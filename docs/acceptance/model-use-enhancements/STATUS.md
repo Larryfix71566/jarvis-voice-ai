@@ -1,6 +1,6 @@
 # Model Use Enhancements — status
 
-**As of:** 2026-10-02
+**As of:** 2026-10-06
 **Plan:** [Model Use Enhancements](../../plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
 **Execution sequence:** [Remaining Gaps Implementation Plan](../../plans/MORTIMER_REMAINING_GAPS_IMPLEMENTATION_PLAN.md)
 
@@ -25,118 +25,197 @@ committed receipt and are unverified**. They are labelled where they appear,
 and no item is ticked on their strength. Test counts in this file that have
 no linked receipt are also unreceipted.
 
+## Candidate validation — 2026-10-06
+
+**Current diagnostic gate:** Exact code head `408bc6f` passes all five CI checks (6,214 unit plus two subtests / 11 skips; 196 integration / four skips; 13 eval). Actual synthetic localhost-only40 proof and all four cleanup owners pass; all full runtime/quality/billing/rollout acceptance flags stay false. Reviewed gates pass 146 focused, 386 affected (three existing skips) and 31 independent cases. No further autonomous implementation prerequisite was identified after current CI/status reconciliation. Default CLI2.1.291, exact external authorization, operator identity, manual-source authority, native test scope, compliant confidential route, Claude C3 review, account and deployed acceptance remain open. [Receipt](receipts/mar-native-api-wire-order-2026-10-06.json).
+
+The earlier captures below record results at their named revisions. They do not supersede the current gate above or the terminal all12 result.
+
+**Latest CI repair:** Ubuntu `aaedc37` fails4 cases/8 setup errors, all traced to absent Mac fixture paths and duplicated model-registry filename authority. Reviewed repair preserves the Mac production guard and all65 original assertions: author364/3 existing skips, independent165/3 and absent-parent106/0 pass. New-head CI remains required. The terminal all12 native gate and explicit approval questions below stay open. [Receipt](receipts/mar-native-diagnostic-ci-portability-2026-10-06.json).
+
+**Latest terminal gate:** All12 at `a653289` finishes11 passed/one failed baseline-native-library ping-count test; Python and both MortimerHost suites pass. An unchanged host test/inverse proves scheduling sensitivity, without proving the exact guest mechanism. VMs stopped/settings unchanged. Native-readiness repair requires a matching main claim; assignment requested. The reviewed native40 diagnostic is pushed at `ddfacfa`, but live capture has not started: automatic approval review requires explicit permission for the exact private REPO_MAP document and Claude destination. No payload sent, no native incompatibility inferred. [Terminal/evidence receipt](receipts/mar-sandbox-full-profile-stability-2026-10-06.json). Earlier live/partial captures below are superseded at their named ref.
+
+The dry-default full-menu native diagnostic is independently repaired and passes104 focused/303 affected/104 independent overlapping cases. Its normal missing-tools refusal remains; exact public live capture and all Developer/billing/rollout gates stay open. The four original causal witnesses are retained. [Diagnostic receipt](receipts/mar-native-full-menu-bootstrap-2026-10-06.json). All five GitHub checks now pass on frozen `a653289`; later heads require new checks. Actual all12 rerun at that ref has passed both Python suites (6,068 plus2 subtests/11 skips each); remaining checks are running, so no overall pass is inferred.
+
+**Latest sandbox/CI stability evidence, 2026-10-06:** Actual pinned-image all12 baseline at `4fd8228` is terminal:11 checks passed; strict-owner host fixtures fail the baseline Python check. The reviewed test-only ownership and phase-entry repairs pass200 combined cases, with independent56 deadline and2 natural-deadline probes. Fresh CI and actual guest rerun are required; no Developer acceptance is inferred. [Terminal](receipts/mar-tokenizer-full-profile-terminal-2026-10-06.json), [fixture](receipts/mar-pilot-fixture-ownership-2026-10-06.json), [deadline](receipts/mar-deadline-confirmed-phases-2026-10-06.json).
+
+Earlier captures below retain their named-source timing and failures; the terminal evidence above supersedes prior live wording.
+
+Fresh immutable image `c43cc422…` is prepared from `8042722`. Actual normal offline worker at `4fd8228` proves protected default tokenizer lookup/four hashes/write refusal, the three unchanged RTVI cases and desktop/Keychain acceptance. Bounded tasks are stopped/settings unchanged. All12 verification is separately confirmed live (exec8389 / primary `f6ccb30d4441` / verification `c11a71ad1cb3`) with identical baseline/candidate; its pass is not inferred. [Image/worker receipt](receipts/mar-tokenizer-image-worker-2026-10-06.json). Native40 deterministic preflight/client order mismatch is repaired with author88/independent121 overlapping checks. Full-menu capability capture remains separate; normal native tools are unapproved.
+
+The actual six-MCP/40-tool Developer harness is independently reviewed: author82 and independent111 overlapping checks pass, preserving original witnesses and exact causal refusals. Native40 capability, operator-issued identity, actual edit/all12/holdout/cleanup/rollback acceptance remain open. [Harness receipt](receipts/mar-full-developer-harness-2026-10-06.json).
+
+Pinned English tokenizer preparation is implemented after main scope #183 merged and was integrated. Independent exact-block17 and root hydration/image11 plus6 subtests pass; actual fresh immutable image, different-UID offline worker and unchanged full12 acceptance remain open. [Recipe receipt](receipts/mar-tokenizer-recipe-2026-10-06.json).
+
+The source-bound four-operation Developer driver is independently repaired (author113 / independent132 overlapping cases), with no live acceptance. Shared execution now accepts all40 installed Developer schemas; root229 affected cases and independent53 managed-path cases pass while other gates remain unchanged. The separate full40 harness now passes independent parent success-proof review; live acceptance remains open. [Receipt](receipts/mar-development-pilot-substrate-2026-10-06.json). The actual all12 sandbox baseline is terminal: ten checks passed and both Python checks failed on the same three missing-tokenizer observer cases. Main recipe scope claim #183 precedes any fix. [Terminal receipt](receipts/mar-full-sandbox-baseline-2026-10-06.json).
+
+Normal task worker isolation and the real desktop/disposable Keychain preflight now pass on stopped owned task `fab0158b99aa`, with image/settings unchanged. [Receipt](receipts/mar-standard-worker-isolation-2026-10-06.json). The unchanged all12 verifier completed on frozen `4e225f3` (exec27828 / primary `de3a99ae63d2` / actual child `678b8671a334`) as a failed pre-edit baseline. Both owned tasks are stopped; no edited-candidate or model acceptance is claimed. Actual full40 live HTTP/source acceptance also needs an operator-issued service-bot identity: the read-only readiness check found no matching credential or active principal. A13 human-only credential minting is unchanged.
+
+The bounded crawler transport repair now passes **44 root / 44 independently reviewed overlapping cases**: no response-cookie carryover, redirect credential spill, process proxy/TLS override or leaked clients. Existing research semantics remain. [Receipt](receipts/mar-crawl-transport-isolation-2026-10-06.json). The [10-06 vault-backed catalog read](receipts/model-access-catalog-readiness-2026-10-06.json) again reports64 SAYGM models and zero confidential models. Neither result establishes public-page origin, account billing, model quality or rollout acceptance.
+
+**Frozen CI evidence: candidate `963ed85`, draft PR #177.** All five GitHub checks are green at that ref; later candidate heads require their own checks. Frozen Mac unit: **5,916 passed plus two subtests, three skips and the previously reproduced audio-default failure**; full deployment acceptance remains open. [Storage/admission receipt](receipts/mar-storage-admission-lifecycle-2026-10-06.json).
+
+The standard immutable image is now prepared and registered as `9e71cb3f…` from `fd41f30`; production profile pointers/settings are unchanged. Actual bounded guest checks prove input write refusal and read-only synthetic DB integrity; both owned VMs are stopped. Normal clone/hydration worker and desktop preflight now pass; all twelve development checks and actual edited-candidate acceptance remain separate, with the unchanged-source baseline completed and failed on the missing-tokenizer prerequisite. [Image receipt](receipts/mar-immutable-image-readiness-2026-10-06.json).
+
+The four-operation pilot implementation is repaired but has no live acceptance. The separate full40 candidate is independently reviewed for parent success-proof validation and has no live acceptance. Manual/public-crawl proof, confidential-memory route, account limits, cross-system review, voice and rollout remain open.
+
+**Earlier candidate captures follow.** Each is evidence at its named ref; the latest record above supersedes its CI/image/prototype readiness wording. Counts overlap and are not additive.
+
+Private-store and admission lifecycle repairs pass **395 focused cases**, with **45 storage** and **38/7 admission** independently reviewed overlapping groups. Original spend and causal cancellation/shutdown assertions remain. [Receipt](receipts/mar-storage-admission-lifecycle-2026-10-06.json). Published4dc3dfb CI failed17 deadline/admission cases; the actual double-cancel leak is reproduced and repaired, but its exact CI initiating event is unproven and new-head CI must rerun. Packaging/clone succeeds for1,738 source files atfd41f30; immutable-image preparation remains open after guest exec readiness failed, with task stopped and settings unchanged. The Developer prototype has four reviewed defects under repair and no live/full40 acceptance.
+
+The exact synthetic-fixture hash repair is claimed on main through #182 (`d5d8cae`) and integrated before edits (`d052314`). Its48 tests plus48 subtests prove exact current bytes are accepted while edits/moves still refuse; scanner/exclusion AST, historical pins and fixture bodies are unchanged. [Receipt](receipts/mar-reviewed-fixture-hashes-2026-10-06.json). Immutable-image preparation and real Developer acceptance remain open. Context-local pilot storage repair is in progress; published candidate4dc3dfb CI remains live, not accepted.
+
+The planner-cancellation CI case is repaired causally: cancellation now occurs after the pending request yields, with all original assertions and an added cleanup witness. Three related tests pass; a frozen original-test probe reproduces the20ms timer race. [Receipt](receipts/mar-planner-cancellation-phase-2026-10-06.json). Pilot directory cleanup is still under diagnosis; latest-head CI remains unverified.
+
+The latest crawler-input repair passes **62 focused / 61 independently reviewed overlapping cases**, with exact source hashes in [its receipt](receipts/mar-research-input-egress-2026-10-06.json). Protected focus now refuses before actual crawler client/HTTP access, including a stricter host restriction between sites. This grants no public status to acquired unknown pages. Published `9f1e7d5` CI has **two failures**, pilot temporary-directory cleanup and cancellation occurring before the planner request starts; both repairs are in progress. Four other checks pass. An actual compatible-image preparation attempt failed before VM boot because ten synthetic credential fixture files lack current exact reviewed hashes; production settings stayed unchanged. This is a source-archive prerequisite, not Developer acceptance. Manual/public-crawl proof, representative pilots and rollout remain open.
+
+Candidate: [draft PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177),
+pushed for cross-system review; not merged or deployed.
+
+Latest bounded source repair: `50daa8b` passed **476 affected tests**, **two
+installed-MCP stdio/loopback tests**, and independent reruns of **six unchanged
+counterexamples plus 11 targeted legitimate-path/authentication checks**.
+Those groups overlap and are not a unique total. The repair pins source floors
+at actual file admission, lifecycle workers to retained ownership, real App
+Builder role/parent identity, and exact saved PR handles. All 82 admin routes
+remain covered by the existing bearer assertion. The frozen full unit run
+passes **5,738 plus two subtests**, with **three skips and one failure**: the
+same previously reproduced audio-default issue. The new auth inventory failure
+is closed. Latest-head CI still needs publication/rerun; no VM, provider,
+account or production action was performed. The
+[ordinary source receipt](receipts/mar-ordinary-workspace-sources-2026-10-06.json)
+records the exact frozen result. Manual advisory/research provenance and
+real workload acceptance remain open.
+
+The later advisory slice at `5da9b47` passes **501 affected cases**, **265
+independent legacy/protocol cases**, **177 independently reviewed budget cases**,
+**nine Base/Registry boundary cases** and **two installed-MCP stdio cases**
+(overlapping groups). It retains original host budgets, signed preparation,
+actual Developer/Analyst roles and owning cancellation/generation before sinks.
+All 18 tool schemas are unchanged; all 86 admin routes retain authentication.
+Frozen full unit: **5,803 plus two subtests passed, three skips and only the
+same audio-default failure**. [Receipt](receipts/mar-advisory-source-budget-2026-10-06.json).
+This supports single-author voice planning and protected source transport; it
+does not close nested council/review, full research, real Developer capability,
+private-memory availability, billing or deployment gates. Configured Tart and
+Softnet are ready; the Developer pilot still needs a compatible image and real
+sandbox/MCP driver. The prior published `cc37241` passed all five CI checks;
+new-head CI remains separate.
+
+The latest repair at `7d74226` passes **223 independent** and **105 focused** overlapping budget/execution cases, preserving the original SDK retry/no-reservation assertion. Read-only preflight precedes client construction, then actual retry proof precedes the atomic reservation. The repaired frozen full unit records **5,893 plus two subtests passed / three skips / only the existing audio-default failure**. Final source review at `58b4e21` is clean across 90 cases. No green full Mac deployment gate is claimed; new-head CI, broader source approval, real workload pilots and rollout remain open. [Receipt](receipts/mar-descendant-review-2026-10-06.json).
+
+The subsequent descendant/review slice at `58b4e21` includes `cc420bf` budgets and `df80223` council/execution integration. Original D/P/C sponsorship, exact acquired-document context and before-client admission pass **192 independent budget**, **97 focused root / 27 independent root**, **422 affected source** and **two installed-MCP** overlapping cases. The 32 budget, eight root and ten review cases are new. Approved review documents retain council/economy eligibility; unknown bytes remain confidential. Frozen full unit records 5,851 passes plus two subtests / three skips / the prior audio failure and a new retry-proof reservation regression, subsequently repaired at `7d74226` without relaxing its assertion. Bounded final source review passes 90 cases; new-head CI remains pending. [Receipt](receipts/mar-descendant-review-2026-10-06.json). This is candidate evidence; manual/public-crawl provenance, full research, actual sandbox Developer and rollout remain open.
+
+The 10-06 extensions are claimed through merged #178 (`0960373`) and #179 (`fb3e1aa`). They add
+per-run SubAgent selection refresh, sealed host source handling before early
+sinks, durable optional task admission and legacy canonical council guards.
+Focused agent/execution/delegate tests: 260 passed; source registry/runlog/repo:
+176 passed; identity suites: 298 passed / three historical skips. A wider unit
+audit has 5,405 passes / three skips / the known audio-default failure; the final independent boundary suite passes 115 cases. The final integration/evals gate reports 173 passes, four skips and the same four baseline function-inventory failures. See [the source-bound integration receipt](receipts/mar-bdg-runtime-integration-2026-10-06.json). These counts do not supersede the
+earlier broad/native receipts below or imply a green deployment gate.
+
+See the [aggregate verification receipt](receipts/candidate-verification-2026-10-06.json)
+and [independent subscription review](receipts/independent-subscription-review-2026-10-06.json).
+
+- Final subscription/agent/execution focused suite: **243 passed**; source-bound independent review covers exact context/tool binding, system constraints, UTF8 transport, invalid-input child cleanup and cleanup quarantine.
+- Broad Mac unit run: **5,076 passed, 3 skipped, 1 failed**; unchanged main has **4,802 passed, 3 skipped, the same audio-default failure**. The last receipt-await guard has a separate focused rerun.
+- Integration/evals: **186 passed, 4 skipped, 4 failed** on both candidate and unchanged main (the same bot function-inventory assertions). Process-supervision failures from the initial restricted run pass with appropriate process access.
+- Detached-checkout policy: **9 passed**. Call-site classification: **30/30**, not privacy acceptance. JarvisKit: **226 passed**. Native route controls: **10 passed**. Batched native coverage includes **493 unique identifiers**, six skips and one capture failure, also reproduced on unchanged main.
+- No assertions were relaxed or tests removed. Full Mac/deployment gates are **not claimed green**. Global production routing and account settings remain unchanged.
+
+The later committed development/source gate at `8902693` passes **572 tests and 45 subtests**, with zero failures/skips and three existing deprecation warnings. It covers actual inert host sandbox facets, authenticated creator IPC, route refresh, task bounds and cleanup ownership. See [the source-bound receipt](receipts/mar-development-source-bridge-2026-10-06.json). It does not replace broader repo/Mac results or establish live VM/provider acceptance.
+
+The subsequent native-owner repair at `5c50385` passes **282 focused tests**, including four unchanged independent concurrency probes. Both actual text clients refuse queued starts and suppress active late publication after shared cleanup quarantine; Codex receipt-worker wait cannot bypass the guard. [Receipt](receipts/mar-native-text-quarantine-2026-10-06.json). Counts overlap the other focused gates and must not be added into a unique full-suite total.
+
 ## Open items first
 
-- [ ] **MAR-A** — Reconcile the installed Mac checkout with the candidate
-  release and capture live baseline latency/quality/usage.
-  A 2026-10-02 aggregate-only refresh confirms the deployed release `ae70f2c`,
-  matching bundle source revision and five loaded service PIDs, and 28/28
-  classified model call sites in both production and the current Codex tree.
-  Since that deployment the ledger has 15 provider calls (8 LLM), with usage
-  and estimated cost but no populated route, billing-source, or model-duration
-  fields. One completed supervisor run is not a model quality or latency
-  sample. The [refresh receipt](receipts/mar-a-baseline-refresh-2026-10-02.json)
-  records the evidence and remaining gates without reading prompt content or
-  making a provider call.
-  A separate [public synthetic direct-API probe](receipts/mar-a-synthetic-direct-api-2026-10-02.json)
-  made ten capped, tool-free calls: five Haiku voice-supervisor fixtures and
-  five Sonnet analyst fixtures all matched exactly, with median execution
-  durations of 508.3 ms and 994.0 ms respectively. This is a narrow smoke
-  baseline, not representative research/development quality or a stable p95;
-  the production ledger's missing route/billing/duration fields remain open.
-  The earlier [2026-09-29 baseline receipt](receipts/mar-a-baseline-2026-09-29.json)
-  covered 28/28 call sites on the then-deployed `eb24e81` release. Its process
-  identity limitation was partly resolved by the current executable check;
-  its missing model-call metrics remain a production-ledger limitation.
-- [ ] **MAR-D** — Apply privacy policy checks to every tool result, council
-  continuation, and usage/logging path. Enabled-mode confidential and
-  local-only sub-agent runs now redact tool arguments/results and final
-  replies in the durable run log. Council proposer, judge, planning, and
-  shadow passes now accept and enforce a stricter request policy, and their
-  durable payload/score sinks redact protected content. Delegation status
-  events now redact protected task text before stdout/UI emission; the
-  shared MCP registry now blocks external servers during an armed sensitive
-  turn before invocation; the remaining audit covers detached continuation
-  and provider-specific result sinks. In the isolated tree, council/planning
-  also inherit the static workload privacy floor when callers omit a label;
-  route preferences and weaker caller labels cannot lower it. Too-small
-  pre-provider rounds carry policy to their durable row and redact protected
-  goals. Confidential/local-only specialist answers now use an awaited local
-  result handoff and are returned to the external voice supervisor only as a
-  fixed status and opaque reference; protected UI results reject copy/share/
-  export. See the dated
-  [GC24-03 council receipt](../verified-gap-closure/GC24-03-council-workload-floor-2026-09-24.md).
-  The [protected local-result receipt](../verified-gap-closure/GC24-03-protected-local-result-handoff-2026-09-25.md)
-  covers this one path; MAR-D remains open until all source/sink families and
-  direct-mode paths are inventoried and negatively tested.
-- [ ] **MAR-E** — Perform the confidential-model portion of the SAYGM pilot.
-  The 2026-10-02 [live readiness receipt](receipts/model-access-live-readiness-2026-10-02.json)
-  confirms the vault credential and authenticated catalog request: 64 models,
-  none advertised as confidential. A catalog-confirmed confidential synthetic
-  test remains open. The 2026-09-20 receipt recorded a missing key; that is
-  historical evidence, not the current credential state.
-- [ ] **MAR-F** — Complete Claude re-authentication and capability evidence.
-  The [initial 2026-10-02 readiness receipt](receipts/model-access-live-readiness-2026-10-02.json)
-  recorded HTTP 401 from the older `/Users/larryfix/.local/bin/claude` despite
-  its account-status report. After Larry refreshed sign-in, a
-  [same-day recheck](receipts/mar-f-claude-subscription-recheck-2026-10-02.json)
-  found the selected `/opt/homebrew/bin/claude` signed in to Claude Max: both
-  direct and Mortimer-isolated fixed public-prompt inference succeeded on
-  `claude-sonnet-5`. The older executable remains signed out. Bot and admin
-  launch-agent `PATH` resolves the signed-in executable, but the running
-  process environment was not independently inspected and routing remains
-  disabled. `codex login status` reported ChatGPT sign-in; its Mortimer adapter
-  remains intentionally gated pending no-tools verification for the installed CLI.
-  Subscription tokens remain in each provider's own sign-in store, outside
-  the project vault. Both adapters remain text-only and reject Mortimer tools.
-  Capability, billing/overage, representative workload, and deployed-route
-  acceptance remain open.
-- [ ] **MAR-G** — Migrate all non-voice call sites and prove no background
-  workload inherits the voice route. Memory, extraction, sweep, procedure,
-  digest, agent, council, upgrade, shared-content vision, and production screen
-  analysis now have shared-boundary paths under the routing gate. Audit v2
-  reports 25 classified entries and zero review-required entries in the
-  2026-09-24 receipt. Shared
-  content resolves and discloses the route per offer, then binds execution to
-  that batch's route snapshot. Enabled-mode Mac/runtime acceptance is not
-  complete.
-  (Isolated dirty tree, 2026-09-24: planner cancellation/race handling is now
-  covered; the planner, council, and vision migrations use the shared boundary.
-  Full unit/integration tests pass: 2,811 passed, 4 skipped, 2 subtests passed;
-  SubAgent eval: 13 passed. This is not merge or deployed-candidate proof. The
-  supervisor voice path remains an explicit exception. See the
-  [GC24-02 implementation receipt](../verified-gap-closure/GC24-02-execution-boundary-implementation-2026-09-24.md).)
-(2026-09-25 isolated-tree update: optional token streaming now crosses the
-shared execution boundary for three explicitly enabled direct Anthropic
-profiles. After adding the explicit event-sink policy guard, the focused
-boundary/shim/route suites pass 126 tests; the full Python unit/integration
-run passes 2,829 tests, 4 skipped, 11 warnings and 2 subtests. No production
-caller consumes streamed deltas yet; complete tool-loop lifecycle, result
-sinks, durable reconciliation and Mac/provider acceptance remain open. See
-the GC24-02 receipt.)
-The current 2026-09-25 audit reports 26 classified entries, including the
-production-routed shared memory classifier, with zero review-required entries.
-See [`model-call-site-inventory-2026-09-25.json`](receipts/model-call-site-inventory-2026-09-25.json).
-- [ ] **MAR-H** — Add persistent route/workload controls to the existing
-  native console and voice command path. The sidecar draft/confirm API and
-  SQLite persistence are now landed; native-console wiring is landed in the
-  Repo sidecar's MODEL ACCESS section; the gated `model_route` voice tool now
-  shares the same draft/confirm store; live voice acceptance remains open.
-- [ ] **MAR-I** — Run the research, development, and synthetic confidential
-  memory pilot. The checked-in offline rollout fixture passes its monitoring
-  gate without touching a live database; provider-backed shadow evidence is
-  still credential-gated.
-  (Reconciled 2026-09-22: the memory provider shadow is no longer
-  credential-gated.
-  [`../memory-automation/provider-shadow-receipt.json`](../memory-automation/provider-shadow-receipt.json),
-  recorded 2026-09-18, shows profile `claude-sonnet-5` via the direct
-  Anthropic API route (`ANTHROPIC_API_KEY`), 8 synthetic cases, 8 calls,
-  `no_regression: true`, `live_database_touched: false` and
-  `production_automation_enabled: false`. That receipt did not go through
-  the model-routing layer or a confidential route, and it covers no research
-  or development workload. MAR-I stays open.)
-- [ ] **MAR-J** — Complete latency, quality, privacy, rollback, and deployed
-  release evidence before changing defaults.
+The 10-05 changes below are **candidate implementation**, on the isolated
+`codex/ws05-execution-20261005` branch claimed through #175, #176, #178, #179 and #180. They do not
+change production routing, credentials, account settings or the deployed app.
+
+- [ ] **MAR-A — deployed baseline and measurements.** The
+  [fresh aggregate baseline](receipts/mar-a-baseline-2026-10-05.json) reconciles
+  production, bundle and deployment receipt to `bde22bb`. Since deployment it
+  records 26 provider calls (12 LLM), without populated historical route,
+  billing-source or duration fields. The candidate's
+  [41 offline API attribution tests](receipts/mar-a-prospective-api-attribution-2026-10-05.json)
+  prove future non-streaming metadata and single-owner accounting. Historical
+  timing is unrecoverable; effective bot activation, representative quality,
+  voice/stream timing and deployed attribution remain open.
+- [ ] **MAR-D — complete source/sink privacy coverage.** Exact route/key contracts,
+  static privacy floors, confidential replay/settlement and sanitized late-delivery
+  logs are implemented. The [source/sink regression receipt](receipts/mar-d-source-sink-regressions-2026-10-05.json)
+  pins the offline repairs. Declared tool-result restrictions are checked before
+  native continuation. The 10-06 typed registry/agent boundary also defaults
+  unknown acquired sources confidential, validates guarded repository bytes,
+  sanitizes public error payloads and redacts earlier MCP buffers. Installed
+  Upgrade/AppBuild issuers and authenticated creator receipts now preserve exact
+  host source/owner bindings before sinks. The ordinary self-edit/app MCP loop
+  now uses a separate authenticated workspace receipt before sinks, with the
+  50daa8b admission/lifecycle repairs above. Unknown raw outputs do not gain
+  external approval. The later advisory transport has signed source/budget
+  proof before sinks; complete manual/public-crawl approval remains open.
+  Preserve standing project-code grants and private source floors.
+- [ ] **MAR-E — SAYGM confidential pilot.** Authentication and catalog access
+  [succeeded again on 10-05](receipts/model-access-catalog-readiness-2026-10-05.json): 64 models, zero advertised confidential models.
+  Candidate execution binds the exact catalog ID, tier, capability shape and
+  protected gateway/key contract; redirected catalog requests are refused.
+  There is no available confidential pilot route to accept today; catalog
+  checks do not establish attestation or account guardrail settings.
+- [ ] **MAR-F — subscription capability, account and workload acceptance.**
+  Installed Codex 0.160.0 has a [passing exact-model text/no-tools proof](receipts/mar-f-codex-text-capability-2026-10-05.json).
+  Installed Claude 2.1.290 has a [passing isolated public native-tool fixture and
+  negative unadvertised-Bash proof](receipts/mar-f-claude-native-fixture-capability-2026-10-05.json). Candidate Claude native tools require a
+  separate exact binary/model/invocation/schema/control-protocol receipt and
+  preserve the existing Mortimer tool executor, mandatory constraints and
+  request cleanup. Codex tool workloads remain unsupported. The fixture does
+  not authorize real Developer tools, prove account billing/overage settings,
+  or establish model quality on those tools. Provider sign-in stores remain
+  outside the vault; no token or credential was copied.
+- [ ] **MAR-G — enabled-mode workload acceptance.** The candidate call-site
+  inventory classifies 30/30 entries, including the repaired historical replay
+  and review-settlement paths. Classification is not behavioral acceptance.
+  Background work keeps dedicated profiles and static privacy/quality floors;
+  the voice supervisor is unchanged. Enabled routing rejects duplicate canonical
+  identities before any council provider call; the 10-06 legacy loader/member
+  guard also rejects canonical and physical aliases before key lookup. Per-run
+  saved SubAgent choices now refresh and optional parent limits are enforced.
+  UpgradeAgent/AppBuildAgent now refresh confirmed choices per run, verify source
+  envelopes and share limits without enabled-mode implicit failover. Capped
+  council child sponsorship and larger-edit parity are implemented in the
+  candidate: [317 council/budget cases](receipts/mar-council-child-budgets-2026-10-06.json)
+  and [170 edit-transport cases](receipts/mar-large-edit-parity-2026-10-06.json)
+  pass in their frozen overlapping gates. Advisory transport now has actual
+  durable parent authority and cancellation ownership. The later descendant/review
+  candidate supports nested sponsorship and sealed acquired documents; its bounded frozen gates are recorded above, while representative workload acceptance remains open. Complete
+  enabled-mode run/usage/cancellation evidence remains open.
+- [ ] **MAR-H — native and voice controls.** Native saved choices outrank defaults,
+  unavailable choices remain visible, and changes invalidate drafts and late
+  replies. Catalog descriptors separate profile capabilities, provider gates and
+  admin activation from unverified bot state. [Ten native route-control tests](receipts/model-route-controls-native-2026-10-05.json)
+  pass. Spoken stage/confirm behavior and deployed acceptance remain open.
+  The broader native protected-window capture gate fails with ScreenCaptureKit
+  `-3811` on both candidate and unchanged main; it was not removed or relaxed.
+- [ ] **MAR-I — three-workload pilot.** The reproducible harness is bounded,
+  dry-run by default, isolates databases, pins source/scorer hashes and records
+  only aggregate results. The
+  [Codex public research diagnostic](receipts/model-use-pilot-live-codex-research-2026-10-05.json)
+  scored 3/3 cases, median 3914.5 ms and sample maximum 3974.5 ms. This is three
+  cold source-packet synthesis calls, not complete research retrieval or stable
+  p95 acceptance. Earlier
+  [direct API](receipts/model-use-pilot-live-direct-research-2026-10-05.json) and
+  [Claude](receipts/model-use-pilot-live-claude-research-2026-10-05.json) diagnostics
+  completed 3/3 requests but failed the strict JSON-format gate; factual content
+  is unscored. [Recomparison](receipts/model-use-pilot-comparison-recheck-2026-10-05.json)
+  is explicitly inconclusive, and changed scorer/framework versions cannot be
+  compared as if they were identical. Real sandbox Developer and confidential
+  memory pilots remain open; historical public memory shadow is not a substitute.
+- [ ] **MAR-J — rollout.** Verify workload quality/latency, privacy, effective
+  service configuration, allowance/paid-overage settings, supported spend/output
+  limits and deployed rollback before changing defaults. The authoritative
+  endpoint registry has no direct OpenAI API endpoint; key presence alone is not
+  evidence of one. Local runtime is a placeholder and private defaults have no
+  compliant available route. Keep global production routing unchanged.
 
 ## Foundation landed
 

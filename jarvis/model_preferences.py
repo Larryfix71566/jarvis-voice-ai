@@ -7,7 +7,8 @@ from typing import Any
 
 from jarvis.db import get_conn, now_iso, run_migrations
 from jarvis.model_routing import (
-    ModelRouteError, inspect_route_choice, model_profile_exists, resolve_policy,
+    ModelRouteError, assert_model_quality, inspect_route_choice, model_profile_exists, resolve_policy,
+    verify_saygm_route_choice,
 )
 
 DRAFT_TTL_S = 600
@@ -49,7 +50,8 @@ def list_preferences(*, conn=None) -> list[dict[str, Any]]:
 def _validate_choice(workload: str, profile: str, route: str,
                      privacy: str | None = None) -> dict[str, str]:
     try:
-        policy, _profile, route_record = inspect_route_choice(workload, profile, route)
+        policy, profile_record, route_record = inspect_route_choice(workload, profile, route)
+        assert_model_quality(policy, profile_record)
     except ModelRouteError as exc:
         raise ModelPreferenceError(str(exc)) from exc
     if not model_profile_exists(profile, workload=workload):
@@ -69,6 +71,13 @@ def _validate_choice(workload: str, profile: str, route: str,
             f"{selected_privacy!r} is below workload {workload!r}'s configured "
             f"{policy.privacy!r} privacy; a preference may keep or raise it, never lower it"
         )
+    if route == "saygm" and selected_privacy == "confidential":
+        # Confidential choices need current proof at both stage and confirm;
+        # saving an unverified TEE label would make the console misleading.
+        try:
+            route_record, _model = verify_saygm_route_choice(profile_record, route_record)
+        except ModelRouteError as exc:
+            raise ModelPreferenceError(str(exc)) from exc
     missing = set(policy.required_capabilities) - set(route_record.capabilities)
     if missing:
         raise ModelPreferenceError(
@@ -79,9 +88,9 @@ def _validate_choice(workload: str, profile: str, route: str,
             f"route {route!r} provides {route_record.privacy!r}, "
             f"but {selected_privacy!r} privacy is required"
         )
-    # Reuse the policy validator without probing credentials. Confirmation is
-    # allowed to save an unavailable choice so the console can show why it is
-    # unavailable and the user can correct it; execution still fails closed.
+    # Ordinary choices may be saved while credentials are unavailable.
+    # Confidential SAYGM choices are the exception: proof is required above,
+    # and execution obtains fresh proof again before sending any content.
     return {"workload": workload, "profile": profile, "route": route,
             "privacy": selected_privacy}
 

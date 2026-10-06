@@ -1,0 +1,30 @@
+{
+  "baseline_receipt": "model-use-pilot-live-direct-research-2026-10-05.json",
+  "baseline_receipt_sha256": "dcdf5c3f4f23bcf25ec7d67174001008a9090672df46867dde925ba2fe73e164",
+  "candidate_receipt": "model-use-pilot-live-claude-research-2026-10-05.json",
+  "candidate_receipt_sha256": "03821adc616e0a0d764c6cbc4569d1f28e559f51ba30ed98a26ac1310600971d",
+  "captured_at_utc": "2026-10-06T03:04:04.303021+00:00",
+  "comparison": {
+    "baseline_gate_failed": true,
+    "candidate_gate_failed": true,
+    "candidate_quality_no_regression": null,
+    "matched_trials": 3,
+    "median_delta_ms": 1778.7648340017768,
+    "p95_delta_ms": 2054.619456990622,
+    "p95_review_threshold_exceeded": true,
+    "quality_comparison_available": false,
+    "short_task_median_target_exceeded": true,
+    "stable_p95_or_rollout_acceptance_claimed": false
+  },
+  "comparison_scorer_version": "model-use-exact-source-and-classification-v2",
+  "content_quality_unscored": true,
+  "harness_sha256": "e696e16e1b9eb8403dbb6d56bac35e66308db9600aed295643479a02e0b2b289",
+  "original_format_failure_reason_available": false,
+  "original_receipts_changed": false,
+  "production_writes": false,
+  "provider_calls": 0,
+  "response_text_read_or_saved": false,
+  "strict_format_failed_in_original_receipts": true,
+  "version": "model-use-comparison-recheck-v2",
+  "workstream": "WS-05"
+}

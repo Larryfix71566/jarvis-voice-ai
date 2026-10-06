@@ -45,6 +45,40 @@ class HydrateTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             hydrate.hydrate(self.root, candidate, [".venv"], os.getuid(), os.getgid())
 
+    def test_tokenizer_data_survives_hydration_in_protected_prefix_for_both_test_trees(self):
+        relative = Path("share/nltk_data/tokenizers/punkt_tab/english")
+        prepared = self.root / "source" / ".venv" / relative
+        prepared.mkdir(parents=True)
+        contents = {name: ("frozen-" + name).encode() for name in (
+            "abbrev_types.txt", "collocations.tab", "ortho_context.tab", "sent_starters.txt")}
+        owner = prepared.stat().st_uid
+        for name, data in contents.items():
+            path = prepared / name
+            path.write_bytes(data)
+            path.chmod(0o666)
+        prepared.chmod(0o777)
+        baseline = Candidate((File("app.py", 0o644, b"baseline"),))
+        candidate = Candidate((File("app.py", 0o644, b"candidate"),))
+        hydrate.hydrate(self.root, candidate, [".venv"], os.getuid(), os.getgid())
+        hydrate.verification_tree(self.root, baseline, candidate, [".venv"])
+        protected = self.root / "dependencies" / "python" / relative
+        self.assertEqual(protected.stat().st_uid, owner)
+        for directory in (protected, *protected.parents):
+            if directory == self.root:
+                break
+            self.assertFalse(directory.stat().st_mode & 0o022)
+        for name, data in contents.items():
+            with self.subTest(name=name):
+                target = protected / name
+                self.assertEqual(target.read_bytes(), data)
+                self.assertEqual(target.stat().st_uid, owner)
+                self.assertFalse(target.stat().st_mode & 0o022)
+                for tree in ("source", "verification"):
+                    self.assertTrue((self.root / tree / ".venv").is_symlink())
+                    linked = self.root / tree / ".venv" / relative / name
+                    self.assertEqual(linked.resolve(), target.resolve())
+                    self.assertEqual(linked.read_bytes(), data)
+
     def test_baseline_tests_use_baseline_source_and_exclude_candidate_tests(self):
         baseline = Candidate((File("tests/test_app.py", 0o644, b"original required test"),
                               File("jarvis/app.py", 0o644, b"old application")))

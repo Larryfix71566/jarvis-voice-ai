@@ -579,6 +579,11 @@ def _call(fn):
         return {"ok": False, "error": OFFLINE_ERROR}
 
 
+def advisory_source_request(client, tool_name, actual_arguments, metadata):
+    from mcp_servers.mcp_selfedit.logic import advisory_source_request as installed_request
+    return installed_request(client, tool_name, actual_arguments, metadata)
+
+
 def research_compare_start(
     client, urls: list, focus: str = "", confirm: bool = False,
     run_id: str = "",

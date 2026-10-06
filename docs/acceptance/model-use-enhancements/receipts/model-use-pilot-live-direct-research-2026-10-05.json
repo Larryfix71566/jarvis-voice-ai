@@ -1,0 +1,189 @@
+{
+  "budget": {
+    "configured_price_reserved_usd": 0.0406525,
+    "deadline_s": 180.0,
+    "max_calls": 3,
+    "max_input_bytes": 16384,
+    "max_output_tokens": 1024,
+    "max_spend_usd": 1.0,
+    "output_token_budget_available": true,
+    "repetitions": 1,
+    "timeout_s": 45.0
+  },
+  "captured_at_utc": "2026-10-06T02:58:47.348793+00:00",
+  "catalog_preflight_attempts": 0,
+  "configured_price_map_sha256": "4f689ffd9dedee2cb351caf5efe7385e2726dd3a1e466b01cbbd090801983d97",
+  "execution_boundary_sha256": "4dc6b57fe81fe32813ee88e3472f9d2e7d0017075937b29f11892f4a6782a5b2",
+  "fixture_sha256": "f87af8c1cd15f05b56b690bf51cc54d6b4e7d61ef67ee398af90bbfbae291a39",
+  "fixture_version": "model-use-public-synthetic-v1",
+  "group": "research",
+  "handling": {
+    "private_workload_text_read": false,
+    "production_routing_changed": false,
+    "production_writes": false,
+    "provider_error_text_saved": false,
+    "response_text_saved": false
+  },
+  "harness_sha256": "d737636891792186041a89730c4b7097f7b7d7faa9fd2754e17ab1562c560965",
+  "limitations": [
+    "one workload diagnostic, not three-workload deployed acceptance",
+    "cold isolated requests; no persistent session warm-up claim",
+    "billing identity comes from resolved route, not independent billing settings",
+    "memory quality covers classification only, not admission/deduplication/restart",
+    "development requires an actual Mortimer sandbox tool driver",
+    "offline outcomes measure fixture wiring, not provider quality",
+    "subscription output-token limits require independent runtime support; request limits alone are not proof",
+    "configured-price reservations are estimates, not verified provider charges",
+    "research fixtures measure source-grounded synthesis, not source retrieval or complete research workflows"
+  ],
+  "mar_i_complete": false,
+  "mode": "live",
+  "provider_requests_attempted": 3,
+  "scorer_version": "model-use-exact-source-and-classification-v1",
+  "source_revision": "adadcc66ebd1730d9c07a12f8fb39cb0573b933a",
+  "summary": {
+    "completed": 3,
+    "latency_samples": 3,
+    "median_completion_ms": 1797.6838750037132,
+    "p95_completion_ms": 2290.7374589995015,
+    "p95_method": "nearest_rank",
+    "passed": 0,
+    "sufficient_for_stable_p95_claim": false
+  },
+  "trials": [
+    {
+      "case_id": "research-versioned-margin",
+      "case_sha256": "03d6ff00f9635dc4d68bc23b28a05631df328f2c1ea4fdca548ae4839311b589",
+      "cold_request": true,
+      "execution_billing_source": "provider_api",
+      "execution_route": "direct_api",
+      "quality": {
+        "checks": 4,
+        "checks_passed": 0,
+        "passed": false,
+        "schema_valid": false
+      },
+      "repetition": 1,
+      "result_policy": "approved_external",
+      "selection": {
+        "billing_source": "provider_api",
+        "canonical_identity": "anthropic/claude-sonnet-5",
+        "profile": "claude-sonnet-5",
+        "provider": "anthropic",
+        "provider_bill_or_allowance_verified": false,
+        "requested_model": "claude-sonnet-5",
+        "response_model_identity_independently_reported": false,
+        "route": "direct_api",
+        "route_capabilities": [
+          "text",
+          "tools",
+          "streaming"
+        ],
+        "route_privacy": "approved_external",
+        "workload": "research_synthesis"
+      },
+      "status": "completed",
+      "timing": {
+        "first_useful_output_ms": null,
+        "provider_ms": 2266.0190830065403,
+        "queue_ms": 0.15912500384729356,
+        "total_ms": 2290.7374589995015
+      },
+      "usage": {
+        "completion_tokens": 189,
+        "prompt_tokens": 120,
+        "usage_known": true
+      }
+    },
+    {
+      "case_id": "research-decision-versus-live-state",
+      "case_sha256": "527cc355854784ffaf862384937ec7b140bd40998bd3288110173efee6414d14",
+      "cold_request": true,
+      "execution_billing_source": "provider_api",
+      "execution_route": "direct_api",
+      "quality": {
+        "checks": 4,
+        "checks_passed": 0,
+        "passed": false,
+        "schema_valid": false
+      },
+      "repetition": 1,
+      "result_policy": "approved_external",
+      "selection": {
+        "billing_source": "provider_api",
+        "canonical_identity": "anthropic/claude-sonnet-5",
+        "profile": "claude-sonnet-5",
+        "provider": "anthropic",
+        "provider_bill_or_allowance_verified": false,
+        "requested_model": "claude-sonnet-5",
+        "response_model_identity_independently_reported": false,
+        "route": "direct_api",
+        "route_capabilities": [
+          "text",
+          "tools",
+          "streaming"
+        ],
+        "route_privacy": "approved_external",
+        "workload": "research_synthesis"
+      },
+      "status": "completed",
+      "timing": {
+        "first_useful_output_ms": null,
+        "provider_ms": 1118.3222499967087,
+        "queue_ms": 0.20599999697878957,
+        "total_ms": 1122.4232500098879
+      },
+      "usage": {
+        "completion_tokens": 59,
+        "prompt_tokens": 119,
+        "usage_known": true
+      }
+    },
+    {
+      "case_id": "research-untrusted-source-directive",
+      "case_sha256": "4159e00fdc350e341e7a21c99e55a337cc0b41a208b40189377ffc26c8366af8",
+      "cold_request": true,
+      "execution_billing_source": "provider_api",
+      "execution_route": "direct_api",
+      "quality": {
+        "checks": 3,
+        "checks_passed": 0,
+        "passed": false,
+        "schema_valid": false
+      },
+      "repetition": 1,
+      "result_policy": "approved_external",
+      "selection": {
+        "billing_source": "provider_api",
+        "canonical_identity": "anthropic/claude-sonnet-5",
+        "profile": "claude-sonnet-5",
+        "provider": "anthropic",
+        "provider_bill_or_allowance_verified": false,
+        "requested_model": "claude-sonnet-5",
+        "response_model_identity_independently_reported": false,
+        "route": "direct_api",
+        "route_capabilities": [
+          "text",
+          "tools",
+          "streaming"
+        ],
+        "route_privacy": "approved_external",
+        "workload": "research_synthesis"
+      },
+      "status": "completed",
+      "timing": {
+        "first_useful_output_ms": null,
+        "provider_ms": 1792.4246250040596,
+        "queue_ms": 0.2620839950395748,
+        "total_ms": 1797.6838750037132
+      },
+      "usage": {
+        "completion_tokens": 131,
+        "prompt_tokens": 110,
+        "usage_known": true
+      }
+    }
+  ],
+  "version": "model-use-pilot-v1",
+  "workstream": "WS-05"
+}

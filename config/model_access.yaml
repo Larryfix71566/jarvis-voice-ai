@@ -3,6 +3,7 @@
 # models. Routes are explicit so subscription exhaustion cannot become a paid
 # API fallback by accident.
 defaults:
+  minimum_quality_tier: mid
   route: direct_api
   fallback_routes: []
   capabilities: [text, tools]
@@ -34,6 +35,7 @@ routes:
 
 workloads:
   voice_supervisor:
+    minimum_quality_tier: economy
     profile: claude-haiku-4-5
     route: direct_api
     privacy: approved_external
@@ -99,6 +101,7 @@ workloads:
     capabilities: [text]
     fallback_routes: []
   council:
+    minimum_quality_tier: economy
     profile: claude-sonnet-5
     route: direct_api
     privacy: approved_external
@@ -107,6 +110,7 @@ workloads:
     fallback_routes: []
 
   planning:
+    minimum_quality_tier: frontier
     profile: claude-fable-5
     route: direct_api
     privacy: approved_external

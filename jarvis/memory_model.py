@@ -16,11 +16,14 @@ from typing import Any
 from jarvis.agents.upgrade_agent import load_model_registry, resolve_profile
 from jarvis.llm_client import make_async_client
 from jarvis.model_routing import (
+    ModelRouteError,
     ResolvedModelRoute,
     make_route_client,
     resolve_model_route,
     resolve_model_route_checked,
+    resolve_policy,
 )
+from jarvis.privacy_policy import DataPolicy, assert_route_allowed, strictest
 
 MEMORY_PROFILE_ENV = "JARVIS_MEMORY_PROFILE"
 BACKGROUND_PROFILE_ENV = "JARVIS_BACKGROUND_PROFILE"
@@ -40,6 +43,18 @@ class MemoryModelRoute:
     base_url: str
     api_key_env: str
     resolved: ResolvedModelRoute | None = None
+
+
+def _assert_background_source_policy(resolved: ResolvedModelRoute, workload: str) -> None:
+    configured = resolve_policy(workload, include_preferences=False)
+    # Real memory/background sources contain private exchanges, facts or
+    # successful tasks. The separately declared memory_shadow workload owns
+    # public fixtures; a route preference cannot approve private sources.
+    required = strictest(
+        DataPolicy("confidential", f"{workload}-source"),
+        DataPolicy(configured.privacy, f"configured-workload:{workload}"),
+    )
+    assert_route_allowed(resolved.route, required)
 
 
 def _resolve_route(settings: Any, *, profile_attr: str, env_name: str,
@@ -90,8 +105,13 @@ def resolve_memory_route(settings: Any) -> MemoryModelRoute:
                               purpose="memory")
     try:
         resolved = resolve_model_route_checked("memory", explicit_profile=profile)
-    except Exception as exc:  # noqa: BLE001 - preserve background fail-closed API
+        _assert_background_source_policy(resolved, "memory")
+    except ModelRouteError as exc:
         raise MemoryModelUnavailable(str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - provider/config diagnostics may contain private values
+        raise MemoryModelUnavailable(
+            f"memory model route unavailable (error_type={type(exc).__name__[:64]})"
+        ) from None
     return MemoryModelRoute(profile=resolved.profile_name, provider=resolved.provider,
                             model=resolved.model, base_url=resolved.base_url,
                             api_key_env=str(resolved.api_key_env or ""), resolved=resolved)
@@ -115,8 +135,13 @@ def resolve_background_route(settings: Any) -> MemoryModelRoute:
                               purpose="background")
     try:
         resolved = resolve_model_route_checked("background", explicit_profile=profile)
-    except Exception as exc:  # noqa: BLE001 - preserve background fail-closed API
+        _assert_background_source_policy(resolved, "background")
+    except ModelRouteError as exc:
         raise MemoryModelUnavailable(str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - provider/config diagnostics may contain private values
+        raise MemoryModelUnavailable(
+            f"background model route unavailable (error_type={type(exc).__name__[:64]})"
+        ) from None
     return MemoryModelRoute(profile=resolved.profile_name, provider=resolved.provider,
                             model=resolved.model, base_url=resolved.base_url,
                             api_key_env=str(resolved.api_key_env or ""), resolved=resolved)

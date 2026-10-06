@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "workstream": "WS-05",
+  "system": "codex",
+  "date": "2026-10-06",
+  "audited_ref": "58b4e21567c347f2069d5365bc6f86e0e968f670",
+  "implementation_refs": {
+    "descendant_budget": "cc420bf",
+    "council_execution": "df80223",
+    "review_source": "58b4e21"
+  },
+  "source_sha256": {
+    "jarvis/model_budget.py": "a84cec07330d6b7f14db3c2991cf4cb674ce65db9ace804e27615096e3303f85",
+    "tests/unit/test_model_descendant_budget.py": "659047ee1c79bf2eebd6dd0e548eec018b81e72394ee30cafd954ea2cc375bca",
+    "jarvis/council/council.py": "a48da8e3a3526f918c9ca69ea131035247aa85ae83a7c97270a85b1ab9dad00b",
+    "jarvis/model_execution.py": "dafd892141f018df42a1a452188c6121d0f0aa25e05465d1991fe5667ec35dec",
+    "tests/unit/test_council_descendant_admission.py": "6f45679c6c39c4ecdda40ee7a36f0d52d79448b4833230e9c503785d8961e289",
+    "tests/unit/test_council_budget_ownership.py": "28bb6d291be5a48b29ad6f35c7217007437e604abe35ef3d0c26f263530fe96e",
+    "jarvis/advisory_sources.py": "f6839fd1bfb01d6812d218f0d0087a00906ebc13c6704ca8700013408d4b7184",
+    "jarvis/admin/server.py": "7eb55542edf97be2e77fce49b71cdfd3e716ed8730decfd81f583dea0f82d8ca",
+    "tests/unit/test_advisory_source_bridge.py": "3954926e5e96969aa75a5f31457d07a8e82fc0e30294950997ada9285c4fd895",
+    "tests/unit/test_advisory_review_sources.py": "f099784ce3ce1aa09b4a81cb591abfccb3b4322076c42bd95bb3f919a29af5f0",
+    "tests/unit/test_admin_advisory_budget.py": "97298c5de64e890c38af0a8df72c72d001cf0524deb82ce540fa296f6ca4a577"
+  },
+  "verification": {
+    "independent_budget": {
+      "passed": 192,
+      "new_cases": 32,
+      "private_64_scope_cases": 2
+    },
+    "root_focused": {
+      "passed": 97,
+      "groups_overlap": true
+    },
+    "independent_root": {
+      "passed": 27,
+      "new_cases": 8,
+      "copied_probe_function_asts_unchanged": true
+    },
+    "source_focused": {
+      "passed": 422,
+      "new_review_cases": 10,
+      "log_sha256": "f31ac726e8422a2aa18a8789d74206469709e72d371b1e5e07066744aabe3557",
+      "junit_sha256": "b1a0f16b7d7149a94ef9db825ae76fbe504ca49fdd8a3dc7da58c02619bb6c0e"
+    },
+    "source_independent": {
+      "passed": 90,
+      "groups": [
+        43,
+        47
+      ],
+      "tested_ref": "58b4e21",
+      "bounded_source_verdict": "clean; separate reservation/retry regression remains open",
+      "canonical_five_path_manifest_sha256": "2f5217e21a2b51aa5c1221ca4ebc1cd54ee0c78bb16ee6737c0927f20435d177"
+    },
+    "installed_mcp_stdio": {
+      "passed": 2,
+      "real_provider_calls": 0,
+      "sandbox_bind_refusal": "initial sandbox-only localhost bind refused; authorized loopback rerun passed"
+    },
+    "frozen_full_unit": {
+      "passed": 5851,
+      "passing_subtests": 2,
+      "failed": 2,
+      "skipped": 3,
+      "warnings": 13,
+      "log_sha256": "627af7534c2a35cba836004136d78c940f3b97030e002193c195142f4f68cf34",
+      "junit_sha256": "7594cb6f8e3e7b7c55960cf7da1d5025422d13ad47a3480ba912653d0542f9b7",
+      "failures": [
+        "previously reproduced audio-default failure on unchanged main",
+        "new retry-proof reservation regression at this frozen ref; subsequently closed by 7d74226 without changing the assertion"
+      ],
+      "initial_restricted_run": "5843 passed /10failed; eight synthetic socket failures disappeared in authorized rerun; remaining two are above",
+      "full_mac_gate_green": false
+    },
+    "new_head_ci": "pending publication and rerun",
+    "groups_overlap": true
+  },
+  "proved": [
+    "One original Developer root, planning coordinator and council adviser chain; coalesced authors retain planning workload and review advisers retain explicit council eligibility",
+    "One reservation UUID funds every ancestor without duplicate observed usage; retained failures and omitted/null restart recovery preserve bounds",
+    "Actual exclusive SQLite validation is inside request timeout; corrected causal probe fails under prior placement and passes under current placement",
+    "Whole primitive council context copied before awaits; later mutation cannot enter the SDK request",
+    "Sealed host review proof binds exact acquired bytes, whole model-visible context, repository/file identity and original action; unknown documents remain confidential"
+  ],
+  "limitations": [
+    "Candidate only, not merged, deployed or activated",
+    "Actual SDK MockTransport/localhost tests do not establish real provider quality or actual sandbox Developer acceptance",
+    "Manual/public-crawl source approval, full research and actual Developer pilots remain open",
+    "Private-memory route availability, billing/allowance/overage, live voice and deployed rollback remain open",
+    "Roadmap checker retains other-owner WS-10/WS-11 lifecycle-word errors; their rows were not changed"
+  ],
+  "retry_reservation_repair": {
+    "audited_ref": "7d7422602c699160eddc83ee9630ae97e236308b",
+    "source_sha256": {
+      "jarvis/model_budget.py": "ac5cd1ff550bef65ee4191d56f251429a094e37b6cdf0d2769915e2546c8c618",
+      "jarvis/model_execution.py": "07d8b9f483d5c09b8538ce3fe9d87373cff4b93933e05ad96a1da61da307f305",
+      "tests/unit/test_model_budget_preflight.py": "01c0165f8d6b4281435a6e8e9a49e7363ecbfeddddd19670f2aae8c166cd1753"
+    },
+    "independent_passed": 223,
+    "new_preflight_cases": 41,
+    "root_focused_passed": 105,
+    "groups_overlap": true,
+    "unchanged_retry_assertion_preserved": true,
+    "readonly_preflight_creates_no_uuid_schema_clock_reservation_or_membership": true,
+    "atomic_admission_after_actual_retry_proof": true,
+    "frozen_full_unit": {
+      "passed": 5893,
+      "passing_subtests": 2,
+      "failed": 1,
+      "skipped": 3,
+      "warnings": 13,
+      "failures": [
+        "previously reproduced tests/unit/test_audio_filters.py::test_factory_disabled_returns_none_even_with_engine on unchanged main"
+      ],
+      "retry_reservation_regression_closed": true,
+      "log_sha256": "a3a3614161f2e7e7bb83a51e732c96041594bfc7811600c5056ddf5f62f96f15",
+      "junit_sha256": "6155418a0d8f31e4a4fe2bccdd11d493df33bae7e9bcbdb94e04dd7a47ae39f3",
+      "full_mac_gate_green": false
+    }
+  }
+}

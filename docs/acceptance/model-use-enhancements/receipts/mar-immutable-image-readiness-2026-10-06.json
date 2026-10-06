@@ -1,0 +1,155 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "purpose": "Immutable development image preparation and bounded offline foundation facts; not Developer acceptance",
+  "source_ref": "fd41f301807060749e60775da8121f895495556b",
+  "task_id": "75f9c74bf90d",
+  "source_sha256": "6751a3a7425b86798113d8985b3f22ff552c9d79129a335a4e00424c9e9a8707",
+  "image_id": "9e71cb3f07c046fb9d0e84c3980134bfbf0372b8628c4b15e271cd15c7aa4c6a",
+  "image_record": {
+    "dependencies": "c713fb909e943d018c5631eb9af1732bda8db31ca8409e358df2f7f2e4344954",
+    "id": "9e71cb3f07c046fb9d0e84c3980134bfbf0372b8628c4b15e271cd15c7aa4c6a",
+    "origin_image": "mortimer-base",
+    "profile": "mortimer",
+    "recipe": "016785e5affd5c561025675b1c2e01f4d4191ddd0b233ea631e8d35cf29cbfa8",
+    "source": "fd41f301807060749e60775da8121f895495556b",
+    "vm": "mortimer-image-9e71cb3f07c046fb9d0e"
+  },
+  "baseline_fingerprint": "3bc62b95064fb513e6ad338259497b93e924538d37721eb8dbac3965920181d5",
+  "profile_fingerprint": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+  "settings_sha256": "99c2c7a63be65db7f655384d38688ff6217d7e3de29db53ccac0ef0dc0afe000",
+  "profile_pointers_unchanged": true,
+  "settings_unchanged": true,
+  "image_record_unchanged_after_probes": true,
+  "source_archive_unchanged_after_probes": true,
+  "preparation": "standard Controller.prepare and Images.register; no settings pointer change",
+  "readiness_correction": "/bin/true does not exist in this macOS guest; /usr/bin/true succeeds through the actual guest agent",
+  "toolchains": {
+    "macos": "26.4",
+    "macos_build": "25E246",
+    "xcode": "26.5",
+    "xcode_build": "17F42",
+    "swift": "6.3.2",
+    "python": "3.12.15",
+    "node": "22.23.3"
+  },
+  "guest_resources": {
+    "cpus": 4,
+    "memory_mib": 8192
+  },
+  "offline_observations": {
+    "normal_rpc_effective_uid": 501,
+    "worker_uid_502": "absent in manual foundation; standard Images.create/hydration remains required",
+    "synthetic_seed_db": {
+      "bytes": 376832,
+      "exists": true,
+      "integrity": "ok",
+      "table_count": 39,
+      "user_version": 0
+    },
+    "host_endpoint_controls": [
+      {
+        "address": "104.20.23.154",
+        "connected": true,
+        "family": 2,
+        "seconds": 0.022
+      },
+      {
+        "address": "172.66.147.243",
+        "connected": true,
+        "family": 2,
+        "seconds": 0.026
+      },
+      {
+        "address": "2606:4700:10::ac42:93f3",
+        "connected": true,
+        "family": 30,
+        "seconds": 0.007
+      },
+      {
+        "address": "2606:4700:10::6814:179a",
+        "connected": true,
+        "family": 30,
+        "seconds": 0.006
+      }
+    ],
+    "guest_endpoint_probes": [
+      {
+        "address": "104.20.23.154",
+        "connected": false,
+        "errno": null,
+        "error_type": "TimeoutError",
+        "family": 2,
+        "seconds": 3.001
+      },
+      {
+        "address": "172.66.147.243",
+        "connected": false,
+        "errno": null,
+        "error_type": "TimeoutError",
+        "family": 2,
+        "seconds": 3.004
+      },
+      {
+        "address": "2606:4700:10::ac42:93f3",
+        "connected": false,
+        "errno": 65,
+        "error_type": "OSError",
+        "family": 30,
+        "seconds": 0.0
+      },
+      {
+        "address": "2606:4700:10::6814:179a",
+        "connected": false,
+        "errno": 65,
+        "error_type": "OSError",
+        "family": 30,
+        "seconds": 0.0
+      }
+    ],
+    "ipv6_limit": "EHOSTUNREACH with no global IPv6 address establishes observed unreachability, not general policy blocking",
+    "shared_input_exclusive_create": {
+      "created": false,
+      "errno": 1,
+      "error_type": "PermissionError",
+      "readonly_refused": true
+    },
+    "owned_marker_absent": true,
+    "mount_flag_limit": "statvfs and os.access were inconclusive; exclusive-create EPERM is the actual write-refusal evidence"
+  },
+  "profile_checks": {
+    "count_before": 12,
+    "count_after": 12,
+    "executed": false
+  },
+  "final_owned_vm_states": [
+    {
+      "name": "mortimer-75f9c74bf90d",
+      "state": "stopped"
+    },
+    {
+      "name": "mortimer-image-9e71cb3f07c046fb9d0e",
+      "state": "stopped"
+    }
+  ],
+  "running_vm_count_after": 0,
+  "evidence_files": {
+    "/private/tmp/ws05-image-preparation-75f9c74bf90d-registered.json": "76be2a997da9c7ba63ea30ef4fb85a6d00249bdc47eabb95afe51038e0e4b807",
+    "/private/tmp/ws05-offline-foundation-75f9c74bf90d-corrected.json": "81e14bab08e4090307055892168616d2576c5ff44f3d6d38f25ad11c635aaf49",
+    "/private/tmp/ws05-offline-readonly-input-75f9c74bf90d.json": "a4b12c09aaf678f19c158dd9b84c2582c2c75d8b949df0934c121f74558c4fec"
+  },
+  "remaining": [
+    "normal cloned task worker/desktop isolation",
+    "all twelve baseline/candidate profile checks",
+    "exact four-tool and forty-tool runtime/schema capability evidence",
+    "nonempty real Developer edit and independent holdout quality",
+    "privacy/account/voice/deployment/rollback gates"
+  ],
+  "limitations": [
+    "No provider/model/Developer/candidate execution occurred in these bounded offline probes",
+    "No full forty-tool Developer acceptance",
+    "No production, helper, guest login, permissions or settings pointer change"
+  ]
+}

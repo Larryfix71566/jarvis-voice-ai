@@ -1,0 +1,71 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "candidate_parent_ref": "9f1e7d53b48078bde4b353b6a1c189bfef5d3845",
+  "source_sha256": {
+    "jarvis/admin/server.py": "8186f73c6c52046004c9ba2f848360e077074ca4396c1c3196024dea958da5b4",
+    "jarvis/research/crawl.py": "65d00e77be5bd2ba01f2f709bc3b2430c997d052fc2c7d208c1d18a065440b68",
+    "tests/unit/test_research_source_inputs.py": "596ea8dd4c4c6c6e921af1700c021012211c8c64e3ebac6db6a5fadbc300921e",
+    "tests/unit/test_admin_advisory_budget.py": "c9a8da6ecbe809b329b4f2eaa4f29b63ccb1431a5c859f4fca764a470417d58b"
+  },
+  "scope": "research input egress before actual crawler transport",
+  "reproduction": {
+    "inert_real_tavily_http_boundary": "protected input reached two mock HTTP requests before repair; zero after repair",
+    "regressions": [
+      "local-only focus refuses before client construction",
+      "confidential focus refuses before client construction",
+      "approved original URL/focus packet reaches both sites; acquired unknown pages never enter subsequent HTTP or model request",
+      "new host restriction after first HTTP stops second request"
+    ]
+  },
+  "validation": {
+    "root": {
+      "passed": 62,
+      "warnings": 1,
+      "log": "/private/tmp/ws05-research-input-egress-20261006.log",
+      "junit": "/private/tmp/ws05-research-input-egress-20261006.xml"
+    },
+    "independent": {
+      "passed": 61,
+      "overlaps_root": true,
+      "verdict": "clean; no concrete blocker",
+      "admin_function_ast_sha256": "1f122b036adc7313ad6af8cf6945e03fea3b8ffb749c540f1a23baf07f49a7d5"
+    }
+  },
+  "latest_published_ci": {
+    "ref": "9f1e7d5",
+    "validate": "failed",
+    "failures": [
+      "test_model_use_pilot.py::test_live_spend_reservation_stops_before_over_budget_request: temporary directory cleanup Errno39",
+      "test_upgrade_agent.py::test_routed_planner_cancel_during_request_returns_structured_cancelled_result: cancellation before started event"
+    ],
+    "other_checks": "four passed",
+    "repairs": "in progress; neither failure waived"
+  },
+  "sandbox_prerequisite": {
+    "task_id": "03d46ae90796",
+    "state": "failed",
+    "reason": "source scanner refuses synthetic credential fixtures lacking current exact reviewed hashes",
+    "source_ref": "9f1e7d5",
+    "vm_booted": false,
+    "provider_called": false,
+    "settings_sha256_before_and_after": "99c2c7a63be65db7f655384d38688ff6217d7e3de29db53ccac0ef0dc0afe000",
+    "read_only_audit": {
+      "permitted_blobs": 1729,
+      "matching_files": 10,
+      "matches": 13,
+      "classification": "intentional synthetic credential fixtures; no potential real credential identified",
+      "checks_passed": 3
+    },
+    "next_step": "claim exact reviewed fixture hash scope before changing sandbox/artifacts.py; keep scanner and exclusions unchanged"
+  },
+  "limitations": [
+    "all HTTP and model transports in this regression gate are inert",
+    "no new external approval for manual instructions or acquired crawler pages",
+    "source-packet tests are not representative research or real Developer acceptance",
+    "no rollout, deployment, billing or account acceptance",
+    "test groups overlap and must not be added as unique cases"
+  ]
+}

@@ -6,7 +6,10 @@ spoken-friendly wrappers around its HTTP API (see logic.py).
 
 from __future__ import annotations
 
-from mcp.server.fastmcp import FastMCP
+import json
+
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.types import CallToolResult, TextContent
 
 from mcp_servers.mcp_selfedit import logic
 
@@ -22,10 +25,62 @@ def _get_client():
     return _client
 
 
+def _source_response(ctx, tool, arguments):
+    if ctx is None:
+        return None
+    meta = ctx.request_context.meta
+    value = meta.model_dump().get('mortimer_development_source') if meta is not None else None
+    if value is None:
+        return None
+    response = logic.workspace_source_request(_get_client(), tool, arguments, value)
+    if response.get('ok') is not True:
+        body, hidden = {'ok': False, 'error': 'workspace_source_unavailable'}, {}
+    elif value.get('phase') == 'execute':
+        receipt = response.get('source_receipt')
+        try:
+            body = json.loads(receipt['result']['content'])
+            hidden = {'source_receipt': receipt}
+        except (ValueError, TypeError, KeyError):
+            body, hidden = {'ok': False, 'error': 'workspace_source_unavailable'}, {}
+    else:
+        body = {'ok': True}
+        hidden = {key: response[key] for key in ('source_context', 'source_preparation_id') if key in response}
+    return CallToolResult(content=[TextContent(type='text', text=json.dumps(body, sort_keys=True,
+        separators=(',', ':'), ensure_ascii=True))], structuredContent=body,
+        _meta={'mortimer_development_source': hidden})
+
+
+def _advisory_response(ctx, tool, arguments):
+    if ctx is None:
+        return None
+    meta = ctx.request_context.meta
+    value = meta.model_dump().get('mortimer_advisory_source') if meta is not None else None
+    if value is None:
+        return None
+    response = logic.advisory_source_request(_get_client(), tool, arguments, value)
+    body, hidden = {'ok': False, 'error': 'advisory_source_unavailable'}, {}
+    if response.get('ok') is True:
+        if value.get('phase') == 'associate':
+            body = {'ok': True}
+        else:
+            try:
+                receipt = response['source_receipt']
+                body = json.loads(receipt['result']['content'])
+                hidden = {'source_receipt': receipt}
+                if value['phase'] == 'prepare':
+                    hidden.update(source_context=response['source_context'], preparation_id=response['preparation_id'])
+            except (ValueError, TypeError, KeyError):
+                pass
+    return CallToolResult(content=[TextContent(type='text', text=json.dumps(body, sort_keys=True,
+        separators=(',', ':'), ensure_ascii=True))], structuredContent=body,
+        _meta={'mortimer_advisory_source': hidden})
+
+
 @mcp.tool()
 def selfedit_start(
     goal: str = "", profile: str = "", confirm: bool = False, plan_path: str = "",
     staging_id: str = "", run_id: str = "", target_paths: list[str] | None = None,
+    ctx: Context = None,
 ) -> dict:
     """Start a self-development run for GOAL (a change to Mortimer itself).
 
@@ -47,6 +102,10 @@ def selfedit_start(
     reads these, not the files the goal merely mentions — always pass it
     when the goal names any file.
     """
+    sourced = _source_response(ctx, 'selfedit_start', dict(goal=goal, profile=profile, confirm=confirm,
+        plan_path=plan_path, staging_id=staging_id, run_id=run_id, target_paths=target_paths))
+    if sourced is not None:
+        return sourced
     return logic.selfedit_start(
         _get_client(), goal, profile or None, confirm,
         plan_path=plan_path, staging_id=staging_id, run_id=run_id,
@@ -55,7 +114,7 @@ def selfedit_start(
 
 
 @mcp.tool()
-def selfedit_status(staging_id: str = "", action_run_id: str = "") -> dict:
+def selfedit_status(staging_id: str = "", action_run_id: str = "", ctx: Context = None) -> dict:
     """Report progress of the current upgrade run and edit session: whether
     the planner is still working, which files are proposed and why, whether
     validation passed, and the PR URL once submitted.
@@ -67,11 +126,12 @@ def selfedit_status(staging_id: str = "", action_run_id: str = "") -> dict:
     Pass action_run_id returned by selfedit_finish to recover that exact
     submission's status after the in-memory job slot moves. Supply only one
     identity at a time."""
-    return logic.selfedit_status(_get_client(), staging_id, action_run_id)
+    sourced = _source_response(ctx, 'selfedit_status', dict(staging_id=staging_id, action_run_id=action_run_id))
+    return sourced if sourced is not None else logic.selfedit_status(_get_client(), staging_id, action_run_id)
 
 
 @mcp.tool()
-def selfedit_read(path: str) -> dict:
+def selfedit_read(path: str, ctx: Context = None) -> dict:
     """Read one repo file from the OPEN self-edit session's worktree.
 
     Use this after selfedit_start(confirm=true) reports a session, to see
@@ -80,12 +140,13 @@ def selfedit_read(path: str) -> dict:
     on a version the session does not have. A human-only (Tier 0) file
     comes back read-only (`human_only: true`), as the session's base holds
     it."""
-    return logic.selfedit_read(_get_client(), path)
+    sourced = _source_response(ctx, 'selfedit_read', {'path': path})
+    return sourced if sourced is not None else logic.selfedit_read(_get_client(), path)
 
 
 @mcp.tool()
 def selfedit_write(path: str, content: str, rationale: str,
-                   visual_intent: str = "", proposal: bool = False) -> dict:
+                   visual_intent: str = "", proposal: bool = False, ctx: Context = None) -> dict:
     """Write one file in the OPEN self-edit session's worktree.
 
     `content` is the COMPLETE new file, not a patch or a fragment — read
@@ -102,12 +163,16 @@ def selfedit_write(path: str, content: str, rationale: str,
     pass; it joins the proposal instead of the session. Secrets and runtime
     data are refused outright. Nothing is committed — call selfedit_finish
     when the whole change is written."""
+    sourced = _source_response(ctx, 'selfedit_write', dict(path=path, content=content, rationale=rationale,
+        visual_intent=visual_intent, proposal=proposal))
+    if sourced is not None:
+        return sourced
     return logic.selfedit_write(_get_client(), path, content, rationale,
                                 visual_intent, proposal)
 
 
 @mcp.tool()
-def selfedit_finish() -> dict:
+def selfedit_finish(ctx: Context = None) -> dict:
     """Validate everything written in this session and, if every check
     passes, open the pull request.
 
@@ -118,7 +183,8 @@ def selfedit_finish() -> dict:
     and STOP; call selfedit_status when the user asks how it is going. If
     validation fails, the session stays open: read the failing check, fix
     the file with selfedit_write, and call selfedit_finish again."""
-    return logic.selfedit_finish(_get_client())
+    sourced = _source_response(ctx, 'selfedit_finish', {})
+    return sourced if sourced is not None else logic.selfedit_finish(_get_client())
 
 
 @mcp.tool()
@@ -152,7 +218,7 @@ def selfedit_revert(confirm: bool = False) -> dict:
 @mcp.tool()
 def plan_start(
     goal: str, mode: str = "single", profile: str = "", confirm: bool = False,
-    review_path: str = "", run_id: str = "",
+    review_path: str = "", run_id: str = "", ctx: Context = None,
 ) -> dict:
     """Start drafting an implementation plan, specification, or design
     document for GOAL — use this instead of writing the document yourself
@@ -172,6 +238,10 @@ def plan_start(
     authoring a new plan — use this whenever the user asks to have a
     plan, spec, or document reviewed, critiqued, or checked by a model.
     `run_id` is filled in by the system; leave it empty."""
+    source = _advisory_response(ctx, 'plan_start', dict(goal=goal, mode=mode, profile=profile,
+        confirm=confirm, review_path=review_path, run_id=run_id))
+    if source is not None:
+        return source
     return logic.plan_start(
         _get_client(), goal, mode or "single", profile or None, confirm,
         review_path or "", run_id=run_id,
@@ -179,32 +249,35 @@ def plan_start(
 
 
 @mcp.tool()
-def plan_status(action_run_id: str = "") -> dict:
+def plan_status(action_run_id: str = "", ctx: Context = None) -> dict:
     """Report progress of the current planning job: whether it is still
     drafting, whether council candidates are ready for the user to choose
     between (name each candidate's label and advisory score), or whether
     a finished plan is ready to be saved as a draft with plan_adopt. If
     plan_start reported an action_run_id after a duplicate/uncertain start,
     pass that ID to inspect its receipt before retrying."""
-    return logic.plan_status(_get_client(), action_run_id)
+    source = _advisory_response(ctx, 'plan_status', dict(action_run_id=action_run_id))
+    return source if source is not None else logic.plan_status(_get_client(), action_run_id)
 
 
 @mcp.tool()
-def plan_choose(label: str) -> dict:
+def plan_choose(label: str, ctx: Context = None) -> dict:
     """Choose one candidate plan from a council-mode planning round by its
     label (e.g. 'Proposal A'). No confirmation needed — this only records
     the user's choice; it writes nothing."""
-    return logic.plan_choose(_get_client(), label)
+    source = _advisory_response(ctx, 'plan_choose', dict(label=label))
+    return source if source is not None else logic.plan_choose(_get_client(), label)
 
 
 @mcp.tool()
-def plan_adopt(path: str = "", confirm: bool = False) -> dict:
+def plan_adopt(path: str = "", confirm: bool = False, ctx: Context = None) -> dict:
     """Save the finished plan/review in an open self-edit sandbox session.
     confirm=false previews; confirm=true writes the proposed document in the VM.
     If a session is needed or warming up, follow the returned retry guidance.
     selfedit_finish verifies and prepares a draft PR; no legacy commit action
     is created. PATH defaults to docs/plans/ or docs/reviews/."""
-    return logic.plan_adopt(_get_client(), path or None, confirm)
+    source = _advisory_response(ctx, 'plan_adopt', dict(path=path or None, confirm=confirm))
+    return source if source is not None else logic.plan_adopt(_get_client(), path or None, confirm)
 
 
 if __name__ == "__main__":

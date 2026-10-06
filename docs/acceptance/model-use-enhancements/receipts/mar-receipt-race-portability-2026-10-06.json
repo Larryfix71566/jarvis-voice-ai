@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "failed_ci_ref": "7ff27d5c20b5314433237acd941224d9cfd320de",
+  "failed_ci_run": 37496665138,
+  "cause": "Original race fixture creates a /private/tmp directory absent on Ubuntu before exercising the atomic publication race.",
+  "changed_path": "tests/unit/test_model_use_development_pilot.py",
+  "changed_path_sha256": "990aa5b3d7eaee4fbef7a064334f485f35b35d6297f0cd4fa1fe12de3588781a",
+  "original_body_retained_byte_for_byte": true,
+  "original_body_sha256": "2fa5ac2708af8be89e4f6e13aa1a3dbbd7a5d364d2c44c52a8f4580d360356d3",
+  "repair": "Use actual pytest-owned temporary ROOT and existing permitted repository receipt anchor, preserving the real publication guard.",
+  "assertions": [
+    "actual atomic os.link attempted once",
+    "competing receipt contents/inode/mode unchanged",
+    "owned directory0700 and output0600",
+    "refusal exit2",
+    "no temporary output leak"
+  ],
+  "local_suite": {
+    "passed": 54,
+    "seconds": 7.22,
+    "xml_sha256": "4ff8653fd83c18a872a986bab0f7136f13f0d2dc61119b47e2e025f4152e4932"
+  },
+  "local_missing_macos_directory_simulation": true,
+  "actual_updated_Ubuntu_CI_passed": false,
+  "production_script_or_guard_changed": false,
+  "assertions_weakened_or_tests_skipped": false,
+  "developer_accepted": false,
+  "mar_i_complete": false
+}

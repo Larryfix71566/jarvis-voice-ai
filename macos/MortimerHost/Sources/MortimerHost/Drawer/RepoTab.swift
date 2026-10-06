@@ -2,6 +2,36 @@ import SwiftUI
 import Observation
 import JarvisKit
 
+/// The three existing AdminAPI requests, injectable only for deterministic
+/// delayed-response tests. Production retains the sidecar's single owner.
+@MainActor
+struct ModelRouteRequests {
+    var load: () async throws -> JSONValue
+    var stage: (ModelRoutePreferenceStage) async throws -> JSONValue
+    var confirm: (String) async throws -> JSONValue
+
+    init(api: AdminAPI) {
+        load = { try await api.modelRoutes() }
+        stage = { try await api.stageModelRoute($0) }
+        confirm = { try await api.confirmModelRoute(draftId: $0) }
+    }
+
+    init(load: @escaping () async throws -> JSONValue,
+         stage: @escaping (ModelRoutePreferenceStage) async throws -> JSONValue,
+         confirm: @escaping (String) async throws -> JSONValue) {
+        self.load = load
+        self.stage = stage
+        self.confirm = confirm
+    }
+}
+
+private struct ModelRouteChoice: Equatable {
+    let workload: String
+    let profile: String
+    let route: String
+    let privacy: String
+}
+
 /// APP plan §3 P2/P6/P7, §5 step 6 — the Repo tab. Poll gitStatusTyped
 /// every repoPollSeconds (15 s — F5, NOT the Edit tab's 3 s); commits
 /// and pushes are draft→confirm TWO-step user actions (C4), the pending
@@ -13,12 +43,31 @@ final class RepoViewModel {
     var state: TabState<GitStatus> = .loading
     var architectureState: TabState<ArchitectureReference> = .loading
     var modelRoutesState: TabState<JSONValue> = .loading
-    var selectedModelWorkload = "developer"
-    var selectedModelProfile = "claude-opus"
-    var selectedModelRoute = "direct_api"
-    var selectedModelPrivacy = "approved_external"
-    var modelRouteDraftID: String?
+    var selectedModelWorkload = "developer" {
+        didSet {
+            guard oldValue != selectedModelWorkload else { return }
+            modelRouteSelectionChanged()
+            applyModelWorkloadDefaults()
+        }
+    }
+    var selectedModelProfile = "claude-opus" {
+        didSet { if oldValue != selectedModelProfile { modelRouteSelectionChanged() } }
+    }
+    var selectedModelRoute = "direct_api" {
+        didSet { if oldValue != selectedModelRoute { modelRouteSelectionChanged() } }
+    }
+    var selectedModelPrivacy = "approved_external" {
+        didSet { if oldValue != selectedModelPrivacy { modelRouteSelectionChanged() } }
+    }
+    private(set) var modelRouteDraftID: String?
     var modelRouteNote: String?
+    private(set) var modelRouteStaging = false
+    private(set) var modelRouteConfirming = false
+    private var modelRouteRequests: ModelRouteRequests
+    private var modelRouteDraftChoice: ModelRouteChoice?
+    private var modelRouteSelectionRevision = 0
+    private var modelRouteServiceRevision = 0
+    private var modelRouteLoadRevision = 0
     var commitMessage = ""
     var pendingCommit: GitDraft?
     var pendingPush: GitDraft?
@@ -26,7 +75,10 @@ final class RepoViewModel {
     private var pollTask: Task<Void, Never>?
     private var stopped = false
 
-    init(api: AdminAPI) { self.api = api }
+    init(api: AdminAPI, modelRouteRequests: ModelRouteRequests? = nil) {
+        self.api = api
+        self.modelRouteRequests = modelRouteRequests ?? ModelRouteRequests(api: api)
+    }
 
     func updateAPI(_ api: AdminAPI) {
         stopPolling()
@@ -34,7 +86,12 @@ final class RepoViewModel {
         stopped = false
         architectureState = .loading
         modelRoutesState = .loading
-        modelRouteDraftID = nil
+        modelRouteServiceRevision += 1
+        modelRouteLoadRevision += 1
+        modelRouteRequests = ModelRouteRequests(api: api)
+        modelRouteStaging = false
+        modelRouteConfirming = false
+        discardModelRouteDraft()
     }
 
     func startPolling() {
@@ -102,78 +159,156 @@ final class RepoViewModel {
     }
 
     func refreshModelRoutes() async {
+        modelRouteLoadRevision += 1
+        let loadRevision = modelRouteLoadRevision
+        let selectionRevision = modelRouteSelectionRevision
         do {
-            let routes = try await api.modelRoutes()
-            guard !Task.isCancelled else { return }
+            let routes = try await modelRouteRequests.load()
+            guard !Task.isCancelled, loadRevision == modelRouteLoadRevision else { return }
+            guard routes["ok"]?.boolValue == true else {
+                modelRoutesState = .error(routes["error"]?.stringValue ?? "Model route catalog unavailable")
+                discardModelRouteDraft()
+                return
+            }
             modelRoutesState = .loaded(routes)
-            applyModelWorkloadDefaults()
+            // A refresh must not replace an edit made while the request ran.
+            if selectionRevision == modelRouteSelectionRevision { applyModelWorkloadDefaults() }
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, loadRevision == modelRouteLoadRevision else { return }
             modelRoutesState = .error(TabStateMapper.fromError(error).state)
+            discardModelRouteDraft()
         }
     }
 
     func applyModelWorkloadDefaults() {
         guard case .loaded(let routes) = modelRoutesState,
               let workload = routes["workloads"]?[selectedModelWorkload] else { return }
-        if let profile = workload["profile"]?.stringValue { selectedModelProfile = profile }
-        if let route = workload["route"]?.stringValue { selectedModelRoute = route }
-        if let privacy = workload["privacy"]?.stringValue { selectedModelPrivacy = privacy }
+        let saved = routes["preferences"]?.arrayValue?.first {
+            $0["workload"]?.stringValue == selectedModelWorkload
+        }
+        if let profile = (saved?["profile"] ?? workload["profile"])?.stringValue { selectedModelProfile = profile }
+        if let route = (saved?["route"] ?? workload["route"])?.stringValue { selectedModelRoute = route }
+        if let privacy = (saved?["privacy"] ?? workload["privacy"])?.stringValue { selectedModelPrivacy = privacy }
+    }
+
+    private var modelRouteChoice: ModelRouteChoice {
+        ModelRouteChoice(workload: selectedModelWorkload, profile: selectedModelProfile,
+                         route: selectedModelRoute, privacy: selectedModelPrivacy)
+    }
+
+    private func modelRouteSelectionChanged() {
+        discardModelRouteDraft()
+    }
+
+    func discardModelRouteDraft() {
+        modelRouteSelectionRevision += 1
+        modelRouteDraftID = nil
+        modelRouteDraftChoice = nil
+        modelRouteNote = nil
     }
 
     func stageModelRoute() async {
-        modelRouteNote = nil
+        guard !modelRouteStaging, !modelRouteConfirming else { return }
+        discardModelRouteDraft()
+        let choice = modelRouteChoice
+        let selectionRevision = modelRouteSelectionRevision
+        let serviceRevision = modelRouteServiceRevision
+        modelRouteStaging = true
+        defer { if serviceRevision == modelRouteServiceRevision { modelRouteStaging = false } }
         do {
-            let result = try await api.stageModelRoute(.init(
-                workload: selectedModelWorkload,
-                profile: selectedModelProfile,
-                route: selectedModelRoute,
-                privacy: selectedModelPrivacy
+            let result = try await modelRouteRequests.stage(.init(
+                workload: choice.workload, profile: choice.profile,
+                route: choice.route, privacy: choice.privacy
             ))
-            if result["ok"]?.boolValue == true {
-                modelRouteDraftID = result["draft_id"]?.stringValue
+            guard !Task.isCancelled, serviceRevision == modelRouteServiceRevision,
+                  selectionRevision == modelRouteSelectionRevision,
+                  choice == modelRouteChoice else { return }
+            if result["ok"]?.boolValue == true,
+               let draftID = result["draft_id"]?.stringValue, !draftID.isEmpty {
+                modelRouteDraftID = draftID
+                modelRouteDraftChoice = choice
                 modelRouteNote = "Draft ready — confirm to save."
             } else {
                 modelRouteNote = result["error"]?.stringValue ?? "Route draft was rejected."
             }
-        } catch { modelRouteNote = TabStateMapper.fromError(error).state }
+        } catch {
+            guard serviceRevision == modelRouteServiceRevision,
+                  selectionRevision == modelRouteSelectionRevision else { return }
+            modelRouteNote = TabStateMapper.fromError(error).state
+        }
     }
 
     func confirmModelRoute() async {
-        guard let draftID = modelRouteDraftID else { return }
+        guard !modelRouteStaging, !modelRouteConfirming,
+              let draftID = modelRouteDraftID, modelRouteDraftChoice == modelRouteChoice else { return }
+        let serviceRevision = modelRouteServiceRevision
+        let choice = modelRouteChoice
+        modelRouteConfirming = true
+        defer { if serviceRevision == modelRouteServiceRevision { modelRouteConfirming = false } }
         do {
-            let result = try await api.confirmModelRoute(draftId: draftID)
+            let result = try await modelRouteRequests.confirm(draftID)
+            guard !Task.isCancelled, serviceRevision == modelRouteServiceRevision else { return }
             if result["ok"]?.boolValue == true {
-                modelRouteNote = "Model route saved."
-                modelRouteDraftID = nil
-                await refreshModelRoutes()
+                discardModelRouteDraft()
+                // Do not replace a different selection made programmatically
+                // during confirmation; the UI disables editing until settled.
+                if choice == modelRouteChoice {
+                    await refreshModelRoutes()
+                    modelRouteNote = "Model route saved."
+                }
             } else {
+                guard choice == modelRouteChoice else { return }
                 modelRouteNote = result["error"]?.stringValue ?? "Route confirmation failed."
             }
-        } catch { modelRouteNote = TabStateMapper.fromError(error).state }
+        } catch {
+            guard serviceRevision == modelRouteServiceRevision, choice == modelRouteChoice else { return }
+            modelRouteNote = TabStateMapper.fromError(error).state
+        }
     }
 
     var modelRouteWorkloads: [String] {
         guard case .loaded(let value) = modelRoutesState,
               let object = value["workloads"]?.objectValue else { return [] }
-        return object.keys.sorted()
+        return Set(Array(object.keys) + [selectedModelWorkload]).sorted()
     }
 
     var modelRouteProfiles: [String] {
         guard case .loaded(let value) = modelRoutesState,
               let profiles = value["profiles"]?.arrayValue else { return [] }
-        return profiles.compactMap { $0["name"]?.stringValue }.sorted()
+        let names = profiles.filter {
+            guard let workloads = $0["supported_workloads"]?.arrayValue else { return true }
+            return workloads.contains(.string(selectedModelWorkload))
+        }.compactMap { $0["name"]?.stringValue }
+        return Set(names + [selectedModelProfile]).sorted()
     }
 
     var modelRouteNames: [String] {
         guard case .loaded(let value) = modelRoutesState,
               let routes = value["routes"]?.objectValue else { return [] }
-        return routes.keys.sorted()
+        let profile = value["profiles"]?.arrayValue?.first { $0["name"]?.stringValue == selectedModelProfile }
+        let names = profile?["routes"]?.arrayValue?.compactMap { $0.stringValue } ?? Array(routes.keys)
+        // Keep an unavailable saved choice visible; never substitute a route.
+        return Set(names + [selectedModelRoute]).sorted()
+    }
+
+    var modelRouteActivationSummary: String {
+        guard case .loaded(let value) = modelRoutesState,
+              let enabled = value["routing_enabled"]?.boolValue else { return "Runtime routing status unavailable." }
+        return enabled ? "Configured routing is enabled in the admin process; bot status must also be verified."
+            : "Routing is disabled in the admin process; bot status has not been verified. Saving a choice does not change the activation flag."
     }
 
     var selectedModelRouteSummary: String? {
-        guard case .loaded(let value) = modelRoutesState,
-              let route = value["routes"]?[selectedModelRoute]?.objectValue else { return nil }
+        guard case .loaded(let value) = modelRoutesState else { return nil }
+        let descriptor: JSONValue?
+        if value["choices"]?.objectValue != nil {
+            descriptor = value["choices"]?[selectedModelWorkload]?[selectedModelProfile]?[selectedModelRoute]
+        } else {
+            descriptor = value["routes"]?[selectedModelRoute]
+        }
+        guard let route = descriptor?.objectValue else {
+            return "Saved or selected route is unavailable in the current catalog."
+        }
         let capabilities = route["capabilities"]?.arrayValue?.compactMap { $0.stringValue }
             .joined(separator: ", ")
         let privacy = route["privacy"]?.stringValue
@@ -182,6 +317,7 @@ final class RepoViewModel {
             capabilities.map { "capabilities: \($0)" },
             privacy.map { "privacy: \($0)" },
             billing.map { "billing: \($0)" },
+            route["reason"]?.stringValue,
         ].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -370,9 +506,6 @@ private struct ModelRouteControls: View {
                     Picker("Workload", selection: $model.selectedModelWorkload) {
                         ForEach(model.modelRouteWorkloads, id: \.self) { Text($0).tag($0) }
                     }
-                    .onChange(of: model.selectedModelWorkload) { _, _ in
-                        model.applyModelWorkloadDefaults()
-                    }
                     Picker("Profile", selection: $model.selectedModelProfile) {
                         ForEach(model.modelRouteProfiles, id: \.self) { Text($0).tag($0) }
                     }
@@ -393,17 +526,19 @@ private struct ModelRouteControls: View {
                     HStack {
                         Button("Draft route") { Task { await model.stageModelRoute() } }
                             .tint(AppTheme.accent)
+                            .disabled(model.modelRouteStaging || model.modelRouteConfirming)
                         if model.modelRouteDraftID != nil {
                             Button("Confirm route") { Task { await model.confirmModelRoute() } }
                                 .tint(AppTheme.green)
-                            Button("Discard") {
-                                model.modelRouteDraftID = nil
-                                model.modelRouteNote = nil
-                            }
+                            Button("Discard", action: model.discardModelRouteDraft)
                         }
                         Button("Refresh") { Task { await model.refreshModelRoutes() } }
                             .buttonStyle(.borderless)
                     }
+                    .disabled(model.modelRouteConfirming)
+                    Text(model.modelRouteActivationSummary)
+                        .font(.system(size: 10))
+                        .foregroundStyle(AppTheme.textDim)
                     if let note = model.modelRouteNote {
                         Text(note)
                             .font(.system(size: 10, design: .monospaced))
@@ -413,6 +548,7 @@ private struct ModelRouteControls: View {
                         .font(.system(size: 10))
                         .foregroundStyle(AppTheme.textDim)
                 }
+                .disabled(model.modelRouteConfirming)
             }
         } label: {
             Label("MODEL ACCESS", systemImage: "arrow.triangle.branch")

@@ -58,8 +58,12 @@ def test_streaming_capability_is_explicit_to_verified_direct_profiles(monkeypatc
     )
     assert "streaming" in route.route.capabilities
     saygm_route = resolve_model_route(
-        "developer", explicit_route="saygm",
+        "memory", explicit_route="saygm",
         environ={"SAYGM_API_KEY": "synthetic-key"},
+        saygm_model=parse_catalog({"data": [{
+            "id": "claude-sonnet-5-TEE", "tier": "confidential",
+            "api_shapes": ["chat.completions"],
+        }]})[0],
     )
     assert "streaming" not in saygm_route.route.capabilities
 
@@ -105,16 +109,20 @@ def test_saygm_catalog_can_upgrade_route_to_confidential(monkeypatch):
     catalog = parse_catalog({"data": [{
         "id": "claude-opus-5-TEE", "tier": "confidential",
         "gateway_provider": "chutes",
+        "api_shapes": ["chat.completions"],
     }]})
-    route = resolve_model_route("developer", explicit_route="saygm",
+    route = resolve_model_route("planning", explicit_profile="claude-opus", explicit_route="saygm",
                                saygm_model=catalog[0])
     assert route.route.privacy == "confidential"
+    assert route.model == "claude-opus-5-TEE"
+    assert route.route.capabilities == ("text",)
 
 
 def test_confidential_memory_requires_catalog_proof(monkeypatch):
     monkeypatch.setenv("SAYGM_API_KEY", "gm-key")
     catalog = parse_catalog({"data": [{
         "id": "claude-sonnet-5-TEE", "tier": "confidential",
+        "api_shapes": ["chat.completions"],
     }]})
     route = resolve_model_route("memory", explicit_route="saygm",
                                saygm_model=catalog[0])
@@ -124,7 +132,8 @@ def test_confidential_memory_requires_catalog_proof(monkeypatch):
 
 def test_checked_route_fetches_catalog_only_for_confidential_saygm(monkeypatch):
     monkeypatch.setenv("SAYGM_API_KEY", "gm-key")
-    catalog = parse_catalog({"data": [{"id": "claude-sonnet-5-TEE", "tier": "confidential"}]})
+    catalog = parse_catalog({"data": [{"id": "claude-sonnet-5-TEE", "tier": "confidential",
+                                       "api_shapes": ["chat.completions"]}]})
     monkeypatch.setattr("jarvis.saygm.fetch_catalog", lambda **_: catalog)
     route = __import__("jarvis.model_routing", fromlist=["resolve_model_route_checked"]).resolve_model_route_checked(
         "memory", explicit_route="saygm")

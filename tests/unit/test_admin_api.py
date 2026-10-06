@@ -87,6 +87,48 @@ def test_model_routes_stage_and_confirm(client):
     assert any(item["workload"] == "developer" for item in c.get("/api/model-routes").json()["preferences"])
 
 
+def test_model_routes_has_profile_specific_direct_api_and_voice_only_haiku(client, monkeypatch):
+    c, _ = client
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "private-api-key-canary")
+    body = c.get("/api/model-routes").json()
+    assert body["ok"] is True
+    assert body["routes"]["direct_api"]["per_profile"] is True
+    voice = next(p for p in body["profiles"] if p["name"] == "claude-haiku-4-5")
+    assert voice["supported_workloads"] == ["voice_supervisor"]
+    assert "claude-haiku-4-5" not in body["choices"]["developer"]
+    direct = body["choices"]["developer"]["claude-opus"]["direct_api"]
+    assert direct["credential_env"] == "ANTHROPIC_API_KEY"
+    assert direct["key_present"] is True
+    assert "images" in direct["capabilities"]
+    assert "subscription" in next(p for p in body["profiles"] if p["name"] == "claude-opus")["routes"]
+    assert "private-api-key-canary" not in str(body)
+
+
+def test_model_routes_is_local_catalog_and_does_not_claim_bot_activation(client, monkeypatch):
+    from jarvis import saygm
+    c, _ = client
+    monkeypatch.setattr(saygm, "fetch_catalog", lambda **_: pytest.fail("GET must not contact a provider"))
+    monkeypatch.delenv("JARVIS_MODEL_ROUTING_ENABLED", raising=False)
+    body = c.get("/api/model-routes").json()
+    assert body["ok"] is True
+    assert body["routing_enabled"] is False
+    assert body["routing_process"] == "admin"
+    assert body["choices"]["memory"]["claude-sonnet-5"]["saygm"]["compatible"] is False
+    monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "1")
+    assert c.get("/api/model-routes").json()["routing_enabled"] is True
+
+
+def test_model_routes_failures_do_not_echo_exception_payload(client, monkeypatch):
+    from jarvis.admin import server
+    c, _ = client
+    def broken():
+        raise RuntimeError("private-provider-error-canary")
+    monkeypatch.setattr(server, "load_access_config", broken)
+    body = c.get("/api/model-routes").json()
+    assert body["ok"] is False
+    assert "private-provider-error-canary" not in str(body)
+
+
 def test_status_endpoint(client):
     c, _ = client
     body = c.get("/api/git/status").json()

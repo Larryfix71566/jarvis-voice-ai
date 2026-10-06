@@ -1,0 +1,115 @@
+{
+  "recorded": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "candidate_ref": "33ddd42e0426ad28abd2736e4937f87f7dcfee33",
+  "production_modified": false,
+  "provider_requests": 0,
+  "new_production_limit_values": false,
+  "source_sha256": {
+    "jarvis/agents/base.py": "b528256071ec3f7efa4d261e9a0a57340fe1b6cc52b7c672a751922acb38bbb2",
+    "jarvis/agents/upgrade_agent.py": "20b7c3f5349b8a91dc65e2029ac188c44deab6057d07a252fa0884122c36c7e4",
+    "jarvis/council/config.py": "91cceb0ac7c63dc36499713a05c7d62247fe9316cc9f5d977dadee79fcd3be35",
+    "jarvis/model_routing.py": "3653491531d7f873b26ebfe1ad24fc92c3c329455bbc8bc5919a9236ad6f9b22",
+    "jarvis/model_execution.py": "b8a26fba3792843714a32a3735e7e04ec741b96aec79d84b08156a04e1c90014",
+    "jarvis/model_budget.py": "3095ac26ede8cce2758f5b3bf3425d5d0481d5cdd8c60fc5d32a3a669596b13d",
+    "jarvis/usage_ledger.py": "bdad43788a2d7b7731ecd47f0b334683895ab0f468e84f01f48b992ae8308f0d",
+    "jarvis/privacy_policy.py": "849baa056e55ad64e3e1648cf590d5deeb12eac59372e277b4636a0739d4fd4a",
+    "jarvis/skills/registry.py": "ce7f9f3888e4b65834a0874b0572f1a4ccb43138c672c4579aa053ea75f8ddc5",
+    "jarvis/runlog/store.py": "bc3f9161a42481466593827b4e484cd61f907d2426be87c6e6a74e0de73bb985",
+    "mcp_servers/mcp_repo/logic.py": "2e810e5e181ac471348b8b4015dd2a6cf122beb7265d2c785c9f547a132612b2"
+  },
+  "verification": {
+    "focused_agent_execution_delegate": {
+      "passed": 260,
+      "failed": 0
+    },
+    "registry_runlog_repo": {
+      "passed": 176,
+      "failed": 0
+    },
+    "canonical_identity_related": {
+      "passed": 298,
+      "skipped": 3,
+      "failed": 0
+    },
+    "independent_budget_boundary_review": {
+      "passed": 115,
+      "failed": 0
+    },
+    "council_integration_fixture_recheck": {
+      "passed": 50,
+      "failed": 0,
+      "assertions_changed": false
+    },
+    "unit_gate": {
+      "passed": 5405,
+      "subtests_passed": 2,
+      "skipped": 3,
+      "failed": 1,
+      "command": "RUN_LIVE=0 python -m pytest tests/unit --tb=no -q",
+      "failures": [
+        "tests/unit/test_audio_filters.py::test_factory_disabled_returns_none_even_with_engine"
+      ],
+      "baseline_comparison": "same audio-default failure independently reproduced on unchanged main in the prior candidate receipt"
+    },
+    "integration_evals_gate": {
+      "passed": 173,
+      "skipped": 4,
+      "failed": 4,
+      "command": "RUN_LIVE=0 python -m pytest tests/integration tests/evals --tb=no -q",
+      "failures": [
+        "tests/integration/test_bot_wiring.py::test_six_functions_registered",
+        "tests/integration/test_bot_wiring.py::test_ui_control_kill_switch_unregisters_tool",
+        "tests/integration/test_bot_wiring.py::test_status_kill_switch_unregisters_tool",
+        "tests/integration/test_bot_wiring.py::test_screen_vision_kill_switch_unregisters_tools"
+      ],
+      "baseline_comparison": "same four inventory failures independently reproduced on unchanged main in prior candidate receipt"
+    },
+    "detached_checkout_policy": {
+      "passed": 9,
+      "failed": 0
+    },
+    "unix_gateway_permitted_recheck": {
+      "passed": 3,
+      "failed": 0,
+      "restricted_initial_failures": "socket binding PermissionError; not a provider failure"
+    },
+    "static_call_site_classification": {
+      "covered": 30,
+      "total": 30,
+      "behavioral_acceptance": false
+    },
+    "roadmap_checker": {
+      "errors": [
+        "WS-10 invalid pending lifecycle wording",
+        "WS-11 invalid open lifecycle wording"
+      ],
+      "warnings": 0,
+      "outside_ws05": true
+    }
+  },
+  "verified_contracts": [
+    "saved SubAgent selections refresh per task; explicit requests and concurrent snapshots retained",
+    "unreadable preferences refuse; API credentials refresh; native quarantine retained through named preflight",
+    "sealed host tool scopes checked before logs, events, derived instructions and continuation; unclassified sources confidential",
+    "guarded repository source roots and bytes; public errors reduced to fixed categories; earlier MCP buffers redacted",
+    "optional task deadlines include admission, association and tools; stricter resumed parent bounds retained",
+    "output and supported-SDK zero-retry configured-price admission; failed reservations retained; no observed usage fabricated",
+    "transient output-only scopes authenticate limits without creating a store",
+    "canonical and physical registry aliases rejected before key lookup; council economy/partition preserved"
+  ],
+  "remaining_independent_work": [
+    "claim and integrate UpgradeAgent/AppBuildAgent saved-choice refresh, source policies, shared limits and enabled-mode no implicit failover",
+    "host-scoped issuers for actual self-edit/app-build/creator results before real Developer continuation",
+    "equivalent representative research and actual sandbox Developer pilots; exact runtime/schema receipts"
+  ],
+  "remaining_external_gates": [
+    "SAYGM catalog advertises no confidential models; local runtime placeholder",
+    "cross-system core review before merge",
+    "account allowance/billing/paid-overage confirmation",
+    "voice/physical/deployed rollback and workload acceptance"
+  ],
+  "deployment_gate_green": false,
+  "rollout_complete": false
+}

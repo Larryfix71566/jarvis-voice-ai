@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "workstream": "WS-05",
+  "system": "codex",
+  "date": "2026-10-06",
+  "audited_ref": "890269303047f3edd733a6910207e9a99533e6a4",
+  "main_scope_claim": {
+    "pr": 179,
+    "merge": "fb3e1aac0bfaa6daedaeee0bd1eb099512e22bb9"
+  },
+  "source_sha256": {
+    "jarvis/development_sources.py": "0555e05a10ff1b04c03cac19e281224442f32812523d182ce1045b9f6ac60d43",
+    "jarvis/development_attestation.py": "8555e6e0d27494faf509b640896594654268bf904857aec25b16530c8d72d21c",
+    "jarvis/agents/base.py": "db6a511930addc97b01ffc3193acac5a19df5c10c7a00454273bcb7306e8d476",
+    "jarvis/agents/upgrade_agent.py": "42a6bbac61bc7f916e4fdf8698efc89ce2bfe08e09affc18ae72e993fd1dbf62",
+    "jarvis/admin/server.py": "4c81e0932931d0c26abadcd2e36adfc13071d583a7d0f6db8eaa8487f1dd995b",
+    "jarvis/bot/server.py": "df1f6bd8396fca5010bb345472d0a825606ee4da9232cfdd4d6ded11863e1932",
+    "jarvis/model_budget.py": "e45acd7f2b40e7d5ec1bf784c1771f4d79652411216580132b66e0d353cb9c80",
+    "jarvis/model_execution.py": "a7a2c58d992a6749818217d1c718ee06d979e4bce35b53b084603c23d4c40ced",
+    "sandbox/files.py": "13754fff29bf9d3097576435c62afb548051d67e353e2d17191f3aec50f62afe",
+    "sandbox/session.py": "d0a4a676cba13960f17b9ce66f03e9c0118ed6e16b13f21cc6854eabddc9c7d9",
+    "sandbox/workspace.py": "e7c7c647aacc4df3029267bb27aa4c4324c95635a0085ddc3642acfe41879987",
+    "tests/unit/test_development_sources.py": "13aacfc0969cd89904681dd4ab60aee65d8c1792930b8b336f90fb0b7bace584",
+    "tests/unit/test_development_attestation.py": "a0dfdba77ae8ce7317bc1391b84f6b414b6a62f503980364ddc078be67f75a6f",
+    "tests/unit/test_upgrade_routed_execution.py": "efd971085715a006e0fe3e0cb9cb9dfbea50708ecd84397fb411c816ffb69214",
+    "tests/integration/test_creator_source_bridge.py": "d5e9ae29b514a113637a11853c26c34608207b9e22c63460908e4a88a0a39a2c"
+  },
+  "verification": {
+    "scope": "focused host-source, creator IPC, development, agent, budget/execution and standard sandbox regression gate",
+    "passed": 572,
+    "failed": 0,
+    "skipped": 0,
+    "subtests_passed": 45,
+    "warnings": 3,
+    "log_sha256": "95c6a4a4accab7c7b59edb8fe8a73f237be357bf2373dac8f5a79ff2ea465db1",
+    "junit_sha256": "eb2de8d018da87edab0537d2d0240892be252e9994e31e5458239c5a5c203008"
+  },
+  "proved": [
+    "exact installed Runtime/Session/File source bindings and pre-RPC owner/snapshot checks",
+    "project code plus named architecture references remain usable; unknown/foreign/private sources cannot approve themselves",
+    "monotonic persisted write floors before guest ingress, including lost ACK and copied derivatives",
+    "one operation, locally sealed source envelopes and authenticated creator receipt verification before result sinks",
+    "creator run/revision/owner/job rechecks and cancellation-lock test without recursive locking",
+    "per-run Upgrade/AppBuild route snapshots, no enabled implicit failover, shared task limits and host-entry deadlines",
+    "native close_request exact parent ownership and retained quarantine, including stateless cleanup failure"
+  ],
+  "not_proved": [
+    "real VM/native Developer capability or workload quality",
+    "remaining ordinary self-edit/app MCP source integration",
+    "shared capped council child budgets (currently refuse)",
+    "large-edit parity beyond the existing 16384-byte typed argument limit",
+    "representative research/confidential-memory pilot",
+    "account allowance, paid-overage and actual subscription billing",
+    "full Mac/deployment gate or effective production activation"
+  ],
+  "production_changed": false,
+  "providers_called": false,
+  "vm_started": false,
+  "other_roadmap_findings": [
+    "WS-10 status starts pending; WS-11 status starts open; owner rows were not modified"
+  ]
+}

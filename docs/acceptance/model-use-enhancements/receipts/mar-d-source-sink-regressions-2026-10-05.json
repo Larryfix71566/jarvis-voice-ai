@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "workstream": "WS-05",
+  "system": "codex",
+  "captured_at_utc": "2026-10-06T03:25:29.129053+00:00",
+  "scope_claim_pr": 176,
+  "scope_claim_merge": "0b6723ce9a243b6592c002257a63d4027e145a3d",
+  "candidate_head": "497e5cd239c60ee096941e681dc4efe831dc052e",
+  "candidate_state": "Shared working-tree implementation; uncommitted at capture. File hashes identify this evidence.",
+  "provider_calls": "Synthetic recording clients only; no live inference, account, or production change.",
+  "files_sha256": {
+    "jarvis/agents/delegate.py": "39366bdd2fdb4fff1575fd99a4c4448a47ae7f0bf137912e8aae133482405ac8",
+    "jarvis/memory_model.py": "cb6f992d7a713ccee7299149532b563c7f5d4af1bd13b99e9175094ae1f8615c",
+    "jarvis/memory_extraction.py": "7799dfd0ecdaa51e2c5c4def7ab6ea03f7aa04d92a940a75dfd1b24058774d2c",
+    "jarvis/memory_sweep.py": "456f59cd46219922ddf6c9d304ba94136ef7c14f89fbfe96f7d22cdf5e1de618",
+    "tests/unit/test_delegate.py": "00f1db1e118cd58f0692ebb43e343721c5fa20c99e248ec1b16508f4397fb166",
+    "tests/unit/test_memory_model.py": "513c7d3a9b55ea2254feffc9790fef7f4eb897331f65ddca1cc7809c5827514f",
+    "tests/unit/test_memory_routed_replay_settlement.py": "da8368c377bfc316f613ce6714146c68a18349ff5f76c176dec44a5b4bec2d9e"
+  },
+  "repairs": [
+    {
+      "path": "jarvis/agents/delegate.py",
+      "behavior": "Late delivery callback errors log class only, without traceback or payload; continuation logs presence instead of path. Outbox fallback retained."
+    },
+    {
+      "path": "jarvis/memory_extraction.py:extract_candidates",
+      "behavior": "Enabled replay extraction uses shared confidential execution. This is scripts/replay_extraction.py\u2019s model helper, distinct from the normal durable worker admission path. Provider exceptions are sanitized before replay prints them."
+    },
+    {
+      "path": "jarvis/memory_sweep.py:settle_open_reviews",
+      "behavior": "Enabled automatic settlement uses shared confidential execution, one usage row, cancellation-safe admission; failed/cancelled calls leave reviews open. Success logs archived count instead of keys."
+    },
+    {
+      "path": "jarvis/memory_model.py",
+      "behavior": "Enabled memory/background factories enforce configured workload floor and private-source floor before building a client. Routing-off compatibility retains direct API behavior."
+    }
+  ],
+  "verification": {
+    "command": "python -m pytest -p no:cacheprovider tests/unit/test_memory_routed_replay_settlement.py tests/unit/test_memory_model.py tests/unit/test_delegate.py tests/unit/test_memory_extraction.py tests/unit/test_memory_settle.py tests/unit/test_memory_sweep.py tests/unit/test_model_route_catalog_binding.py -q",
+    "result": "261 passed",
+    "new_regression_nodeids": [
+      "tests/unit/test_delegate.py::TestFindingsCarryForward::test_continuation_log_omits_findings_path_and_content",
+      "tests/unit/test_delegate.py::TestNoticeOutbox::test_late_delivery_callback_failure_logs_only_error_type",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_enabled_calls_use_policy_boundary_and_one_normalized_usage_row[replay]",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_enabled_calls_use_policy_boundary_and_one_normalized_usage_row[settlement]",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_confidential_sources_refuse_external_route_before_provider[replay]",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_confidential_sources_refuse_external_route_before_provider[settlement]",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_cancellation_releases_background_admission_without_writing_review[replay]",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_cancellation_releases_background_admission_without_writing_review[settlement]",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_usage_sink_failure_preserves_result_and_logs_no_payload[replay]",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_usage_sink_failure_preserves_result_and_logs_no_payload[settlement]",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_routing_off_retains_direct_client_request_and_accounting[replay]",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_routing_off_retains_direct_client_request_and_accounting[settlement]",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_settlement_provider_error_leaves_review_open_and_logs_no_payload",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_replay_provider_error_is_safe_for_replay_script_exception_output",
+      "tests/unit/test_memory_routed_replay_settlement.py::test_settlement_success_log_contains_count_without_private_memory_key",
+      "tests/unit/test_memory_model.py::test_enabled_source_floor_refuses_external_before_client_construction[memory]",
+      "tests/unit/test_memory_model.py::test_enabled_source_floor_refuses_external_before_client_construction[background]",
+      "tests/unit/test_memory_model.py::test_unexpected_enabled_route_failure_does_not_echo_provider_diagnostic[memory]",
+      "tests/unit/test_memory_model.py::test_unexpected_enabled_route_failure_does_not_echo_provider_diagnostic[background]"
+    ],
+    "canary_checks": [
+      "Provider response usage extra is absent from normalized usage ledger; exactly one row per completed replay/settlement.",
+      "Confidential input rejects approved_external route before provider create.",
+      "Callback exception, findings path/body, archived memory key and unexpected route diagnostic are absent from logs/public error text.",
+      "Cancellation releases background admission and leaves reviews open.",
+      "Usage sink failures preserve valid extraction/settlement results without logging private diagnostics."
+    ]
+  },
+  "callsite_inventory": {
+    "counts": {
+      "total": 30,
+      "covered": 30,
+      "review_required": 0
+    },
+    "classification_is_privacy_acceptance": false,
+    "change": "Two new shared-boundary branches add to the previous 28 static entries; direct compatibility branches remain classified."
+  },
+  "remaining_gates": [
+    "Global routing remains unchanged; routing-off compatibility paths are external and are not a confidentiality claim.",
+    "Trusted source-policy metadata for newly acquired private/unlabelled content still needs design/evidence; approved repository processing remains authorized.",
+    "Model/runtime, billing, isolated pilot and physical acceptance gates remain independently open."
+  ],
+  "mar_d_accepted": false
+}

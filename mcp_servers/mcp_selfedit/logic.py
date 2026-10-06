@@ -53,6 +53,41 @@ def _call(fn) -> dict[str, Any]:
         return {"ok": False, "error": OFFLINE_ERROR}
 
 
+def workspace_source_request(client, tool_name: str, actual_arguments: dict, metadata: dict) -> dict:
+    """Hidden host transport; metadata never participates in source approval.
+
+    Ordinary tools keep their legacy logic when this is not requested. The
+    authenticated admin invokes that installed logic and signs the final body.
+    """
+    try:
+        if (type(metadata) is not dict or metadata.get('tool_name') != tool_name
+                or metadata.get('phase') not in {'associate', 'prepare', 'execute'}):
+            raise ValueError()
+        arguments = metadata.get('arguments', {})
+        if type(arguments) is not dict:
+            raise ValueError()
+        if any(name == 'run_id' or name not in actual_arguments or actual_arguments[name] != value
+               for name, value in arguments.items()):
+            raise ValueError()
+        phase = metadata['phase']
+        body = {name: metadata[name] for name in ('owner_id', 'bot_session_id', 'developer_run_id')}
+        body['workspace_kind'] = 'app-build' if tool_name.startswith('app_') else 'selfedit'
+        if phase != 'associate':
+            body.update(tool_name=tool_name, arguments=arguments)
+            body.update({name: metadata[name] for name in (
+                'source_challenge', 'source_task_id',
+                'source_tool_call_id', 'source_input_policy')})
+        if phase == 'execute':
+            body.update({name: metadata[name] for name in ('source_context', 'source_preparation_id')})
+        path = 'tool' if phase == 'execute' else phase
+        response = client.post('/api/development/source/' + path, json=body)
+        if type(response) is not dict or response.get('ok') is not True:
+            raise ValueError()
+        return response
+    except Exception:
+        return {'ok': False, 'error': 'workspace_source_unavailable'}
+
+
 def _format_models(models: list[dict[str, Any]]) -> str:
     parts = []
     for m in models:
@@ -600,6 +635,46 @@ def selfedit_verify_appearance(client, branch_override: bool = False,
 # job that replaces both. The sidecar's own /api/selfedit/validate and
 # /submit routes are untouched (SE10): the native app's Edit tab drives
 # them directly.
+
+
+def advisory_source_request(client, tool_name, actual_arguments, metadata):
+    """Hidden, installed adapter; no policy or budget claims enter schemas."""
+    try:
+        import inspect
+        from mcp_servers.mcp_web import logic as web_logic
+        names = {'plan_start', 'plan_status', 'plan_choose', 'plan_adopt',
+                 'research_compare_start', 'research_status', 'research_save'}
+        if (type(metadata) is not dict or metadata.get('protocol') != 'mortimer.advisory-source.v1'
+                or metadata.get('tool_name') != tool_name or tool_name not in names
+                or metadata.get('phase') not in {'associate', 'prepare', 'execute', 'cancel'}):
+            raise ValueError()
+        arguments = metadata['arguments']
+        if type(arguments) is not dict:
+            raise ValueError()
+        function = globals()[tool_name] if tool_name.startswith('plan_') else getattr(web_logic, tool_name)
+        bound = inspect.signature(function).bind(None, **arguments)
+        bound.apply_defaults()
+        expected = dict(bound.arguments)
+        expected.pop('client')
+        for key, value in actual_arguments.items():
+            if key == 'run_id':
+                continue  # GL9 is transport attribution, never a target grant.
+            compared = expected[key]
+            if key == 'profile' and value == '' and compared is None:
+                continue
+            if key == 'path' and value is None and compared == '':
+                continue
+            if value != compared:
+                raise ValueError()
+        body = {key: metadata[key] for key in ('owner_id', 'bot_session_id', 'caller_run_id',
+            'caller_agent', 'tool_name', 'arguments', 'task_id', 'tool_call_id', 'challenge', 'input_policy')}
+        for key in ('owner_scope_id', 'child_scope_id', 'preparation_id', 'source_context'):
+            if key in metadata:
+                body[key] = metadata[key]
+        path = {'associate': 'associate', 'prepare': 'prepare', 'execute': 'tool', 'cancel': 'cancel'}[metadata['phase']]
+        return _call(lambda: client.post('/api/advisory/source/' + path, json=body))
+    except Exception:
+        return {'ok': False, 'error': 'advisory_source_unavailable'}
 
 
 def plan_start(

@@ -1,0 +1,52 @@
+{
+  "actual_cross_uid_guest_rerun_passed": false,
+  "author_two_file_suite": {
+    "errors": 0,
+    "failures": 0,
+    "reported_seconds": 45.69,
+    "skipped": 0,
+    "tests": 144,
+    "xml_sha256": "cdccd82baac44641a926c6f3665074644e9dfe10de66ff881f548a219808024a"
+  },
+  "baseline_chowned": false,
+  "changed_files": {
+    "tests/unit/test_model_use_development_pilot.py": "d96c07f02fc84a823c00d2f57e2ae5b7e109b9243a495a7dcf696ac5b177ed72",
+    "tests/unit/test_model_use_full_development_pilot.py": "d4ac987ee2a63e11dd294ea79ac6695bd0d4cbd9d0e1a449a2d69166c69f56ff"
+  },
+  "date": "2026-10-06",
+  "developer_accepted": false,
+  "getuid_patched": false,
+  "independent_review": "Codex root source/AST review; all prior collected test bodies are unchanged at HEAD1a82139.",
+  "mar_i_complete": false,
+  "new_regressions": [
+    "foreign original-tree owner metadata refuses while exact current-UID copy passes unchanged reader",
+    "real owned snapshot Git satisfies unchanged committed-support proof"
+  ],
+  "old_assertions_weakened": false,
+  "old_test_bodies_unchanged": {
+    "full": 34,
+    "prototype": 37
+  },
+  "pr": 177,
+  "production_guard_changed": false,
+  "root_combined_fixture_deadline_execution_suite": {
+    "errors": 0,
+    "failures": 0,
+    "reported_seconds": 46.56,
+    "skipped": 0,
+    "tests": 200,
+    "xml_sha256": "fea8581f21bf6190bec27d8a377f6baad975924b6253fbac23b45c3554e2ec45"
+  },
+  "snapshot": {
+    "candidate_scanner_reused": true,
+    "copied_bytes": 4181197,
+    "copied_files": 398,
+    "every_copy_sha_verified": true,
+    "modes": "0400/0500 files and0500 source directories; teardown only restores directory write access for pytest cleanup",
+    "no_remote_git": true,
+    "session_final_file_set_and_sha_verified": true,
+    "tracked_or_bounded_original_source_only": true
+  },
+  "system": "codex",
+  "workstream": "WS-05"
+}

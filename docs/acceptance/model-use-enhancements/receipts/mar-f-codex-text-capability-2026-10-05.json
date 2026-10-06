@@ -1,0 +1,50 @@
+{
+  "advertised_tool_schema_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "advertised_tools": [],
+  "api_credentials_absent": true,
+  "billing_verified": false,
+  "catalog_embedded": false,
+  "catalog_sha256": "50e0ddce907ca63ed4df9d6690cb056d37a112334f8a251e84095bb862b6b44c",
+  "catalog_source": "public metadata compiled into the exact pinned executable",
+  "error_category": null,
+  "evidence_date": "2026-10-05",
+  "executable": {
+    "path": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "sha256": "6b582e8813ce7e8ed4c52814ee5cf230dba647bf2292df747a4003f2657ef201",
+    "version": "codex-cli 0.160.0"
+  },
+  "host_refusal_diagnostic_sha256": "83f77416f8b35e5bc6b75b0defcad0c308974deb9a6a800d96b5ae27ad6dcde1",
+  "invocation_sha256": "c73f1ecb5d468a8cf52f9098f7525908f8f31df5ecbaa3fc2f29c85c08ba3828",
+  "limits": [
+    "Local tool construction/parser evidence only.",
+    "No subscription account, model inference, allowance, overage or billing acceptance.",
+    "An explicit operator gate and matching binary/model/config/catalog are still required.",
+    "The embedded model catalog was omitted because it contains vendor instruction templates; its immutable digest is retained.",
+    "This sanitized evidence file cannot activate a route. Regenerate the full local runtime receipt from the exact installed binary for runtime validation.",
+    "The mock transport proves empty model tool schemas and an explicit matching-call host refusal; it does not prove account authentication or provider-model behavior."
+  ],
+  "model": "gpt-6-astra",
+  "negative_probe": {
+    "error_category": null,
+    "explicit_matching_host_refusal": true,
+    "negative_unadvertised_tool_rejected": true,
+    "request_count": 2,
+    "side_effect_absent": true,
+    "terminal_success_without_error_items": true
+  },
+  "negative_unadvertised_tool_rejected": true,
+  "production_gate_changed": false,
+  "proof_kind": "installed_cli_loopback_mock",
+  "protocol": "responses-local-mock-function-refusal-v1",
+  "provider_inference_performed": false,
+  "real_provider_calls": 0,
+  "record_kind": "sanitized_capability_acceptance_evidence",
+  "request_count": 1,
+  "runtime": "codex",
+  "runtime_receipt": false,
+  "schema_version": 1,
+  "sensitive_data_included": false,
+  "side_effect_absent": true,
+  "terminal_success_without_error_items": true,
+  "workload_quality_accepted": false
+}

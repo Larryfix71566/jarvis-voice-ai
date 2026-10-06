@@ -1,0 +1,62 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "driver_sha256": "10c26f430768b5047c9446830fcfcb2490a10debf40cc743f3f3f2a157bf5be1",
+  "tests_sha256": "8f9e4f17776a244456d29b4b621c045f167585ebf905bf13862829e7fbbd7419",
+  "author_gate": {
+    "passed": 82,
+    "seconds": 30.89,
+    "xml_sha256": "8a94bdd0eb53265b4e79d90ac0c4d00ca6839ae4044ec3a453e45971a2c6028d"
+  },
+  "independent_gate": {
+    "passed_checks_across_two_runs": 111,
+    "first_run": {
+      "passed": 103,
+      "seconds": 60.77
+    },
+    "second_run": {
+      "passed": 8,
+      "seconds": 9.68
+    },
+    "overlaps_author_gate": true,
+    "covers": [
+      "actual managed SubAgent/six MCP/40 schemas and SDK route capture",
+      "late model/endpoint/limits/registry/environment refusal and private floors",
+      "public-entry exact boolean/status/exit and backed success artifacts",
+      "actual desktop visible marker",
+      "purpose-specific edited-candidate binding",
+      "actual get_run unresolved-call semantics",
+      "owned protected artifact modes and no symlinks"
+    ]
+  },
+  "retained_probe_hashes": {
+    "/private/tmp/test_ws05_full_receipt_boolean_witness.py": "0caa84b92e16add480950384da4a56e5d4628667d852504cecc3ddf5581bc143",
+    "/private/tmp/test_ws05_full_receipt_structured_witness.py": "85204ccf87599aedca3b68a588c94d9a1e533c6b85a545d6702c56e735c233d0",
+    "/private/tmp/test_ws05_full_parent_semantic_probes.py": "b709a46e19f8a125841f1a714a7405fc30a3b6982357cb9765d155475d2966c8",
+    "/private/tmp/test_ws05_full_parent_semantic_inverse.py": "188669f0b4ed96bc96b6e9bf07989ac991a7e60c9c280353a6b5205889ff5cbb",
+    "/private/tmp/test_ws05_full_final_authority_semantics.py": "c531c652f38dcad5c860bc2b70f54e6859d09a0fd430d595595bd5636ee9794a"
+  },
+  "original_bad_behavior_witnesses_unchanged": true,
+  "exact_causal_inverses_refuse": true,
+  "honest_backed_artifact_fixture_passes": true,
+  "fixture_guest_logs_inert": true,
+  "operator_identity": "requires existing operator-issued service-bot credential and principal; no live minting",
+  "operation_surface": "actual installed six-MCP 40-tool Developer; bounded public edit forbids publication and private capabilities",
+  "baseline_candidate_all12_required": true,
+  "nonempty_edit_and_known_independent_holdouts_required": true,
+  "live_native_capability_verified": false,
+  "provider_inference_performed": false,
+  "real_vm_edit_performed": false,
+  "developer_accepted": false,
+  "mar_i_complete": false,
+  "production_changed": false,
+  "remaining": [
+    "exact native40 protocol receipt",
+    "operator-issued authenticated source/admin identity",
+    "actual nonempty sandbox edit",
+    "all12 and known+independent quality gates",
+    "live cleanup and rollback"
+  ]
+}

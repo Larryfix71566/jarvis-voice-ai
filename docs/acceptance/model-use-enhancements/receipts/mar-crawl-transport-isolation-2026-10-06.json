@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "parent_ref": "08ea4f06fb9d8b729e45e1a0e9f9e17c56c1f7ab",
+  "reproduction": {
+    "file": "/private/tmp/ws05-crawl-cookie-before.json",
+    "sha256": "a0f1a44819923f7f6f71fc992921b558fd4542f757030a090344b14702eab50b",
+    "synthetic_cookie_reused_on_second_request": true,
+    "provider_calls": false
+  },
+  "source_sha256": {
+    "jarvis/research/crawl.py": "0c939e074995f3351004f4da4899e77f98db117f216b6e2c7bceb658c2570bdf",
+    "tests/unit/test_research_transport_isolation.py": "a00b14e624ae8fd5b54db967735d5df54b71767d4396ed8eadbbb0d75e5a8a20"
+  },
+  "repair": [
+    "fresh closed real HTTP client per crawl request",
+    "exact Tavily endpoint checked before client construction",
+    "no redirect following",
+    "no process proxy/TLS override inheritance"
+  ],
+  "validation": {
+    "root_passed": 44,
+    "root_log": "/private/tmp/ws05-crawl-transport-root.log",
+    "independent_passed": 44,
+    "independent_log": "/private/tmp/ws05-crawl-independent-review.log",
+    "groups_overlap": true,
+    "verdict": "clean",
+    "transport": "real httpx with inert final request handler/MockTransport; no network"
+  },
+  "preserved": [
+    "existing API-off research workflow",
+    "per-site order/bounds/chunking/digest/scorer",
+    "timeout0/transport-1/status/nonJSON taxonomy",
+    "protected-input before-HTTP refusal",
+    "unknown acquired content confidential before model/output"
+  ],
+  "not_completed": [
+    "public page-origin/source approval",
+    "full research retrieval/model quality acceptance",
+    "manual-instruction privacy decision",
+    "full Developer and rollout gates"
+  ]
+}

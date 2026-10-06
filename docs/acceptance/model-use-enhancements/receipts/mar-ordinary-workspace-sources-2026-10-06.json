@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "workstream": "WS-05",
+  "system": "codex",
+  "date": "2026-10-06",
+  "audited_ref": "50daa8b2b3af7023d450259140e5ab0f626c7c4a",
+  "source_sha256": {
+    "jarvis/admin/server.py": "256d0c65c2a74d28a708ae2fa948e510cfaff7d7cda9e1829d3d6795f03e1f38",
+    "jarvis/development_attestation.py": "3cc602d453b368438f9875436135f242f5c180df790c2f6a0daa02e7ff693071",
+    "jarvis/development_sources.py": "b2e4ab0d7d53dab9939287ff921aa8deb6f6aba73f1838c5c6a7e62f8a49ce65",
+    "jarvis/skills/registry.py": "adaa5537eb24d58a903dbb5f13e2955ddd7344ec878031bac156bd95e222e030",
+    "mcp_servers/mcp_apps/logic.py": "b863d1f319e148d4705fd2bdbef84a7b818db22b1638121d104d6c6e7e41efc0",
+    "mcp_servers/mcp_apps/server.py": "9debab2df2f8c8d377903a3550a88a369a74acc2c7bf9be175034e22d17ae9e9",
+    "mcp_servers/mcp_selfedit/logic.py": "2c6b3bbf967b3fabf12176fdcfb8c8d3cefdcbaafa441e64fbb7ebe56685c62a",
+    "mcp_servers/mcp_selfedit/server.py": "a50dc06dcdcec477a83df08e4a2155985be59d23d9b8d3c7925581e30a68577a",
+    "tests/unit/test_workspace_source_bridge.py": "654a217202d5f52559f1f0237bfb396a9ff8485dd7f7c6a00e19c0e5b6b377d1",
+    "tests/unit/test_admin_advisory_budget.py": "f410c7b743980ec6b1f804f9e51700d95221dd3d34e5a4f1db466dc2c73a8cef",
+    "tests/integration/test_workspace_source_stdio.py": "76f259f0ec68ed99984c158864702ce0ef133df07f185d07a5802cfbcc7deca3",
+    "sandbox/files.py": "03897d75b56700618dd0a52e9e8bd61aba1b1537edf34cf139ada0ec278b83b3",
+    "tests/unit/test_workspace_source_races.py": "68ba3de322340fefb6465d260e97032cabd7b3321aa712acfefa6a41643a4bf1",
+    "tests/unit/test_workspace_publication_sources.py": "54e78268dcd5a37b2d69f91d61eb8c1998bb16abdea978f5171e71b89f487203",
+    "tests/unit/test_auth_middleware.py": "c416ee404895b2a2e7bf775bd8572a4c44295ff3e9f90d86371e98a5f95514d1"
+  },
+  "verification": {
+    "focused": {
+      "passed": 476,
+      "failed": 0,
+      "skipped": 0,
+      "log_sha256": "0c499ab6862d469c4a58449d12c6e19d3cb1b9dd898c6134d0ecfad5cfaa2499",
+      "junit_sha256": "d37c6a13ce46ca66911528e4c2c8c30dc27549d7574034e9934aeb2cc9c6ac65"
+    },
+    "actual_mcp_stdio": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "log_sha256": "536e9a911949f3b423d72271d8629a4281650bb80e8a6316eb3e7c9d28b5461e",
+      "junit_sha256": "691c7f5911e199a24df0c16681798b93a3ff88a624e1d4d61521cb77bcd116e3"
+    },
+    "independent_known_counterexamples": {
+      "passed": 6,
+      "failed": 0,
+      "test_bodies_unchanged": true,
+      "body_ast_comparison": "all six independent function ASTs equal retained repository tests"
+    },
+    "independent_legitimate_path_auth_publication": {
+      "passed": 11,
+      "failed": 0,
+      "admin_routes_with_bearer_assertions": 82
+    },
+    "full_unit": {
+      "passed": 5738,
+      "failed": 1,
+      "skipped": 3,
+      "passing_subtests": 2,
+      "warnings": 13,
+      "log_sha256": "7eeba9ee53a1e0009d1b367f8aeebcb6fb84f13d6f45594fc5e02e3505fe7166",
+      "junit_sha256": "2d8a6514b19196f542623a1b4be73cbdcecfa56c0228c18c91bd641f18eb5190",
+      "failures": [
+        "tests/unit/test_audio_filters.py::test_factory_disabled_returns_none_even_with_engine \u2014 same existing audio-default failure previously reproduced on unchanged main"
+      ],
+      "full_mac_gate_green": false
+    },
+    "groups_overlap": true,
+    "new_head_ci": "pending publication; previous green head9032c83 is not acceptance of this ref"
+  },
+  "proved": [
+    "Real installed MCP modules carry hidden request/response source metadata while provider tool schemas omit host bindings",
+    "Separate workspace protocol uses authenticated service-bot, live/current caller and retained same-owner/session job, pinned host anchor and one-use preparation/challenge",
+    "Exact project source/proposals retain permission and approval gates, while unknown/private foreign GitHub data stays confidential",
+    "Restriction-only journals persist local-only no-write goals and copied derivatives before ingress; dangling/replaced/symlink/hardlink/forged owner or session records refuse",
+    "Existing start handlers classify the same acquired plan bytes passed to background workers; lost acknowledgements cannot downgrade restrictions",
+    "Actual file admission refreshes the host floor; restrictions raised after preparation or inside invoke persist to files and retained jobs, including later turns",
+    "Finish/start/cleanup workers pin the actual retained session and refuse foreign/replaced ownership before validation/stop/destroy callbacks",
+    "App MCP requires the configured App Builder role and actual stable caller parent; legitimate retained cleanup stays usable",
+    "Exact saved repository/PR/commit/candidate publication handle and human-only approval notice survive status while private source floors remain",
+    "All82 sidecar routes retain the existing bearer assertion; new three source endpoints are POST-only"
+  ],
+  "providers_called": false,
+  "native_provider_process_started": false,
+  "mcp_stdio_processes_started": true,
+  "transport_network": "synthetic loopback admin HTTP/Unix only",
+  "vm_started": false,
+  "production_changed": false,
+  "not_proved": [
+    "Complete manual advisory/research source approval",
+    "Complete advisory cancellation/retained-result ownership; separate bounded follow-on",
+    "Real native Developer capability/quality or VM acceptance",
+    "Representative full research retrieval",
+    "Account billing/overage",
+    "Full unit/deployment acceptance",
+    "Complete WS-05 rollout"
+  ],
+  "prior_verification": [
+    {
+      "audited_ref": "3a2fb5d3e025c92bac18ccb41361a62c4792e28e",
+      "source_sha256": {
+        "jarvis/admin/server.py": "e2f7cdd02ec18a952bff09f81b00dbe8e58405e630810ebcc670420bb111060d",
+        "jarvis/development_attestation.py": "3cc602d453b368438f9875436135f242f5c180df790c2f6a0daa02e7ff693071",
+        "jarvis/development_sources.py": "d29555a3e65e2fe968ce23c8b2e28c6dbf5a2bb7978fcd1958b8519d601a795c",
+        "jarvis/skills/registry.py": "3f205dc8425643ccee2e9b6076f0c8a7f87da91f6d1dd28c1ba3b5d46467dbea",
+        "mcp_servers/mcp_apps/logic.py": "b863d1f319e148d4705fd2bdbef84a7b818db22b1638121d104d6c6e7e41efc0",
+        "mcp_servers/mcp_apps/server.py": "9debab2df2f8c8d377903a3550a88a369a74acc2c7bf9be175034e22d17ae9e9",
+        "mcp_servers/mcp_selfedit/logic.py": "8d88c737999ce707a0077597dfe52303b5706aff6c59c2a2148017408a20203c",
+        "mcp_servers/mcp_selfedit/server.py": "a50dc06dcdcec477a83df08e4a2155985be59d23d9b8d3c7925581e30a68577a",
+        "tests/unit/test_workspace_source_bridge.py": "bd0da451a3b7fac0f5cad0bf0e3f90fa08a55b9b013293cc0dd792d3c024ec2c",
+        "tests/unit/test_admin_advisory_budget.py": "f410c7b743980ec6b1f804f9e51700d95221dd3d34e5a4f1db466dc2c73a8cef",
+        "tests/integration/test_workspace_source_stdio.py": "ffb620e3bda576d7d22e2fc043bc7ce3b4973e14f34e163f8c97b6af8cd76cbf"
+      },
+      "verification": {
+        "focused": {
+          "passed": 434,
+          "failed": 0,
+          "warnings": 3,
+          "log_sha256": "0f4827c108435e637727c231fa58182e5e2afc0f45bb1ed079f04efc9d4d132c",
+          "junit_sha256": "8560471bdef5c508eacca12739e7d4b52bbd98b8afe48891e755611b5c82a0c1"
+        },
+        "actual_mcp_stdio": {
+          "passed": 2,
+          "failed": 0,
+          "log_sha256": "59e343ffe54618f75f4cda823fa55a7177ae6a73236414442169d45f8300e5f1",
+          "junit_sha256": "6c72b8baaf115324b6ece1c3b43fe8771520c7435cfb478e11f3b76892644f55"
+        },
+        "full_unit": {
+          "passed": 5721,
+          "failed": 2,
+          "skipped": 3,
+          "passing_subtests": 2,
+          "log_sha256": "8e29ffc3a68ff852f4bc91c95a9536ec7af245f7a3e7cf5044a4f6525f7fc5ee",
+          "junit_sha256": "c6fc7bb7ccb66de042908c2f771b92af59694b0947e6ffc35ac812e3849e9223",
+          "failures": [
+            "existing audio-filter default failure previously reproduced on unchanged main",
+            "new sidecar route inventory expected79/actual82; three new source POST routes require the related inventory-test update"
+          ]
+        }
+      }
+    }
+  ]
+}

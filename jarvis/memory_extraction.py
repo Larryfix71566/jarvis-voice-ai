@@ -84,7 +84,7 @@ from jarvis.model_execution import (
     ModelExecutionRequest,
     execute_chat,
 )
-from jarvis.model_routing import make_route_client
+from jarvis.model_routing import ModelRouteError, make_route_client
 from jarvis.privacy_policy import DataPolicy
 from jarvis.procedures import _overlap_score, _tokens
 from jarvis.usage_ledger import (
@@ -614,27 +614,65 @@ async def extract_candidates(
         # Test seam only; production uses JARVIS_MEMORY_PROFILE.
         client = client_factory(settings)
         model = settings.openai_model
+        resolved = None
     else:
         client, route = make_memory_async_client(settings)
         model = route.model
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": EXCHANGE_EXTRACTION_PROMPT},
-            {"role": "user", "content": exchange_text},
-        ],
-    )
-    try:
-        record_completion(
-            rung="memory_extraction",
-            provider=provider_from_base_url(str(client.base_url)),
-            model=model,
-            response=response,
-            session_id=session_id,
+        resolved = getattr(route, "resolved", None)
+    if resolved is not None:
+        # This is the replay extractor, not the normal worker's separately
+        # protected durable-admission path. Keep its exact source policy even
+        # if configuration or a saved route preference claims a weaker level.
+        request_id = hashlib.sha256(
+            f"{session_id}:{exchange_text}".encode("utf-8")
+        ).hexdigest()[:24]
+        request = ModelExecutionRequest(
+            workload=resolved.workload,
+            task_id=f"memory-replay:{request_id}",
+            parent_request_id=f"memory-replay:{request_id}",
+            instructions=exchange_text,
+            context=(ModelContextMessage(
+                "system", EXCHANGE_EXTRACTION_PROMPT,
+                DataPolicy("confidential", "memory-replay-prompt"),
+            ),),
+            data_policy=DataPolicy("confidential", "replayed-conversation-exchange"),
+            timeout_s=30.0,
         )
-    except Exception:
-        pass
-    return _parse_candidates(response.choices[0].message.content or "")
+        try:
+            execution = await execute_chat(request, resolved, client_factory=lambda _: client)
+        except ModelRouteError:
+            raise  # policy errors already contain only trusted route/source metadata
+        except Exception as exc:  # noqa: BLE001 — replay's caller prints exception strings
+            raise RuntimeError(
+                f"memory replay model call failed (error_type={type(exc).__name__[:64]})"
+            ) from None
+        try:
+            record_execution_result("memory_extraction", execution, session_id=session_id)
+        except Exception as exc:  # noqa: BLE001 — accounting never masks a valid extraction
+            logger.warning("memory_replay_usage_record_failed error_type=%s", type(exc).__name__[:64])
+        result_text = execution.text
+    else:
+        # Preserve routing-off behavior and the existing direct-client test
+        # seam. This compatibility branch does not assert confidentiality.
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": EXCHANGE_EXTRACTION_PROMPT},
+                {"role": "user", "content": exchange_text},
+            ],
+        )
+        try:
+            record_completion(
+                rung="memory_extraction",
+                provider=provider_from_base_url(str(client.base_url)),
+                model=model,
+                response=response,
+                session_id=session_id,
+            )
+        except Exception:
+            pass
+        result_text = response.choices[0].message.content or ""
+    return _parse_candidates(result_text)
 
 
 async def extract_from_exchange(

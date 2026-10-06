@@ -107,3 +107,65 @@ def test_keeping_or_raising_privacy_is_still_allowed(tmp_path, monkeypatch):
     confirm_preference(raised["draft_id"])
     assert {(row["workload"], row["privacy"]) for row in list_preferences()} == {
         ("librarian", "confidential"), ("analyst", "local_only")}
+
+
+def _confidential_catalog():
+    from jarvis.saygm import parse_catalog
+    return parse_catalog({"data": [{
+        "id": "claude-sonnet-5-TEE", "tier": "confidential",
+        "api_shapes": ["chat.completions"],
+    }]})
+
+
+def test_confidential_saygm_preference_validates_stage_confirm_and_execution(tmp_path, monkeypatch):
+    from jarvis.model_routing import resolve_model_route_checked
+
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "confidential-prefs.db"))
+    monkeypatch.setenv("SAYGM_API_KEY", "fixture-key")
+    monkeypatch.setenv("JARVIS_MODEL_PREFERENCES_ENABLED", "1")
+    calls = []
+
+    def fetch(**kwargs):
+        calls.append(kwargs)
+        return _confidential_catalog()
+
+    monkeypatch.setattr("jarvis.saygm.fetch_catalog", fetch)
+    draft = stage_preference("memory", "claude-sonnet-5", "saygm", "confidential")
+    assert list_preferences() == []
+    confirm_preference(draft["draft_id"])
+    resolved = resolve_model_route_checked("memory")
+    assert resolved.model == "claude-sonnet-5-TEE"
+    assert resolved.route.capabilities == ("text",)
+    assert resolved.route.privacy == "confidential"
+    assert calls == [{"api_key": "fixture-key", "base_url": "https://api.saygm.com/v1"}] * 3
+
+
+def test_confidential_preference_rechecks_catalog_when_confirming(tmp_path, monkeypatch):
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "changed-catalog.db"))
+    monkeypatch.setenv("SAYGM_API_KEY", "fixture-key")
+    monkeypatch.setattr("jarvis.saygm.fetch_catalog", lambda **_: _confidential_catalog())
+    draft = stage_preference("memory", "claude-sonnet-5", "saygm", "confidential")
+    monkeypatch.setattr("jarvis.saygm.fetch_catalog", lambda **_: [])
+    with pytest.raises(ModelPreferenceError, match="not present"):
+        confirm_preference(draft["draft_id"])
+    assert list_preferences() == []
+
+
+def test_confidential_preference_requires_credential_before_catalog(tmp_path, monkeypatch):
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "no-key.db"))
+    monkeypatch.delenv("SAYGM_API_KEY", raising=False)
+    def forbidden(**_kwargs):
+        raise AssertionError("catalog called without the selected credential")
+    monkeypatch.setattr("jarvis.saygm.fetch_catalog", forbidden)
+    with pytest.raises(ModelPreferenceError, match="requires SAYGM_API_KEY"):
+        stage_preference("memory", "claude-sonnet-5", "saygm", "confidential")
+    assert list_preferences() == []
+
+
+def test_confidential_text_catalog_cannot_stage_tool_workload(tmp_path, monkeypatch):
+    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "no-tools.db"))
+    monkeypatch.setenv("SAYGM_API_KEY", "fixture-key")
+    monkeypatch.setattr("jarvis.saygm.fetch_catalog", lambda **_: _confidential_catalog())
+    with pytest.raises(ModelPreferenceError, match="lacks required capabilities: tools"):
+        stage_preference("developer", "claude-sonnet-5", "saygm", "confidential")
+    assert list_preferences() == []

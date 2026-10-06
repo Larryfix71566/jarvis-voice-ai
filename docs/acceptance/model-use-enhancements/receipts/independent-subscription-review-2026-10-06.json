@@ -1,0 +1,83 @@
+{
+  "candidate_head_after": "aaec43c2d2671a10eec422e221a51eca9e5b81c8",
+  "candidate_head_before": "63e8ccbc42baced5864f1f9951834b1736404432",
+  "captured_at_utc": "2026-10-06T04:18:16.488221+00:00",
+  "checks": {
+    "actual_baseagent_same_client_reuse_refused_after_cleanup_failure": true,
+    "actual_unix_transport_preserves_200000_cjk_characters": true,
+    "capability_validation_wait_cannot_launch_after_cleanup_quarantine": true,
+    "changed_native_call_arguments_refused_before_release": true,
+    "concurrent_text_and_tool_completions_refused_after_sibling_cleanup_failure": true,
+    "declared_confidential_tool_result_refused_before_native_resume": true,
+    "duplicate_identical_native_batch_refused_before_any_host_tool_execution": true,
+    "extra_assistant_context_refused": true,
+    "failed_cleanup_owner_reference_retained": true,
+    "failed_tool_system_constraint_preserved_through_native_hook": true,
+    "focused_tests_passed": true,
+    "invalid_utf8_text_prompt_refused_before_process_creation": true,
+    "pending_draft_system_constraint_preserved_through_native_hook": true,
+    "same_parent_queued_requests_refused_after_cleanup_failure": true,
+    "source_files_unchanged_during_final_verification": true
+  },
+  "files_sha256": {
+    "jarvis/agents/base.py": "a8ac78abbe94d4ba1ff1744e888916fdc0e187fa43cb0f233353a789edf0fc5c",
+    "jarvis/model_execution.py": "4dc6b57fe81fe32813ee88e3472f9d2e7d0017075937b29f11892f4a6782a5b2",
+    "jarvis/subscription.py": "c0ec83ce310ecbdfeb7647dbe8c10df9e9370c40f753bd2bde64c971cf1926fe",
+    "jarvis/subscription_tools.py": "4340a6591cb30823e566cbec8b462a113167a8743ef7a6ade37763f7ea24cd5b",
+    "scripts/capture_model_use_baseline.py": "945080891c2ba147d6518d0c57e0f7dcd4d1e79827011d423fd50ad75afd849b",
+    "scripts/run_model_use_pilot.py": "e696e16e1b9eb8403dbb6d56bac35e66308db9600aed295643479a02e0b2b289",
+    "tests/fixtures/model_use_pilot_cases.json": "f87af8c1cd15f05b56b690bf51cc54d6b4e7d61ef67ee398af90bbfbae291a39",
+    "tests/unit/test_model_use_baseline.py": "81f63a59a80ddac201f3e757b935833970cead1f88a1246f622455c8b1177690",
+    "tests/unit/test_model_use_pilot.py": "030fb14aec0ca0eb331e70d2cc072e11d36dab3026e0ecf5ee6d46f1b449fa82",
+    "tests/unit/test_subscription.py": "e07e4b05bca6989e404defd99d4df5202140fd036025bf2e8bc5545414805e54",
+    "tests/unit/test_subscription_tools.py": "d3de3fca689f98371a7c7c2bb28c0da783bab337f2bde16a4ee09b244d67c62c"
+  },
+  "focused_test_result": {
+    "duration_seconds": 3.42,
+    "failed": 0,
+    "includes": "42 baseline/pilot tests, four cleanup/quarantine tests, two real local POSIX process-group cancellation/timeout tests",
+    "passed": 48
+  },
+  "limitations": [
+    "Injected cleanup failures establish same-client refusal and retention, not evidence of an actual orphaned provider process or host damage.",
+    "Local fake native frames exercise real bridge and existing outer loop; this receipt does not independently attest a signed-in provider protocol or account.",
+    "Declared tool-result data policy is enforced. Trusted classification of newly acquired private or unlabelled sources remains a separate source-policy gate.",
+    "No developer sandbox workload, subscription allowance/paid-overage settings, production activation, or physical acceptance is established by this review."
+  ],
+  "method": {
+    "existing_baseagent_outer_loop_used": true,
+    "private_unix_socket_transfer_used": true,
+    "probe_results_sha256": {
+      "cleanup_concurrency_result_v2.json": "7c2b773536fc5bb8f33fe80f4e69d5739be8dc704d77d2286d7a2de1f049bd7f",
+      "cleanup_reuse_result_v2.json": "6ba0efd45b1d71633e403f79de702f56a02c8cd31a3addbc2339701209dd4d36",
+      "encoding_cleanup_result.json": "1861bd38756a91fee1a45040427a1aa042efeaeacb26877c19cedabee558f410",
+      "ipc_size_result.json": "468dbf020f8084d04ab215404c3c1aac4892032545b2a87b8faea16bb0b46866",
+      "result_v2.json": "86d49134cc440a2cbbb2505d337eefdc4f69951d220ae4b486ccc7cb07373647"
+    },
+    "probe_scripts_sha256": {
+      "cleanup_concurrency_probe_v2.py": "ce1bb7089cf0546f4405eb7a2a5dfb4b38d73f4caadf745e161968a26e0863dc",
+      "cleanup_reuse_probe_v2.py": "da44d0f21701b04c3cd7746b7e41984274be62ae111b6b28f9fe9d2c549c4118",
+      "encoding_cleanup_probe.py": "be96cd3cf094655e20be5400963e44f79198181ce3f3a95f85584543e7e4983e",
+      "ipc_size_probe.py": "8f19cb6d7b02a64e0210a57bb42533405ba4123ea4ed2126646bfe5b86fd81fb",
+      "probe_v2.py": "5d88f6541f698631e7c479095720a0016449fee27b7ff2a1ce1fff11a2af402c"
+    },
+    "provider_session_cleanup_failures_instrumented": true
+  },
+  "private_workload_text_included": false,
+  "production_configuration_changed": false,
+  "production_writes": false,
+  "provider_calls": 0,
+  "provider_credentials_requested": false,
+  "provider_response_or_error_text_included": false,
+  "record_kind": "sanitized_independent_local_regression_review",
+  "representative_workload_quality_accepted": false,
+  "reviewer_task": "ws05_plan_status",
+  "rollout_accepted": false,
+  "schema_version": 1,
+  "scoped_local_regressions_passed": true,
+  "source_identity_basis": "Exact file SHA256 values; HEAD changed by root commits while these files remained identical.",
+  "subscription_billing_verified": false,
+  "system": "codex",
+  "vault_access_requested": false,
+  "workstream": "WS-05"
+}

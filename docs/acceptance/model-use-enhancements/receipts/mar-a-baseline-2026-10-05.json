@@ -1,0 +1,91 @@
+{
+  "bundle_matches_checkout": true,
+  "bundle_revision": "bde22bb6425c6bf36a3e0d7cf53f2785c274190d",
+  "captured_at_utc": "2026-10-06T02:53:33.284147+00:00",
+  "deployment": {
+    "deployed_at_utc": "2026-10-03T20:34:04+00:00",
+    "receipt_revision_matches_checkout": true,
+    "status": "deployed"
+  },
+  "effective_process_routing_independently_verified": false,
+  "handling": {
+    "credential_values_loaded": false,
+    "production_writes": false,
+    "prompt_or_response_content_read": false,
+    "provider_calls": 0
+  },
+  "ledger": {
+    "calls": 26,
+    "cost_is_provider_bill_verification": false,
+    "first_row_utc": "2026-10-03T20:34:21.661426+00:00",
+    "last_row_utc": "2026-10-03T20:34:45.302854+00:00",
+    "llm_calls": 12,
+    "metadata_coverage": {
+      "billing_source": {
+        "column_present": true,
+        "known_rows": 0
+      },
+      "cache_breakdown_known": {
+        "column_present": true,
+        "known_rows": 26
+      },
+      "duration_ms": {
+        "column_present": true,
+        "known_rows": 0
+      },
+      "route_name": {
+        "column_present": true,
+        "known_rows": 0
+      },
+      "usage_known": {
+        "column_present": true,
+        "known_rows": 26
+      }
+    },
+    "quality_scores_available": false,
+    "route_billing_duration_groups": [
+      {
+        "billing_source": "unknown",
+        "calls": 26,
+        "duration_rows": 0,
+        "max_duration_ms": null,
+        "mean_duration_ms": null,
+        "min_duration_ms": null,
+        "route": "unknown"
+      }
+    ],
+    "rungs": {
+      "kb_digest": 1,
+      "memory_classify": 1,
+      "memory_extraction": 6,
+      "stt": 1,
+      "supervisor": 4,
+      "tts": 13
+    },
+    "snapshot": {
+      "attempts": 1,
+      "method": "temporary_db_plus_wal_copy",
+      "source_stat_window_unchanged": true,
+      "source_wal_present": true,
+      "transactional_source_snapshot_claimed": false
+    },
+    "totals": {
+      "estimated_cost_usd": 0.12129558859106868,
+      "input_tokens": 3340,
+      "output_tokens": 2850,
+      "priced_rows": 26
+    },
+    "window_start_utc": "2026-10-03T20:34:04+00:00"
+  },
+  "mar_a_complete": false,
+  "milestone": "MAR-A",
+  "open_gates": [
+    "effective_process_routing",
+    "representative_workload_quality_latency",
+    "production_route_billing_duration_attribution",
+    "sufficient_workload_samples"
+  ],
+  "source_revision": "bde22bb6425c6bf36a3e0d7cf53f2785c274190d",
+  "version": "model-use-baseline-v1",
+  "workstream": "WS-05"
+}

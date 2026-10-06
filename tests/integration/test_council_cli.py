@@ -18,7 +18,7 @@ profiles:
   - name: k-economy-1
     label: economy one
     provider: openai
-    model: m
+    model: economy-model-1
     base_url: https://api.openai.com/v1
     api_key_env: TESTKEY_ECON_1
     temperature: 0.2
@@ -26,7 +26,7 @@ profiles:
   - name: k-economy-2
     label: economy two
     provider: openai
-    model: m
+    model: economy-model-2
     base_url: https://api.openai.com/v1
     api_key_env: TESTKEY_ECON_2
     temperature: 0.2
@@ -34,7 +34,7 @@ profiles:
   - name: k-mid-1
     label: mid one
     provider: openai
-    model: m
+    model: mid-model-1
     base_url: https://api.openai.com/v1
     api_key_env: TESTKEY_MID_1
     temperature: 0.2
@@ -42,7 +42,7 @@ profiles:
   - name: k-frontier-1
     label: frontier one
     provider: openai
-    model: m
+    model: frontier-model-1
     base_url: https://api.openai.com/v1
     api_key_env: TESTKEY_FRONTIER_1
     temperature: 0.2

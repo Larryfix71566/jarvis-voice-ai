@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "recipe_source_ref": "8042722e345e416b4e1a866c7496968f73ee3ed2",
+  "worker_source_ref": "4fd822893b7acda0344e768b13bfda8a5f80b905",
+  "image_id": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+  "recipe_sha256": "56e71231d9776f37254aacf90c74a20b61ebe264977063f9d2554ad7ba5d367c",
+  "image_record": {
+    "id": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+    "vm": "mortimer-image-c43cc422ac3ecc9a5725",
+    "profile": "mortimer",
+    "dependencies": "c713fb909e943d018c5631eb9af1732bda8db31ca8409e358df2f7f2e4344954",
+    "recipe": "56e71231d9776f37254aacf90c74a20b61ebe264977063f9d2554ad7ba5d367c",
+    "source": "8042722e345e416b4e1a866c7496968f73ee3ed2",
+    "origin_image": "mortimer-base"
+  },
+  "preparation_task": "f0bc0da86e94",
+  "offline_worker_task": "7d64dd5802e7",
+  "normal_hydration": true,
+  "cold_tokenizer": {
+    "uid": 502,
+    "sys_prefix": "/Users/admin/mortimer/dependencies/python",
+    "nltk_version": "3.10.2",
+    "nltk_data_path": [
+      "/Users/mortimer-dev/nltk_data",
+      "/Users/admin/mortimer/dependencies/python/nltk_data",
+      "/Users/admin/mortimer/dependencies/python/share/nltk_data",
+      "/Users/admin/mortimer/dependencies/python/lib/nltk_data",
+      "/usr/share/nltk_data",
+      "/usr/local/share/nltk_data",
+      "/usr/lib/nltk_data",
+      "/usr/local/lib/nltk_data"
+    ],
+    "resolved": "/Users/admin/mortimer/dependencies/python/share/nltk_data/tokenizers/punkt_tab/english",
+    "four_hashes_verified": true,
+    "worker_write_refused": true,
+    "cold_sentence_tokenizer": true,
+    "pipecat_sentence_helper": true
+  },
+  "unchanged_rtvi_tests": {
+    "passed": 3,
+    "seconds": 3.52,
+    "warnings": 1,
+    "tests": [
+      "test_default_observer_doubles_the_guarded_reply",
+      "test_each_guard_mode_sends_the_reply_once",
+      "test_turn_boundaries_are_still_sent_once"
+    ],
+    "assertions_unchanged": true
+  },
+  "actual_worker_desktop_probe": {
+    "returncode": 0,
+    "passed": true,
+    "seconds": 29.332,
+    "log_sha256": "adbe9a9199ac1cd291958992aa51394dbd50840d5c75fed5cd68600ea52742d9"
+  },
+  "owned_tasks_stopped": true,
+  "running_vm_count_after_bounded_probe": 0,
+  "settings_unchanged": true,
+  "image_record_unchanged": true,
+  "preparation_evidence_sha256": "50c1e5e5894c8205f4bac47144ed3be5daa7fec5e9092ef86be862fb283f53c4",
+  "worker_evidence_sha256": "7428d7f613ba15722a16fb062496647c47f038a829db62fa8b1a8d21a8e7babd",
+  "retained_initial_caller_failure": "Initial diagnostic called task_dir before allocation, raised Unknown task and created no VM; corrected caller used HOME/tasks path. Original failed record/log preserved.",
+  "full12_passed": false,
+  "developer_accepted": false,
+  "mar_i_complete": false,
+  "full12_operation": {
+    "exec_session": 8389,
+    "operation_pid": 86939,
+    "source_ref": "4fd822893b7acda0344e768b13bfda8a5f80b905",
+    "primary_task": "f6ccb30d4441",
+    "actual_verification_task": "c11a71ad1cb3",
+    "confirmed_live_at_capture": true,
+    "status": "running",
+    "nonempty_edit": false
+  },
+  "production_changed": false
+}

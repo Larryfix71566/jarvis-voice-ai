@@ -924,6 +924,21 @@ class TestHandoffDepth:
 
 
 class TestFindingsCarryForward:
+    async def test_continuation_log_omits_findings_path_and_content(self, monkeypatch, caplog):
+        from jarvis.agents import delegate
+        path = "docs/PRIVATE_FINDINGS_PATH_CANARY.md"
+        body = "PRIVATE_FINDINGS_BODY_CANARY"
+        monkeypatch.setattr(delegate, "_read_findings", lambda _path: body)
+        agent = ScriptedAgent("developer", ["NEEDS-INPUT: fixture", "done"])
+        _, handler = _tool(agent)
+        with caplog.at_level("INFO", logger="jarvis.agents.delegate"):
+            await handler({"agent_name": "developer", "task": "investigate"})
+            await handler({"agent_name": "developer", "task": "continue with the findings",
+                           "continuation": True, "findings_path": path})
+        assert body in agent.tasks[1]
+        assert "findings_present=True" in caplog.text
+        assert path not in caplog.text and body not in caplog.text
+
     """H2.2 — a reset that hands back 15 rounds is only progress if those
     rounds start where the last one stopped."""
 
@@ -1124,6 +1139,22 @@ class TestBargeInSurvival:
 
 
 class TestNoticeOutbox:
+    async def test_late_delivery_callback_failure_logs_only_error_type(self, outbox, caplog):
+        canary = "PRIVATE_LATE_DELIVERY_CANARY"
+        agent = SlowFakeSubAgent("developer", delay=0.05, result="done late")
+        async def broken_hook(text):
+            raise RuntimeError(canary + ": rejected context " + text)
+        _, handler = build_delegate_tool(
+            {"developer": agent}, late_delivery={"fn": broken_hook})
+        with caplog.at_level("WARNING", logger="jarvis.agents.delegate"):
+            await self._orphan(handler)
+        assert outbox == [("Developer", "The Developer task finished: done late")]
+        assert "delegate_late_delivery_failed" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
+        assert canary not in caplog.text and "Traceback" not in caplog.text
+        record = next(record for record in caplog.records if "delegate_late_delivery_failed" in record.message)
+        assert record.exc_info is None
+
     """Status spec T3.2 (L12): a late result nobody can hear now — no hook,
     or a hook whose session has ended (inject_late_result returns False) —
     goes to the notice outbox instead of being lost (fact 3.5)."""

@@ -132,17 +132,39 @@ is reserved for the voice Supervisor and is not a background profile.
 | Knowledge-base digest and procedure description | `jarvis/memory_model.py` resolves `JARVIS_BACKGROUND_PROFILE`; background work stays independent of the voice route. |
 | New memory classifier shadow | `scripts/run_memory_provider_shadow.py --profile NAME` is an opt-in evaluation; its results do not establish production admission or staged rollout acceptance. |
 | Skills evaluation | Isolated opt-in workload; requires both budget and feature gates, has no route override or fallback, and is unavailable unless policy config enables it. |
-| Claude/Codex subscriptions | Text-only adapters; tool calls are rejected, inherited API keys/endpoints are stripped, and there is no paid-API fallback. |
-| SAYGM | Confidential only when catalog evidence confirms confidential tier and `-TEE`; other routes are external processing. |
+| Claude/Codex subscriptions | Text routes require exact runtime capability acceptance and strip inherited API keys/endpoints. Candidate Claude native MCP tools require a separate runtime/schema/protocol receipt and pass through the existing agent tool loop; Codex tools remain unsupported. No paid-API fallback. |
+| SAYGM | Exact catalog model and advertised capabilities must match execution. Confidential requires confidential tier and `-TEE`; other routes are external processing. Gateway host/key contracts and no-redirect catalog reads are enforced. |
 
 `jarvis/privacy_policy.py` checks local-only/confidential/approved-external
 before execution. Tool permissions remain with agent and sandbox layers.
-`jarvis/model_execution.py` is the provider-neutral contract. Paid calls need
-a known price and numeric spend ceiling before reservation. Subscription
+`jarvis/model_execution.py` is the provider-neutral contract. Isolated paid verification calls need
+a known price and numeric spend ceiling before reservation; general workload
+spend/output policy acceptance is still open. Subscription
 probes and provider verification are opt-in; see
 `scripts/verify_model_access.py`. `scripts/audit_model_call_sites.py
 --require-covered` checks production completion call-site coverage. Live
 provider probes must never be run as a documentation/build check.
+
+### WS-05 candidate acceptance boundary (2026-10-05)
+
+The authoritative progress and rollout gates are in
+[`MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md`](plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
+and its [acceptance status](acceptance/model-use-enhancements/STATUS.md).
+The native Repo controls use the existing admin stage/confirm preference store;
+saving a choice does not activate routing. Admin-process activation status is
+reported separately from unverified bot-process state. Unsupported exact models,
+quality tiers, tools, privacy or output requirements are refused before provider
+creation. A subscription capability receipt is bound to the exact binary,
+version, model and invocation; the Claude tool receipt additionally binds schemas
+and the native control protocol. Fixture-only receipts do not authorize the
+Developer tool registry. Provider credentials stay with official runtimes or
+the Mac vault, and tool permission/sandbox ownership remains with Mortimer.
+
+The candidate adds future API route/billing/duration metadata without duplicating
+ledger entries or reconstructing old measurements. Streaming and voice timing
+remain separate gates. Current catalog and research diagnostics do not establish
+confidential-model availability, verified paid-overage settings or complete
+workload quality. Global production routing remains unchanged.
 
 ## Verification map
 

@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "main_claim": {
+    "pr": 182,
+    "merge_ref": "d5d8caecff71991a5c834b5bb6bec426afb16f85",
+    "integration_ref": "d052314"
+  },
+  "candidate_parent_ref": "d052314",
+  "source_sha256": {
+    "sandbox/artifacts.py": "e9af38a592df62248ecadfd0511392269e8531ce4bf9287531afbd731046e27c",
+    "sandbox/tests/test_reviewed_fixtures.py": "63a46f1df88879396769dd702a9477a9ea4c44b9ffe0c0fea38a13d2af248c48"
+  },
+  "reviewed_source_ref": "9f1e7d53b48078bde4b353b6a1c189bfef5d3845",
+  "independent_source_audit": {
+    "permitted_blobs": 1729,
+    "matches": 13,
+    "files": 10,
+    "classification": "intentional synthetic credential test fixtures",
+    "probes_passed": 3
+  },
+  "repair": "refresh two existing current fixture SHA pins and add eight independently reviewed exact path/whole-file SHA pins",
+  "invariants": {
+    "scanner_and_exclusions_ast_unchanged": true,
+    "historical_baseline_pin_unchanged": true,
+    "fixture_bodies_unchanged": true,
+    "no_path_only_or_pattern_exemption": true
+  },
+  "validation": {
+    "passed": 48,
+    "subtests_passed": 48,
+    "log": "/private/tmp/ws05-reviewed-fixture-repair.log",
+    "junit": "/private/tmp/ws05-reviewed-fixture-repair.xml",
+    "meaningful_checks": [
+      "ten exact current fixture blobs pass actual Candidate",
+      "all ten mutations and moves refuse",
+      "historical baseline pin and private-path exclusions remain unchanged",
+      "actual Git snapshot accepts exact fixture corpus; mutated snapshot refuses and deletes partial output"
+    ]
+  },
+  "limitations": [
+    "no immutable image prepared or VM booted by this repair yet",
+    "no model call or Developer acceptance",
+    "all existing source/privacy/session/publication/profile gates remain required",
+    "latest candidate Linux CI is still running; no green candidate/deployment claim"
+  ]
+}

@@ -1,11 +1,26 @@
 """Application-facing workspace operations backed exclusively by VM sessions."""
 from __future__ import annotations
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar
 from sandbox.artifacts import SandboxError
 from sandbox.runtime import Runtime
 
 log = logging.getLogger(__name__)
 TERMINAL = {'published', 'reverted', 'cancelled', 'setup_failed'}
+_source_session = ContextVar('sandbox_source_session', default=None)
+
+
+@contextmanager
+def pin_source_session(workspace, session, identity):
+    """Keep the existing installed service semantics on one proven session."""
+    token = _source_session.set((workspace, session))
+    try:
+        from sandbox.session import pin_source_identity
+        with pin_source_identity(session, identity):
+            yield
+    finally:
+        _source_session.reset(token)
 
 class SandboxWorkspace:
     def __init__(self, *, repository, token, kind, profile, base_branch, allowed, runtime_factory=None):
@@ -24,6 +39,11 @@ class SandboxWorkspace:
         session = self._runtime().active(self._repository(), self._kind, self._allowed)
         if session is None:
             raise SandboxError('No sandbox session is active; start a development session first.')
+        pinned = _source_session.get()
+        if pinned is not None and pinned[0] is self:
+            if session.id != pinned[1].id or session.directory != pinned[1].directory:
+                raise SandboxError('The source session changed during this operation.')
+            return pinned[1]
         return session
 
     @staticmethod

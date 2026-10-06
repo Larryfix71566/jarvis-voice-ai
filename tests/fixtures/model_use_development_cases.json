@@ -1,0 +1,21 @@
+{
+  "version": "model-use-real-development-v1",
+  "case_id": "date-diff-mixed-awareness",
+  "target_path": "mcp_servers/mcp_time/logic.py",
+  "goal": "Fix date_diff in mcp_servers/mcp_time/logic.py. Its module promises timezone-aware datetimes in JARVIS_TIMEZONE, and date_add already interprets naive ISO values in that timezone. date_diff currently crashes when just one argument is timezone-aware. Normalize naive inputs using the configured timezone and compare absolute instants, including DST and differing explicit offsets. Preserve the existing signed b-minus-a result, floor days, one-decimal hours, and error mapping for invalid ISO values. Change only this file, present the nonempty diff, run session_validate with all existing Mortimer checks, then report the result without publishing. Do not read private records, status logs, screens, or any pilot oracle. Do not add dependencies, change permissions, or weaken tests.",
+  "oracle_visibility": "public_known_tests",
+  "oracle": {
+    "version": "date-diff-oracle-v1",
+    "cases": [
+      {"id": "aware-positive", "timezone": "America/New_York", "a": "2026-08-04T00:00:00-04:00", "b": "2026-08-05T12:00:00-04:00", "expected": {"days": 1, "hours": 36.0}},
+      {"id": "aware-negative", "timezone": "America/New_York", "a": "2026-08-05T00:00:00-04:00", "b": "2026-08-04T00:00:00-04:00", "expected": {"days": -1, "hours": -24.0}},
+      {"id": "naive-left", "timezone": "America/New_York", "a": "2026-08-04T00:00:00", "b": "2026-08-05T12:00:00-04:00", "expected": {"days": 1, "hours": 36.0}},
+      {"id": "naive-right", "timezone": "America/New_York", "a": "2026-08-05T12:00:00-04:00", "b": "2026-08-04T00:00:00", "expected": {"days": -2, "hours": -36.0}},
+      {"id": "configured-zone", "timezone": "Asia/Kolkata", "a": "2026-08-04T00:00:00", "b": "2026-08-04T00:00:00+00:00", "expected": {"days": 0, "hours": 5.5}},
+      {"id": "dst-instants", "timezone": "America/New_York", "a": "2026-03-08T01:30:00", "b": "2026-03-08T03:30:00", "expected": {"days": 0, "hours": 1.0}},
+      {"id": "explicit-offsets", "timezone": "UTC", "a": "2026-08-04T00:00:00-04:00", "b": "2026-08-05T00:00:00+00:00", "expected": {"days": 0, "hours": 20.0}},
+      {"id": "invalid-iso", "timezone": "UTC", "a": "not a datetime", "b": "2026-08-05T00:00:00+00:00", "expected_error": true},
+      {"id": "invalid-type", "timezone": "UTC", "a": null, "b": "2026-08-05T00:00:00+00:00", "expected_error": true}
+    ]
+  }
+}

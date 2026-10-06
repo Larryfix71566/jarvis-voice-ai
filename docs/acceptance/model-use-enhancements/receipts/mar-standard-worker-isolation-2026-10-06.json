@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "task": "fab0158b99aa",
+  "source_ref": "fd41f301807060749e60775da8121f895495556b",
+  "image_id": "9e71cb3f07c046fb9d0e84c3980134bfbf0372b8628c4b15e271cd15c7aa4c6a",
+  "normal_lifecycle": "actual Images.create, Controller.start, Images.hydrate, worker auto-login restart and Verifier.desktop_probe; no core gate changed",
+  "worker": {
+    "name": "mortimer-dev",
+    "uid": 502,
+    "guarded_id_returncode": 0,
+    "sudo_n_true_returncode": 1
+  },
+  "desktop_probe": {
+    "log_sha256": "adbe9a9199ac1cd291958992aa51394dbd50840d5c75fed5cd68600ea52742d9",
+    "passed": true,
+    "returncode": 0,
+    "seconds": 8.739
+  },
+  "task_stopped": true,
+  "running_vm_count_after": 0,
+  "settings_unchanged": true,
+  "image_record_unchanged": true,
+  "initial_probe_invocation_failure": {
+    "error_type": "FileNotFoundError",
+    "cause": "root diagnostic omitted host evidence directory; actual worker hydration/privilege checks already completed",
+    "original_file": "/private/tmp/ws05-standard-worker-preflight.json"
+  },
+  "corrected_probe": "created required evidence directory and reran only desktop probe on same already hydrated stopped owned task",
+  "source_evidence_sha256": {
+    "/private/tmp/ws05-standard-worker-preflight.json": "2d07c897855d29f597935b0f0ebac2deb2af7a07d77a2d28595d6a162b2f12a7",
+    "/private/tmp/ws05-worker-desktop-recheck.json": "a4ef67a064c83955324907cf0160a7b6afaf1f8d27dbd5bd49e8729fc1d9e776"
+  },
+  "limits": [
+    "No model/Developer/candidate edit or private host data execution",
+    "All12 full profile checks remain a separate live operation",
+    "Does not establish account billing or general IPv6 policy"
+  ],
+  "nonempty_edit": false,
+  "developer_accepted": false,
+  "mar_i_complete": false
+}

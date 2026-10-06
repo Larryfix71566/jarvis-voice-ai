@@ -595,8 +595,8 @@ def build_delegate_tool(
         if continuation:
             handoff_depth[agent_name] = handoff_depth.get(agent_name, 0) + 1
             logger.info(
-                "delegate_continuation agent=%s depth=%d findings_path=%s",
-                agent_name, handoff_depth[agent_name], findings_path or "-",
+                "delegate_continuation agent=%s depth=%d findings_present=%s",
+                agent_name, handoff_depth[agent_name], bool(findings_path),
             )
 
         # H2.2 — carry the prior run's findings forward. Read here, once,
@@ -809,9 +809,10 @@ def build_delegate_tool(
             async def _offer(fn: Callable, note: str) -> bool:
                 try:
                     return await fn(note) is not False
-                except Exception:  # noqa: BLE001 — never lose the result
-                    logger.exception("delegate_late_delivery_failed agent=%s "
-                                     "run_id=%s", agent_name, run_id)
+                except Exception as exc:  # noqa: BLE001 — never lose the result
+                    logger.warning("delegate_late_delivery_failed agent=%s "
+                                   "run_id=%s error_type=%s", agent_name, run_id,
+                                   type(exc).__name__[:64])
                     return False
 
             async def _deliver_or_outbox(fn: Callable | None, note: str,

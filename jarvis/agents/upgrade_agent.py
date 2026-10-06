@@ -22,7 +22,10 @@ Which model does the planning comes from the model registry:
 ``config/model_endpoints.yaml`` (the human-only endpoint/credential map) by
 :func:`load_model_registry` — the one loader (override path via
 ``JARVIS_UPGRADE_MODELS``; docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md).
-Selection order: an explicit per-session ``profile`` argument >
+With managed routing enabled, each run refreshes the workload's saved route
+through the checked resolver; only an original explicit ``profile`` argument
+overrides its profile choice. Selection remains fixed for that run.
+Legacy selection order: an explicit per-session ``profile`` argument >
 ``JARVIS_UPGRADE_PROFILE`` env > the registry's ``default`` key, which
 ``supervisor:`` pins in the endpoints file. Profiles are OpenAI-compatible
 endpoints; the API key comes from the endpoint's ``api_key_env`` — keys
@@ -45,16 +48,20 @@ import inspect
 import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 import yaml
 
 from jarvis import effort, llm_client
+from jarvis.model_budget import TaskBudget, ModelBudgetUnavailable, begin_model_task_budget, remaining_seconds
 from jarvis.model_execution import (
     ModelContextMessage,
     ModelExecutionRequest,
@@ -67,8 +74,13 @@ from jarvis.model_routing import (
     ResolvedModelRoute,
     make_route_client,
     resolve_model_route,
+    resolve_model_route_checked,
+    resolve_policy,
 )
-from jarvis.privacy_policy import DataPolicy
+from jarvis.privacy_policy import (
+    DataPolicy, ToolResultEnvelope, ToolResultBindingError, assert_route_allowed,
+    make_tool_execution_scope, strictest, validate_tool_result,
+)
 from jarvis.repo_map import load_architecture_suffix, load_repo_map_suffix
 from jarvis.selfedit.service import SelfEditService
 from jarvis.usage_ledger import (
@@ -301,6 +313,107 @@ class ModelRegistryError(ValueError):
     the routine file is worse than one that refuses to load (split plan
     D3, §3 item 3, §10).
     """
+
+
+class ModelRegistryIdentityError(ModelRegistryError, ModelRouteError):
+    """Unsafe canonical identity, including on the legacy routing-off path."""
+
+
+_CANONICAL_IDENTITY = re.compile(r"[a-z0-9][a-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9_./:-]{0,255}\Z")
+_PROVIDER_NAMESPACE = {"moonshot": "moonshotai"}
+
+
+def _wire_model_identity(profile: dict[str, Any]) -> str:
+    provider = profile.get("provider")
+    if provider is None:
+        base_url = profile.get("base_url")
+        if not isinstance(base_url, str):
+            raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+        try:
+            host = urlsplit(base_url).hostname
+        except ValueError:
+            host = None
+        if host not in {"api.openai.com", "api.anthropic.com", "api.moonshot.ai",
+                        "api.moonshot.cn", "openrouter.ai", "api.saygm.com"}:
+            raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+        provider = provider_from_base_url(base_url)
+    model = profile.get("model")
+    if (not isinstance(provider, str) or provider != provider.strip()
+            or not isinstance(model, str) or model != model.strip()):
+        raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+    namespace = _PROVIDER_NAMESPACE.get(provider, provider)
+    if namespace in {"openrouter", "saygm"}:
+        # A gateway is a route, not the vendor whose model casts the vote.
+        # Its qualified wire model is sufficient; a bare gateway model is
+        # unavailable without an explicit canonical identity.
+        identity = model
+    elif model.startswith(namespace + "/"):
+        identity = model
+    else:
+        identity = f"{namespace}/{model}"
+    if not _CANONICAL_IDENTITY.fullmatch(identity) or "//" in identity or identity.endswith("/"):
+        raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+    return identity
+
+
+def canonical_model_identity(profile: dict[str, Any]) -> str:
+    """One model identity regardless of profile name, credentials or route.
+
+    Historical profiles without ``identity`` derive it from their provider
+    and wire model. This never adds keys to a frozen historical registry.
+    An explicitly malformed identity is a refusal, never a request to
+    guess a replacement from the profile name.
+    """
+    if not isinstance(profile, dict):
+        raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+    if "identity" not in profile:
+        return _wire_model_identity(profile)
+    identity = profile["identity"]
+    if (not isinstance(identity, str) or not _CANONICAL_IDENTITY.fullmatch(identity)
+            or "//" in identity or identity.endswith("/")):
+        raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+    return identity
+
+
+def validate_model_registry_identities(registry: dict[str, Any]) -> dict[str, str]:
+    """Reject alias votes before credential lookup, independent of rollout.
+
+    Also accepts an already loaded registry, so membership callers cannot
+    bypass the loader's check by supplying a previously cached snapshot.
+    Authoritative wire identities additionally catch two profiles that
+    give different declared identities to the exact same provider model.
+    """
+    if not isinstance(registry, dict) or not isinstance(registry.get("profiles"), dict):
+        raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+    identities: dict[str, str] = {}
+    seen: set[str] = set()
+    seen_wire: set[str] = set()
+    seen_endpoint_models: set[tuple[str, str, str]] = set()
+    for name, profile in registry["profiles"].items():
+        identity = canonical_model_identity(profile)
+        if identity in seen:
+            raise ModelRegistryIdentityError("model registry has duplicate canonical model identities")
+        seen.add(identity)
+        try:
+            wire_identity = _wire_model_identity(profile)
+        except ModelRegistryIdentityError:
+            # Explicit identities remain authoritative when a gateway's
+            # opaque wire model or historical sparse profile cannot derive
+            # a qualified wire identity. Missing identities already failed.
+            wire_identity = None
+        if wire_identity is not None:
+            if wire_identity in seen_wire:
+                raise ModelRegistryIdentityError("model registry has duplicate canonical model identities")
+            seen_wire.add(wire_identity)
+        provider, base_url, model = (profile.get("provider"), profile.get("base_url"), profile.get("model"))
+        if (isinstance(provider, str) and isinstance(model, str) and model
+                and (base_url is None or isinstance(base_url, str))):
+            endpoint_model = (provider, (base_url or "").rstrip("/"), model)
+            if endpoint_model in seen_endpoint_models:
+                raise ModelRegistryIdentityError("model registry has duplicate canonical model identities")
+            seen_endpoint_models.add(endpoint_model)
+        identities[name] = identity
+    return identities
 
 
 # Split plan D3 — the credential boundary is VOCABULARY. A profile in the
@@ -555,15 +668,22 @@ def load_model_registry(path: str | os.PathLike[str] | None = None, *,
     so no caller changes semantics. A missing file returns the empty
     registry ``{"default": None, "profiles": {}}`` so callers fall back to
     legacy mode; an unsafe or inconsistent one raises ModelRegistryError.
+    Canonical identities are validated before credentials, including when
+    shared model routing is disabled; aliases never become independent votes.
     """
     layers = load_registry_layers(path, config_dir=config_dir)
     if layers["shape"] == "legacy":
+        names = [prof["name"] for prof in layers["profiles"]]
+        if len(names) != len(set(names)):
+            raise ModelRegistryError("model registry profile is declared twice")
         profiles = {prof["name"]: prof for prof in layers["profiles"]}
     else:
         endpoints = layers["endpoints"]
         profiles = {prof["name"]: _join_profile(prof, endpoints[str(prof["endpoint"])])
                     for prof in layers["profiles"]}
-    return {"default": layers["default"], "profiles": profiles}
+    registry = {"default": layers["default"], "profiles": profiles}
+    validate_model_registry_identities(registry)
+    return registry
 
 
 # Split plan §4a: what each provider currently offers, one generated file per
@@ -623,6 +743,7 @@ def catalog_retirement(entry: dict[str, Any]) -> str | None:
 
 def resolve_profile(registry: dict[str, Any], requested: str | None = None) -> dict[str, Any]:
     """Resolve which profile to use: explicit > env > registry default."""
+    validate_model_registry_identities(registry)
     profiles: dict[str, dict[str, Any]] = registry.get("profiles", {})
     name = requested or os.environ.get(PROFILE_ENV) or registry.get("default")
     if not name or name not in profiles:
@@ -633,7 +754,8 @@ def resolve_profile(registry: dict[str, Any], requested: str | None = None) -> d
     return profiles[name]
 
 
-def available_models(registry_path: str | os.PathLike[str] | None = None) -> list[dict[str, Any]]:
+def available_models(registry_path: str | os.PathLike[str] | None = None, *,
+                     registry: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """List planner profiles for pickers — includes key presence, never key material.
 
     `tier` (economy | mid | frontier | None) is surfaced here so the
@@ -641,7 +763,8 @@ def available_models(registry_path: str | os.PathLike[str] | None = None) -> lis
     picker (MORTIMER_LLM_COUNCIL_PLAN.md D9) read it from this one place
     rather than re-parsing the registry YAML themselves.
     """
-    registry = load_model_registry(registry_path)
+    registry = registry if registry is not None else load_model_registry(registry_path)
+    validate_model_registry_identities(registry)
     default = registry.get("default")
     out: list[dict[str, Any]] = []
     for name, prof in sorted(registry.get("profiles", {}).items()):
@@ -659,6 +782,22 @@ def available_models(registry_path: str | os.PathLike[str] | None = None) -> lis
             }
         )
     return out
+
+
+@dataclass(frozen=True)
+class PlannerRunSnapshot:
+    """Selected policy and profile parameters belong to exactly one run."""
+
+    route: ResolvedModelRoute
+    policy: DataPolicy
+    budget: TaskBudget
+    parent_request_id: str
+    temperature: float | None
+    effort: str | None
+
+
+class PlannerCouncilBudgetUnavailable(ModelRouteError):
+    """The council has no child admission binding for this capped run yet."""
 
 
 class UpgradeAgent:
@@ -679,6 +818,21 @@ class UpgradeAgent:
         tool_specs: list[dict[str, Any]] | None = None,
     ):
         self.service = service
+        self._explicit_profile = profile
+        self._client_factory_injected = client_factory is not None
+        self._run_snapshot: PlannerRunSnapshot | None = None
+        self._acquired_policy: DataPolicy | None = None
+        self._approved_proposals: list[dict] = []
+        self._run_lock = threading.Lock()
+        self._quarantined_clients: list[Any] = []
+        self._run_started_at = 0.0
+        self._run_started_at_unix = 0.0
+        self._execution_task_id: str | None = None
+        self._workspace_context: Any = None
+        self._deadline_exhausted = threading.Event()
+        self._deadline_timer: threading.Timer | None = None
+        self._session_started = False
+        self._last_result_policy = DataPolicy()
         # MORTIMER_GRAPH_LAYER_PLAN.md GL9 (contract G2): the delegating sub-agent
         # run, threaded from SkillRegistry.call() through the sidecar; None for a
         # console-initiated run. Every convene() below passes it through.
@@ -692,7 +846,17 @@ class UpgradeAgent:
         self._execution_parent_id: str | None = None
         self._routed_client: Any = None
         self._routed_client_identity: tuple[str, str, str] | None = None
+        self._routed_client_route: ResolvedModelRoute | None = None
+        self._routed_client_parent: str | None = None
         self.cfg = load_agent_config(config_path, section=config_section)
+        self._legacy_base_cfg = dict(self.cfg)
+        try:
+            self._configured_policy_floor = DataPolicy(
+                resolve_policy(self._workload, include_preferences=False).privacy,
+                "constructed-development-workload",
+            )
+        except (ModelRouteError, ValueError, OSError):
+            self._configured_policy_floor = None
         self._system_prompt = system_prompt or SYSTEM_PROMPT
         # Cooperative cancel (Larry 2026-08-30/31: a kimi-k3 planner sat
         # "still running" for the caption goal and nothing could stop it —
@@ -728,7 +892,12 @@ class UpgradeAgent:
         self._registry_path = registry_path
         registry = load_model_registry(registry_path)
         if registry.get("profiles"):
-            prof = resolve_profile(registry, profile)
+            legacy_profile = profile
+            if legacy_profile is None and config_section == "app_build":
+                legacy_profile = os.environ.get(APPBUILD_PROFILE_ENV)
+            if not self._client_factory_injected and os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
+                legacy_profile = profile or registry.get("default")
+            prof = resolve_profile(registry, legacy_profile)
             self.profile_name = prof["name"]
             self.cfg["provider"] = prof.get("provider", self.cfg["provider"])
             self.cfg["model"] = prof.get("model", self.cfg["model"])
@@ -745,10 +914,10 @@ class UpgradeAgent:
                 self.cfg["effort"] = prof["effort"]
             self._api_key_env = prof.get("api_key_env", "OPENAI_API_KEY")
             self._resolved_route = None
-            if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
+            if not self._client_factory_injected and os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
                 try:
                     self._resolved_route = resolve_model_route(
-                        self._workload, explicit_profile=self.profile_name,
+                        self._workload, explicit_profile=self._explicit_profile,
                         registry_path=registry_path)
                     self.cfg["provider"] = self._resolved_route.provider
                     self.cfg["model"] = self._resolved_route.model
@@ -822,6 +991,201 @@ class UpgradeAgent:
             if self._resolved_route is None:
                 self._client = self._build_client(
                     self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
+
+    def _prepare_run_snapshot(self, *, data_policy: DataPolicy | None = None,
+                              plan: str | None = None, plan_policy: DataPolicy | None = None) -> None:
+        """Refresh managed selection once; injected legacy clients keep their seam."""
+        self._run_snapshot = None
+        self._acquired_policy = None
+        self._approved_proposals = []
+        if self._quarantined_clients:
+            raise ModelRouteError("native runtime cleanup remains unverified")
+        managed = not self._client_factory_injected and os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+        if managed:
+            selected_policy = resolve_policy(self._workload, explicit_profile=self._explicit_profile)
+            route = resolve_model_route_checked(
+                self._workload, explicit_profile=self._explicit_profile,
+                registry_path=self._registry_path,
+            )
+            registry = load_model_registry(self._registry_path)
+            profile = resolve_profile(registry, route.profile_name)
+            policy = resolve_policy(self._workload, explicit_profile=self._explicit_profile)
+            temperature = profile.get("temperature", self._legacy_base_cfg["temperature"])
+            profile_effort = profile.get("effort", self._legacy_base_cfg.get("effort"))
+        elif self._client_factory_injected and isinstance(self._resolved_route, ResolvedModelRoute):
+            route = self._resolved_route
+            policy = resolve_policy(self._workload, include_preferences=False)
+            selected_policy = policy
+            temperature, profile_effort = self.cfg.get("temperature"), self.cfg.get("effort")
+        else:
+            if not self._client_factory_injected and self._resolved_route is not None:
+                self._restore_legacy_selection()
+            return
+        configured = resolve_policy(self._workload, include_preferences=False)
+        floor = strictest(
+            DataPolicy(configured.privacy, "configured-development-workload"),
+            DataPolicy(policy.privacy, "selected-development-policy"),
+            DataPolicy(selected_policy.privacy, "initial-development-policy"),
+        )
+        if self._configured_policy_floor is not None:
+            floor = strictest(floor, self._configured_policy_floor)
+        if data_policy is not None:
+            if type(data_policy) is not DataPolicy:
+                raise ToolResultBindingError()
+            floor = strictest(floor, data_policy)
+        if plan:
+            if plan_policy is not None and type(plan_policy) is not DataPolicy:
+                raise ToolResultBindingError()
+            floor = strictest(floor, plan_policy or DataPolicy())
+        assert_route_allowed(route.route, floor)
+        budget = begin_model_task_budget(self._workload, self._execution_parent_id, route.limits,
+                                         started_at=self._run_started_at_unix)
+        if (route.route.adapter not in {"openai_compatible", "saygm_gateway"}
+                and (budget.limits.max_output_tokens_per_call is not None
+                     or budget.limits.max_estimated_spend_usd_per_task is not None)):
+            raise ModelBudgetUnavailable("budget_unsupported_route")
+        if (budget.limits.max_estimated_spend_usd_per_task is not None
+                and route.route.billing != "provider_api"):
+            raise ModelBudgetUnavailable("budget_unsupported_route")
+        route = replace(route, limits=budget.limits)
+        if remaining_seconds(budget) <= 0:
+            raise ModelBudgetUnavailable("budget_deadline_exhausted")
+        self._run_snapshot = PlannerRunSnapshot(
+            route, floor, budget, self._execution_parent_id, temperature, profile_effort,
+        )
+        self._resolved_route = route
+        self.profile_name, self.model, self.base_url = route.profile_name, route.model, route.base_url
+        self.cfg.update(model=route.model, provider=route.provider, base_url=route.base_url,
+                        temperature=temperature)
+        if profile_effort is None:
+            self.cfg.pop("effort", None)
+        else:
+            self.cfg["effort"] = profile_effort
+        self._key_missing = False
+        self._missing_access_reason = None
+
+    def _restore_legacy_selection(self) -> None:
+        """A global-off run restores the explicit legacy client contract."""
+        self.cfg.update(self._legacy_base_cfg)
+        registry = load_model_registry(self._registry_path)
+        self.profile_name = None
+        self._api_key_env = "OPENAI_API_KEY"
+        if registry.get("profiles"):
+            requested = self._explicit_profile
+            if requested is None and self._workload == "app_builder":
+                requested = os.environ.get(APPBUILD_PROFILE_ENV)
+            profile = resolve_profile(registry, requested)
+            self.profile_name = profile["name"]
+            for key in ("model", "provider", "temperature", "effort"):
+                if key in profile:
+                    self.cfg[key] = profile[key]
+            self.cfg["base_url"] = profile.get("base_url") or self.cfg["base_url"]
+            self._api_key_env = profile.get("api_key_env", "OPENAI_API_KEY")
+        self._resolved_route = None
+        self.model, self.base_url = self.cfg["model"], self.cfg["base_url"]
+        self._key_missing = not self._api_key_env or not os.environ.get(self._api_key_env)
+        self._missing_access_reason = f"{self._api_key_env or 'route credential'} is not set" if self._key_missing else None
+        self._client = None if self._key_missing else self._build_client(
+            self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
+
+    def _current_run_policy(self) -> DataPolicy:
+        snapshot = self._run_snapshot
+        if snapshot is None:
+            raise ModelRouteError("planner run policy is unavailable")
+        selected = strictest(snapshot.policy, self._acquired_policy or snapshot.policy)
+        # Provenance remains in each sealed envelope. Repeating history must
+        # not recursively duplicate source labels until an otherwise valid
+        # long tool session exceeds the binding protocol's metadata bound.
+        return DataPolicy(selected.level, "development-run-context")
+
+    def _join_workspace_floor(self) -> None:
+        # The installed owner proof returns a host capability, never result
+        # JSON. Its typed floor may strengthen the run before any model call.
+        floor = getattr(self._workspace_context, "input_floor", None)
+        if floor is not None:
+            if type(floor) is not DataPolicy:
+                raise ToolResultBindingError()
+            joined = strictest(self._current_run_policy(), floor)
+            self._acquired_policy = DataPolicy(joined.level, "development-owner-context")
+            assert_route_allowed(self._run_snapshot.route.route, self._acquired_policy)
+
+    def _remaining_run_seconds(self) -> float:
+        if self._run_snapshot is None:
+            return float("inf")
+        remaining = min(
+            remaining_seconds(self._run_snapshot.budget),
+            self.cfg["max_session_minutes"] * 60 - (time.monotonic() - self._run_started_at),
+        )
+        if self._deadline_exhausted.is_set() or remaining <= 0:
+            raise ModelBudgetUnavailable("budget_deadline_exhausted")
+        return remaining
+
+    def _check_run_deadline(self) -> float:
+        return min(PLANNER_CALL_TIMEOUT_S, self._remaining_run_seconds())
+
+    def _cancel_owned_session(self, parent_request_id: str, *, context: Any = None) -> None:
+        """A cancellation cannot adopt or interrupt a different host session."""
+        try:
+            from jarvis.development_sources import cancel_workspace_session_for_owner
+            cancel_workspace_session_for_owner(self.service, parent_request_id, context=context)
+        except Exception as exc:
+            _log_safe_failure("planner_owned_session_cancel_unavailable", exc)
+
+    def _start_deadline_timer(self) -> None:
+        snapshot = self._run_snapshot
+        if snapshot is None:
+            return
+        seconds = min(
+            remaining_seconds(snapshot.budget),
+            self.cfg["max_session_minutes"] * 60 - (time.monotonic() - self._run_started_at),
+        )
+        if seconds <= 0:
+            raise ModelBudgetUnavailable("budget_deadline_exhausted")
+        parent = snapshot.parent_request_id
+
+        def expire() -> None:
+            if self._execution_parent_id != parent or self._run_snapshot is not snapshot:
+                return
+            self._deadline_exhausted.set()
+            context = self._workspace_context
+            self._cancel_owned_session(parent, context=context)
+
+        self._deadline_timer = threading.Timer(seconds, expire)
+        self._deadline_timer.daemon = True
+        self._deadline_timer.start()
+
+    def _result_status(self) -> dict:
+        if self._run_snapshot is None:
+            return self.service.status()
+        if not self._session_started:
+            return {}
+        # This installed host view exposes lifecycle flags, counts and opaque
+        # handles, never raw goals, branch slugs, diffs or check logs.
+        from jarvis.development_sources import workspace_status_for_owner
+        return workspace_status_for_owner(self.service, self._execution_parent_id,
+                                          context=self._workspace_context)
+
+    def _run_refusal(self, code: str, *, session_started: bool = False) -> dict:
+        submitted = bool(session_started and self._submit_result is not None)
+        return {"ok": False, "summary": "The configured development route or source is unavailable; inspect the saved session before retrying.",
+                "failure_code": code, "session_started": session_started, "status": {},
+                "submitted": True if submitted else None if session_started else False,
+                "pr_url": (self._submit_result or {}).get("pr_url") if submitted else None,
+                "outcome_unknown": bool((session_started and not submitted) or self._quarantined_clients),
+                "cleanup_unverified": bool(self._quarantined_clients),
+                "failovers": [], "final_profile": self.profile_name}
+
+    @staticmethod
+    def _unavailable_code(exc: Exception, default: str) -> str:
+        # SDK error.code may originate in provider JSON. Only the local
+        # authority's closed refusal categories may enter a result record.
+        allowed = {"budget_input_invalid", "budget_scope_mismatch", "budget_policy_mismatch",
+                   "budget_clock_unavailable", "budget_clock_mismatch", "budget_storage_unavailable",
+                   "budget_price_unavailable", "budget_output_limit", "budget_spend_exhausted",
+                   "budget_deadline_exhausted", "budget_unsupported_route"}
+        if isinstance(exc, PlannerCouncilBudgetUnavailable):
+            return "development_council_budget_unavailable"
+        return exc.code if isinstance(exc, ModelBudgetUnavailable) and exc.code in allowed else default
 
     def _build_client(self, api_key_env: str, base_url: str | None,
                       provider: str | None = None) -> Any:
@@ -913,7 +1277,7 @@ class UpgradeAgent:
         return None
 
     def _completion(self, request: dict[str, Any]) -> Any:
-        """One completion call, bounded and failover-capable.
+        """One bounded completion call; failover belongs to legacy execution.
 
         On an UNREACHABLE-class failure the current profile is retired for
         this session and the next key-present profile takes over mid-run —
@@ -950,17 +1314,18 @@ class UpgradeAgent:
             # provider="unknown" (never "anthropic"), so extra_body_for()
             # cleanly returns {} instead of the whole call raising.
             provider = (
-                self._resolved_route.provider
-                if isinstance(self._resolved_route, ResolvedModelRoute)
+                self._run_snapshot.route.provider if self._run_snapshot is not None
+                else self._resolved_route.provider if isinstance(self._resolved_route, ResolvedModelRoute)
                 else provider_from_base_url(str(getattr(self._client, "base_url", "")))
             )
             extra_body = effort.extra_body_for(
                 rung=f"{self._council_workflow}_executor", provider=provider,
-                explicit=self.cfg.get("effort"), model=self.model,
+                explicit=(self._run_snapshot.effort if self._run_snapshot is not None else self.cfg.get("effort")),
+                model=(self._run_snapshot.route.model if self._run_snapshot is not None else self.model),
             )
             call_request = {**request, "extra_body": extra_body} if extra_body else request
             try:
-                if isinstance(self._resolved_route, ResolvedModelRoute):
+                if self._run_snapshot is not None or isinstance(self._resolved_route, ResolvedModelRoute):
                     if self._execution_loop is None:
                         raise RuntimeError("routed planner execution loop is unavailable")
                     response = self._execution_loop.run_until_complete(
@@ -980,6 +1345,10 @@ class UpgradeAgent:
                         pass
                 return response
             except Exception as exc:  # noqa: BLE001 — classified immediately below
+                if self._run_snapshot is not None:
+                    # Enabled selections are task contracts. An outage is
+                    # unavailable, never permission to buy a different model.
+                    raise
                 if not self._is_unreachable(exc) or attempts >= MAX_PLANNER_FAILOVERS:
                     raise
                 failed_name = self.profile_name or self.model
@@ -1043,29 +1412,62 @@ class UpgradeAgent:
 
     async def _close_routed_client(self) -> None:
         client = self._routed_client
-        self._routed_client = None
-        self._routed_client_identity = None
         if client is None:
             return
+        if any(existing is client for existing in self._quarantined_clients):
+            return
         close = getattr(client, "close", None)
-        if callable(close):
-            result = close()
-            if inspect.isawaitable(result):
-                await result
+        native = (self._routed_client_route is not None
+                  and self._routed_client_route.route.adapter in {
+                      "subscription_runtime", "codex_subscription_runtime", "local_runtime"})
+        close_request = getattr(client, "close_request", None)
+        from jarvis.subscription import SubscriptionTextClient, CodexSubscriptionTextClient
+        stateless = type(client) in {SubscriptionTextClient, CodexSubscriptionTextClient}
+        try:
+            if native and callable(close_request):
+                if self._routed_client_parent is None:
+                    raise ModelRouteError("native runtime owner is unavailable")
+                result = close_request(self._routed_client_parent)
+                if inspect.isawaitable(result):
+                    await result
+            if callable(close):
+                result = close()
+                if inspect.isawaitable(result):
+                    await result
+            elif native and not callable(close_request) and not stateless:
+                raise ModelRouteError("native runtime cleanup remains unverified")
+        except Exception:
+            if native:
+                if not any(existing is client for existing in self._quarantined_clients):
+                    self._quarantined_clients.append(client)
+            raise
+        if getattr(client, "cleanup_unverified", False):
+            if not any(existing is client for existing in self._quarantined_clients):
+                self._quarantined_clients.append(client)
+            raise ModelRouteError("native runtime cleanup remains unverified")
+        self._routed_client = None
+        self._routed_client_identity = None
+        self._routed_client_route = None
+        self._routed_client_parent = None
 
     async def _routed_completion(self, request: dict[str, Any]) -> Any:
-        route = self._resolved_route
+        route = self._run_snapshot.route if self._run_snapshot is not None else self._resolved_route
         if not isinstance(route, ResolvedModelRoute):
             raise ModelRouteError("planner route is not resolved")
+        self._result_status()  # Verify the pinned host job before another model round.
+        policy = self._current_run_policy()
+        assert_route_allowed(route.route, policy)
+        timeout = self._check_run_deadline()
         identity = (route.identity, route.route.name, route.model)
         if self._routed_client is None or self._routed_client_identity != identity:
             await self._close_routed_client()
             self._routed_client = make_route_client(
-                route, timeout=PLANNER_CALL_TIMEOUT_S, max_retries=0,
+                route, timeout=timeout, max_retries=0,
             )
             self._routed_client_identity = identity
+            self._routed_client_route = route
+            self._routed_client_parent = self._execution_parent_id
 
-        policy = DataPolicy(route.route.privacy, f"{self._workload}-planner")
         context = _planner_context_messages(request.get("messages"), policy)
         references = tuple(
             ModelToolReference(
@@ -1075,34 +1477,48 @@ class UpgradeAgent:
             )
             for spec in request.get("tools", TOOL_SPECS)
         )
+        self._execution_task_id = f"{self._council_workflow}-planner:{uuid.uuid4().hex}"
         execution_request = ModelExecutionRequest(
             workload=route.workload,
-            task_id=f"{self._council_workflow}-planner:{uuid.uuid4().hex}",
+            task_id=self._execution_task_id,
             parent_request_id=self._execution_parent_id or uuid.uuid4().hex,
             instructions="",
             context=context,
             tools=references,
             data_policy=policy,
-            timeout_s=PLANNER_CALL_TIMEOUT_S,
+            timeout_s=self._check_run_deadline(),
             temperature=request.get("temperature"),
             extra_body=request.get("extra_body"),
         )
-        operation = asyncio.create_task(execute_chat(
-            execution_request, route,
-            client_factory=lambda _route: self._routed_client,
-        ))
+        execute_kwargs = {"client_factory": lambda _route: self._routed_client}
+        if self._run_snapshot is not None and self._run_snapshot.budget.scope_id is not None:
+            execute_kwargs["task_budget"] = self._run_snapshot.budget
+        operation = asyncio.create_task(execute_chat(execution_request, route, **execute_kwargs))
         while not operation.done():
-            if self._cancel.is_set():
+            if self._cancel.is_set() or self._deadline_exhausted.is_set():
                 operation.cancel()
                 break
             await asyncio.wait({operation}, timeout=0.05)
-        result = await operation
+        try:
+            result = await operation
+        except asyncio.CancelledError:
+            if self._deadline_exhausted.is_set():
+                raise ModelBudgetUnavailable("budget_deadline_exhausted") from None
+            raise
+        except Exception as exc:
+            from jarvis.subscription import SubscriptionRuntimeError
+            if (route.route.adapter in {"subscription_runtime", "codex_subscription_runtime"}
+                    and isinstance(exc, SubscriptionRuntimeError) and exc.category == "cleanup"):
+                if not any(client is self._routed_client for client in self._quarantined_clients):
+                    self._quarantined_clients.append(self._routed_client)
+            raise
         # Cancellation may land after execute_chat completes but before this
         # coroutine resumes. Do not ledger or expose a stale completion in
         # that race; the synchronous run loop converts this into its normal
         # structured cancelled result.
         if self._cancel.is_set():
             raise asyncio.CancelledError
+        self._check_run_deadline()
         record_execution_result(
             f"{self._council_workflow}_executor", result,
             session_id=self._run_id,
@@ -1141,23 +1557,79 @@ class UpgradeAgent:
 
     def run(
         self, goal: str, on_event: Callable[[dict], None] | None = None,
-        *, plan: str | None = None,
+        *, plan: str | None = None, data_policy: DataPolicy | None = None,
+        plan_policy: DataPolicy | None = None,
     ) -> dict:
         """Run synchronously while keeping one async client loop per session."""
+        if not self._run_lock.acquire(blocking=False):
+            return self._run_refusal("development_owner_busy")
         loop = asyncio.new_event_loop()
         self._execution_loop = loop
-        self._execution_parent_id = self._run_id or f"{self._council_workflow}:{uuid.uuid4().hex}"
+        self._execution_parent_id = self._run_id or str(uuid.uuid4())
+        self._run_started_at = time.monotonic()
+        self._run_started_at_unix = time.time()
+        self._deadline_exhausted.clear()
+        self._session_started = False
+        self._workspace_context = None
+        run_result: dict | None = None
         try:
-            return self._run_with_execution_loop(goal, on_event, plan=plan)
+            try:
+                self._prepare_run_snapshot(data_policy=data_policy, plan=plan, plan_policy=plan_policy)
+                self._start_deadline_timer()
+            except (ModelRouteError, ValueError, OSError) as exc:
+                _log_safe_failure("planner_selection_unavailable", exc)
+                run_result = self._run_refusal(self._unavailable_code(exc, "development_route_unavailable"))
+                return run_result
+            run_result = self._run_with_execution_loop(goal, on_event, plan=plan)
+            return run_result
+        except asyncio.CancelledError:
+            if self._run_snapshot is None:
+                raise
+            run_result = {"ok": False, "cancelled": True, "submitted": self._submit_result is not None,
+                    "summary": "Cancelled while development was running; inspect the saved session before retrying.",
+                    "status": {}, "failovers": [], "final_profile": self.profile_name}
+            return run_result
+        except Exception as exc:
+            if self._run_snapshot is None:
+                raise
+            _log_safe_failure("planner_enabled_execution_unavailable", exc)
+            self._close_pending_round("execution_unavailable")
+            run_result = self._run_refusal(self._unavailable_code(exc, "development_execution_unavailable"),
+                                           session_started=self._session_started)
+            return run_result
         finally:
+            if self._deadline_timer is not None:
+                self._deadline_timer.cancel()
+                self._deadline_timer = None
             if not loop.is_closed():
                 try:
                     loop.run_until_complete(self._close_routed_client())
                 except Exception as exc:  # noqa: BLE001 — cleanup cannot mask the session result
                     _log_safe_failure("planner_async_client_cleanup_failed", exc)
                 loop.close()
+            if self._run_snapshot is not None and self._quarantined_clients and run_result is not None:
+                run_result.clear()
+                run_result.update(self._run_refusal("development_cleanup_unverified",
+                                                    session_started=self._session_started))
+                run_result.update(cleanup_unverified=True, outcome_unknown=True)
+            self._last_result_policy = self._current_run_policy() if self._run_snapshot is not None else DataPolicy()
+            if self._run_snapshot is not None and run_result is not None:
+                self._emit(on_event, {"type": "agent_done", "ok": bool(run_result.get("ok")),
+                                     "declined": bool(run_result.get("declined")),
+                                     "cancelled": bool(run_result.get("cancelled")),
+                                     "cleanup_unverified": bool(run_result.get("cleanup_unverified"))})
             self._execution_loop = None
             self._execution_parent_id = None
+            self._execution_task_id = None
+            self._workspace_context = None
+            self._run_snapshot = None
+            self._acquired_policy = None
+            self._run_lock.release()
+
+    @property
+    def result_policy(self) -> DataPolicy:
+        """Host-owned output floor; result JSON cannot declare its own privacy."""
+        return self._last_result_policy
 
     def _run_with_execution_loop(
         self, goal: str, on_event: Callable[[dict], None] | None = None,
@@ -1179,7 +1651,7 @@ class UpgradeAgent:
         """
         if self._cancel.is_set():
             return {"ok": False, "cancelled": True, "session_started": False,
-                    "summary": "Cancelled before starting a development session.", "status": self.service.status()}
+                    "summary": "Cancelled before starting a development session.", "status": self._result_status()}
         if self._key_missing:
             return {
                 "ok": False,
@@ -1188,7 +1660,7 @@ class UpgradeAgent:
                     "cannot run until its configured route is ready"
                 ),
                 "session_started": False,
-                "status": self.service.status(),
+                "status": self._result_status(),
             }
 
         # D2.1 — a reused agent instance starts with a clean escalation slate.
@@ -1212,10 +1684,29 @@ class UpgradeAgent:
             # SE8 — the planner path carries the same run_id the developer
             # path does, so a session opened here is joinable to its
             # delegating run without a timestamp join.
-            res = self.service.start_session(goal, run_id=self._run_id)
+            res = self.service.start_session(
+                goal, run_id=self._execution_parent_id if self._run_snapshot is not None else self._run_id,
+            )
             if not res["ok"]:
+                if self._run_snapshot is not None:
+                    return self._run_refusal("development_session_unavailable")
                 return {"ok": False, "summary": res["error"],
-                        "status": self.service.status()}
+                        "status": self._result_status()}
+            self._session_started = True
+            if self._run_snapshot is not None:
+                from jarvis.development_sources import assert_workspace_session_owner
+                self._workspace_context = assert_workspace_session_owner(self.service, self._execution_parent_id)
+                self._join_workspace_floor()
+            if self._deadline_exhausted.is_set() and self._run_snapshot is not None:
+                self._cancel_owned_session(self._execution_parent_id, context=self._workspace_context)
+                self._check_run_deadline()
+        elif self._run_snapshot is not None:
+            # Only the installed host issuer may prove reuse of the actual
+            # session. Returned status JSON never adopts another owner's job.
+            from jarvis.development_sources import assert_workspace_session_owner
+            self._workspace_context = assert_workspace_session_owner(self.service, self._execution_parent_id)
+            self._join_workspace_floor()
+            self._session_started = True
 
         messages = [
             {"role": "system", "content": self._system_prompt},
@@ -1261,6 +1752,7 @@ class UpgradeAgent:
         end_reason = "iteration_limit"
         seen_tool_call_ids: set[str] = set()
         while iterations_used < iterations_budget:
+            self._check_run_deadline()
             if self._cancel.is_set():
                 cancelled = True
                 end_reason = "cancelled"
@@ -1268,7 +1760,7 @@ class UpgradeAgent:
                            "no changes were submitted")
                 break
             iterations_used += 1
-            if iterations_used == halfway_checkpoint and not self.service.proposals:
+            if iterations_used == halfway_checkpoint and not self._proposals_for_context():
                 messages.append({
                     "role": "system",
                     "content": (
@@ -1285,12 +1777,13 @@ class UpgradeAgent:
                 summary = "session time limit reached; no changes were submitted"
                 break
             request: dict[str, Any] = {
-                "model": self.cfg["model"],
+                "model": self._run_snapshot.route.model if self._run_snapshot is not None else self.cfg["model"],
                 "messages": messages,
                 "tools": self._tool_specs,
             }
-            if self.cfg["temperature"] is not None:
-                request["temperature"] = self.cfg["temperature"]
+            temperature = self._run_snapshot.temperature if self._run_snapshot is not None else self.cfg["temperature"]
+            if temperature is not None:
+                request["temperature"] = temperature
             try:
                 response = self._completion(request)
             except asyncio.CancelledError:
@@ -1312,6 +1805,7 @@ class UpgradeAgent:
                     "no changes were submitted"
                 )
                 break
+            self._check_run_deadline()
             message = response.choices[0].message
             tool_calls = list(getattr(message, "tool_calls", None) or [])
             if not tool_calls:
@@ -1339,7 +1833,13 @@ class UpgradeAgent:
                     args = json.loads(tc.function.arguments or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                result = self._dispatch(tc.function.name, args)
+                if self._run_snapshot is not None:
+                    result = self._dispatch_classified(tc.function.name, args, tc.id)
+                else:
+                    result = self._dispatch(tc.function.name, args)
+                if self._run_snapshot is not None and self._cancel.is_set():
+                    raise asyncio.CancelledError
+                self._check_run_deadline()
                 if tc.function.name == "session_decline" and result.get("declined"):
                     reason = result.get("reason", "")
                     messages.append({
@@ -1354,7 +1854,10 @@ class UpgradeAgent:
                     if not self._scope_council_used:
                         self._scope_council_used = True
                         try:
-                            allowlist_text = self.service.describe_boundary()
+                            allowlist_text = (
+                                "Development tools are confined to the verified workspace; publication retains its existing gates."
+                                if self._run_snapshot is not None else self.service.describe_boundary()
+                            )
                         except Exception:  # noqa: BLE001 — best-effort context
                             allowlist_text = "(allowlist file unavailable)"
                         scope_brief = self._maybe_scope_council(
@@ -1363,10 +1866,10 @@ class UpgradeAgent:
                     if scope_brief:
                         reason = reason + "\n\n[Council scope advice]\n" + scope_brief
                     self._close_pending_round("declined")
-                    self._emit(on_event, {"type": "agent_done", "ok": False,
+                    self._emit_done(on_event, {"type": "agent_done", "ok": False,
                                           "declined": True})
                     return {"ok": False, "declined": True, "summary": reason,
-                            "status": self.service.status()}
+                            "status": self._result_status()}
                 if tc.function.name == "session_validate":
                     # D8.1 — the FIRST validate result after an escalation
                     # is what "did the retry validate" means; recorded
@@ -1388,7 +1891,7 @@ class UpgradeAgent:
                     if repairs_used > 1:
                         council_brief = self._maybe_escalate(
                             goal=goal, trigger="E1",
-                            context={"diff": self.service.proposals,
+                            context={"diff": self._proposals_for_context(),
                                      "checks": result.get("checks")},
                         )
                         if council_brief is None:
@@ -1406,9 +1909,9 @@ class UpgradeAgent:
                             summary = ("validation failed twice; session ended without "
                                        "submitting. " + json.dumps(result.get("checks")))
                             self._close_pending_round("unfinished")
-                            self._emit(on_event, {"type": "agent_done", "ok": False})
+                            self._emit_done(on_event, {"type": "agent_done", "ok": False})
                             return {"ok": False, "summary": summary,
-                                    "status": self.service.status()}
+                                    "status": self._result_status()}
                         messages.append({
                             "role": "tool", "tool_call_id": tc.id,
                             "content": json.dumps(result),
@@ -1469,7 +1972,7 @@ class UpgradeAgent:
         if (
             not ok
             and summary == "the agent reached its iteration limit without finishing"
-            and not self.service.proposals
+            and not self._proposals_for_context()
         ):
             summary = (
                 "the session never converged on a first edit within its "
@@ -1487,9 +1990,9 @@ class UpgradeAgent:
             summary = (summary or "") + " [" + "; ".join(self._failover_notes) + "]"
 
         self._close_pending_round(end_reason)
-        self._emit(on_event, {"type": "agent_done", "ok": ok})
+        self._emit_done(on_event, {"type": "agent_done", "ok": ok})
         return {
-            "ok": ok, "summary": summary, "status": self.service.status(),
+            "ok": ok, "summary": summary, "status": self._result_status(),
             "failovers": list(self._failover_notes),
             "final_profile": self.profile_name,
             "cancelled": cancelled,
@@ -1501,6 +2004,11 @@ class UpgradeAgent:
         """Ask the running edit loop to stop at its next step (see
         __init__). Safe to call from any thread; idempotent."""
         self._cancel.set()
+        if self._run_snapshot is not None:
+            self._cancel_owned_session(self._run_snapshot.parent_request_id, context=self._workspace_context)
+            return
+        if not self._client_factory_injected and os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
+            return
         cancel = getattr(self.service, "cancel", None)
         if callable(cancel):
             cancel()
@@ -1545,12 +2053,19 @@ class UpgradeAgent:
         inside the method, not at module load time — avoids a circular
         import.
         """
+        if self._run_snapshot is not None:
+            self._check_run_deadline()
+            policy = self._current_run_policy()
+            assert_route_allowed(self._run_snapshot.route.route, policy)
+            context = {**context, "privacy": policy.level}
         from jarvis.council.config import (
             COUNCIL_MAX_ESCALATIONS,
             COUNCIL_PLANNER_START_TIER,
         )
 
         if self._escalations_used >= COUNCIL_MAX_ESCALATIONS:
+            return None
+        if self._run_snapshot is not None and not self._assert_council_budget_supported():
             return None
         # MORTIMER_OPTIMIZATION_PLAN.md Phase 3: this placement="planner"
         # escalation starts at COUNCIL_PLANNER_START_TIER (2), not tier 1 —
@@ -1571,13 +2086,19 @@ class UpgradeAgent:
             }
         try:
             from jarvis.council.council import convene
-            result = asyncio.run(convene(
+            result = self._run_council(convene(
                 workflow=self._council_workflow, placement="planner", trigger=trigger,
-                goal=goal, tier=tier, context=context, run_id=self._run_id,
+                goal=goal, tier=tier, context=context,
+                run_id=self._execution_parent_id if self._run_snapshot is not None else self._run_id,
+                **self._council_execution_kwargs(),
             ))
         except Exception as exc:                    # noqa: BLE001
+            self._check_run_deadline()
+            if self._run_snapshot is not None and isinstance(exc, ModelBudgetUnavailable):
+                raise
             _log_safe_failure("council_escalation_failed", exc)
             return None
+        self._check_run_deadline()
         if result is None or result.winner is None:
             return None
         # V1 — remembered immediately, before the existing
@@ -1600,19 +2121,74 @@ class UpgradeAgent:
         NOT touch `_escalations_used` — the escalation ladder is for E1
         only. Advisory only: the caller decides what to do with the
         returned brief; nothing here executes it."""
+        context = {"reason": reason, "allowlist": allowlist}
+        if self._run_snapshot is not None:
+            if not self._assert_council_budget_supported():
+                return None
+            self._check_run_deadline()
+            policy = self._current_run_policy()
+            assert_route_allowed(self._run_snapshot.route.route, policy)
+            context["privacy"] = policy.level
         try:
             from jarvis.council.council import convene
-            result = asyncio.run(convene(
+            result = self._run_council(convene(
                 workflow=self._council_workflow, placement="scope", trigger="E2",
                 goal=goal, tier=1,
-                context={"reason": reason, "allowlist": allowlist}, run_id=self._run_id,
+                context=context,
+                run_id=self._execution_parent_id if self._run_snapshot is not None else self._run_id,
+                **self._council_execution_kwargs(),
             ))
         except Exception as exc:                    # noqa: BLE001
+            self._check_run_deadline()
+            if self._run_snapshot is not None and isinstance(exc, ModelBudgetUnavailable):
+                raise
             _log_safe_failure("council_scope_council_failed", exc)
             return None
+        self._check_run_deadline()
         if result is None or result.winner is None:
             return None
         return result.winner.content
+
+    def _run_council(self, coroutine: Any) -> Any:
+        if self._run_snapshot is None:
+            return asyncio.run(coroutine)
+
+        async def bounded() -> Any:
+            operation = asyncio.create_task(coroutine)
+            try:
+                while not operation.done():
+                    self._remaining_run_seconds()
+                    if self._cancel.is_set():
+                        raise asyncio.CancelledError
+                    await asyncio.wait({operation}, timeout=0.05)
+                self._remaining_run_seconds()
+                if self._cancel.is_set():
+                    raise asyncio.CancelledError
+                return await operation
+            finally:
+                if not operation.done():
+                    operation.cancel()
+                    try:
+                        await operation
+                    except asyncio.CancelledError:
+                        pass
+
+        return self._execution_loop.run_until_complete(bounded())
+
+    def _assert_council_budget_supported(self) -> bool:
+        from jarvis.council.council import _council_enabled
+        # Capped runs are supported only through the sealed host sponsor
+        # passed below. Council owns child admission, never context JSON.
+        return _council_enabled()
+
+    def _council_execution_kwargs(self) -> dict[str, Any]:
+        if self._run_snapshot is None:
+            return {}
+        return {
+            "parent_budget": self._run_snapshot.budget,
+            "data_policy": self._current_run_policy(),
+            "cancel_event": self._cancel,
+        }
 
     def _dispatch(self, name: str, args: dict) -> dict:
         """Closed toolset — unknown tools are refused outright."""
@@ -1635,6 +2211,47 @@ class UpgradeAgent:
             return {"ok": False, "declined": True,
                     "reason": str(args.get("reason", ""))}
         return {"ok": False, "error": f"unknown tool: {name}"}
+
+    def _proposals_for_context(self) -> list[dict]:
+        return list(self._approved_proposals) if self._run_snapshot is not None else self.service.proposals
+
+    def _dispatch_classified(self, name: str, args: dict, tool_call_id: str) -> dict:
+        """Execute once through the installed issuer before any result branch."""
+        from jarvis.development_sources import dispatch_workspace_tool
+
+        if (self._execution_task_id is None or type(args) is not dict
+                or name not in {spec["function"]["name"] for spec in self._tool_specs}):
+            raise ToolResultBindingError()
+        policy = self._current_run_policy()
+        scope = make_tool_execution_scope(
+            self._execution_parent_id, self._execution_task_id, tool_call_id,
+            name, args, policy,
+        )
+        envelope = dispatch_workspace_tool(self.service, name, args, execution_scope=scope,
+                                            context=self._workspace_context)
+        if type(envelope) is not ToolResultEnvelope:
+            raise ToolResultBindingError()
+        acquired, content = validate_tool_result(scope, envelope)
+        self._acquired_policy = DataPolicy(strictest(policy, acquired).level,
+                                           "development-run-acquired-source")
+        assert_route_allowed(self._run_snapshot.route.route, self._acquired_policy)
+        self._check_run_deadline()
+        result = json.loads(content)
+        if type(result) is not dict:
+            raise ToolResultBindingError()
+        if name == "edit_propose" and result.get("ok"):
+            self._approved_proposals.append({
+                "path": args.get("path"), "rationale": args.get("rationale", ""),
+                "diff": result.get("diff", ""),
+            })
+        elif name == "session_submit" and result.get("ok"):
+            self._submit_result = result
+        return result
+
+    def _emit_done(self, on_event: Callable[[dict], None] | None, event: dict) -> None:
+        # Enabled completion waits for native cleanup before claiming success.
+        if self._run_snapshot is None:
+            self._emit(on_event, event)
 
     @staticmethod
     def _emit(on_event: Callable[[dict], None] | None, event: dict) -> None:
@@ -1701,11 +2318,9 @@ class AppBuildAgent(UpgradeAgent):
         client_factory: Callable[[], Any] | None = None,
         run_id: str | None = None,
     ):
-        # Selection order mirrors resolve_profile's own: explicit >
-        # env > registry default. resolve_profile only checks
-        # JARVIS_UPGRADE_PROFILE, so the app-build env fallback is applied
-        # here, before the base class ever calls it.
-        profile = profile or os.environ.get(APPBUILD_PROFILE_ENV)
+        # Keep the explicit request separate. The base class applies the
+        # app-build env fallback only for its legacy client path; managed
+        # routing refreshes the workload preference at each run.
         super().__init__(
             workspace, config_path=config_path, registry_path=registry_path,
             profile=profile, client_factory=client_factory,

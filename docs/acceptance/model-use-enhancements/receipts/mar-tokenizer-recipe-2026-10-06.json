@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "scope_claim": 183,
+  "scope_merge": "4d2a3ce28c0b53c0c7eba5b3a4c42dc137430fac",
+  "scope_integrated_before_edits": "24ce2f4",
+  "recipe_sha256": "56e71231d9776f37254aacf90c74a20b61ebe264977063f9d2554ad7ba5d367c",
+  "official_archive_url": "https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/tokenizers/punkt_tab.zip",
+  "official_archive_sha256": "e57f64187974277726a3417ca6f181ec5403676c717672eef6a748a7b20e0106",
+  "official_archive_bytes": 4319076,
+  "installed_resource": "<prepared Python prefix>/share/nltk_data/tokenizers/punkt_tab/english",
+  "independent_exact_block": {
+    "passed": 17,
+    "seconds": 3.44,
+    "probe_sha256": "e2553890ed791c10940cd591a4774ba12116f8f21767cc34b96e0d3c47dcc98b",
+    "log_sha256": "0e23ed5d811e6017e13c3b5ca7a77d997c3a21c37a33bd17fc08ddc891ea746d",
+    "xml_sha256": "d815f6f24de20d650449c34682142bb763862456c87000c1f2943f16b0ba0513",
+    "cold_prefix_real_venv": true,
+    "unchanged_hydration_and_both_test_links": true,
+    "host_site_PYTHONPATH_used_for_offline_dependencies": true,
+    "transport_local_archive_injection": true,
+    "different_uid_guest_write_refusal_proven": false,
+    "checks": [
+      "primary archive and four file pins",
+      "explicit no proxy and redirect refusal",
+      "invalid or duplicate or incomplete artifacts refuse",
+      "fixed filenames only and no overwrite",
+      "cold default lookup and Pipecat sentence helper offline",
+      "HOME shadow refuses"
+    ],
+    "initial_failures_retained": "Five redirect probe fixture failures were corrected to exercise actual urllib opener HTTPError handling; recipe unchanged."
+  },
+  "root_hydration_images": {
+    "passed": 11,
+    "subtests": 6,
+    "seconds": 0.65,
+    "original_assertions_retained": true,
+    "synthetic_nested_resource_owner_modes_and_links": true
+  },
+  "bash_syntax_passed": true,
+  "fresh_image_acceptance": false,
+  "full12_passed": false,
+  "developer_accepted": false,
+  "mar_i_complete": false,
+  "production_changed": false,
+  "remaining": [
+    "fresh immutable preparation/register",
+    "actual offline cold default resource lookup",
+    "guarded worker write refusal",
+    "three unchanged RTVI assertions",
+    "all twelve unchanged checks"
+  ]
+}

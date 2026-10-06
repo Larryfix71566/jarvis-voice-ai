@@ -29,6 +29,9 @@ returns a per-site result dict, never raises for an ordinary API failure.
 from __future__ import annotations
 
 import os
+import hashlib
+import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +59,40 @@ DEFAULT_FOCUS = "Identify what this site offers, who it is for, and what disting
 # used only to keep a defensively-truncated title/content read legible if
 # a future response ever exceeds it.
 _TITLE_MAX_CHARS = 120
+
+
+@dataclass(frozen=True)
+class CrawlSourceEvidence:
+    requested_url: str = field(repr=False)
+    transport_endpoint: str
+    content_digest: str
+    page_origin_verified: bool = False
+
+
+class _CrawlResult(dict):
+    """Wire-compatible body with separate host acquisition evidence."""
+    def __init__(self, value, requested_url):
+        super().__init__(value)
+        self._source_evidence = CrawlSourceEvidence(requested_url, TAVILY_CRAWL_URL,
+            hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'),
+                ensure_ascii=True, allow_nan=False).encode()).hexdigest())
+
+
+def crawl_source_policy(result):
+    """Tavily success supplies no page credential/redirect/public-origin proof."""
+    from jarvis.privacy_policy import DataPolicy
+    return DataPolicy('confidential', 'unverified-crawl-page-origin')
+
+
+def assert_crawl_input_allowed(policy):
+    """The crawler is an external sink before any model sees its response."""
+    from jarvis.model_routing import AccessRoute, ModelRouteError
+    from jarvis.privacy_policy import DataPolicy, assert_route_allowed
+    if type(policy) is not DataPolicy:
+        raise ModelRouteError('research input classification is unavailable')
+    assert_route_allowed(AccessRoute(name='research_crawl', adapter='tavily_http',
+        billing='provider_api', credential_env=TAVILY_API_KEY_ENV,
+        privacy='approved_external', base_url=TAVILY_CRAWL_URL), policy)
 
 
 def load_research_config(path: str | os.PathLike[str] | None = None) -> dict[str, Any]:
@@ -86,19 +123,27 @@ class TavilyCrawlClient:
     (status_code, json_body_or_None)."""
 
     def __init__(self, timeout: float = 150.0):
-        self._client = httpx.Client(timeout=timeout)
+        self._timeout = timeout
 
     def post(self, url: str, headers: dict, json: dict) -> tuple[int, dict | None]:
+        # The approved crawler route is this exact endpoint. A response must
+        # not lend cookies to the next site, redirect credentials elsewhere,
+        # or inherit a process proxy/TLS override. This says nothing about
+        # the origin or classification of the pages returned by Tavily.
+        if url != TAVILY_CRAWL_URL:
+            return (-1, None)
         try:
-            resp = self._client.post(url, headers=headers, json=json)
+            with httpx.Client(timeout=self._timeout, trust_env=False,
+                              follow_redirects=False) as client:
+                resp = client.post(url, headers=headers, json=json)
+                try:
+                    body = resp.json()
+                except ValueError:
+                    body = None
         except httpx.TimeoutException:
             return (0, None)  # 0 is this module's sentinel for "no response at all"
         except httpx.HTTPError:
             return (-1, None)  # -1: transport-level failure, not an HTTP status
-        try:
-            body = resp.json()
-        except ValueError:
-            body = None
         return (resp.status_code, body)
 
 
@@ -209,10 +254,10 @@ def crawl_site(
             "error": "the crawl completed but found no pages",
             "error_kind": "empty",
         }
-    return {
+    return _CrawlResult({
         "ok": True, "url": url, "pages": pages,
         "credits": credits, "page_count": len(pages),
-    }
+    }, url)
 
 
 def build_site_digest(site_result: dict[str, Any]) -> str:

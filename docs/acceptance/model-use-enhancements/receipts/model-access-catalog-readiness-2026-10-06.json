@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "ref": "08ea4f06fb9d8b729e45e1a0e9f9e17c56c1f7ab",
+  "catalog": {
+    "confidential_models": [],
+    "models": 64,
+    "ok": true
+  },
+  "vault": "established Mac encrypted project vault; no secret values printed",
+  "operation": "authenticated pinned HTTPS /models catalog read only",
+  "source_sha256": {
+    "jarvis/saygm.py": "3f503fb784552f31fd7250dd0aa308e1f222b89f89e6dcc0a9ad74b33a308c4f",
+    "scripts/verify_model_access.py": "4bae0b5942dffd2cdfe2b1b860b9fe977f4c68868bd417c97f6d17936937af66"
+  },
+  "raw_evidence_file": "/private/tmp/ws05-catalog-readiness-2026-10-06.json",
+  "raw_evidence_sha256": "ae4f1fd62c0394ef6f4f9630b9bac9f9a0ac6e752becbe2a63d3ce2cfa85af94",
+  "model_calls": false,
+  "subscription_probes": false,
+  "production_settings_changed": false,
+  "limit": "The probe reports routing disabled in its fresh process; it does not inspect effective running-service activation or account billing. Zero ready_issues only covers presence/config checks.",
+  "confidential_memory_pilot": "unavailable: no advertised confidential model; no open-route fallback",
+  "acceptance_complete": false
+}

@@ -1,0 +1,28 @@
+{
+  "captured_on": "2026-10-05",
+  "evidence_kind": "local_offline_client_and_ledger_regressions",
+  "historical_rows_modified": false,
+  "limitations": [
+    "Non-voice API factory path only; Pipecat assembled voice completions remain separate.",
+    "Adapter billing labels do not prove provider account charges or allowance.",
+    "Historical missing durations are unrecoverable; production coverage requires deployment and subsequent traffic."
+  ],
+  "production_changes": false,
+  "provider_calls": 0,
+  "source_sha256": {
+    "jarvis/llm_client.py": "6a66ccf3341d1601d7af20e260f3cc131f21a7f1ac94321a031a00a4d32d45d8",
+    "jarvis/usage_ledger.py": "eb83846e853946deb2532b9e3fc7568b397ae9078538a122425545ee429d0fa1",
+    "tests/unit/test_api_completion_metadata.py": "58d503409173dfba4533afab78805a800b46a1d7e2565193b4f1cc0bef19edb2"
+  },
+  "stage": "MAR-A",
+  "tests_passed": 41,
+  "verified": [
+    "actual API factory preserves client and completion identity",
+    "all request arguments and OpenRouter cache-control preserved",
+    "completed non-streaming SDK duration and adapter route/billing reach one ledger row",
+    "streaming initial-return duration remains unknown",
+    "provider JSON cannot spoof the trusted local metadata type",
+    "cancellation and provider exception identity propagate unchanged"
+  ],
+  "workstream": "WS-05"
+}

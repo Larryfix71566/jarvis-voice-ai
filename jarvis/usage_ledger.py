@@ -39,9 +39,11 @@ from __future__ import annotations
 import os
 import sqlite3
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 try:
     import yaml  # PyYAML, already a dependency via config loading
@@ -106,8 +108,75 @@ CREATE INDEX IF NOT EXISTS idx_calls_rung ON llm_calls (month, rung);
 CREATE INDEX IF NOT EXISTS idx_calls_model ON llm_calls (month, provider, model);
 """
 
+# Optional WS-05 admission state is separate from observed usage. The budget
+# authority initializes these tables only when a task has a deadline or an
+# estimated spending ceiling; ordinary accounting keeps its existing schema
+# and best-effort behavior. Monetary values are decimal text, never SQLite
+# floating point sums that could admit a call over a configured ceiling.
+_MODEL_BUDGET_SCHEMA = """
+CREATE TABLE IF NOT EXISTS model_task_budgets (
+    user_id TEXT NOT NULL,
+    workload TEXT NOT NULL,
+    parent_request_id TEXT NOT NULL,
+    scope_id TEXT NOT NULL UNIQUE,
+    started_at REAL NOT NULL,
+    last_seen_at REAL NOT NULL,
+    deadline_at REAL,
+    max_output_tokens_per_call INTEGER,
+    spend_ceiling_usd TEXT,
+    PRIMARY KEY (user_id, workload, parent_request_id)
+);
+CREATE TABLE IF NOT EXISTS model_call_budget_reservations (
+    reservation_id TEXT PRIMARY KEY,
+    scope_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    route_name TEXT NOT NULL,
+    billing_source TEXT NOT NULL,
+    estimated_input_tokens INTEGER NOT NULL,
+    output_token_upper_bound INTEGER NOT NULL,
+    reserved_cost_usd TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    FOREIGN KEY (scope_id) REFERENCES model_task_budgets(scope_id)
+);
+CREATE INDEX IF NOT EXISTS idx_model_budget_reservations_scope
+    ON model_call_budget_reservations (scope_id);
+CREATE TABLE IF NOT EXISTS model_task_budget_links (
+    child_scope_id TEXT PRIMARY KEY,
+    parent_scope_id TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    FOREIGN KEY (child_scope_id) REFERENCES model_task_budgets(scope_id),
+    FOREIGN KEY (parent_scope_id) REFERENCES model_task_budgets(scope_id),
+    CHECK (child_scope_id != parent_scope_id)
+);
+CREATE TABLE IF NOT EXISTS model_call_budget_reservation_scopes (
+    reservation_id TEXT NOT NULL,
+    scope_id TEXT NOT NULL,
+    PRIMARY KEY (reservation_id, scope_id),
+    FOREIGN KEY (reservation_id) REFERENCES model_call_budget_reservations(reservation_id),
+    FOREIGN KEY (scope_id) REFERENCES model_task_budgets(scope_id)
+);
+CREATE INDEX IF NOT EXISTS idx_model_budget_membership_scope
+    ON model_call_budget_reservation_scopes (scope_id);
+"""
+
 _lock = threading.Lock()
 _price_map_cache: Optional[dict] = None
+
+
+@dataclass(frozen=True)
+class ApiCompletionMetadata:
+    """Local client instrumentation, never provider-supplied billing evidence.
+
+    The API client factory attaches this exact type without replacing the
+    completion object. Duration measures a completed non-streaming SDK call;
+    historical calls and assembled streaming completions remain unknown.
+    """
+
+    route_name: str
+    billing_source: str
+    duration_ms: float | None
 
 
 # ---------------------------------------------------------------- price map
@@ -178,7 +247,9 @@ def compute_cost(provider: str,
 # ---------------------------------------------------------------- ledger
 
 def _conn() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    from jarvis.storage_context import costs_path
+    path = costs_path(DB_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
     # Rev 3: WAL + busy_timeout from day one, not "when a future concurrent
     # writer appears". There are two writers from the FIRST council round:
     # council.py/upgrade_agent.py run inside the admin sidecar process,
@@ -188,7 +259,7 @@ def _conn() -> sqlite3.Connection:
     # INSERT (and costs_api's reads) overlap without SQLITE_BUSY. WAL is
     # persistent per database file, so setting it on every connect is
     # idempotent and costs nothing.
-    conn = sqlite3.connect(DB_PATH, timeout=5.0)
+    conn = sqlite3.connect(path, timeout=5.0)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.executescript(_SCHEMA)
@@ -223,6 +294,62 @@ def _conn() -> sqlite3.Connection:
     if "duration_ms" not in cols:
         conn.execute("ALTER TABLE llm_calls ADD COLUMN duration_ms REAL")
     return conn
+
+
+def _model_budget_schema_exists(conn: sqlite3.Connection) -> bool:
+    names = {row[0] for row in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name IN "
+        "('model_task_budgets','model_call_budget_reservations',"
+        "'model_task_budget_links','model_call_budget_reservation_scopes')",
+    )}
+    core = {"model_task_budgets", "model_call_budget_reservations"}
+    child = {"model_task_budget_links", "model_call_budget_reservation_scopes"}
+    if ((names & core and not core <= names) or
+            (names & child and (not child <= names or not core <= names))):
+        raise sqlite3.DatabaseError("incomplete model budget schema")
+    return core <= names
+
+
+def model_budget_connection() -> sqlite3.Connection:
+    """Open optional admission storage; failures belong to its authority.
+
+    Unlike record_call(), this helper deliberately does not swallow failures.
+    Callers must close the connection and translate failures into a fixed,
+    payload-free unavailable status before any outbound execution.
+    """
+    conn = _conn()
+    try:
+        _model_budget_schema_exists(conn)
+        conn.executescript(_MODEL_BUDGET_SCHEMA)
+        conn.execute("PRAGMA foreign_keys=ON")
+        return conn
+    except Exception:
+        conn.close()
+        raise
+
+
+def existing_model_budget_connection() -> sqlite3.Connection | None:
+    """Read prior optional budgets without creating a database or schema.
+
+    A resumed parent retains its earlier restrictions even when present
+    configuration has no limits. Missing storage or an older ledger with no
+    budget table has no prior state; unreadable existing storage is an error,
+    which the admission authority must never treat as an unrestricted task.
+    """
+    from jarvis.storage_context import costs_path
+    path = costs_path(DB_PATH)
+    if not path.exists():
+        return None
+    conn = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=5.0)
+    try:
+        conn.execute("PRAGMA busy_timeout=5000")
+        if _model_budget_schema_exists(conn):
+            return conn
+        conn.close()
+        return None
+    except Exception:
+        conn.close()
+        raise
 
 
 def record_call(rung: str,
@@ -330,6 +457,13 @@ def provider_from_base_url(base_url: str) -> str:
     base_url is: self-updating if .env is ever repointed, and available at
     every call site via the already-constructed client (client.base_url)."""
     b = (base_url or "").lower()
+    try:
+        endpoint = urlsplit(b)
+        if (endpoint.scheme == "https" and endpoint.hostname == "api.saygm.com"
+                and endpoint.port in {None, 443}):
+            return "saygm"
+    except ValueError:
+        pass
     if "anthropic.com" in b:
         return "anthropic"
     if "openrouter.ai" in b:
@@ -383,7 +517,8 @@ def record_completion(rung: str,
                       reported_cost: Optional[float] = None,
                       plan_state: Optional[str] = None,
                       billing_source: str | None = None,
-                      route_name: str | None = None) -> None:
+                      route_name: str | None = None,
+                      duration_ms: float | None = None) -> None:
     """The one adapter for every call site in this repo — all are
     chat.completions.create via AsyncOpenAI regardless of upstream vendor.
 
@@ -395,6 +530,16 @@ def record_completion(rung: str,
               and let scripts/pull_openrouter_activity.py backfill by
               gen_id later.
     """
+    # Accept only our local metadata type. A provider's JSON extra named like
+    # this attribute cannot relabel API spend as a subscription call.
+    metadata = getattr(response, "_mortimer_api_call", None)
+    if isinstance(metadata, ApiCompletionMetadata):
+        if billing_source is None:
+            billing_source = metadata.billing_source
+        if route_name is None:
+            route_name = metadata.route_name
+        if duration_ms is None:
+            duration_ms = metadata.duration_ms
     u = _get(response, "usage") or {}
     prompt_value = _get(u, "prompt_tokens")
     completion_value = _get(u, "completion_tokens")
@@ -437,6 +582,7 @@ def record_completion(rung: str,
         cache_breakdown_known=(cached_value is not None and cache_write_value is not None),
         billing_source=billing_source,
         route_name=route_name,
+        duration_ms=duration_ms,
     )
 
 

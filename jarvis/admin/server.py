@@ -60,9 +60,10 @@ import sys
 import threading
 import time
 import uuid
+from contextvars import ContextVar, copy_context
 from contextlib import closing
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -101,7 +102,14 @@ from jarvis.model_preferences import (
     list_preferences,
     stage_preference,
 )
-from jarvis.model_routing import available_routes, load_access_config
+from jarvis.model_routing import (
+    available_routes, describe_route_choice, load_access_config,
+    model_profile_for_workload, ModelRouteError, resolve_policy,
+)
+from jarvis.model_budget import (
+    ModelBudgetUnavailable, TaskBudget, begin_model_task_budget, remaining_seconds,
+)
+from jarvis.privacy_policy import DataPolicy
 from jarvis import keyhealth
 from jarvis.prompts import (
     PLAN_AUTHOR_PROMPT,
@@ -275,6 +283,24 @@ class ResearchSaveIn(BaseModel):
     path: str | None = None
 
 
+class AdvisorySourceIn(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    owner_id: str
+    bot_session_id: str
+    caller_run_id: str
+    caller_agent: Literal['developer', 'analyst']
+    tool_name: str
+    arguments: dict[str, Any]
+    task_id: str
+    tool_call_id: str
+    challenge: str
+    input_policy: Literal['approved_external', 'confidential', 'local_only']
+    owner_scope_id: str | None = None
+    child_scope_id: str | None = None
+    preparation_id: str | None = None
+    source_context: dict[str, str] | None = None
+
+
 class SkillRequestIn(BaseModel):
     """Closed, versioned mutation surface for Skills workspace requests."""
     model_config = ConfigDict(extra="forbid")
@@ -316,11 +342,16 @@ class SkillCreatorAssociationIn(BaseModel):
     request_id: str = Field(min_length=36, max_length=36)
     developer_run_id: str = Field(min_length=36, max_length=36)
     creator_revision: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_authority: bool = False
 
 
 class SkillCreatorToolIn(SkillCreatorAssociationIn):
     tool_name: str = Field(min_length=1, max_length=64)
     arguments: dict[str, Any] = Field(default_factory=dict)
+    source_challenge: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_task_id: str | None = Field(default=None, min_length=1, max_length=256)
+    source_tool_call_id: str | None = Field(default=None, min_length=1, max_length=256)
+    source_input_policy: Literal["approved_external", "confidential", "local_only"] | None = None
 
 
 
@@ -334,6 +365,28 @@ class AppBuildGoalIn(BaseModel):
     plan: str | None = None
     plan_path: str | None = None
     run_id: str | None = None
+
+
+class WorkspaceSourceAssociationIn(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    owner_id: str = Field(min_length=1, max_length=64)
+    bot_session_id: str = Field(min_length=36, max_length=36)
+    developer_run_id: str = Field(min_length=36, max_length=36)
+    workspace_kind: Literal['selfedit', 'app-build']
+
+
+class WorkspaceSourcePrepareIn(WorkspaceSourceAssociationIn):
+    tool_name: str = Field(min_length=1, max_length=64)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    source_challenge: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_task_id: str = Field(min_length=1, max_length=256)
+    source_tool_call_id: str = Field(min_length=1, max_length=256)
+    source_input_policy: Literal["approved_external", "confidential", "local_only"]
+
+
+class WorkspaceSourceToolIn(WorkspaceSourcePrepareIn):
+    source_context: dict[str, str]
+    source_preparation_id: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class ModelRouteStageIn(BaseModel):
@@ -629,10 +682,7 @@ def _open_authoring(service, goal, run_id, target_paths, job):
                     job.update(state="error", error=opened.get("error"))
                 return
         else:
-            if service.branch and (service.goal or "") != goal:
-                discarded = service.revert()
-                if not discarded.get("ok"):
-                    raise RuntimeError("Previous workspace could not be discarded")
+            _cleanup_existing_workspace(service, goal)
             if not service.branch:
                 opened = service.start_session(goal, run_id=run_id)
                 if not opened.get("ok"):
@@ -705,7 +755,7 @@ def _begin_authoring(
         return _prior_staged_selfedit_action(action_run_id, action_scope) or {
             "ok": False, "error": "the self-edit claim could not be reconciled; no session was opened",
         }
-    worker = threading.Thread(target=_open_authoring,
+    worker = threading.Thread(target=_source_worker_target(_open_authoring),
         args=(_selfedit_service, goal, run_id, target_paths, job), daemon=True)
     try:
         worker.start()
@@ -899,43 +949,217 @@ def _research_busy() -> bool:
         return _research_job["state"] == "running"
 
 
-def _run_research_job(urls: list[str], focus: str, run_id: str) -> None:
+_advisory_transport_context = ContextVar('advisory_transport_context', default=None)
+_advisory_job_guards = {}
+
+
+def _advisory_slot(kind):
+    return (_plan_lock, _plan_job) if kind == 'planning' else (_research_lock, _research_job)
+
+
+def _advisory_new_guard(kind, run_id, cancel_event=None):
+    lock, slot = _advisory_slot(kind)
+    source = _advisory_transport_context.get()
+    event = source.cancel_event if source is not None else (cancel_event or threading.Event())
+    with lock:
+        guard = {'run_id': slot.get('run_id'), 'event': event, 'source': source}
+        if slot.get('run_id') not in {None, run_id}:
+            event.set()
+        else:
+            _advisory_job_guards[kind] = guard
+        return guard
+
+
+def _advisory_publish(kind, guard, values, run_id, *, claim_status, policy=None, failure=False):
+    lock, slot = _advisory_slot(kind)
+    with lock:
+        if (_advisory_job_guards.get(kind) is not guard or slot.get('run_id') != guard['run_id']
+                or (guard['event'].is_set() and not failure)):
+            return False
+        source = guard['source']
+        if source is not None:
+            from jarvis.advisory_sources import check_advisory_source, record_advisory_job
+            try:
+                check_advisory_source(source, slot, allow_cancelled=failure)
+            except ModelRouteError:
+                return False
+        slot.update(values)
+        if source is not None and not guard['event'].is_set():
+            record_advisory_job(source, slot, policy=policy)
+        updater = _update_plan_start_claim if kind == 'planning' else _update_research_start_claim
+        updater(run_id, claim_status)
+        return True
+
+
+def _advisory_worker_kwargs():
+    source = _advisory_transport_context.get()
+    return {} if source is None else {'parent_budget': source.parent_budget,
+        'coordinator_budget': source.coordinator_budget, 'context_source': source,
+        'data_policy': source.input_floor, 'cancel_event': source.cancel_event}
+
+
+def _activate_advisory(slot):
+    source = _advisory_transport_context.get()
+    if source is not None:
+        from jarvis.advisory_sources import activate_advisory_source
+        activate_advisory_source(source, slot)
+
+
+def _advisory_context_for_job(kind, slot):
+    if os.environ.get('JARVIS_MODEL_ROUTING_ENABLED') != '1':
+        return None
+    from jarvis.advisory_sources import manual_advisory_source, verify_advisory_job
+    try:
+        source = _advisory_transport_context.get()
+        if source is None:
+            source = manual_advisory_source(kind, slot, current_user_id())
+        if source is not None:
+            verify_advisory_job(source, slot)
+        return source
+    except ModelRouteError:
+        raise HTTPException(status_code=409, detail='advisory source owner changed') from None
+
+
+def _start_advisory_thread(target, *, args=(), kwargs=None, started_at=None) -> None:
+    """Keep the authenticated host context in council/planning workers."""
+    host_kwargs = dict(kwargs or {})
+    host_kwargs.update(_advisory_worker_kwargs())
+    kind = ('planning' if target in {_run_plan_single, _run_plan_council} else
+            'research' if target is _run_research_job else None)
+    if kind is not None and (os.environ.get('JARVIS_MODEL_ROUTING_ENABLED') == '1'
+                             or _advisory_transport_context.get() is not None):
+        guard = _advisory_new_guard(kind, args[-1], host_kwargs.get('cancel_event'))
+        host_kwargs.update(cancel_event=guard['event'], job_guard=guard)
+    if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
+        host_kwargs["started_at"] = time.time() if started_at is None else started_at
+    threading.Thread(target=copy_context().run, args=(target, *args),
+                     kwargs=host_kwargs, daemon=True).start()
+
+
+def _advisory_owner(
+    workload: str, context: dict[str, Any], run_id: str | None, *,
+    parent_budget: TaskBudget | None, data_policy: DataPolicy | None,
+    cancel_event: threading.Event | None, started_at: float,
+) -> tuple[TaskBudget | None, DataPolicy | None]:
+    if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") != "1":
+        if parent_budget is not None:
+            raise ModelBudgetUnavailable("budget_unsupported_route")
+        return None, None
+    # Raw API dictionaries and returned crawl JSON cannot approve a source.
+    policy = council_mod._host_policy(
+        context, workload, DataPolicy() if data_policy is None else data_policy,
+        **({'context_source': _advisory_transport_context.get()} if _advisory_transport_context.get() is not None else {}),
+    )
+    source = _advisory_transport_context.get()
+    if source is not None:
+        from jarvis.advisory_sources import check_advisory_source
+        from jarvis.privacy_policy import strictest
+        _, slot = _advisory_slot(source.as_metadata()['advisory_kind'])
+        policy = strictest(policy, check_advisory_source(source, slot))
+    if parent_budget is not None:
+        if type(parent_budget) is not TaskBudget:
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        owner = parent_budget
+    else:
+        owner = begin_model_task_budget(
+            workload, run_id or f"admin:{uuid.uuid4().hex}",
+            resolve_policy(workload, include_preferences=False).limits,
+            started_at=started_at,
+        )
+    _check_advisory_owner(owner, cancel_event)
+    return owner, policy
+
+
+def _check_advisory_owner(owner: TaskBudget | None, cancel_event: threading.Event | None) -> None:
+    if cancel_event is not None:
+        if type(cancel_event) is not threading.Event:
+            raise ModelBudgetUnavailable("budget_scope_mismatch")
+        if cancel_event.is_set():
+            raise asyncio.CancelledError
+    if owner is not None and remaining_seconds(owner) <= 0:
+        raise ModelBudgetUnavailable("budget_deadline_exhausted")
+
+
+def _advisory_failure(exc: BaseException, legacy_prefix: str) -> str:
+    if isinstance(exc, ModelBudgetUnavailable):
+        return exc.code
+    if isinstance(exc, asyncio.CancelledError):
+        return "budget_cancelled"
+    if isinstance(exc, ModelRouteError):
+        return "model_policy_refused"
+    return f"{legacy_prefix} ({type(exc).__name__})"
+
+
+def _run_research_job(
+    urls: list[str], focus: str, run_id: str, *,
+    parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None, started_at: float | None = None, job_guard=None,
+    coordinator_budget=None, context_source=None,
+) -> None:
     """Background thread target (R1): crawl both sites (sync, one at a
     time — Tavily's own crawl is already parallel internally, and two
     concurrent 120s calls would only double the memory footprint for no
     real time saving), assemble the digest in CODE, then one model call
     for the prose comparison (R4/R5). Settles _research_job on every exit
     path, mirroring every other job target on this page."""
+    started_at = time.time() if started_at is None else started_at
+    guard = job_guard or _advisory_new_guard('research', run_id, cancel_event)
+    cancel_event = guard['event']
+    policy = data_policy
     try:
+        owner, policy = _advisory_owner(
+            "planning", {}, run_id, parent_budget=parent_budget,
+            data_policy=data_policy, cancel_event=cancel_event, started_at=started_at,
+        )
+        input_policy = policy
+        # The original HTTP packet is distinct from acquired page content.
+        # Freeze it before work; never include a prior crawl's raw response
+        # in the next site's request or downgrade an acquired result floor.
+        crawl_urls, crawl_focus = tuple(urls), focus
+        if owner is not None:
+            research_crawl.assert_crawl_input_allowed(input_policy)
         cfg = research_crawl.load_research_config()
         api_key = os.environ.get(research_crawl.TAVILY_API_KEY_ENV)
         if not api_key:
-            with _research_lock:
-                _research_job.update(
+            _advisory_publish('research', guard, dict(
                     state="error",
                     error="TAVILY_API_KEY is not configured",
                     finished_at=time.time(),
-                )
-            _update_research_start_claim(run_id, "failed")
+                ), run_id, claim_status='failed', failure=True)
             return
         client = research_crawl.TavilyCrawlClient(timeout=float(cfg.get("timeout_s", 120)) + 10.0)
-        results = [
-            research_crawl.crawl_site(client, url, focus, api_key, cfg)
-            for url in urls
-        ]
+        results = []
+        for url in crawl_urls:
+            _check_advisory_owner(owner, cancel_event)
+            if owner is not None:
+                from jarvis.privacy_policy import strictest
+                current_input = input_policy
+                if guard['source'] is not None:
+                    from jarvis.advisory_sources import check_advisory_source
+                    current_input = strictest(current_input,
+                        check_advisory_source(guard['source'], _research_job))
+                research_crawl.assert_crawl_input_allowed(current_input)
+            results.append(research_crawl.crawl_site(client, url, crawl_focus, api_key, cfg))
+            _check_advisory_owner(owner, cancel_event)
+        if owner is not None:
+            from jarvis.privacy_policy import strictest
+            # No acquired content enters the shared job, digest, model, or
+            # result sinks until its full accumulated floor is recorded.
+            policy = strictest(policy, *(research_crawl.crawl_source_policy(result) for result in results))
+            if guard['source'] is not None:
+                from jarvis.advisory_sources import record_advisory_job
+                record_advisory_job(guard['source'], _research_job, policy=policy)
         # R9 — per-site failure, never all-or-nothing: only when EVERY
         # site failed does this become a terminal error.
         if not any(r.get("ok") for r in results):
-            with _research_lock:
-                _research_job.update(
+            _advisory_publish('research', guard, dict(
                     state="error",
                     sites=[_site_summary(r) for r in results],
                     error="both sites failed to crawl — " + "; ".join(
                         f"{r['url']}: {r.get('error', 'unknown')}" for r in results
                     ),
                     finished_at=time.time(),
-                )
-            _update_research_start_claim(run_id, "failed")
+                ), run_id, claim_status='failed', policy=policy, failure=True)
             return
 
         digests = research_crawl.assemble_digests(results[0], results[1])
@@ -950,39 +1174,43 @@ def _run_research_job(urls: list[str], focus: str, run_id: str) -> None:
         try:
             profile = resolve_profile(registry, profile_name)
         except UnknownModelProfileError:
-            with _research_lock:
-                _research_job.update(
+            _advisory_publish('research', guard, dict(
                     state="error",
                     sites=[_site_summary(r) for r in results],
                     error="no usable planner model",
                     finished_at=time.time(),
-                )
-            _update_research_start_claim(run_id, "failed")
+                ), run_id, claim_status='failed', policy=policy, failure=True)
             return
+        call_kwargs = {}
+        if owner is not None:
+            policy = council_mod._host_policy({}, "council", policy)
+            execution = council_mod._child_execution(
+                owner, "council", policy, cancel_event, started_at=started_at,
+                sponsored=parent_budget is not None,
+                **({'coordinator': coordinator_budget} if coordinator_budget is not None else {}),
+            )
+            call_kwargs = {"execution": execution, "data_policy": policy}
         content, _usage = asyncio.run(council_mod._call_profile(
             profile, RESEARCH_SYSTEM_PROMPT, user_content,
-            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="research",
+            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="research", **call_kwargs,
         ))
-        with _research_lock:
-            _research_job.update(
+        _check_advisory_owner(owner, cancel_event)
+        _advisory_publish('research', guard, dict(
                 state="done",
                 sites=[_site_summary(r) for r in results],
                 comparison=content,
                 model=profile["name"],
                 credits_used=research_crawl.total_credits(*results),
                 finished_at=time.time(),
-            )
-        _update_research_start_claim(run_id, "completed")
+            ), run_id, claim_status='completed', policy=policy)
         logger.info("research_state_transition state=done site_count=%d", len(urls))
-    except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
+    except (Exception, asyncio.CancelledError) as exc:  # every exit settles the job
         logger.warning("research_job_failed error_type=%s", type(exc).__name__)
-        with _research_lock:
-            _research_job.update(
+        _advisory_publish('research', guard, dict(
                 state="error",
-                error=f"research job failed ({type(exc).__name__})",
+                error=_advisory_failure(exc, "research job failed"),
                 finished_at=time.time(),
-            )
-        _update_research_start_claim(run_id, "failed")
+            ), run_id, claim_status='failed', policy=policy, failure=True)
 
 
 def _site_summary(result: dict[str, Any]) -> dict[str, Any]:
@@ -1008,6 +1236,76 @@ def _make_agent(service: SelfEditService, profile: str | None,
     return UpgradeAgent(service, profile=profile, run_id=run_id)
 
 
+# Only the authenticated source adapter binds this host capability. No
+# Pydantic field or provider-supplied privacy label can construct it.
+_workspace_start_policy = ContextVar('workspace_start_policy', default=None)
+_workspace_lifecycle_context = ContextVar('workspace_lifecycle_context', default=None)
+_workspace_cleanup_context = ContextVar('workspace_cleanup_context', default=None)
+_appbuild_parent_id = ContextVar('appbuild_parent_id', default=None)
+
+
+def _source_plan_observed(path, result):
+    source = _workspace_start_policy.get()
+    if source is not None:
+        from jarvis.development_sources import host_plan_policy
+        from jarvis.privacy_policy import strictest
+        source['plan_policy'] = strictest(source['data_policy'], host_plan_policy(_selfedit_service, path, result))
+        if 'run' in source:
+            from jarvis.development_sources import retain_workspace_floor
+            retain_workspace_floor(source['run'], source['plan_policy'])
+
+
+def _source_worker_kwargs():
+    source = _workspace_start_policy.get()
+    return {key: value for key, value in source.items() if key in {'data_policy', 'plan_policy'}} if source is not None else {}
+
+
+def _source_worker_target(target):
+    from sandbox.workspace import _source_session
+    if (_workspace_start_policy.get() is None and _workspace_lifecycle_context.get() is None
+            and _workspace_cleanup_context.get() is None and _source_session.get() is None):
+        return target
+    from functools import partial
+    return partial(copy_context().run, target)
+
+
+def _lifecycle_service(service, *, terminal=False):
+    context = _workspace_lifecycle_context.get()
+    if context is None:
+        return service
+    from jarvis.development_sources import _live, refresh_workspace_floor
+    if service is not context._service:
+        raise RuntimeError('workspace_source_changed')
+    _live(service, context.as_metadata()['developer_run_id'], context, terminal=terminal)
+    refresh_workspace_floor(context)
+    return service
+
+
+def _cleanup_existing_workspace(service, goal):
+    """Stale cleanup uses its own host proof, never the new start's actor."""
+    context = _workspace_cleanup_context.get()
+    if _workspace_start_policy.get() is None:
+        if service.branch and (service.goal or '') != goal:
+            service.revert()
+        return
+    if context is None:
+        runtime = service._runtime()
+        record = runtime.workspaces / (runtime._key(service._repository(), service._kind) + '.json')
+        try:
+            record.lstat()
+        except FileNotFoundError:
+            return
+        raise RuntimeError('workspace_source_changed')
+    if service is not context._service:
+        raise RuntimeError('workspace_source_changed')
+    from jarvis.development_sources import _live
+    from sandbox.workspace import pin_source_session
+    with pin_source_session(service, context._session, context._identity):
+        _live(service, context.as_metadata()['developer_run_id'], context, terminal=True)
+        if service.branch and (service.goal or '') != goal:
+            service.revert()
+
+
 def _run_finish() -> None:
     """SE4 — background thread target: validate, and on green, submit.
 
@@ -1020,12 +1318,13 @@ def _run_finish() -> None:
     publication_dispatched = False
     claimed = False
     try:
+        service = _lifecycle_service(_selfedit_service)
         with _finish_lock:
             if _finish_job.get("cancel_requested"):
                 _finish_job.update(state="cancelled", finished_at=time.time())
                 return
             action_run_id = _finish_job.get("action_run_id")
-        result = _selfedit_service.validate()
+        result = service.validate()
         with _finish_lock:
             _finish_job["checks"] = result.get("checks")
             if _finish_job.get("cancel_requested"):
@@ -1058,7 +1357,7 @@ def _run_finish() -> None:
             return
         if not claimed:
             prior = _prior_selfedit_publish(action_run_id)
-            current = _selfedit_service.status()
+            current = _lifecycle_service(service, terminal=True).status()
             publication = current.get("publication") or {}
             with _finish_lock:
                 if prior and prior.get("state") == "completed" and publication.get("url"):
@@ -1090,7 +1389,7 @@ def _run_finish() -> None:
                 return
             _finish_job["state"] = "submitting"
         publication_dispatched = True
-        submitted = _selfedit_service.submit()
+        submitted = _lifecycle_service(service).submit()
         if submitted.get("ok"):
             try:
                 update_execution_action(
@@ -1144,7 +1443,8 @@ def _run_finish() -> None:
 def _run_agent(goal: str, profile: str | None, plan: str | None = None,
                run_id: str | None = None,
                action_run_id: str | None = None,
-               action_scope: str = _SELFEDIT_STAGED_START_ACTION_SCOPE) -> None:
+               action_scope: str = _SELFEDIT_STAGED_START_ACTION_SCOPE, *,
+               data_policy=None, plan_policy=None) -> None:
     """Background thread target: plan edits, then settle the job state."""
     global _run_agent_instance
     try:
@@ -1160,12 +1460,10 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
         # goal would plan on the old branch with the old proposal still
         # applied. Same goal → resume it (validate/submit by voice); a
         # different goal → drop the leftover first, and say so in the log.
-        stale = _selfedit_service.branch
-        if stale and (_selfedit_service.goal or "") != goal:
-            logger.info("selfedit_stale_session_reverted branch_present=%s",
-                        bool(stale))
-            _selfedit_service.revert()
-        result = agent.run(goal, plan=plan)
+        _cleanup_existing_workspace(_selfedit_service, goal)
+        policies = {key: value for key, value in {'data_policy': data_policy, 'plan_policy': plan_policy}.items()
+                    if value is not None}
+        result = agent.run(goal, plan=plan, **policies)
         if result.get("cancelled") or _run_job.get("cancel_requested", False):
             state = "cancelled"
             # Cancellation stops the VM and revokes publication eligibility;
@@ -1241,7 +1539,7 @@ def _busy() -> bool:
 
 def _make_appbuild_agent(workspace: AppWorkspace, profile: str | None) -> AppBuildAgent:
     """Construct the planner (seam for tests), mirroring _make_agent."""
-    return AppBuildAgent(workspace, profile=profile)
+    return AppBuildAgent(workspace, profile=profile, run_id=_appbuild_parent_id.get())
 
 
 def _appbuild_busy() -> bool:
@@ -1329,7 +1627,7 @@ def _prior_appbuild_submit(session_id: str, workspace_status: dict[str, Any]) ->
 
 def _run_appbuild_agent(
     app: str, goal: str, profile: str | None, plan: str | None = None,
-    run_id: str | None = None,
+    run_id: str | None = None, *, data_policy=None, plan_policy=None,
 ) -> None:
     """Background thread target, mirroring _run_agent: build one app, then
     settle _appbuild_job. The AppWorkspace itself lives on _appbuild_
@@ -1338,15 +1636,27 @@ def _run_appbuild_agent(
     global _appbuild_workspace, _appbuild_agent_instance
     workspace = None
     try:
-        workspace = AppWorkspace(app)
-        agent = _make_appbuild_agent(workspace, profile)
+        cleanup = _workspace_cleanup_context.get()
+        workspace = cleanup._service if cleanup is not None else AppWorkspace(app)
+        if _workspace_start_policy.get() is not None:
+            from jarvis.agents.workspace import AppWorkspace as InstalledAppWorkspace
+            if type(workspace) is not InstalledAppWorkspace or workspace.app_name != app:
+                raise RuntimeError('workspace_source_changed')
+            _cleanup_existing_workspace(workspace, goal)
+        parent_token = _appbuild_parent_id.set(run_id)
+        try:
+            agent = _make_appbuild_agent(workspace, profile)
+        finally:
+            _appbuild_parent_id.reset(parent_token)
         with _appbuild_lock:
             _appbuild_workspace = workspace
             _appbuild_agent_instance = agent
             cancelled = _appbuild_job.get("cancel_requested", False)
         if cancelled:
             agent.request_cancel()
-        result = agent.run(goal, plan=plan)
+        policies = {key: value for key, value in {'data_policy': data_policy, 'plan_policy': plan_policy}.items()
+                    if value is not None}
+        result = agent.run(goal, plan=plan, **policies)
         with _appbuild_lock:
             cancelled = _appbuild_job.get("cancel_requested", False) or result.get("cancelled", False)
         if cancelled:
@@ -1389,6 +1699,8 @@ def _council_busy() -> bool:
 
 def _run_council_job(
     *, trigger: str, goal: str, context: dict[str, Any], placement: str = "planner",
+    parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None, started_at: float | None = None,
 ) -> None:
     """MORTIMER_LLM_COUNCIL_V2_PLAN.md V5 — background thread target,
     mirroring `_run_agent`'s shape: run the round, then settle
@@ -1398,17 +1710,25 @@ def _run_council_job(
     `winner=None` and `select_reason` populated — the same distinction
     `_maybe_escalate` makes between `result is None` and
     `result.winner is None`."""
+    started_at = time.time() if started_at is None else started_at
     try:
+        owner, policy = _advisory_owner(
+            "council", context, None, parent_budget=parent_budget,
+            data_policy=data_policy, cancel_event=cancel_event, started_at=started_at,
+        )
+        host_kwargs = ({"parent_budget": owner, "data_policy": policy,
+                        "cancel_event": cancel_event} if owner is not None else {})
         result = asyncio.run(council_mod.convene(
             workflow="selfedit", placement=placement, trigger=trigger,
-            goal=goal, tier=1, context=context,
+            goal=goal, tier=1, context=context, **host_kwargs,
         ))
-    except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
+        _check_advisory_owner(owner, cancel_event)
+    except (Exception, asyncio.CancelledError) as exc:  # every exit settles the job
         logger.warning("council_job_failed error_type=%s", type(exc).__name__)
         with _council_lock:
             _council_job.update(
                 state="error",
-                error=f"council job failed ({type(exc).__name__})",
+                error=_advisory_failure(exc, "council job failed"),
                 finished_at=time.time(),
             )
         return
@@ -1455,6 +1775,9 @@ def _resolve_planning_profile(explicit: str | None) -> dict[str, Any]:
 def _run_plan_single(
     goal: str, profile: dict[str, Any], context: dict[str, Any],
     run_id: str | None = None,
+    *, parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None, started_at: float | None = None, job_guard=None,
+    coordinator_budget=None, context_source=None,
 ) -> None:
     # MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R3 — single mode now shares
     # the same _proposer_user_message assembly council mode uses, so a
@@ -1463,64 +1786,93 @@ def _run_plan_single(
     is_review = context.get("document") is not None
     system_prompt = PLAN_REVIEW_PROMPT if is_review else PLAN_AUTHOR_PROMPT
     user_content = council_mod._proposer_user_message(goal, context, "doc")
+    started_at = time.time() if started_at is None else started_at
+    guard = job_guard or _advisory_new_guard('planning', run_id, cancel_event)
+    cancel_event = guard['event']
+    policy = data_policy
     try:
+        owner, policy = _advisory_owner(
+            "planning", context, run_id, parent_budget=parent_budget,
+            data_policy=data_policy, cancel_event=cancel_event, started_at=started_at,
+        )
+        call_kwargs = {}
+        if owner is not None:
+            workload = "council" if is_review else "planning"
+            policy = council_mod._host_policy(context, workload, policy,
+                **({'context_source': context_source} if context_source is not None else {}))
+            execution = council_mod._child_execution(
+                owner, workload, policy, cancel_event, started_at=started_at,
+                sponsored=parent_budget is not None,
+                **({'coordinator': coordinator_budget} if coordinator_budget is not None else {}),
+            )
+            call_kwargs = {"execution": execution, "data_policy": policy}
         content, _usage = asyncio.run(council_mod._call_profile(
             profile, system_prompt, user_content,
-            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="planning",
+            council_config.PLANNING_MEMBER_TIMEOUT_S, rung="planning", **call_kwargs,
         ))
-    except Exception as exc:  # noqa: BLE001 — a crash must still settle the job
+        _check_advisory_owner(owner, cancel_event)
+    except (Exception, asyncio.CancelledError) as exc:  # every exit settles the job
         logger.warning("plan_single_job_failed error_type=%s", type(exc).__name__)
-        with _plan_lock:
-            _plan_job.update(
+        _advisory_publish('planning', guard, dict(
                 state="error",
-                error=f"planning call failed ({type(exc).__name__})",
+                error=_advisory_failure(exc, "planning call failed"),
                 finished_at=time.time(),
-            )
-        _update_plan_start_claim(run_id, "failed")
+            ), run_id, claim_status='failed', policy=policy, failure=True)
         return
-    with _plan_lock:
-        _plan_job.update(
+    _advisory_publish('planning', guard, dict(
             state="done", plan=content, author=profile["name"],
             finished_at=time.time(),
-        )
-    _update_plan_start_claim(run_id, "completed")
+        ), run_id, claim_status='completed', policy=policy)
 
 
 def _run_plan_council(
     goal: str, members: dict[str, list[str]] | None, context: dict[str, Any],
     run_id: str | None = None,
+    *, parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
+    cancel_event: threading.Event | None = None, started_at: float | None = None, job_guard=None,
+    coordinator_budget=None, context_source=None,
 ) -> None:
+    started_at = time.time() if started_at is None else started_at
+    guard = job_guard or _advisory_new_guard('planning', run_id, cancel_event)
+    cancel_event = guard['event']
+    policy = data_policy
     try:
+        owner, policy = _advisory_owner(
+            "planning", context, run_id, parent_budget=parent_budget,
+            data_policy=data_policy, cancel_event=cancel_event, started_at=started_at,
+        )
+        host_kwargs = ({"parent_budget": owner, "data_policy": policy,
+                        "cancel_event": cancel_event} if owner is not None else {})
+        if coordinator_budget is not None:
+            host_kwargs['coordinator_budget'] = coordinator_budget
+        if context_source is not None:
+            host_kwargs['context_source'] = context_source
         result = asyncio.run(council_mod.draft_candidates(
             goal, members=members, judge=True, context=context, run_id=run_id,
+            **host_kwargs,
         ))
-    except Exception as exc:  # noqa: BLE001
+        _check_advisory_owner(owner, cancel_event)
+    except (Exception, asyncio.CancelledError) as exc:
         logger.warning("plan_council_job_failed error_type=%s", type(exc).__name__)
-        with _plan_lock:
-            _plan_job.update(
+        _advisory_publish('planning', guard, dict(
                 state="error",
-                error=f"planning round failed ({type(exc).__name__})",
+                error=_advisory_failure(exc, "planning round failed"),
                 finished_at=time.time(),
-            )
-        _update_plan_start_claim(run_id, "failed")
+            ), run_id, claim_status='failed', policy=policy, failure=True)
         return
     if result is None:
-        with _plan_lock:
-            _plan_job.update(
+        _advisory_publish('planning', guard, dict(
                 state="error",
                 error="council unavailable — see admin sidecar logs",
                 finished_at=time.time(),
-            )
-        _update_plan_start_claim(run_id, "failed")
+            ), run_id, claim_status='failed', policy=policy, failure=True)
         return
     if not result.proposals:
-        with _plan_lock:
-            _plan_job.update(
+        _advisory_publish('planning', guard, dict(
                 state="error",
                 error=result.select_reason or "no candidates were produced",
                 finished_at=time.time(),
-            )
-        _update_plan_start_claim(run_id, "failed")
+            ), run_id, claim_status='failed', policy=policy, failure=True)
         return
     candidates = [
         {
@@ -1529,12 +1881,10 @@ def _run_plan_council(
         }
         for p in result.proposals
     ]
-    with _plan_lock:
-        _plan_job.update(
+    _advisory_publish('planning', guard, dict(
             state="awaiting_choice", round_id=result.round_id,
             candidates=candidates, finished_at=time.time(),
-        )
-    _update_plan_start_claim(run_id, "awaiting_choice")
+        ), run_id, claim_status='awaiting_choice', policy=policy)
 
 
 def _slugify_goal(goal: str) -> str:
@@ -1631,9 +1981,22 @@ def model_routes() -> dict:
     try:
         access = load_access_config()
         registry = load_model_registry()
+        workloads = access.get("workloads") or {}
+        configured_routes = access.get("routes") or {}
+        profile_pool = dict(registry.get("profiles") or {})
+        restricted_profiles = {}
+        # Preserve Haiku's voice-only exception without adding an economy
+        # profile to the general registry or hiding its current selection.
+        if "voice_supervisor" in workloads:
+            voice_name = workloads["voice_supervisor"].get("profile")
+            if voice_name and voice_name not in profile_pool:
+                profile_pool[voice_name] = model_profile_for_workload("voice_supervisor")
+                restricted_profiles[voice_name] = ["voice_supervisor"]
         profiles = []
-        for name, profile in sorted((registry.get("profiles") or {}).items()):
-            routes = available_routes(profile)
+        choices = {name: {} for name in workloads}
+        for name, profile in sorted(profile_pool.items()):
+            routes = available_routes(profile, route_catalog=configured_routes)
+            supported_workloads = restricted_profiles.get(name, sorted(workloads))
             profiles.append({
                 "name": name,
                 "identity": profile.get("identity", ""),
@@ -1641,12 +2004,21 @@ def model_routes() -> dict:
                 "model": profile.get("model", ""),
                 "tier": profile.get("tier"),
                 "routes": routes,
+                "supported_workloads": supported_workloads,
                 "api_key_env": profile.get("api_key_env"),
                 "key_present": bool(profile.get("api_key_env")
                                      and os.environ.get(profile["api_key_env"])),
             })
+            for workload in supported_workloads:
+                choices[workload][name] = {
+                    route: describe_route_choice(
+                        workload, name, route, access_config=access,
+                        registry=registry,
+                    )
+                    for route in routes
+                }
         route_catalog = {}
-        for name, route in (access.get("routes") or {}).items():
+        for name, route in configured_routes.items():
             route_catalog[name] = {
                 "adapter": route.get("adapter", name),
                 "billing": route.get("billing", name),
@@ -1656,9 +2028,18 @@ def model_routes() -> dict:
                 "key_present": bool(route.get("credential_env")
                                      and os.environ.get(route["credential_env"])),
             }
+        # Direct API is synthesized per profile by the resolver, not a global
+        # YAML route. Its credentials/capabilities are in choices above.
+        route_catalog.setdefault("direct_api", {
+            "adapter": "profile_api", "billing": "provider_api",
+            "privacy": "approved_external", "capabilities": [],
+            "per_profile": True,
+        })
         return {"ok": True, "routes": route_catalog,
-                "workloads": access.get("workloads") or {},
-                "profiles": profiles, "preferences": list_preferences()}
+                "workloads": workloads, "choices": choices,
+                "profiles": profiles, "preferences": list_preferences(),
+                "routing_enabled": os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1",
+                "routing_process": "admin"}
     except Exception as exc:  # noqa: BLE001 - read-only status boundary
         logger.warning("model_routes_status_failed error_type=%s",
                        type(exc).__name__)
@@ -1857,6 +2238,7 @@ def selfedit_run(body: GoalIn) -> dict:
         # R1). Same truncation knob: a seeded plan is a document injection
         # with the same size concerns as a reviewed one.
         read_result = repo_logic.repo_read_file(plan_path)
+        _source_plan_observed(plan_path, read_result)
         if not read_result.get("ok"):
             return {"ok": False, "error": read_result.get("error")}
         plan = read_result.get("content") or ""
@@ -1892,6 +2274,7 @@ def selfedit_run(body: GoalIn) -> dict:
         if not duplicate_claim:
             _run_job.update(
                 state="running", cancel_requested=False,
+                run_id=run_id,
                 goal=goal,
                 profile=agent.model_label(),
                 summary=None,
@@ -1911,9 +2294,10 @@ def selfedit_run(body: GoalIn) -> dict:
     logger.info("selfedit_state_transition state=running")
     try:
         threading.Thread(
-            target=_run_agent,
+            target=_source_worker_target(_run_agent),
             args=(goal, profile, plan, run_id, requested_action_id,
                   requested_action_scope),
+            **({'kwargs': _source_worker_kwargs()} if _workspace_start_policy.get() is not None else {}),
             daemon=True,
         ).start()
     except Exception as exc:
@@ -2153,7 +2537,17 @@ def _save_document_to_sandbox(path: str, content: str, rationale: str = "") -> d
         # W8 routes a human-only write into a proposal; a generated
         # document is never one — refuse, as before.
         return {"ok": False, "error": f"{path} is human-only; save the document under another name."}
-    result = selfedit_write(SelfEditWriteIn(path=path, content=content, rationale=rationale))
+    source = _advisory_transport_context.get()
+    if source is None:
+        result = selfedit_write(SelfEditWriteIn(path=path, content=content, rationale=rationale))
+    else:
+        from jarvis.advisory_sources import save_advisory_document
+        try:
+            result = save_advisory_document(source, _selfedit_service, path, content, rationale,
+                lambda: selfedit_write(SelfEditWriteIn(path=path, content=content, rationale=rationale)))
+        except Exception:
+            return {'ok': False, 'code': 'advisory_transfer_unavailable',
+                    'error': 'The generated document cannot be saved into this unverified workspace.'}
     if not result.get("ok"):
         return result
     return {**result, "path": path, "saved_to_sandbox": True,
@@ -2166,7 +2560,8 @@ def selfedit_finish() -> dict:
     """SE4 — start the finish job: validate, and submit if green."""
     if not authoring_enabled():
         return dict(_AUTHORING_OFF)
-    session = _selfedit_service.status()
+    service = _lifecycle_service(_selfedit_service, terminal=True)
+    session = service.status()
     action_run_id = str(session.get("id") or "")
     if action_run_id:
         prior = _prior_selfedit_publish(action_run_id)
@@ -2195,13 +2590,13 @@ def selfedit_finish() -> dict:
         _finish_job.update(
             state="validating", checks=None, pr_url=None, notice=None, cancel_requested=False,
             human_only=None, apply_command=None,
-            run_id=session.get("run_id") or _selfedit_service.run_id,
+            run_id=session.get("run_id") or service.run_id,
             action_run_id=action_run_id,
             started_at=time.time(), finished_at=None,
         )
     logger.info("selfedit_state_transition state=finish_validating run_id=%s",
                 _selfedit_service.run_id)
-    threading.Thread(target=_run_finish, daemon=True).start()
+    threading.Thread(target=_source_worker_target(_run_finish), daemon=True).start()
     return {
         "ok": True, "started": True, "state": "validating",
         "action_run_id": action_run_id,
@@ -2360,11 +2755,10 @@ def selfedit_reject() -> dict:
             )
             council_started = True
     if council_started:
-        threading.Thread(
-            target=_run_council_job,
+        _start_advisory_thread(
+            _run_council_job,
             kwargs={"trigger": "E3", "goal": goal, "context": context},
-            daemon=True,
-        ).start()
+        )
 
     revert_result = _selfedit_service.revert()
     logger.info("selfedit_state_transition state=rejected ok=%s", revert_result.get("ok"))
@@ -2431,6 +2825,7 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
         # Voice-path plan seeding — identical read-and-refuse pattern to
         # selfedit_run's, so an unreadable plan can never seed a build.
         read_result = repo_logic.repo_read_file(plan_path)
+        _source_plan_observed(plan_path, read_result)
         if not read_result.get("ok"):
             return {"ok": False, "error": read_result.get("error")}
         plan = read_result.get("content") or ""
@@ -2484,7 +2879,8 @@ def appbuild_start(body: AppBuildGoalIn) -> dict:
     logger.info("appbuild_state_transition state=running")
     _update_appbuild_start_claim(run_id, "running")
     worker = threading.Thread(
-        target=_run_appbuild_agent, args=(app_name, goal, body.profile, plan, run_id), daemon=True,
+        target=_source_worker_target(_run_appbuild_agent), args=(app_name, goal, body.profile, plan, run_id), daemon=True,
+        **({'kwargs': _source_worker_kwargs()} if _workspace_start_policy.get() is not None else {}),
     )
     try:
         worker.start()
@@ -2597,6 +2993,7 @@ def appbuild_job_status(
 
 def _submit_appbuild(workspace, operation_id, session_id, output):
     try:
+        workspace = _lifecycle_service(workspace)
         result = workspace.submit()
     except Exception as exc:
         logger.warning("app_workspace_submission_failed error_type=%s",
@@ -2618,7 +3015,7 @@ def _submit_appbuild(workspace, operation_id, session_id, output):
 
 @app.post("/api/appbuild/submit")
 def appbuild_submit() -> dict:
-    workspace = _recover_appbuild_workspace()
+    workspace = _lifecycle_service(_recover_appbuild_workspace(), terminal=True)
     if workspace is None:
         return {"ok": False, "error": "no active app-build session to submit"}
     workspace_status = workspace.status()
@@ -2661,7 +3058,7 @@ def appbuild_submit() -> dict:
                             submit_action_id=session_id)
     output = {}
     worker = threading.Thread(
-        target=_submit_appbuild,
+        target=_source_worker_target(_submit_appbuild),
         args=(workspace, operation_id, session_id, output), daemon=True,
     )
     try:
@@ -2715,6 +3112,7 @@ def appbuild_cancel() -> dict:
 
 @app.post("/api/research/start")
 def research_start(body: ResearchStartIn) -> dict:
+    advisory_started_at = time.time()
     if not _research_enabled():
         return {"ok": False, "error": RESEARCH_DISABLED_MESSAGE}
     run_id = (body.run_id or "").strip()
@@ -2772,12 +3170,14 @@ def research_start(body: ResearchStartIn) -> dict:
             started_at=time.time(), finished_at=None, saved_path=None, save_error=None,
             run_id=run_id,
         )
+        _activate_advisory(_research_job)
     _update_research_start_claim(run_id, "running")
     logger.info("research_state_transition state=running site_count=%d", len(urls))
     try:
-        threading.Thread(
-            target=_run_research_job, args=(urls, body.focus or "", run_id), daemon=True,
-        ).start()
+        _start_advisory_thread(
+            _run_research_job, args=(urls, body.focus or "", run_id),
+            started_at=advisory_started_at,
+        )
     except Exception as exc:
         logger.warning("research_job_dispatch_failed error_type=%s", type(exc).__name__)
         with _research_lock:
@@ -2793,6 +3193,7 @@ def research_start(body: ResearchStartIn) -> dict:
 def research_job_status(run_id: str | None = None) -> dict:
     requested_run_id = (run_id or "").strip()
     with _research_lock:
+        _advisory_context_for_job('research', _research_job)
         job = dict(_research_job)
     if requested_run_id and job.get("run_id") != requested_run_id:
         try:
@@ -2817,6 +3218,7 @@ def research_save(body: ResearchSaveIn) -> dict:
     counts, and credits — a comparison without its sources and cost is a
     claim with no provenance (R6/R8)."""
     with _research_lock:
+        source = _advisory_context_for_job('research', _research_job)
         if _research_job["state"] != "done":
             return {"ok": False, "error": "no finished comparison to save"}
         job = dict(_research_job)
@@ -2843,32 +3245,56 @@ def research_save(body: ResearchSaveIn) -> dict:
         f"Sites: {', '.join(urls)}. Pages: {pages_note}. "
         f"Credits used: {job.get('credits_used', 0)}.*"
     )
-    result = _save_document_to_sandbox(
-        path, comparison + footer,
-        rationale=f"Site comparison: {', '.join(urls)}",
-    )
+    token = _advisory_transport_context.set(source)
+    try:
+        result = _save_document_to_sandbox(
+            path, comparison + footer,
+            rationale=f"Site comparison: {', '.join(urls)}",
+        )
+    finally:
+        _advisory_transport_context.reset(token)
     if result.get("ok"):
         with _research_lock:
+            _advisory_context_for_job('research', _research_job)
             _research_job.update(saved_path=result.get("path"), save_error=None)
+            if source is not None:
+                from jarvis.advisory_sources import record_advisory_job
+                record_advisory_job(source, _research_job)
     else:
         with _research_lock:
+            _advisory_context_for_job('research', _research_job)
             _research_job.update(save_error=result.get("error"))
+            if source is not None:
+                from jarvis.advisory_sources import record_advisory_job
+                record_advisory_job(source, _research_job)
     return dict(result)
 
 
 @app.post("/api/research/cancel")
 def research_cancel() -> dict:
-    if _research_busy():
+    if _research_busy() and _advisory_transport_context.get() is None:
         return {"ok": False, "error": "a comparison is in progress — ask for status instead"}
     with _research_lock:
+        source = _advisory_transport_context.get()
+        guard = _advisory_job_guards.get('research')
+        if source is not None and (_research_job.get('run_id') != source.as_metadata()['action_run_id']
+                or (guard is not None and guard['source'] is not None and guard['source']._action is not source._action)):
+            return {'ok': True, 'already_idle': True}
+        _advisory_context_for_job('research', _research_job)
+        guard = _advisory_job_guards.pop('research', None)
+        if guard is not None:
+            guard['event'].set()
         if _research_job["state"] == "idle":
             return {"ok": True, "already_idle": True}
         _research_job.update(
             state="idle", urls=None, focus=None, sites=None, comparison=None,
             model=None, credits_used=None, error=None, started_at=None,
             finished_at=None, saved_path=None, save_error=None,
-            run_id=None,
+            run_id=guard['run_id'] if guard is not None and guard['source'] is not None else None,
         )
+        if guard is not None and guard['source'] is not None:
+            from jarvis.advisory_sources import record_advisory_job
+            record_advisory_job(guard['source'], _research_job, allow_cancelled=True)
     return {"ok": True}
 
 
@@ -2891,6 +3317,683 @@ def memory_overview() -> dict:
         "observations": memory_module.list_observation_groups(),
         "usage": memory_module.memory_usage(),
     }
+
+
+_WORKSPACE_SOURCE_TOOLS = frozenset({
+    'selfedit_start', 'selfedit_status', 'selfedit_read', 'selfedit_write', 'selfedit_finish',
+    'app_build_start', 'app_build_status', 'app_build_submit',
+})
+_workspace_preparation_lock = threading.Lock()
+_workspace_preparations: dict[str, tuple] = {}
+
+
+def _workspace_source_run(body, request):
+    """The service credential authenticates transport, never JSON authority."""
+    from jarvis.runlog.store import get_run
+    from jarvis.skill_runtime import runtime_owner
+
+    identity = request.scope.get('client_identity')
+    if not auth_enabled() or identity is None or getattr(identity, 'name', None) != 'service-bot':
+        raise HTTPException(status_code=403, detail='workspace source requires authenticated service-bot')
+    try:
+        for raw in (body.bot_session_id, body.developer_run_id):
+            if str(uuid.UUID(raw)) != raw:
+                raise ValueError()
+        detail = get_run(body.developer_run_id)
+        run = detail['run'] if type(detail) is dict else None
+        role = 'app_builder' if body.workspace_kind == 'app-build' else 'developer'
+        if (type(run) is not dict or run.get('agent') != role or run.get('status') != 'running'
+                or run.get('user_id') != body.owner_id or run.get('session_id') != body.bot_session_id
+                or runtime_owner(body.bot_session_id) != body.owner_id):
+            raise ValueError()
+        return run
+    except Exception:
+        raise HTTPException(status_code=409, detail='workspace source caller is stale') from None
+
+
+def _workspace_source_arguments(body):
+    import inspect
+    from jarvis.privacy_policy import bounded_tool_arguments
+    from mcp_servers.mcp_selfedit import logic as selfedit_logic
+    from mcp_servers.mcp_apps import logic as apps_logic
+
+    kind = 'app-build' if body.tool_name.startswith('app_') else 'selfedit'
+    if body.tool_name not in _WORKSPACE_SOURCE_TOOLS or 'run_id' in body.arguments or body.workspace_kind != kind:
+        raise HTTPException(status_code=403, detail='tool is outside workspace source capability')
+    try:
+        bounded_tool_arguments(body.tool_name, body.arguments)
+        module = apps_logic if body.tool_name.startswith('app_') else selfedit_logic
+        function = getattr(module, body.tool_name)
+        bound = inspect.signature(function).bind(None, **body.arguments)
+        bound.apply_defaults()
+        values = dict(bound.arguments)
+        values.pop('client')
+        for key, value in values.items():
+            if key in {'confirm', 'proposal'}:
+                if type(value) is not bool:
+                    raise ValueError()
+            elif key == 'target_paths':
+                if value is not None and (type(value) is not list or any(type(p) is not str for p in value)):
+                    raise ValueError()
+            elif value is not None and type(value) is not str:
+                raise ValueError()
+        if 'run_id' in values:
+            values['run_id'] = body.developer_run_id
+        return function, values
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(status_code=400, detail='invalid workspace source arguments') from None
+
+
+def _workspace_source_context(body, run, values, *, terminal=False):
+    from jarvis.development_sources import ordinary_context
+    from jarvis.runlog.store import get_run
+
+    kind = 'app-build' if body.tool_name.startswith('app_') else 'selfedit'
+    service, retained, job = None, None, None
+    lineage = body.developer_run_id
+    if body.tool_name == 'selfedit_start' and values['confirm']:
+        with _staging_lock:
+            _prune_expired_stagings()
+            sid = values['staging_id'].strip()
+            record = _selfedit_stagings.get(sid)
+            if record is None and (sid or not values['goal'].strip()) and len(_selfedit_stagings) == 1:
+                sid, record = next(iter(_selfedit_stagings.items()))
+            if record is not None:
+                job = record.get('run_id')
+                digest = hashlib.sha256(json.dumps(record, sort_keys=True, separators=(',', ':'),
+                                                   allow_nan=False).encode()).hexdigest()
+                lineage = sid + ':' + digest
+        if job is None and (values['staging_id'] or not values['goal'].strip()):
+            for lock, slot in ((_opening_lock, _opening_job), (_run_lock, _run_job)):
+                with lock:
+                    snapshot = dict(slot)
+                if snapshot.get('action_run_id') == values['staging_id'].strip():
+                    claim = get_execution_action(snapshot.get('action_scope') or _SELFEDIT_STAGED_START_ACTION_SCOPE,
+                                                 snapshot['action_run_id'])
+                    if claim is not None:
+                        job, lineage = snapshot.get('run_id'), snapshot['action_run_id']
+                        break
+            if job is None:
+                raise HTTPException(status_code=409, detail='workspace source lineage is unavailable')
+    elif body.tool_name in {'selfedit_read', 'selfedit_write', 'selfedit_finish'}:
+        service = _selfedit_service
+    elif body.tool_name == 'selfedit_status':
+        if values['staging_id']:
+            with _staging_lock:
+                record = _selfedit_stagings.get(values['staging_id'].strip())
+                if record is not None:
+                    job, lineage = record.get('run_id'), values['staging_id'].strip()
+        if job is None:
+            try:
+                _selfedit_service._session()
+                service = _selfedit_service
+            except Exception:
+                for lock, slot in ((_opening_lock, _opening_job), (_run_lock, _run_job)):
+                    with lock:
+                        candidate = slot.get('run_id')
+                    if candidate:
+                        job, lineage = candidate, candidate
+                        break
+    elif body.tool_name in {'app_build_status', 'app_build_submit'}:
+        with _appbuild_lock:
+            service, job = _appbuild_workspace, _appbuild_job.get('run_id')
+        if body.tool_name == 'app_build_submit' and service is None:
+            raise HTTPException(status_code=409, detail='workspace source lineage is unavailable')
+    if service is not None:
+        state = service._session()._read()
+        job, lineage = state.get('run_id'), state.get('id')
+    if job is not None:
+        detail = get_run(job)
+        retained = detail.get('run') if type(detail) is dict else None
+        if retained is None:
+            raise HTTPException(status_code=409, detail='workspace source lineage is unavailable')
+    return ordinary_context(service, run, retained, workspace_kind=kind,
+                            lineage_id=lineage, terminal=terminal)
+
+
+def _workspace_source_cleanup(body, run, values):
+    """Separate local capability for any workspace a fresh start may retire."""
+    if not body.tool_name.endswith('start') or not values.get('confirm'):
+        return None
+    from jarvis.development_sources import ordinary_context, _host_session
+    from jarvis.runlog.store import get_run
+    from sandbox.runtime import Runtime
+    service = _selfedit_service if body.workspace_kind == 'selfedit' else AppWorkspace(validate_app_name(values['app']))
+    runtime = service._runtime()
+    if type(runtime) is not Runtime:
+        raise ValueError()
+    record = runtime.workspaces / (runtime._key(service._repository(), service._kind) + '.json')
+    try:
+        record.lstat()
+    except FileNotFoundError:
+        return None
+    session = _host_session(service)
+    state = session._read()
+    retained = get_run(state['run_id'])['run']
+    return ordinary_context(service, run, retained, workspace_kind=body.workspace_kind,
+                            lineage_id=state['id'], terminal=True)
+
+
+def _same_cleanup(before, after):
+    if before is None or after is None:
+        return before is after
+    from jarvis.development_sources import _verify_workspace_floor_pins
+    _verify_workspace_floor_pins(before)
+    return (before.as_metadata() == after.as_metadata() and before._identity == after._identity
+            and before._pins == after._pins)
+
+
+class _WorkspaceSourceClient:
+    """Installed ordinary transformations over existing guarded handlers."""
+    def __init__(self, scope, context, run, cleanup=None):
+        self.scope, self.context, self.classified = scope, context, None
+        self.start_policy = {'data_policy': scope.input_policy, 'run': run}
+        self.cleanup = cleanup
+
+    def _lifecycle(self, invoke):
+        if self.context._session is None:
+            return invoke()
+        from sandbox.workspace import pin_source_session
+        from jarvis.development_sources import _live
+        _live(self.context._service, self.scope.parent_request_id, self.context, terminal=True)
+        token = _workspace_lifecycle_context.set(self.context)
+        try:
+            with pin_source_session(self.context._service, self.context._session, self.context._identity):
+                return invoke()
+        finally:
+            _workspace_lifecycle_context.reset(token)
+
+    def _file(self, name, values, invoke):
+        from jarvis.development_sources import dispatch_workspace_tool
+        from jarvis.privacy_policy import make_tool_execution_scope, validate_tool_result
+        inner = make_tool_execution_scope(self.scope.parent_request_id, self.scope.task_id,
+            self.scope.tool_call_id, name, values, self.scope.input_policy)
+        self.classified = dispatch_workspace_tool(_selfedit_service, name, values,
+            execution_scope=inner, context=self.context, invoke=invoke)
+        self.policy, content = validate_tool_result(inner, self.classified)
+        return json.loads(content)
+
+    def get(self, path, params=None):
+        params = params or {}
+        if path == '/api/selfedit/file':
+            return self._file('file_read', {'path': params['path']}, lambda: selfedit_file(params['path']))
+        if path == '/api/selfedit/models':
+            return selfedit_models()
+        if path == '/api/selfedit/run':
+            return self._lifecycle(lambda: selfedit_run_status(**params))
+        if path == '/api/appbuild/job':
+            return self._lifecycle(lambda: appbuild_job_status(**params))
+        raise ValueError('workspace_source_unavailable')
+
+    def post(self, path, json=None):
+        values = json or {}
+        if path == '/api/selfedit/write':
+            body = SelfEditWriteIn(**values)
+            args = {'path': body.path, 'new_content': body.content, 'rationale': body.rationale,
+                    'visual_intent': body.visual_intent, 'proposal': body.proposal}
+            return self._file('edit_propose', args, lambda: selfedit_write(body))
+        if path == '/api/selfedit/stage':
+            return selfedit_stage(SelfEditStageIn(**values))
+        if path == '/api/selfedit/run':
+            token = _workspace_start_policy.set(self.start_policy)
+            cleanup_token = _workspace_cleanup_context.set(self.cleanup)
+            try:
+                return selfedit_run(GoalIn(**values))
+            finally:
+                _workspace_start_policy.reset(token)
+                _workspace_cleanup_context.reset(cleanup_token)
+        if path == '/api/selfedit/finish':
+            return self._lifecycle(selfedit_finish)
+        if path == '/api/appbuild/start':
+            token = _workspace_start_policy.set(self.start_policy)
+            cleanup_token = _workspace_cleanup_context.set(self.cleanup)
+            try:
+                return appbuild_start(AppBuildGoalIn(**values))
+            finally:
+                _workspace_start_policy.reset(token)
+                _workspace_cleanup_context.reset(cleanup_token)
+        if path == '/api/appbuild/submit':
+            return self._lifecycle(appbuild_submit)
+        raise ValueError('workspace_source_unavailable')
+
+
+def _workspace_lifecycle_result(name, values, result):
+    """Explicit host reduction drops raw logs, URLs, goals and error text."""
+    if type(result) is not dict or result.get('ok') is not True:
+        return {'ok': False, 'error': 'development_operation_failed'}
+    if name == 'selfedit_start' and not values['confirm']:
+        sid = result.get('staging_id')
+        with _staging_lock:
+            stage = _selfedit_stagings.get(sid)
+            if (type(stage) is not dict or stage.get('goal') != values['goal'].strip()
+                    or stage.get('run_id') != values['run_id']):
+                return {'ok': False, 'error': 'development_operation_failed'}
+        return result  # Exact installed caller-input/profile/allowlist preview.
+    if name == 'app_build_start' and not values['confirm']:
+        return result  # Pure caller-input preview; no acquired application data.
+    reduced = {'ok': True}
+    for key in ('started', 'opening', 'duplicate', 'needs_confirmation', 'active',
+                'staging_found', 'already_submitted', 'reconciliation_required'):
+        if type(result.get(key)) is bool:
+            reduced[key] = result[key]
+    states = {'idle', 'starting', 'ready', 'running', 'validating', 'submitting', 'done',
+              'error', 'cancelled', 'completed', 'failed', 'unknown', 'recovered'}
+    state = result.get('state')
+    for key in ('opening', 'finish', 'job'):
+        if type(result.get(key)) is dict and result[key].get('state') in states:
+            state = result[key]['state']
+            if state not in {'idle', 'done'}:
+                break
+    if state in states:
+        reduced['state'] = state
+    for key in ('action_run_id', 'submission_id'):
+        value = result.get(key)
+        if type(value) is str and re.fullmatch(r'(?:[0-9a-f]{12}|[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', value):
+            reduced[key] = value
+    if result.get('session') or (name == 'selfedit_status' and result.get('active')):
+        reduced['session_open'] = True
+    if reduced.get('reconciliation_required') or state == 'unknown':
+        reduced['summary'] = 'The outcome is unresolved. Check this action again; do not retry automatically.'
+    elif name in {'selfedit_start', 'selfedit_status'} and reduced.get('session_open'):
+        reduced['summary'] = 'The isolated session is open. Read each file, write the approved change, then call selfedit_finish.'
+    elif name == 'selfedit_finish':
+        reduced['summary'] = 'Validation and draft submission are being checked. Ask for self-edit status; merging stays with you.'
+    elif name == 'app_build_submit':
+        reduced['summary'] = 'Draft submission is being checked. Ask for app-build status; merging stays with you.'
+    else:
+        reduced['summary'] = 'The development lifecycle state is available. Check status before another operation.'
+    return reduced
+
+
+@app.post('/api/development/source/associate')
+def associate_workspace_source(body: WorkspaceSourceAssociationIn, request: Request) -> dict:
+    _workspace_source_run(body, request)
+    from jarvis.development_attestation import ensure_admin_source_authority
+    ensure_admin_source_authority()
+    _workspace_source_run(body, request)
+    return {'ok': True}
+
+
+@app.post('/api/development/source/prepare')
+def prepare_workspace_source(body: WorkspaceSourcePrepareIn, request: Request) -> dict:
+    run = _workspace_source_run(body, request)
+    _, values = _workspace_source_arguments(body)
+    try:
+        from jarvis.development_sources import retain_workspace_floor
+        from jarvis.privacy_policy import DataPolicy
+        retain_workspace_floor(run, DataPolicy(body.source_input_policy, 'workspace-caller-floor'))
+        context = _workspace_source_context(body, run, values, terminal=body.tool_name.endswith(('status', 'finish', 'submit')))
+        cleanup = _workspace_source_cleanup(body, run, values)
+        _workspace_source_run(body, request)
+        import secrets
+        key = secrets.token_hex(32)
+        with _workspace_preparation_lock:
+            now = time.monotonic()
+            for prior, record in list(_workspace_preparations.items()):
+                if now - record[0] >= 60:
+                    _workspace_preparations.pop(prior, None)
+            if len(_workspace_preparations) >= 4096:
+                raise ValueError()
+            _workspace_preparations[key] = (now, body.model_dump(), context, cleanup)
+        return {'ok': True, 'source_context': context.as_metadata(), 'source_preparation_id': key}
+    except Exception:
+        raise HTTPException(status_code=409, detail='workspace source context is unavailable') from None
+
+
+@app.post('/api/development/source/tool')
+def execute_workspace_source(body: WorkspaceSourceToolIn, request: Request) -> dict:
+    from jarvis.development_attestation import sign_workspace_source
+    from jarvis.development_sources import ordinary_context, _verify_workspace_floor_pins, published_workspace_result
+    from jarvis.privacy_policy import DataPolicy, issue_tool_result, make_tool_execution_scope, strictest, validate_tool_result
+    from jarvis.tenant import user_id_scope
+
+    run = _workspace_source_run(body, request)
+    function, values = _workspace_source_arguments(body)
+    terminal = body.tool_name.endswith(('status', 'finish', 'submit'))
+    try:
+        with _workspace_preparation_lock:
+            prepared = _workspace_preparations.pop(body.source_preparation_id, None)
+        binding = body.model_dump(exclude={'source_context', 'source_preparation_id'})
+        if prepared is None or not 0 <= time.monotonic() - prepared[0] < 60 or binding != prepared[1]:
+            raise ValueError()
+        context = prepared[2]
+        _verify_workspace_floor_pins(context)
+        current_context = _workspace_source_context(body, run, values, terminal=terminal)
+        cleanup = _workspace_source_cleanup(body, run, values)
+        if not _same_cleanup(prepared[3], cleanup):
+            raise ValueError()
+        if (context.as_metadata() != body.source_context or current_context.as_metadata() != body.source_context
+                or current_context._identity != context._identity or current_context._pins != context._pins):
+            raise ValueError()
+        # A host acquisition can strengthen a run after preparation. The
+        # current verified floor must precede admission of any guest bytes.
+        context = current_context
+        scope = make_tool_execution_scope(body.developer_run_id, body.source_task_id, body.source_tool_call_id,
+            body.tool_name, body.arguments, strictest(context.input_floor,
+                cleanup.input_floor if cleanup is not None else context.input_floor,
+                DataPolicy(body.source_input_policy, 'workspace-caller-floor')))
+        from jarvis.development_sources import retain_workspace_floor
+        retain_workspace_floor(run, scope.input_policy)
+        retained_id = context.as_metadata().get('sandbox_job_id')
+        if retained_id and retained_id != run['run_id']:
+            from jarvis.runlog.store import get_run
+            retained = get_run(retained_id)['run']
+            if retained['user_id'] != run['user_id'] or retained['session_id'] != run['session_id']:
+                raise ValueError()
+            retain_workspace_floor(retained, scope.input_policy)
+        if cleanup is not None:
+            from jarvis.runlog.store import get_run
+            retain_workspace_floor(get_run(cleanup.as_metadata()['sandbox_job_id'])['run'], scope.input_policy)
+            cleanup = _workspace_source_cleanup(body, run, values)
+        # Only the just-issued restriction update may add a missing floor
+        # record. Re-pin that actual host journal before the installed tool.
+        admitted = _workspace_source_context(body, run, values, terminal=terminal)
+        if (admitted.as_metadata() != context.as_metadata() or admitted._identity != context._identity
+                or admitted._pins != context._pins):
+            raise ValueError()
+        context = admitted
+        client = _WorkspaceSourceClient(scope, context, run, cleanup)
+        with user_id_scope(run['user_id']):
+            result = function(client, **values)
+        from jarvis.development_sources import refresh_workspace_floor
+        latest_floor = refresh_workspace_floor(context)
+        policy, source_scope, refs = strictest(context.input_floor, latest_floor), 'workspace-generated-lifecycle', ()
+        if client.classified is not None:
+            policy = strictest(policy, client.policy)
+            source_scope, refs = client.classified.source_scope, client.classified.canonical_refs
+        else:
+            result = _workspace_lifecycle_result(body.tool_name, values, result)
+        policy = strictest(policy, *(value for value in client.start_policy.values() if type(value) is DataPolicy))
+        current_run = _workspace_source_run(body, request)
+        if body.tool_name == 'selfedit_start':
+            if values['confirm'] and result.get('ok'):
+                expected_job = context.as_metadata().get('sandbox_job_id', body.developer_run_id)
+                with _opening_lock, _run_lock:
+                    if not any(slot.get('run_id') == expected_job for slot in (_opening_job, _run_job)):
+                        raise ValueError()
+            after = ordinary_context(None, current_run, workspace_kind='selfedit',
+                                     lineage_id=context.as_metadata()['lineage_id'])
+        else:
+            after = _workspace_source_context(body, current_run, values, terminal=terminal)
+            if after.as_metadata() != context.as_metadata():
+                raise ValueError()
+        policy = strictest(policy, after.input_floor)
+        if (result.get('ok') is True and context._session is not None
+                and body.tool_name in {'selfedit_status', 'selfedit_finish', 'app_build_status', 'app_build_submit'}):
+            metadata = context.as_metadata()
+            identities = {'selfedit_status': ('action_run_id', 'sandbox_session_id'),
+                          'app_build_status': ('submission_id', 'sandbox_session_id')}
+            selected = identities.get(body.tool_name)
+            same = selected is None or not values.get(selected[0]) or values[selected[0]] == metadata.get(selected[1])
+            if body.tool_name == 'app_build_status' and values.get('action_run_id'):
+                same = same and values['action_run_id'] == metadata.get('sandbox_job_id')
+            if same:
+                published = published_workspace_result(context._service, execution_scope=scope, context=context)
+                if published is not None:
+                    pub_policy, pub_content = validate_tool_result(scope, published)
+                    handle = json.loads(pub_content)
+                    result.update(pr_url=handle['pr_url'], pr_number=handle['pr_number'], commit=handle['commit'])
+                    result['summary'] = ('Draft pull request: ' + handle['pr_url'] + '. '
+                        'Review it on GitHub; approval and merging remain with you.')
+                    if handle.get('human_only') is True:
+                        result['human_only'] = True
+                        result['summary'] = ('Human-only proposal: ' + handle['pr_url'] + '. '
+                            'Ask Larry to approve and apply it himself; do not merge this proposal as it is.')
+                    policy = strictest(policy, pub_policy)
+                    refs += published.canonical_refs
+        classified = issue_tool_result(scope, json.dumps(result, sort_keys=True, separators=(',', ':'),
+            ensure_ascii=True, allow_nan=False), policy, source_scope, refs)
+        receipt = sign_workspace_source(scope, classified, context=context.as_metadata(), challenge=body.source_challenge)
+        _workspace_source_run(body, request)
+        if client.classified is not None:
+            final = _workspace_source_context(body, current_run, values, terminal=terminal)
+            if final.as_metadata() != context.as_metadata():
+                raise ValueError()
+        return {'ok': True, 'source_receipt': receipt}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=409, detail='workspace source binding changed') from None
+
+
+_advisory_preparations = {}
+_advisory_preparation_lock = threading.RLock()
+
+
+def _advisory_source_run(body, request, *, terminal=False):
+    from jarvis.advisory_sources import kind_for_tool
+    from jarvis.runlog.store import get_run
+    from jarvis.skill_runtime import runtime_owner
+    if not auth_enabled() or request.scope.get('client_identity') is None or request.scope['client_identity'].name != 'service-bot':
+        raise HTTPException(status_code=403, detail='advisory source requires authenticated service bot')
+    kind = kind_for_tool(body.tool_name)
+    expected = 'developer' if kind == 'planning' else 'analyst'
+    detail = get_run(body.caller_run_id)
+    run = detail.get('run') if type(detail) is dict else None
+    if (type(run) is not dict or run.get('agent') != expected or body.caller_agent != expected
+            or run.get('user_id') != body.owner_id or run.get('session_id') != body.bot_session_id
+            or (not terminal and run.get('status') != 'running')
+            or runtime_owner(body.bot_session_id) != body.owner_id):
+        raise HTTPException(status_code=409, detail='advisory source caller changed')
+    return run
+
+
+def _advisory_source_arguments(body):
+    import inspect
+    from jarvis.privacy_policy import bounded_tool_arguments
+    from mcp_servers.mcp_selfedit import logic as plan_logic
+    from mcp_servers.mcp_web import logic as web_logic
+    bounded_tool_arguments(body.tool_name, body.arguments)
+    module = plan_logic if body.tool_name.startswith('plan_') else web_logic
+    function = getattr(module, body.tool_name)
+    bound = inspect.signature(function).bind(None, **body.arguments)
+    bound.apply_defaults()
+    values = dict(bound.arguments)
+    values.pop('client')
+    for key, value in values.items():
+        if key == 'confirm':
+            if type(value) is not bool:
+                raise ValueError()
+        elif key == 'urls':
+            if type(value) is not list or any(type(url) is not str for url in value):
+                raise ValueError()
+        elif value is not None and type(value) is not str:
+            raise ValueError()
+    if body.tool_name in {'plan_start', 'research_compare_start'}:
+        if 'run_id' in body.arguments:
+            raise ValueError()
+        values['run_id'] = body.caller_run_id
+    return function, values
+
+
+def _advisory_scope(body):
+    from jarvis.privacy_policy import make_tool_execution_scope, DataPolicy
+    return make_tool_execution_scope(body.caller_run_id, body.task_id, body.tool_call_id,
+        body.tool_name, body.arguments, DataPolicy(body.input_policy, 'advisory-caller-floor'))
+
+
+def _advisory_binding(body):
+    return body.model_dump(exclude={'challenge', 'preparation_id', 'source_context'})
+
+
+class _AdvisorySourceClient:
+    def __init__(self, context):
+        self.context = context
+
+    def _check(self, kind):
+        from jarvis.advisory_sources import verify_advisory_job
+        _, slot = _advisory_slot(kind)
+        verify_advisory_job(self.context, slot)
+
+    def get(self, path, params=None):
+        params = params or {}
+        kind = 'planning' if path == '/api/plan/job' else 'research'
+        self._check(kind)
+        target = self.context.as_metadata()['action_run_id']
+        if params.get('run_id') and params['run_id'] != target:
+            raise ValueError()
+        if path == '/api/plan/job':
+            return plan_job_status(target)
+        if path == '/api/research/job':
+            return research_job_status(target)
+        raise ValueError()
+
+    def post(self, path, json=None):
+        values = json or {}
+        if path == '/api/plan/start':
+            return plan_start(PlanStartIn(**values))
+        if path == '/api/research/start':
+            return research_start(ResearchStartIn(**values))
+        kind = 'planning' if path.startswith('/api/plan/') else 'research'
+        self._check(kind)
+        if path == '/api/plan/choose':
+            return plan_choose(PlanChooseIn(**values))
+        if path == '/api/plan/adopt':
+            return plan_adopt(PlanAdoptIn(**values))
+        if path == '/api/research/save':
+            return research_save(ResearchSaveIn(**values))
+        raise ValueError()
+
+
+@app.post('/api/advisory/source/associate')
+def associate_advisory_source(body: AdvisorySourceIn, request: Request) -> dict:
+    _advisory_source_run(body, request)
+    from jarvis.development_attestation import ensure_admin_source_authority
+    ensure_admin_source_authority()
+    _advisory_source_run(body, request)
+    return {'ok': True}
+
+
+@app.post('/api/advisory/source/prepare')
+def prepare_advisory_source(body: AdvisorySourceIn, request: Request) -> dict:
+    from jarvis import advisory_sources as sources
+    from jarvis.development_attestation import sign_advisory_source
+    from jarvis.tenant import user_id_scope
+    run = _advisory_source_run(body, request)
+    try:
+        _, values = _advisory_source_arguments(body)
+        scope = _advisory_scope(body)
+        with user_id_scope(run['user_id']):
+            if body.tool_name in {'plan_start', 'research_compare_start'}:
+                context = sources.prepare_advisory_source(scope, run,
+                    owner_scope_id=body.owner_scope_id, child_scope_id=body.child_scope_id)
+                if body.tool_name == 'plan_start' and values['review_path'].strip():
+                    path = values['review_path'].strip()
+                    acquired = repo_logic.repo_read_file(path)
+                    context = sources.acquire_review_source(context, _selfedit_service, path, acquired,
+                        max_chars=council_config.PLAN_REVIEW_DOC_MAX_CHARS)
+            else:
+                if body.owner_scope_id is not None or body.child_scope_id is not None:
+                    raise ValueError()
+                _, slot = _advisory_slot(sources.kind_for_tool(body.tool_name))
+                context = sources.retained_advisory_source(scope, run, slot)
+                requested = values.get('action_run_id') if body.tool_name == 'plan_status' else values.get('run_id')
+                if requested and requested != context.as_metadata()['action_run_id']:
+                    raise ValueError()
+        key = uuid.uuid4().hex + uuid.uuid4().hex
+        value = {'ok': True, 'preparation_id': key, 'source_context': context.as_metadata()}
+        envelope = sources.issue_advisory_result(scope, context, value, pending=True)
+        receipt = sign_advisory_source(scope, envelope, context=context.as_metadata(),
+            challenge=body.challenge, phase='prepare')
+        _advisory_source_run(body, request)
+        with _advisory_preparation_lock:
+            now = time.monotonic()
+            for old, entry in list(_advisory_preparations.items()):
+                if now - entry['created_at'] > 600:
+                    _advisory_preparations.pop(old, None)
+            if len(_advisory_preparations) >= 4096:
+                raise ValueError()
+            _advisory_preparations[key] = {'created_at': now, 'binding': _advisory_binding(body),
+                                         'context': context, 'used': False}
+        return {**value, 'source_receipt': receipt}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=409, detail='advisory source binding changed') from None
+
+
+def _prepared_advisory(body, *, consume):
+    with _advisory_preparation_lock:
+        entry = _advisory_preparations.get(body.preparation_id)
+        if (entry is None or entry['binding'] != _advisory_binding(body)
+                or entry['context'].as_metadata() != body.source_context
+                or not 0 <= time.monotonic() - entry['created_at'] < 600
+                or (consume and entry['used'])):
+            raise ValueError()
+        if consume:
+            entry['used'] = True
+        return entry['context']
+
+
+@app.post('/api/advisory/source/tool')
+def execute_advisory_source(body: AdvisorySourceIn, request: Request) -> dict:
+    from jarvis import advisory_sources as sources
+    from jarvis.development_attestation import sign_advisory_source
+    from jarvis.tenant import user_id_scope
+    run = _advisory_source_run(body, request)
+    try:
+        context = _prepared_advisory(body, consume=True)
+        function, values = _advisory_source_arguments(body)
+        scope = _advisory_scope(body)
+        with user_id_scope(run['user_id']):
+            context = sources.refresh_advisory_source(context, run)
+            if context.cancel_event.is_set():
+                raise ValueError()
+            if body.tool_name == 'plan_start' and values['review_path'].strip():
+                sources.prepared_review_source(context, _selfedit_service, values['review_path'].strip())
+            if body.tool_name == 'research_status':
+                values['run_id'] = context.as_metadata()['action_run_id']
+            token = _advisory_transport_context.set(context)
+            try:
+                value = function(_AdvisorySourceClient(context), **values)
+            finally:
+                _advisory_transport_context.reset(token)
+            if type(value) is not dict or value.get('ok') is not True:
+                value = {'ok': False, 'error': 'advisory_operation_failed'}
+            pending = body.tool_name in {'plan_start', 'research_compare_start'}
+            envelope = sources.issue_advisory_result(scope, context, value, pending=pending)
+        _advisory_source_run(body, request)
+        return {'ok': True, 'source_receipt': sign_advisory_source(scope, envelope,
+            context=context.as_metadata(), challenge=body.challenge, phase='execute')}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=409, detail='advisory source binding changed') from None
+
+
+@app.post('/api/advisory/source/cancel')
+def cancel_advisory_source(body: AdvisorySourceIn, request: Request) -> dict:
+    from jarvis import advisory_sources as sources
+    from jarvis.development_attestation import sign_advisory_source
+    from jarvis.tenant import user_id_scope
+    run = _advisory_source_run(body, request, terminal=True)
+    try:
+        if body.tool_name not in {'plan_start', 'research_compare_start'}:
+            raise ValueError()
+        context = _prepared_advisory(body, consume=False)
+        sources.cancel_advisory_source(context)
+        kind = sources.kind_for_tool(body.tool_name)
+        lock, slot = _advisory_slot(kind)
+        with user_id_scope(run['user_id']):
+            with lock:
+                owns_slot = (context._action.slot is slot and sources._active.get(kind) is context._action
+                    and slot.get('run_id') == context.as_metadata()['action_run_id'])
+            if owns_slot:
+                token = _advisory_transport_context.set(context)
+                try:
+                    plan_cancel() if kind == 'planning' else research_cancel()
+                finally:
+                    _advisory_transport_context.reset(token)
+            scope = _advisory_scope(body)
+            envelope = sources.issue_advisory_result(scope, context, {'ok': True, 'cancelled': True,
+                'action_run_id': context.as_metadata()['action_run_id']}, pending=True)
+        _advisory_source_run(body, request, terminal=True)
+        return {'ok': True, 'source_receipt': sign_advisory_source(scope, envelope,
+            context=context.as_metadata(), challenge=body.challenge, phase='cancel')}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=409, detail='advisory source binding changed') from None
 
 
 @app.post("/api/skills/runtime-inventory")
@@ -2985,7 +4088,25 @@ def associate_skill_creator_run(body: SkillCreatorAssociationIn, request: Reques
         )
     except SkillRequestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
-    return {"ok": True, "developer_run_id": body.developer_run_id}
+    result = {"ok": True, "developer_run_id": body.developer_run_id}
+    if body.source_authority:
+        from jarvis.development_attestation import ensure_admin_source_authority
+        from jarvis.development_sources import creator_context
+        from jarvis.skill_requests import _service
+
+        state = _creator_internal_owner(body, request)
+        run = _verify_developer_run(body)
+        if state.get("cancel_requested"):
+            raise HTTPException(status_code=409, detail="creator request is cancelling")
+        try:
+            source_context = creator_context(
+                _service(state["skill_id"], expected_job_id=state["sandbox_job_id"]), state, run,
+            )
+            ensure_admin_source_authority()
+            result["source_context"] = source_context.as_metadata()
+        except Exception:
+            raise HTTPException(status_code=503, detail="creator source authority is unavailable") from None
+    return result
 
 
 @app.post("/api/skills/creator/tool")
@@ -3006,46 +4127,115 @@ def execute_skill_creator_tool(body: SkillCreatorToolIn, request: Request) -> di
     live = service.status()
     if live.get("run_id") != state.get("sandbox_job_id"):
         raise HTTPException(status_code=409, detail="creator sandbox job changed")
-    if tool == "file_read":
-        if set(args) != {"path"} or not isinstance(args.get("path"), str):
-            raise HTTPException(status_code=400, detail="invalid creator tool arguments")
-        result = service.read_file(args["path"])
-    elif tool == "edit_propose":
-        allowed = {"path", "new_content", "rationale", "visual_intent"}
-        if (not {"path", "new_content"} <= set(args) or set(args) - allowed
-                or not isinstance(args.get("path"), str)
-                or not isinstance(args.get("new_content"), str)
-                or len(args["new_content"].encode("utf-8")) > 512 * 1024
-                or not isinstance(args.get("rationale", ""), str)
-                or len(args.get("rationale", "")) > 2000
-                or not isinstance(args.get("visual_intent", ""), str)
-                or len(args.get("visual_intent", "")) > 1000):
-            raise HTTPException(status_code=400, detail="invalid creator tool arguments")
-        result = service.propose_edit(
-            args["path"], args["new_content"], args.get("rationale", ""),
-            args.get("visual_intent", ""),
+    def invoke() -> dict:
+        if tool == "file_read":
+            if set(args) != {"path"} or not isinstance(args.get("path"), str):
+                raise HTTPException(status_code=400, detail="invalid creator tool arguments")
+            result = service.read_file(args["path"])
+        elif tool == "edit_propose":
+            allowed = {"path", "new_content", "rationale", "visual_intent"}
+            if (not {"path", "new_content"} <= set(args) or set(args) - allowed
+                    or not isinstance(args.get("path"), str)
+                    or not isinstance(args.get("new_content"), str)
+                    or len(args["new_content"].encode("utf-8")) > 512 * 1024
+                    or not isinstance(args.get("rationale", ""), str)
+                    or len(args.get("rationale", "")) > 2000
+                    or not isinstance(args.get("visual_intent", ""), str)
+                    or len(args.get("visual_intent", "")) > 1000):
+                raise HTTPException(status_code=400, detail="invalid creator tool arguments")
+            result = service.propose_edit(
+                args["path"], args["new_content"], args.get("rationale", ""),
+                args.get("visual_intent", ""),
+            )
+        elif tool == "session_validate":
+            if args:
+                raise HTTPException(status_code=400, detail="invalid creator tool arguments")
+            result = service.validate()
+        elif tool == "session_decline":
+            if set(args) != {"reason"} or not isinstance(args.get("reason"), str) or len(args["reason"]) > 2000:
+                raise HTTPException(status_code=400, detail="invalid creator tool arguments")
+            from jarvis.skill_requests import update as update_skill_request
+            update_skill_request(
+                body.owner_id, body.request_id, state="draft_needs_attention",
+                result_code="creator_declined",
+            )
+            result = {"ok": False, "declined": True, "reason": args["reason"]}
+        else:
+            raise HTTPException(status_code=403, detail="tool is outside the creator capability")
+        if not isinstance(result, dict):
+            raise HTTPException(status_code=502, detail="creator tool returned an invalid result")
+        return result
+
+    source_fields = (body.source_challenge, body.source_task_id,
+                     body.source_tool_call_id, body.source_input_policy)
+    if not any(value is not None for value in source_fields):
+        return {"ok": True, "result": invoke()}
+    if any(value is None for value in source_fields):
+        raise HTTPException(status_code=400, detail="invalid creator source binding")
+    from jarvis.development_attestation import sign_tool_source
+    from jarvis.development_sources import creator_context, dispatch_workspace_tool
+    from jarvis.privacy_policy import (DataPolicy, issue_tool_result, make_tool_execution_scope,
+                                      strictest, validate_tool_result)
+
+    try:
+        source_context = creator_context(service, state, run)
+        source_scope = make_tool_execution_scope(
+            body.developer_run_id, body.source_task_id, body.source_tool_call_id,
+            tool, args, strictest(source_context.input_floor,
+                                 DataPolicy(body.source_input_policy, "creator-caller-floor")),
         )
-    elif tool == "session_validate":
-        if args:
-            raise HTTPException(status_code=400, detail="invalid creator tool arguments")
-        result = service.validate()
-    elif tool == "session_decline":
-        if set(args) != {"reason"} or not isinstance(args.get("reason"), str) or len(args["reason"]) > 2000:
-            raise HTTPException(status_code=400, detail="invalid creator tool arguments")
-        from jarvis.skill_requests import update as update_skill_request
-        update_skill_request(
-            body.owner_id, body.request_id, state="draft_needs_attention",
-            result_code="creator_declined",
+        classified = dispatch_workspace_tool(
+            service, tool, args, execution_scope=source_scope, context=source_context, invoke=invoke,
         )
-        result = {"ok": False, "declined": True, "reason": args["reason"]}
-    else:
-        raise HTTPException(status_code=403, detail="tool is outside the creator capability")
-    if not isinstance(result, dict):
-        raise HTTPException(status_code=502, detail="creator tool returned an invalid result")
-    # The Developer run identity is rechecked before execution and the exact
-    # sandbox identity is checked above; return only the tool receipt itself.
-    _ = run
-    return {"ok": True, "result": result}
+        # Do not hold the request lock across the workspace operation: a
+        # concurrent cancellation must remain able to win before signing.
+        current = _creator_internal_owner(body, request)
+        current_run = _verify_developer_run(body)
+        after_live = service.status()
+        if (current.get("cancel_requested")
+                or current.get("developer_run_id") != body.developer_run_id
+                or current.get("creator_revision") != body.creator_revision
+                or current.get("sandbox_job_id") != state.get("sandbox_job_id")
+                or after_live.get("run_id") != state.get("sandbox_job_id")):
+            raise HTTPException(status_code=409, detail="creator source binding changed")
+        after_context = creator_context(service, current, current_run)
+        if after_context.as_metadata() != source_context.as_metadata():
+            raise HTTPException(status_code=409, detail="creator source binding changed")
+        policy, content = validate_tool_result(source_scope, classified)
+        classified = issue_tool_result(
+            source_scope, content, strictest(policy, after_context.input_floor),
+            classified.source_scope, classified.canonical_refs,
+        )
+        from jarvis.skill_requests import _paths
+        import fcntl
+        import stat
+
+        _, lock_path = _paths(body.owner_id, body.request_id)
+        descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        with os.fdopen(descriptor, "a") as lock:
+            metadata = os.fstat(lock.fileno())
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid()
+                    or stat.S_IMODE(metadata.st_mode) != 0o600 or metadata.st_nlink != 1):
+                raise HTTPException(status_code=409, detail="creator source binding changed")
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            final_state = _creator_internal_owner(body, request)
+            _verify_developer_run(body)
+            if (final_state.get("cancel_requested")
+                    or any(final_state.get(key) != current.get(key) for key in (
+                        "bot_session_id", "developer_run_id", "creator_revision", "skill_id",
+                        "sandbox_job_id", "sandbox_session_id", "sandbox_task_id", "source_commit",
+                    ))):
+                raise HTTPException(status_code=409, detail="creator source binding changed")
+            # The long workspace operation and source snapshot ran before
+            # this lock. A cancellation/request replacement cannot race the
+            # final durable check and receipt signature.
+            receipt = sign_tool_source(source_scope, classified, context=source_context.as_metadata(),
+                                       challenge=body.source_challenge)
+        return {"ok": True, "source_receipt": receipt}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=409, detail="creator source receipt could not be verified") from None
 
 
 @app.get("/api/skills")
@@ -3911,6 +5101,7 @@ def council_convene(body: ConveneIn) -> dict:
     is implemented — D6.1's prompts are the only ones this plan defines;
     a reviewer-placement prompt was never specified, so that placement
     is refused rather than improvised."""
+    advisory_started_at = time.time()
     run_migrations()
     if body.placement != "planner":
         return {
@@ -3936,11 +5127,11 @@ def council_convene(body: ConveneIn) -> dict:
             winner=None, winner_mean=None, select_reason=None, error=None,
             started_at=time.time(), finished_at=None,
         )
-    threading.Thread(
-        target=_run_council_job,
+    _start_advisory_thread(
+        _run_council_job,
         kwargs={"trigger": "manual", "goal": goal, "context": context},
-        daemon=True,
-    ).start()
+        started_at=advisory_started_at,
+    )
     return {"ok": True, "started": True}
 
 
@@ -4043,6 +5234,7 @@ def council_roster(
 
 @app.post("/api/plan/start")
 def plan_start(body: PlanStartIn) -> dict:
+    advisory_started_at = time.time()
     run_migrations()
     goal = (body.goal or "").strip()
     if not goal:
@@ -4067,13 +5259,18 @@ def plan_start(body: PlanStartIn) -> dict:
         read_result = repo_logic.repo_read_file(review_path)
         if not read_result.get("ok"):
             return {"ok": False, "error": read_result.get("error")}
-        content = read_result.get("content") or ""
-        if len(content) > council_config.PLAN_REVIEW_DOC_MAX_CHARS:
-            content = (
-                content[: council_config.PLAN_REVIEW_DOC_MAX_CHARS]
-                + "\n\n… (truncated for review — flag this truncation in your verdict)"
-            )
-        context = {"document": content, "document_path": review_path}
+        source = _advisory_transport_context.get()
+        if source is not None:
+            from jarvis.advisory_sources import prepared_review_source
+            context = prepared_review_source(source, _selfedit_service, review_path, read_result)
+        else:
+            content = read_result.get("content") or ""
+            if len(content) > council_config.PLAN_REVIEW_DOC_MAX_CHARS:
+                content = (
+                    content[: council_config.PLAN_REVIEW_DOC_MAX_CHARS]
+                    + "\n\n… (truncated for review — flag this truncation in your verdict)"
+                )
+            context = {"document": content, "document_path": review_path}
 
     with _plan_lock:
         try:
@@ -4154,22 +5351,25 @@ def plan_start(body: PlanStartIn) -> dict:
             review_path=review_path or None,
             run_id=run_id,
         )
+        _activate_advisory(_plan_job)
     _update_plan_start_claim(run_id, "running")
     if body.mode == "single":
-        threading.Thread(
-            target=_run_plan_single, args=(goal, profile, context, run_id), daemon=True,
-        ).start()
+        _start_advisory_thread(
+            _run_plan_single, args=(goal, profile, context, run_id),
+            started_at=advisory_started_at,
+        )
     else:
-        threading.Thread(
-            target=_run_plan_council,
-            args=(goal, body.members, context, run_id), daemon=True,
-        ).start()
+        _start_advisory_thread(
+            _run_plan_council, args=(goal, body.members, context, run_id),
+            started_at=advisory_started_at,
+        )
     return {"ok": True, "started": True}
 
 
 @app.get("/api/plan/job")
 def plan_job_status(run_id: str | None = None) -> dict:
     with _plan_lock:
+        _advisory_context_for_job('planning', _plan_job)
         job = dict(_plan_job)
     requested_run_id = (run_id or "").strip()
     if requested_run_id:
@@ -4202,6 +5402,7 @@ def plan_job_status(run_id: str | None = None) -> dict:
 @app.post("/api/plan/choose")
 def plan_choose(body: PlanChooseIn) -> dict:
     with _plan_lock:
+        source = _advisory_context_for_job('planning', _plan_job)
         if _plan_job["state"] != "awaiting_choice":
             return {"ok": False, "error": "no planning round is awaiting a choice"}
         round_id = _plan_job["round_id"]
@@ -4212,11 +5413,20 @@ def plan_choose(body: PlanChooseIn) -> dict:
         return {"ok": False, "error": f"no candidate with label {label!r}"}
     council_mod.record_user_choice(round_id, label)
     with _plan_lock:
+        if _advisory_context_for_job('planning', _plan_job) is not source:
+            # Metadata-only manual contexts may be freshly sealed; the
+            # action identity is the retained authority.
+            current = _advisory_context_for_job('planning', _plan_job)
+            if source is not None and (current is None or current._action is not source._action):
+                raise HTTPException(status_code=409, detail='advisory source action changed')
         _plan_job.update(
             state="done", plan=match["content"], author=match["profile"],
             finished_at=time.time(),
         )
         chosen_run_id = _plan_job.get("run_id")
+        if source is not None:
+            from jarvis.advisory_sources import record_advisory_job
+            record_advisory_job(source, _plan_job)
     _update_plan_start_claim(chosen_run_id, "completed")
     return {"ok": True}
 
@@ -4228,6 +5438,7 @@ def plan_adopt(body: PlanAdoptIn) -> dict:
     candidate on the ballot stays footer-free and byte-comparable, and a
     plan never adopted stamps nothing."""
     with _plan_lock:
+        source = _advisory_context_for_job('planning', _plan_job)
         if _plan_job["state"] != "done":
             return {"ok": False, "error": "no finished plan to adopt"}
         job = dict(_plan_job)
@@ -4263,15 +5474,28 @@ def plan_adopt(body: PlanAdoptIn) -> dict:
             f"{'s' if n != 1 else ''} (round {job['round_id']})."
         )
 
-    result = _save_document_to_sandbox(
-        path, plan_text + footer, rationale=f"Adopted plan: {job.get('goal') or ''}",
-    )
+    token = _advisory_transport_context.set(source)
+    try:
+        result = _save_document_to_sandbox(
+            path, plan_text + footer, rationale=f"Adopted plan: {job.get('goal') or ''}",
+        )
+    finally:
+        _advisory_transport_context.reset(token)
     return dict(result)
 
 
 @app.post("/api/plan/cancel")
 def plan_cancel() -> dict:
     with _plan_lock:
+        source = _advisory_transport_context.get()
+        guard = _advisory_job_guards.get('planning')
+        if source is not None and (_plan_job.get('run_id') != source.as_metadata()['action_run_id']
+                or (guard is not None and guard['source'] is not None and guard['source']._action is not source._action)):
+            return {'ok': True, 'already_idle': True}
+        _advisory_context_for_job('planning', _plan_job)
+        guard = _advisory_job_guards.pop('planning', None)
+        if guard is not None:
+            guard['event'].set()
         if _plan_job["state"] == "idle":
             return {"ok": True, "already_idle": True}
         _plan_job.update(
@@ -4279,6 +5503,9 @@ def plan_cancel() -> dict:
             candidates=None, plan=None, author=None, error=None,
             started_at=None, finished_at=None, review_path=None,
         )
+        if guard is not None and guard['source'] is not None:
+            from jarvis.advisory_sources import record_advisory_job
+            record_advisory_job(guard['source'], _plan_job, allow_cancelled=True)
     return {"ok": True}
 
 

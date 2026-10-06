@@ -1,0 +1,229 @@
+{
+  "actual_verifier_receipt": {
+    "attempt": "27a67269ce8848e689c34a7ce269a011",
+    "baseline": "df8f7f12b8f2d7ae8012d84cfc8abf7dad0a249b4cc0175294bdb6172cd9abf6",
+    "candidate": "df8f7f12b8f2d7ae8012d84cfc8abf7dad0a249b4cc0175294bdb6172cd9abf6",
+    "checks": [
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-c",
+          "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
+        ],
+        "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "name": "backend-imports",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 2.427
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/unit",
+          "-q"
+        ],
+        "log_sha256": "f1609c96baf534679277157365fd57e5de2e2f0b1281235de130dac13332a08e",
+        "name": "baseline-backend",
+        "passed": false,
+        "returncode": 1,
+        "seconds": 420.972
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "tests/unit",
+          "-q"
+        ],
+        "log_sha256": "054fcc59562cf34688553e4865746392f8aa5813f841c19a31fca9d27058c22d",
+        "name": "backend",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 403.019
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/evals/sub_agent_evals.py",
+          "-q"
+        ],
+        "log_sha256": "b87da6da015141a0b5a25940fffa02a910eae100a34934c4b6107599a60d4707",
+        "name": "scripted-evals",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 2.025
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "scripts/latency_probe.py",
+          "--budget",
+          "tests/fixtures/latency_sample.log"
+        ],
+        "log_sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a",
+        "name": "latency",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 0.144
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "services/mortimer-vault/tests",
+          "-q"
+        ],
+        "log_sha256": "769cbc028757c3e82372c961c2dac877913bc0cfcf19830accc30b36258c38a4",
+        "name": "knowledge-base",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 3.368
+      },
+      {
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/services/mortimer-vault/tests",
+          "-q"
+        ],
+        "log_sha256": "20da327ae9e9e1fb1240c378e2278eb6fdd79e295c48a8523b95a88d74127858",
+        "name": "baseline-knowledge-base",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 5.169
+      },
+      {
+        "argv": [
+          "npm",
+          "--prefix",
+          "web",
+          "run",
+          "build"
+        ],
+        "log_sha256": "6889ec8cb7eade7f519d38125c2da3da2d5a9105c53a51af15d9dd67771215a8",
+        "name": "web",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 30.623
+      },
+      {
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/JarvisKit"
+        ],
+        "log_sha256": "ec2edd4f1569c93cc1bf381e4b53de7148e9e1a8395d786348f22a9ab2af61ea",
+        "name": "native-library",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 90.054
+      },
+      {
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/MortimerHost"
+        ],
+        "log_sha256": "4b323e87f35bf67df755e50e21bef21a4034c4e93062ef3e44572237a65e027b",
+        "name": "native-app",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 187.381
+      },
+      {
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/JarvisKit"
+        ],
+        "log_sha256": "22f6af0359c434a696b82c40d063552732e7a1ac33ef71b63155f08969a3cf47",
+        "name": "baseline-native-library",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 22.485
+      },
+      {
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/MortimerHost"
+        ],
+        "log_sha256": "7a47fd3a2f05a33fa413013059731504da45c40e34f88597af5dd475a679d564",
+        "name": "baseline-native-app",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 183.795
+      }
+    ],
+    "desktop_probe": {
+      "log_sha256": "adbe9a9199ac1cd291958992aa51394dbd50840d5c75fed5cd68600ea52742d9",
+      "passed": true,
+      "returncode": 0,
+      "seconds": 33.025
+    },
+    "development_task": "f6ccb30d4441",
+    "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+    "passed": false,
+    "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+    "runner": "67dfc621dae442649cac7977e2349b53bc0b0e193684e0d7ce4c95e6745e9188",
+    "source_commit": "4fd822893b7acda0344e768b13bfda8a5f80b905",
+    "source_unchanged": true,
+    "status": "failed",
+    "verification_task": "c11a71ad1cb3",
+    "version": 1
+  },
+  "baseline_backend": {
+    "errors": 27,
+    "failed": 36,
+    "passed": 5999,
+    "seconds": 419.12,
+    "skipped": 6,
+    "subtests_passed": 2
+  },
+  "candidate_backend": {
+    "passed": 6058,
+    "seconds": 401.69,
+    "skipped": 10,
+    "subtests_passed": 2
+  },
+  "cause_evidence": "Baseline host-simulation pilot tests enter unchanged strict host _read with admin-owned source files while the actual guest worker is UID502; host_file_unverified is recorded. Candidate files are worker-owned. No tokenizer observer assertion fails in this run.",
+  "date": "2026-10-06",
+  "developer_accepted": false,
+  "failed_checks": [
+    "baseline-backend"
+  ],
+  "final_owned_tasks": [
+    {
+      "status": "stopped",
+      "task": "c11a71ad1cb3"
+    },
+    {
+      "status": "stopped",
+      "task": "f6ccb30d4441"
+    }
+  ],
+  "image_id": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+  "image_record_unchanged": true,
+  "mar_i_complete": false,
+  "nonempty_edit": false,
+  "passed_checks": 11,
+  "pr": 177,
+  "raw_result_path": "/private/tmp/ws05-tokenizer-full-profile-baseline.json",
+  "raw_result_sha256": "b4283d97401b2d9f9caad1449dc6a7570d2aaeb3d0ec90f7f03197bdde52a478",
+  "running_vm_count_after": 0,
+  "settings_unchanged": true,
+  "source_commit": "4fd822893b7acda0344e768b13bfda8a5f80b905",
+  "system": "codex",
+  "workstream": "WS-05"
+}

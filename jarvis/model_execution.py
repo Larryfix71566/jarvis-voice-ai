@@ -17,7 +17,7 @@ import threading
 import time
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import SimpleNamespace
 from typing import Any, Literal
 
@@ -30,16 +30,33 @@ from jarvis.model_routing import (
     AccessRoute,
     ModelRouteError,
     ResolvedModelRoute,
+    WorkloadLimits,
     make_route_client,
+)
+from jarvis.model_budget import (
+    ModelBudgetUnavailable, TaskBudget, ChildTaskBudget, begin_model_task_budget,
+    remaining_seconds, reserve_model_call_budget,
+    resolve_model_child_budget, remaining_child_seconds, reserve_model_child_call_budget,
+    validate_model_child_budget,
+    check_model_call_budget,
 )
 from jarvis.privacy_policy import (
     DataPolicy,
     assert_route_allowed,
     inherit_result_policy,
     strictest,
+    tool_argument_limit,
+    tool_result_limit,
+    bounded_tool_arguments,
 )
 
+from jarvis.storage_context import state_to_thread
+
 logger = logging.getLogger(__name__)
+
+# The installed Developer's six MCP servers declare forty distinct tools.
+# This bounds registered schemas, independently of native per-run call limits.
+MAX_REGISTERED_TOOL_REFERENCES = 40
 
 
 class ModelExecutionInputError(ValueError):
@@ -213,28 +230,55 @@ class ModelAdmissionController:
         if priority not in {"interactive", "background"}:
             raise ModelExecutionInputError("priority must be interactive or background")
         cancelled = threading.Event()
-        acquisition = asyncio.create_task(asyncio.to_thread(
-            self._acquire, priority, cancelled,
-        ))
+        handoff = threading.Lock()
+        owns_slot = abandoned = False
+
+        def release_owned(*, abandon: bool = False) -> None:
+            nonlocal owns_slot, abandoned
+            with handoff:
+                abandoned = abandoned or abandon
+                release, owns_slot = owns_slot, False
+            if release:
+                self._release(priority)
+
+        def acquire_owned() -> bool:
+            nonlocal owns_slot
+            acquired = self._acquire(priority, cancelled)
+            with handoff:
+                if acquired and not abandoned:
+                    owns_slot = True
+                    return True
+            # The async owner may be gone before a real worker's committed
+            # lease is delivered. The worker still owns compensating release.
+            if acquired:
+                self._release(priority)
+            return False
+
+        # Capacity waiters touch no storage. Keep them out of a bounded
+        # storage pool so they cannot starve admitted requests' DB work.
+        acquisition = asyncio.create_task(asyncio.to_thread(acquire_owned))
         try:
             acquired = await asyncio.shield(acquisition)
         except asyncio.CancelledError:
             cancelled.set()
             with self._condition:
                 self._condition.notify_all()
+            release_owned(abandon=True)
             try:
-                acquired = await asyncio.shield(acquisition)
+                await asyncio.shield(acquisition)
             except asyncio.CancelledError:
-                acquired = False
-            if acquired:
-                self._release(priority)
+                # Another cancellation or loop shutdown may also cancel the
+                # delivery task. The retained worker handoff releases any
+                # late grant without relying on that task's result.
+                pass
             raise
         if not acquired:
             raise asyncio.CancelledError
         try:
             yield
         finally:
-            self._release(priority)
+            release_owned()
+
 
 
 _PROCESS_ADMISSION = ModelAdmissionController()
@@ -375,7 +419,8 @@ def _validated_inputs(request: ModelExecutionRequest,
             raise ModelExecutionInputError("unsupported context message role")
         if not isinstance(item.data_policy, DataPolicy):
             raise ModelExecutionInputError("context data policy is invalid")
-        if not isinstance(item.content, str) or len(item.content) > 1_000_000:
+        quota = tool_result_limit(item.name) if item.role == 'tool' else 1_000_000
+        if not isinstance(item.content, str) or len(item.content) > quota:
             raise ModelExecutionInputError("context message content must be bounded text")
         if not isinstance(item.tool_calls, tuple):
             raise ModelExecutionInputError("context tool calls must be an immutable tuple")
@@ -414,7 +459,7 @@ def _validated_inputs(request: ModelExecutionRequest,
                 raw_arguments = call.raw_arguments
                 if raw_arguments is None:
                     raw_arguments = json.dumps(call.arguments, separators=(",", ":"))
-                if not isinstance(raw_arguments, str) or len(raw_arguments) > 16_384:
+                if not isinstance(raw_arguments, str) or len(raw_arguments) > tool_argument_limit(call.name):
                     raise ModelExecutionInputError("assistant tool arguments exceed the limit")
                 try:
                     parsed_arguments = json.loads(raw_arguments)
@@ -422,6 +467,10 @@ def _validated_inputs(request: ModelExecutionRequest,
                     raise ModelExecutionInputError("assistant tool arguments are malformed") from exc
                 if not isinstance(parsed_arguments, dict) or dict(call.arguments) != parsed_arguments:
                     raise ModelExecutionInputError("assistant tool arguments do not match their JSON")
+                try:
+                    bounded_tool_arguments(call.name, parsed_arguments)
+                except ValueError as exc:
+                    raise ModelExecutionInputError('assistant tool arguments exceed the canonical limit') from exc
                 call_extras = _validated_provider_extras(
                     call.provider_extras,
                     reserved={"id", "type", "function"},
@@ -525,8 +574,9 @@ def _validated_inputs(request: ModelExecutionRequest,
 
     if not isinstance(request.tools, tuple):
         raise ModelExecutionInputError("tools must be an immutable tuple")
-    if len(request.tools) > 32:
-        raise ModelExecutionInputError("at most 32 registered tool references are supported")
+    if len(request.tools) > MAX_REGISTERED_TOOL_REFERENCES:
+        raise ModelExecutionInputError(
+            f"at most {MAX_REGISTERED_TOOL_REFERENCES} registered tool references are supported")
     tool_schemas: list[dict[str, Any]] = []
     tool_names: set[str] = set()
     tool_validators: dict[str, Any] = {}
@@ -579,6 +629,16 @@ def _validated_inputs(request: ModelExecutionRequest,
         raise ModelExecutionInputError(
             "tool history references a tool outside the caller's current allowlist"
         )
+    # Historical calls are sent to the provider again. Apply the same current
+    # registered schemas as new calls, after the trusted validators exist.
+    for item in request.context:
+        if isinstance(item, ModelContextMessage):
+            for call in item.tool_calls:
+                try:
+                    tool_validators[call.name].validate(dict(call.arguments))
+                except Exception as exc:
+                    raise ModelExecutionInputError(
+                        'historical tool arguments do not match the registered schema') from exc
 
     effective_policy = strictest(*policies)
     assert_route_allowed(resolved.route, effective_policy)
@@ -647,7 +707,7 @@ def _validated_tool_calls(message: Any,
             raise ModelExecutionOutputError("provider returned an invalid tool-call identity")
         if not isinstance(name, str) or name not in validators:
             raise ModelExecutionOutputError("provider requested a tool outside the allowlist")
-        if not isinstance(arguments, str) or len(arguments) > 16_384:
+        if not isinstance(arguments, str) or len(arguments) > tool_argument_limit(name):
             raise ModelExecutionOutputError("provider returned invalid or oversized tool arguments")
         try:
             parsed = json.loads(arguments)
@@ -655,6 +715,10 @@ def _validated_tool_calls(message: Any,
             raise ModelExecutionOutputError("provider returned malformed tool arguments") from exc
         if not isinstance(parsed, dict):
             raise ModelExecutionOutputError("tool arguments must be a JSON object")
+        try:
+            bounded_tool_arguments(name, parsed)
+        except ValueError as exc:
+            raise ModelExecutionOutputError('provider tool arguments exceed the canonical limit') from exc
         try:
             validators[name].validate(parsed)
         except Exception as exc:
@@ -673,7 +737,8 @@ def _validated_tool_calls(message: Any,
 
 
 async def _collect_chat_stream(stream: Any,
-                              on_text_delta: Callable[[str], Any]) -> Any:
+                              on_text_delta: Callable[[str], Any], *,
+                              allowed_tools: tuple[str, ...] = ()) -> Any:
     """Collect OpenAI-shaped chunks without exposing partial tool arguments.
 
     Text deltas are policy-bearing events; tool requests are reconstructed and
@@ -736,7 +801,15 @@ async def _collect_chat_stream(stream: Any,
                         if not isinstance(fragment, str):
                             raise ModelExecutionOutputError("provider streamed malformed tool data")
                         state[key] += fragment
-                        if len(state[key]) > (64 if key == "name" else 16_384):
+                        if len(state['name']) > 64:
+                            raise ModelExecutionOutputError("provider streamed oversized tool data")
+                        # A provider may send arguments before completing the
+                        # name. Bound that buffer by the permitted name prefixes;
+                        # the final exact name/schema is still checked before a
+                        # tool_request event or operation can be published.
+                        quota = max((tool_argument_limit(name) for name in allowed_tools
+                                     if name.startswith(state['name'])), default=16_384)
+                        if len(state['arguments']) > quota:
                             raise ModelExecutionOutputError("provider streamed oversized tool data")
                 raw_extras = _field(part, "model_extra") or {}
                 extras = _validated_provider_extras(
@@ -798,13 +871,21 @@ async def execute_chat(request: ModelExecutionRequest,
                        client_factory: Callable[..., Any] | None = None,
                        event_sink: Callable[[ModelExecutionEvent], Any] | None = None,
                        event_sink_policy: DataPolicy | None = None,
-                       admission: ModelAdmissionController | None = None) -> ModelExecutionResult:
+                       admission: ModelAdmissionController | None = None,
+                       task_budget: TaskBudget | None = None,
+                       child_budget: ChildTaskBudget | None = None) -> ModelExecutionResult:
     """Execute one validated request, preserving context and attachments.
 
     Cancellation propagates to the provider client, and the outer deadline
     prevents late results from being returned to callers. Tool loops remain
     owned by their existing agent boundary.
     """
+    entry_loop_time = asyncio.get_running_loop().time()
+    started_at = time.monotonic()
+    budget_started_at = time.time()
+    if task_budget is not None and child_budget is not None:
+        raise ModelBudgetUnavailable("budget_policy_mismatch")
+    request = _limited_output_request(request, resolved.limits.max_output_tokens_per_call)
     messages, effective_policy, tools, tool_validators, seen_tool_call_ids = _validated_inputs(
         request, resolved
     )
@@ -823,11 +904,41 @@ async def execute_chat(request: ModelExecutionRequest,
         )
     controller = admission or _PROCESS_ADMISSION
     sequence = 0
+    deadline: asyncio.Timeout | None = None
+
+    def require_active() -> None:
+        # Awaited adapters and observers can swallow CancelledError. The
+        # timeout object's state and monotonic deadline still own admission
+        # and publication, even after such an await returns a late value.
+        current = asyncio.current_task()
+        timed_out = deadline is not None and (
+            deadline.expired() or (deadline.when() is not None
+                                   and asyncio.get_running_loop().time() >= deadline.when())
+        )
+        if timed_out:
+            raise TimeoutError
+        if current is not None and current.cancelling():
+            raise asyncio.CancelledError
+
+    async def observe(event: ModelExecutionEvent, *, terminal: bool = False) -> None:
+        if not terminal:
+            require_active()
+        try:
+            observed = event_sink(event)
+            if inspect.isawaitable(observed):
+                await observed
+        except Exception:  # noqa: BLE001 — telemetry observers never own request outcome
+            pass
+        if not terminal:
+            require_active()
 
     async def emit(event_type: ExecutionEventType, *, error_code: str | None = None,
                    progress_stage: ExecutionProgressStage | None = None,
                    text_delta: str | None = None) -> None:
         nonlocal sequence
+        terminal = event_type in {"cancelled", "failed"}
+        if not terminal:
+            require_active()
         sequence += 1
         if event_sink is None:
             return
@@ -841,17 +952,11 @@ async def execute_chat(request: ModelExecutionRequest,
             progress_stage=progress_stage,
             text_delta=text_delta,
         )
-        try:
-            observed = event_sink(event)
-            if inspect.isawaitable(observed):
-                await observed
-        except Exception:  # noqa: BLE001 — telemetry observers never own request outcome
-            # Lifecycle observers must not turn a successful provider result
-            # into a failure or obscure the original provider exception.
-            return
+        await observe(event, terminal=terminal)
 
     async def emit_tool_request(call: ModelToolCall) -> None:
         nonlocal sequence
+        require_active()
         sequence += 1
         if event_sink is None:
             return
@@ -864,15 +969,11 @@ async def execute_chat(request: ModelExecutionRequest,
             tool_call_id=call.tool_call_id,
             tool_name=call.name,
         )
-        try:
-            observed = event_sink(event)
-            if inspect.isawaitable(observed):
-                await observed
-        except Exception:  # noqa: BLE001 — telemetry observers never own request outcome
-            return
+        await observe(event)
 
     async def emit_tool_result(call_id: str, name: str) -> None:
         nonlocal sequence
+        require_active()
         sequence += 1
         if event_sink is None:
             return
@@ -885,21 +986,103 @@ async def execute_chat(request: ModelExecutionRequest,
             tool_call_id=call_id,
             tool_name=name,
         )
-        try:
-            observed = event_sink(event)
-            if inspect.isawaitable(observed):
-                await observed
-        except Exception:  # noqa: BLE001 — telemetry observers never own request outcome
-            return
+        await observe(event)
 
-    started_at = time.monotonic()
+    client = None
     try:
         # The deadline includes lifecycle admission and time spent queued for
         # capacity; cancellation at either point must still emit one terminal
         # event rather than escaping before the lifecycle guard is active.
-        async with asyncio.timeout(request.timeout_s):
+        setup_limit = request.timeout_s
+        if resolved.limits.deadline_seconds is not None:
+            setup_limit = min(setup_limit, resolved.limits.deadline_seconds)
+        if (isinstance(task_budget, TaskBudget) and type(task_budget.limits) is WorkloadLimits
+                and task_budget.limits.deadline_seconds is not None):
+            setup_limit = min(setup_limit, task_budget.limits.deadline_seconds)
+        if child_budget is not None:
+            # These captured fields can only shorten the setup timeout. The
+            # authoritative storage read itself belongs inside that timeout.
+            handles = ((child_budget.owner, *child_budget._ancestors, child_budget.child)
+                       if type(child_budget) is ChildTaskBudget and type(child_budget._ancestors) is tuple else ())
+            for handle in handles:
+                if (isinstance(handle, TaskBudget) and type(handle.limits) is WorkloadLimits
+                        and handle.limits.deadline_seconds is not None):
+                    setup_limit = min(setup_limit, handle.limits.deadline_seconds)
+        async with asyncio.timeout_at(entry_loop_time + setup_limit) as deadline:
+            require_active()
+            if child_budget is not None:
+                child_budget = await state_to_thread(validate_model_child_budget, child_budget)
+                require_active()
+            limits = resolved.limits
+            # The host-only binding is checked against durable owner/child
+            # records, including when this invocation omits the keyword. A
+            # persisted sponsored child cannot reopen as an independent pool.
+            binding = await state_to_thread(
+                resolve_model_child_budget, request.workload,
+                request.parent_request_id, limits, child_budget=child_budget,
+                started_at=budget_started_at,
+            )
+            require_active()
+            if binding is not None and task_budget is not None:
+                raise ModelBudgetUnavailable("budget_policy_mismatch")
+            if task_budget is not None:
+                if (not isinstance(task_budget, TaskBudget) or task_budget.workload != request.workload
+                        or task_budget.parent_request_id != request.parent_request_id):
+                    raise ModelBudgetUnavailable("budget_scope_mismatch")
+                # Validate the host handle and retain its earlier output-only
+                # cap. Durable state is reopened below, never accepted from
+                # caller-provided policy fields as the spending authority.
+                await state_to_thread(remaining_seconds, task_budget)
+                require_active()
+                limits = WorkloadLimits(*(
+                    min(first, second) if first is not None and second is not None
+                    else first if first is not None else second
+                    for first, second in zip(
+                        (limits.max_output_tokens_per_call, limits.deadline_seconds,
+                         limits.max_estimated_spend_usd_per_task),
+                        (task_budget.limits.max_output_tokens_per_call,
+                         task_budget.limits.deadline_seconds,
+                         task_budget.limits.max_estimated_spend_usd_per_task),
+                    )
+                ))
+            if binding is not None:
+                budget = binding.child
+                limits = binding.limits
+            else:
+                budget = await state_to_thread(
+                    begin_model_task_budget, request.workload,
+                    request.parent_request_id, limits, started_at=budget_started_at,
+                )
+                limits = budget.limits
+            require_active()
+            # The durable parent's bounds can be stricter than a new route
+            # snapshot (including after configuration is cleared/restarted).
+            request = _limited_output_request(request, limits.max_output_tokens_per_call)
+            messages, effective_policy, tools, tool_validators, seen_tool_call_ids = _validated_inputs(
+                request, resolved,
+            )
+            remaining = await state_to_thread(
+                remaining_child_seconds if binding is not None else remaining_seconds,
+                binding if binding is not None else budget,
+            )
+            require_active()
+            if remaining <= 0:
+                raise ModelBudgetUnavailable("budget_deadline_exhausted")
+            tightened_deadline = asyncio.get_running_loop().time() + min(
+                remaining, max(0, request.timeout_s - (time.monotonic() - started_at)),
+            )
+            deadline.reschedule(min(deadline.when(), tightened_deadline))
+            spend_capped = limits.max_estimated_spend_usd_per_task is not None
+            if spend_capped:
+                if resolved.route.adapter not in {"openai_compatible", "saygm_gateway"}:
+                    raise ModelBudgetUnavailable("budget_unsupported_route")
+                if request.output.max_tokens is None:
+                    raise ModelBudgetUnavailable("budget_output_limit")
+                if request.attachments or any(not isinstance(m.get("content"), str) for m in messages):
+                    raise ModelBudgetUnavailable("budget_input_invalid")
             await emit("queued")
             async with controller.slot(resolved.priority):
+                require_active()
                 await emit("started")
                 # Tool execution belongs to the caller, so this boundary
                 # receives results as validated conversation context on the
@@ -908,8 +1091,20 @@ async def execute_chat(request: ModelExecutionRequest,
                 for item in request.context:
                     if isinstance(item, ModelContextMessage) and item.role == "tool":
                         await emit_tool_result(item.tool_call_id, item.name)
+                if budget.scope_id is not None:
+                    estimate = _estimated_text_input_tokens(messages, tools) if spend_capped else 1
+                    await state_to_thread(
+                        check_model_call_budget,
+                        binding if binding is not None else budget, request.task_id,
+                        resolved.provider, resolved.model, resolved.route.name,
+                        resolved.route.billing, estimate, request.output.max_tokens or 1,
+                    )
+                    # Refuse exhausted inherited pools before constructing a
+                    # client. This dry check cannot authorize an outbound call.
+                    require_active()
                 client = (client_factory(resolved) if client_factory is not None
                           else make_route_client(resolved, timeout=request.timeout_s))
+                require_active()
                 completion_args: dict[str, Any] = {
                     "model": resolved.model,
                     "messages": messages,
@@ -926,13 +1121,33 @@ async def execute_chat(request: ModelExecutionRequest,
                     }
                 if request.stream_text:
                     completion_args["stream"] = True
+                if spend_capped and not _api_adapter_has_no_retries(client):
+                    raise ModelBudgetUnavailable("budget_unsupported_route")
+                if budget.scope_id is not None:
+                    await state_to_thread(
+                        reserve_model_child_call_budget if binding is not None else reserve_model_call_budget,
+                        binding if binding is not None else budget, request.task_id,
+                        resolved.provider, resolved.model, resolved.route.name,
+                        resolved.route.billing, estimate, request.output.max_tokens or 1,
+                    )
+                    # Reserve atomically only after the real adapter's retry
+                    # proof; concurrent use may have exhausted a pool since
+                    # preflight. Failed/cancelled admitted attempts remain.
+                    require_active()
                 await emit("progress", progress_stage="provider_request")
-                response = await client.chat.completions.create(**completion_args)
+                native_execute = getattr(client, "execute_request", None)
+                if native_execute is not None:
+                    response = await native_execute(request, resolved, completion_args)
+                else:
+                    response = await client.chat.completions.create(**completion_args)
+                require_active()
                 if request.stream_text:
                     response = await _collect_chat_stream(
                         response,
                         lambda fragment: emit("text_delta", text_delta=fragment),
+                        allowed_tools=tuple(tool_validators),
                     )
+                    require_active()
                 await emit("progress", progress_stage="response_received")
                 message = response.choices[0].message
                 text = message.content
@@ -982,15 +1197,72 @@ async def execute_chat(request: ModelExecutionRequest,
                     provider_extras=provider_extras,
                 )
                 await emit("completed")
+                require_active()
                 return result
     except asyncio.CancelledError:
+        await close_model_request(client, request.parent_request_id)
         await emit("cancelled")
         raise
     except TimeoutError:
+        await close_model_request(client, request.parent_request_id)
         await emit("failed", error_code="timeout")
         raise
     except Exception as exc:
+        await close_model_request(client, request.parent_request_id)
         # Only a stable category is published. Provider exception text may
         # include input, credentials, endpoints or account details.
-        await emit("failed", error_code=type(exc).__name__)
+        await emit("failed", error_code=(exc.code if isinstance(exc, ModelBudgetUnavailable)
+                                         else type(exc).__name__))
         raise
+
+
+def _limited_output_request(request: ModelExecutionRequest, cap: int | None) -> ModelExecutionRequest:
+    if cap is None:
+        return request
+    if not isinstance(request.output, ModelOutputRequirements):
+        raise ModelExecutionInputError("output requirements are invalid")
+    existing = request.output.max_tokens
+    if existing is not None and (type(existing) is not int or not 1 <= existing <= 32_000):
+        raise ModelExecutionInputError("max_tokens must be an integer from 1 to 32000")
+    return replace(request, output=replace(request.output, max_tokens=min(existing, cap)
+                                          if existing is not None else cap))
+
+
+def _estimated_text_input_tokens(messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> int:
+    # Explicit conservative local estimate, not a provider token or invoice
+    # measurement. Include every UTF-8 byte plus framing/schema overhead.
+    return 1024 + len(json.dumps({"messages": messages, "tools": tools},
+                                ensure_ascii=False, separators=(",", ":"),
+                                allow_nan=False).encode("utf-8"))
+
+
+def _api_adapter_has_no_retries(client: Any) -> bool:
+    """Prove retry configuration from supported SDKs, never a foreign flag."""
+    import openai
+    import anthropic
+    from jarvis.anthropic_shim import AsyncAnthropicChatShim
+    from jarvis.llm_client import _OpenRouterCachingClient
+
+    if type(client) is _OpenRouterCachingClient:
+        client = client._client
+    if type(client) is AsyncAnthropicChatShim:
+        client = client._anthropic
+    return (type(client) in {openai.AsyncOpenAI, anthropic.AsyncAnthropic}
+            and type(client.max_retries) is int and client.max_retries == 0)
+
+
+async def close_model_request(client: Any, parent_request_id: str) -> None:
+    """Close only this parent's native session after failure or agent cleanup."""
+    close = getattr(client, "close_request", None)
+    if close is None:
+        return
+    try:
+        cleanup = close(parent_request_id)
+        if inspect.isawaitable(cleanup):
+            task = asyncio.ensure_future(cleanup)
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                await asyncio.shield(task)
+    except Exception as exc:  # noqa: BLE001 — cleanup diagnostics contain no provider payload
+        logger.warning("model_request_cleanup_failed: %s", type(exc).__name__)
