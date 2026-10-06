@@ -529,6 +529,8 @@ Renumbering completed in the main integration. Read-only production verification
 
 **WS-05 workload quality key reserved before implementation, 2026-10-05:** `model_access.defaults.minimum_quality_tier` and `model_access.workloads.<name>.minimum_quality_tier`, with the existing registry tiers `economy`, `mid`, `frontier`. Apply the standing Sonnet-or-better (`mid`) floor to ordinary non-voice specialists and private background work; planning keeps its frontier floor, while voice and the documented council tier-1 pool retain their legitimate economy choices. Explicit or saved choices below the workload floor are unavailable; they are never silently replaced.
 
+**WS-05 optional workload-limit keys reserved before implementation, 2026-10-06:** `model_access.defaults.max_output_tokens_per_call`, `.deadline_seconds`, `.max_estimated_spend_usd_per_task`, and corresponding `model_access.workloads.<name>` keys. Absent/null values retain existing behavior; no production limit is assigned by this reservation. Spending is configured-price admission, not a guarantee of provider charges or account overage settings. Native routes refuse unsupported output/spend ceilings; enforceable deadlines remain available. Per-parent reservation state is separate from actual usage accounting in costs.db inline tables `model_task_budgets` and `model_call_budget_reservations`; no jarvis.db migration is needed. No port, launch label, credential reference or allowlist change is reserved.
+
 ---
 
 ## 4. Conflict register
