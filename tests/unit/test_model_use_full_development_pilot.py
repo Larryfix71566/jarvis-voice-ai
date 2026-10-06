@@ -860,3 +860,163 @@ async def test_actual_extra_call_with_corresponding_result_is_not_unresolved(tmp
             connection.execute('INSERT INTO agent_events(run_id,seq,type,tool,tool_call_id,created_at) VALUES(?,?,?,?,?,?)',
                 (request['run_id'], sequence + offset, kind, 'selfedit_write', 'actual-resolved', 'unit-date'))
     assert pilot.validate_success_evidence(value, expected, request, contract) is True
+
+
+def inert_native_order_receipt(tmp_path, monkeypatch, schemas, model):
+    """In-memory unit proof only; no real CLI identity or receipt is created."""
+    from jarvis import subscription_tools as native
+    names = [schema['function']['name'] for schema in schemas]
+    references = [{'name': item['function']['name'], 'description': item['function']['description'],
+                   'parameters': item['function']['parameters']} for item in schemas]
+    receipt_path = tmp_path / 'NONEXISTENT-IN-MEMORY-NATIVE-UNIT-RECEIPT'
+    binary_path = tmp_path / 'INERT-NONEXISTENT-NATIVE-UNIT-EXECUTABLE'
+    assert not os.path.lexists(receipt_path) and not os.path.lexists(binary_path)
+    identity = {'path': str(binary_path), 'version': 'INERT_UNIT_NOT_INSTALLED', 'sha256': '0' * 64}
+    receipt = {'schema_version': 1, 'provider': 'claude', 'model': model, 'executable': identity,
+        'protocol': native.PROTOCOL, 'tool_names': names,
+        'tool_schema_sha256': native._json_digest(references),
+        'invocation_sha256': native._json_digest(native._claude_tool_argv(
+            identity['path'], model, '<mcp-config>', '<system-prompt>', names)),
+        'control_protocol_sha256': native._json_digest(native.NATIVE_CONTROL_CONTRACT),
+        'protocol_source': native.NATIVE_PROTOCOL_SOURCE,
+        'isolation_env_sha256': native._json_digest(native.NATIVE_ISOLATION_ENV),
+        **{field: True for field in ('native_tool_call_observed', 'unknown_tool_rejected',
+            'unadvertised_host_tool_rejected', 'unadvertised_host_tool_side_effect_absent',
+            'builtins_disabled', 'customization_canaries_absent', 'system_constraints_observed',
+            'api_credentials_absent', 'terminal_success_without_error_items')}}
+    original_file, original_stat, original_text = Path.is_file, Path.stat, Path.read_text
+    original_read, original_digest = pilot.support()._read, native._file_digest
+    monkeypatch.setattr(Path, 'is_file', lambda path: True if path == receipt_path else original_file(path))
+    monkeypatch.setattr(Path, 'stat', lambda path, *args, **kwargs:
+        SimpleNamespace(st_size=1024) if path == receipt_path else original_stat(path, *args, **kwargs))
+    monkeypatch.setattr(Path, 'read_text', lambda path, *args, **kwargs:
+        json.dumps(receipt) if path == receipt_path else original_text(path, *args, **kwargs))
+    monkeypatch.setattr(pilot.support(), '_read', lambda path, **kwargs:
+        pilot.canonical(receipt) if Path(path) == receipt_path else original_read(path, **kwargs))
+    monkeypatch.setattr(native, '_file_digest', lambda path:
+        identity['sha256'] if Path(path) == binary_path else original_digest(path))
+    monkeypatch.setattr(native, 'claude_tool_runtime_identity', lambda: identity)
+    monkeypatch.setenv(native.TOOLS_ENABLED_ENV, '1')
+    monkeypatch.setenv(native.TOOL_CAPABILITY_RECEIPT_ENV, str(receipt_path))
+    return receipt, identity, receipt_path, binary_path
+
+
+def bind_inert_native_artifacts(value, expected, request, registry, identity, receipt_path, receipt):
+    """Adapt the labelled offline artifact fixture to a subscription route."""
+    from sandbox.durable import atomic_json
+    contract, _sha = pilot.selection_contract('claude-opus', 'subscription')
+    profile, route, policy = contract['model'], contract['route'], contract['policy']
+    resolved = {'workload': 'developer', 'profile_name': 'claude-opus', 'model': profile['model'],
+                'provider': 'subscription', 'base_url': 'subscription://claude', 'route': route,
+                'api_key_env': route['credential_env'], 'identity': profile['identity'],
+                'priority': policy['priority'], 'limits': policy['limits']}
+    model = {'route': resolved, 'schemas': registry.openai_tools(list(pilot.SERVERS)), 'runtime': identity}
+    atomic_json(Path(request['directory']) / 'full-model-contract.json', model)
+    value['model_contract_sha256'] = pilot.digest(pilot.canonical(model))
+    value['native_runtime'] = identity
+    value['capability_receipt_sha256'] = pilot.digest(pilot.canonical(receipt))
+    request['capability_receipt'] = str(receipt_path)
+    return contract
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('damage', ['honest', 'manifest_contract', 'names', 'invocation', 'schema_order'])
+async def test_actual_full40_native_order_is_bound_at_all_pilot_boundaries(
+        tmp_path, actual_developer_sdk_unit, monkeypatch, damage):
+    """Real six-MCP/native client, with only the provider transport inert.
+
+    The nonexistent identity/receipt below is unit evidence, never live native
+    capability acceptance. The actual client/session/validator and discovered
+    forty schemas exercise the same ordered request contract as the pilot.
+    """
+    from jarvis import subscription_tools as native
+    from jarvis.model_execution import ModelExecutionRequest, ModelToolReference
+    from jarvis.model_routing import AccessRoute, ResolvedModelRoute, WorkloadLimits, ModelRouteError
+    from jarvis.privacy_policy import DataPolicy
+    from jarvis.subscription import SubscriptionCapabilityError
+    agent, registry, _calls = actual_developer_sdk_unit
+    value, expected, request, _api_contract = backed_success(tmp_path, registry)
+    schemas = registry.openai_tools(list(pilot.SERVERS))
+    names = [schema['function']['name'] for schema in schemas]
+    manifest = value['full_registry']['declared_tool_names']
+    assert len(names) == 40 and set(names) == set(manifest) and names != manifest
+    contract, selection_sha = pilot.selection_contract('claude-opus', 'subscription')
+    model = contract['model']['model']
+    receipt, identity, receipt_path, binary_path = inert_native_order_receipt(
+        tmp_path, monkeypatch, schemas, model)
+    if damage in {'names', 'manifest_contract'}:
+        receipt['tool_names'] = manifest
+    if damage in {'invocation', 'manifest_contract'}:
+        receipt['invocation_sha256'] = native._json_digest(native._claude_tool_argv(
+            identity['path'], model, '<mcp-config>', '<system-prompt>', manifest))
+    elif damage == 'schema_order':
+        by_name = {item['function']['name']: item['function'] for item in schemas}
+        receipt['tool_schema_sha256'] = native._json_digest([
+            {'name': name, 'description': by_name[name]['description'], 'parameters': by_name[name]['parameters']}
+            for name in manifest])
+    assert set(receipt['tool_names']) == set(names)
+    parent_contract = bind_inert_native_artifacts(
+        value, expected, request, registry, identity, receipt_path, receipt)
+    policy_path = tmp_path / 'native-contract-policy.json'
+    import yaml
+    policy_path.write_bytes(pilot.canonical(yaml.safe_load((pilot.ROOT / 'config/model_access.yaml').read_text())))
+    monkeypatch.setenv('JARVIS_MODEL_ACCESS_CONFIG', str(policy_path))
+    resolved = ResolvedModelRoute('developer', 'claude-opus', model, 'subscription',
+        'subscription://claude', AccessRoute(**contract['route']), contract['route']['credential_env'],
+        contract['model']['identity'], priority=contract['policy']['priority'],
+        limits=WorkloadLimits(**contract['policy']['limits']))
+    guard = pilot.ModelContract(agent, registry, resolved, schemas, contract['policy'], selection_sha,
+                                pilot.digest(policy_path.read_bytes()), identity)
+    references = tuple(ModelToolReference(item['function']['name'], item['function']['parameters'],
+        item['function']['description']) for item in schemas)
+    execution = ModelExecutionRequest('developer', 'inert-native-order:0', str(uuid.uuid4()), '',
+        tools=references, data_policy=DataPolicy('approved_external', 'public-inert-no-inference'), timeout_s=5)
+    provider_entries = []
+    # Preserve the actual native session constructor and close path. Only the
+    # provider-start/completion boundary is inert; no CLI or network is used.
+    async def inert_start(session):
+        provider_entries.append(list(session.names))
+        assert session.names == names
+        assert native._json_digest(native._claude_tool_argv(session.command, session.model,
+            '<mcp-config>', '<system-prompt>', session.names)) == receipt['invocation_sha256']
+    async def inert_completion(session, _request, _args):
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(tool_calls=[]))])
+    monkeypatch.setattr(native._ClaudeNativeSession, 'start', inert_start)
+    monkeypatch.setattr(native._ClaudeNativeSession, 'next_completion', inert_completion)
+    client = native.ClaudeSubscriptionToolClient(model)
+    completion = {'messages': [{'role': 'user', 'content': 'Inert test; never infer.'}]}
+    if damage == 'honest':
+        assert pilot.validate_native_schema_receipt(model, schemas) == identity
+        guard.check()
+        await client.execute_request(execution, resolved, completion)
+        assert provider_entries == [names]
+        assert pilot.validate_success_evidence(value, expected, request, parent_contract) is True
+        # The manifest-order preflight that caused the live blocker refuses
+        # this exact actual-order proof, while all repaired paths agree.
+        with pytest.raises(SubscriptionCapabilityError):
+            native._validate_native_receipt(model, manifest, references)
+    else:
+        if damage == 'manifest_contract':
+            # Exact causal inverse: the old manifest-name preflight accepts,
+            # but the repaired preflight, guard, actual client and parent all
+            # reject this same proof before an inert provider session starts.
+            assert native._validate_native_receipt(model, manifest, references) == identity
+        with pytest.raises(SubscriptionCapabilityError):
+            pilot.validate_native_schema_receipt(model, schemas)
+        with pytest.raises(ModelRouteError, match='full_pilot_model_contract_changed'):
+            guard.check()
+        with pytest.raises(SubscriptionCapabilityError):
+            await client.execute_request(execution, resolved, completion)
+        with pytest.raises(pilot.FullPilotUnavailable, match='worker_success_evidence_invalid'):
+            pilot.validate_success_evidence(value, expected, request, parent_contract)
+        assert provider_entries == []
+    assert not client.sessions and not client.active_requests and not client.locks
+    assert not os.path.lexists(receipt_path) and not os.path.lexists(binary_path)
+
+
+def test_independent_native_order_diagnostic_is_preserved():
+    """The external causal diagnostic stays unchanged and is not acceptance."""
+    path = Path('/private/tmp/ws05_native_full40_order_audit.py')
+    if not path.exists():
+        pytest.skip('independent native-order diagnostic is local review material')
+    assert pilot.digest(path.read_bytes()) == '2f63212d9a30ba3fd2d132f8e86dd6de4bb31891968d2ec1578016f9c8dfa5df'

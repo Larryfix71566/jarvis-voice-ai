@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "driver_sha256": "c7570ffa45fbe282f893b92e7f6bb094b99b0526e3a909181460a3dd30c76c7d",
+  "tests_sha256": "4b07a33805bf2dd3582a99051359fec53e217ce705582fe2560d3715810f5962",
+  "cause": "Actual registry rebuild uses config order git/repo/runlog/selfedit/screen/status; manifest membership order puts selfedit before runlog. First differing index13, same40names.",
+  "actual_six_MCP_discovery_performed": true,
+  "provider_inference_performed": false,
+  "native_CLI_invoked": false,
+  "live_capability_receipt_created": false,
+  "repair": [
+    "preflight ordered names derive from exact frozen actual schemas",
+    "runtime ModelContract recheck uses same ordered references",
+    "parent native tool_names and argv digest use same actual order",
+    "manifest remains declaration and set authority; strict ordered receipt checks retained"
+  ],
+  "author": {
+    "passed": 88,
+    "seconds": 42.24,
+    "overlaps_earlier_82": true,
+    "xml_sha256": "48de9622f233a58e90abd520bed1ced77c4f32a4ef1b9de559c8347c668bc93e"
+  },
+  "independent": {
+    "passed": 121,
+    "seconds": 85.45,
+    "overlaps_author": true,
+    "probe_sha256": "fbd6d0d1e1902390f749e92397de02725044effc5107ed741d4c2520c947ad3a",
+    "checks": [
+      "honest actual ordered menu passes preflight/client/backed parent",
+      "ordered-name/ref-hash/argv-hash mutations refuse",
+      "original receipt/public-main/ownership/privacy/managed-path inverses retained"
+    ]
+  },
+  "original_diagnostic_sha256": "2f63212d9a30ba3fd2d132f8e86dd6de4bb31891968d2ec1578016f9c8dfa5df",
+  "actual_schema_report_sha256": "982ba75b3d6b0653e2ca7d95c1f42273dc97b4213fab543e168da5d58df8a831",
+  "native_identity_and_receipt_fixtures_nonexistent_in_memory": true,
+  "normal_native_route_tools_currently_unapproved": true,
+  "operator_A13_unchanged": true,
+  "developer_accepted": false,
+  "mar_i_complete": false,
+  "production_changed": false
+}

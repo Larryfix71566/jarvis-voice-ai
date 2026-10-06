@@ -87,6 +87,19 @@ def selection_contract(profile, route, *, policy_path=None):
     return record, digest(canonical(record))
 
 
+def validate_native_schema_receipt(model, schemas):
+    """Bind the receipt to the frozen SDK request order, never manifest order.
+
+    The declaration manifest proves membership. Discovery supplies the ordered
+    schemas actually handed to BaseAgent and the native subscription client.
+    """
+    from jarvis.model_execution import ModelToolReference
+    from jarvis.subscription_tools import _validate_native_receipt
+    references = tuple(ModelToolReference(item['function']['name'], item['function']['parameters'],
+        item['function']['description']) for item in schemas)
+    return _validate_native_receipt(model, [reference.name for reference in references], references)
+
+
 def inspect_full_pilot(*, source_ref, source_branch, image_id, image_home, profile, route):
     helper = support()
     case = helper.load_corpus()
@@ -482,12 +495,7 @@ class ModelContract:
             if policy['policy'] != self.expected_policy or selected != self.expected_selection:
                 raise ValueError()
             if self.native_identity is not None:
-                from jarvis.model_execution import ModelToolReference
-                from jarvis.subscription_tools import _validate_native_receipt
-                schemas = json.loads(self.schemas)
-                references = tuple(ModelToolReference(item['function']['name'], item['function']['parameters'],
-                    item['function']['description']) for item in schemas)
-                identity = _validate_native_receipt(self.resolved.model, actual['declared_tool_names'], references)
+                identity = validate_native_schema_receipt(self.resolved.model, json.loads(self.schemas))
                 if canonical(identity) != canonical(self.native_identity):
                     raise ValueError()
         except Exception:
@@ -609,12 +617,7 @@ async def _full_owned_worker(request):
                     if resolved.route.adapter.endswith('subscription_runtime'):
                         if resolved.route.adapter != 'subscription_runtime':
                             raise FullPilotUnavailable('native_full_developer_unsupported')
-                        from jarvis.model_execution import ModelToolReference
-                        from jarvis.subscription_tools import _validate_native_receipt
-                        refs = tuple(ModelToolReference(item['function']['name'], item['function']['parameters'],
-                            item['function']['description']) for item in schemas)
-                        native_identity = _validate_native_receipt(resolved.model,
-                            discovered['declared_tool_names'], refs)
+                        native_identity = validate_native_schema_receipt(resolved.model, schemas)
                         report['native_runtime'] = native_identity
                         report['capability_receipt_sha256'] = digest(helper._read(Path(request['capability_receipt'])))
                     settings_obj = load_settings(env_file=None)
@@ -945,7 +948,7 @@ def validate_success_evidence(value, expected, request, selection):
             if (route['adapter'] != 'subscription_runtime' or type(native.get('schema_version')) is not int
                     or native.get('schema_version') != 1 or native.get('provider') != 'claude'
                     or native.get('model') != resolved['model'] or native.get('protocol') != PROTOCOL
-                    or native.get('tool_names') != declarations['declared_tool_names']
+                    or native.get('tool_names') != names
                     or native.get('tool_schema_sha256') != _json_digest(references)
                     or any(native.get(name) is not True for name in required_native)
                     or value.get('capability_receipt_sha256') != digest(native_raw)
@@ -957,7 +960,7 @@ def validate_success_evidence(value, expected, request, selection):
                     or native.get('isolation_env_sha256') != _json_digest(NATIVE_ISOLATION_ENV)
                     or native.get('invocation_sha256') != _json_digest(_claude_tool_argv(
                         native['executable']['path'], resolved['model'], '<mcp-config>', '<system-prompt>',
-                        declarations['declared_tool_names']))):
+                        names))):
                 raise ValueError()
         elif model.get('runtime') is not None or 'native_runtime' in value:
             raise ValueError()
