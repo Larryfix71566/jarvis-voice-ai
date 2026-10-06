@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** IN PROGRESS 2026-10-02. B2/B3 merged in #158, B4 merged in #156, and B1's 72-entry log migration lands in #160. The ten-PR no-conflict observation and warn-only checker rollout remain open.
+**Status:** IN PROGRESS, reconciled 2026-10-06. B2/B3 merged in #158, B4 merged in #156, and B1's 72-entry log migration merged in #160 (`30fa3db`). The ten-PR no-conflict observation and warn-only checker rollout remain open.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -130,3 +130,7 @@ Python standard library only. Reads `ROADMAP.md` and git; `--receipts DIR` on th
 - 2026-10-02 (Codex B1–B3 claim): Larry dispatched Codex through the WS-20 handoff. Codex confirmed the B1 log format above and reserved `docs/ws20-b123-claim-20261002` for the bounded work. #142's roadmap conflict was reconciled and the PR merged as `d01f9af` after five passing checks; Codex's reviews of #147 and #156 requested specific fixes. This claim changes no app code or production state. B1 migration waits for the roadmap PR freeze window; B2's production source will be the deployed `7c4637e` receipt, not main's header.
 
 - 2026-10-02: plan proposed (Claude). Phase A scripts prepared: `land_ws20_plan.sh`, `land_ws07_text_once.sh`, `resolve_cc7a1b.sh` (in `Claude outputs/`). WS-19's reconciliation (#151) had already fixed the rows from Claude's 10-02 review; the remaining items are in Phase A.
+
+### 2026-10-06 — Codex B1/B2 reconciliation
+
+The original 72 entries in §8 at `cc64d50` match 72 migrated file bodies at #160 merge `30fa3db` verbatim; the separate migration entry is additional. B1 is complete. The production line was refreshed from the latest successful receipt, `bde22bb` deployed 2026-10-03 16:34 EDT. Checker strict-mode rollout and the ten-PR conflict observation are not inferred complete. Claude-owned status corrections remain proposed in #172/#174; this update does not claim their merge or new live acceptance.

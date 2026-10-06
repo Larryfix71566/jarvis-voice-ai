@@ -25,7 +25,9 @@ committed receipt and are unverified**. They are labelled where they appear,
 and no item is ticked on their strength. Test counts in this file that have
 no linked receipt are also unreceipted.
 
-## Candidate validation — 2026-10-06
+## Merged implementation and open acceptance — 2026-10-06
+
+PR #177 merged as `c38d895`; final head `06a7ad5` and code head `408bc6f` each passed all five CI checks. The latest deployment receipt remains `bde22bb` (10-03 16:34 EDT). No live rollout or completed cross-system review is inferred from the merge. Earlier candidate captures below remain historical evidence at their named refs.
 
 **Current diagnostic gate:** Exact code head `408bc6f` passes all five CI checks (6,214 unit plus two subtests / 11 skips; 196 integration / four skips; 13 eval). Actual synthetic localhost-only40 proof and all four cleanup owners pass; all full runtime/quality/billing/rollout acceptance flags stay false. Reviewed gates pass 146 focused, 386 affected (three existing skips) and 31 independent cases. No further autonomous implementation prerequisite was identified after current CI/status reconciliation. Default CLI2.1.291, exact external authorization, operator identity, manual-source authority, native test scope, compliant confidential route, Claude C3 review, account and deployed acceptance remain open. [Receipt](receipts/mar-native-api-wire-order-2026-10-06.json).
 
@@ -69,8 +71,7 @@ The planner-cancellation CI case is repaired causally: cancellation now occurs a
 
 The latest crawler-input repair passes **62 focused / 61 independently reviewed overlapping cases**, with exact source hashes in [its receipt](receipts/mar-research-input-egress-2026-10-06.json). Protected focus now refuses before actual crawler client/HTTP access, including a stricter host restriction between sites. This grants no public status to acquired unknown pages. Published `9f1e7d5` CI has **two failures**, pilot temporary-directory cleanup and cancellation occurring before the planner request starts; both repairs are in progress. Four other checks pass. An actual compatible-image preparation attempt failed before VM boot because ten synthetic credential fixture files lack current exact reviewed hashes; production settings stayed unchanged. This is a source-archive prerequisite, not Developer acceptance. Manual/public-crawl proof, representative pilots and rollout remain open.
 
-Candidate: [draft PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177),
-pushed for cross-system review; not merged or deployed.
+Historical candidate: [PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177), now merged as `c38d895`; the live acceptance and deployment gates described above remain open.
 
 Latest bounded source repair: `50daa8b` passed **476 affected tests**, **two
 installed-MCP stdio/loopback tests**, and independent reruns of **six unchanged
