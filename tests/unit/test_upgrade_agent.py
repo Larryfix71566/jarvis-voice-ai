@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import subprocess
 import threading
 from pathlib import Path
 from types import SimpleNamespace
+from types import ModuleType
 
 import pytest
 import yaml
@@ -1205,6 +1207,19 @@ def test_routed_planner_uses_shared_boundary_and_preserves_tool_history(
 ) -> None:
     import jarvis.agents.upgrade_agent as ua_mod
     from jarvis.model_execution import ModelToolCall
+    from jarvis.privacy_policy import DataPolicy, issue_tool_result
+
+    # This test owns a synthetic, public source fixture. FakeRuntime is not
+    # a production source authority and must not receive a blanket approval.
+    fixture_sources = ModuleType("jarvis.development_sources")
+    def dispatch_fixture(service, name, args, *, execution_scope, context=None):
+        assert name == "file_read"
+        return issue_tool_result(execution_scope, json.dumps(service.read_file(args["path"])),
+                                 DataPolicy("approved_external", "public-unit-fixture"), "fixture")
+    fixture_sources.dispatch_workspace_tool = dispatch_fixture
+    fixture_sources.assert_workspace_session_owner = lambda service, parent: None
+    fixture_sources.workspace_status_for_owner = lambda service, parent, **kwargs: {}
+    monkeypatch.setitem(sys.modules, "jarvis.development_sources", fixture_sources)
 
     monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "1")
     route = ResolvedModelRoute(
@@ -1258,7 +1273,8 @@ def test_routed_planner_uses_shared_boundary_and_preserves_tool_history(
         )
 
     monkeypatch.setattr(ua_mod, "execute_chat", fake_execute)
-    result = agent.run("read the project file and finish", plan="Read then report.")
+    result = agent.run("read the project file and finish", plan="Read then report.",
+                       plan_policy=DataPolicy("approved_external", "public-unit-plan"))
 
     assert result["ok"] is True
     assert calls == 2
@@ -1289,6 +1305,11 @@ def test_routed_planner_cancel_during_request_returns_structured_cancelled_resul
     service: SelfEditService, monkeypatch,
 ) -> None:
     import jarvis.agents.upgrade_agent as ua_mod
+
+    fixture_sources = ModuleType("jarvis.development_sources")
+    fixture_sources.assert_workspace_session_owner = lambda service, parent: None
+    fixture_sources.workspace_status_for_owner = lambda service, parent, **kwargs: {}
+    monkeypatch.setitem(sys.modules, "jarvis.development_sources", fixture_sources)
 
     agent = _agent(service, ScriptedClient([]))
     agent._resolved_route = _routed_planner_route()
@@ -1324,6 +1345,11 @@ def test_routed_planner_discards_completion_if_cancel_wins_before_record_or_tool
 ) -> None:
     import jarvis.agents.upgrade_agent as ua_mod
     from jarvis.model_execution import ModelToolCall
+
+    fixture_sources = ModuleType("jarvis.development_sources")
+    fixture_sources.assert_workspace_session_owner = lambda service, parent: None
+    fixture_sources.workspace_status_for_owner = lambda service, parent, **kwargs: {}
+    monkeypatch.setitem(sys.modules, "jarvis.development_sources", fixture_sources)
 
     agent = _agent(service, ScriptedClient([]))
     agent._resolved_route = _routed_planner_route()
