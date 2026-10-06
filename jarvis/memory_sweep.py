@@ -1251,32 +1251,59 @@ async def settle_open_reviews(
         if client_factory is not None:
             client = client_factory(settings)
             model = getattr(settings, "openai_model", None)
+            resolved = None
         else:
             client, route = make_memory_async_client(settings)
             model = route.model
+            resolved = getattr(route, "resolved", None)
         payload = {"reviews": [
             {"id": review_id,
              "a": {"key": a["key"], "content": a["content"], "exchanges": a["exchanges"]},
              "b": {"key": b["key"], "content": b["content"], "exchanges": b["exchanges"]}}
             for review_id, a, b in items
         ]}
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": SETTLE_PROMPT},
-                {"role": "user", "content": json.dumps(payload)},
-            ],
-        )
-        try:
-            record_completion(
-                rung="memory_settle",
-                provider=provider_from_base_url(str(client.base_url)),
-                model=model,
-                response=response,
+        if resolved is not None:
+            request_id = f"memory-settle:{uuid.uuid4().hex}"
+            execution = await execute_chat(
+                ModelExecutionRequest(
+                    workload=resolved.workload,
+                    task_id=request_id,
+                    parent_request_id=request_id,
+                    instructions=json.dumps(payload),
+                    context=(ModelContextMessage(
+                        "system", SETTLE_PROMPT,
+                        DataPolicy("confidential", "memory-settlement-prompt"),
+                    ),),
+                    data_policy=DataPolicy("confidential", "memory-review-facts-and-exchanges"),
+                    timeout_s=30.0,
+                ), resolved, client_factory=lambda _: client,
             )
-        except Exception:  # noqa: BLE001 — accounting never blocks the sweep
-            pass
-        answers = _parse_settlement(response.choices[0].message.content or "")
+            try:
+                record_execution_result("memory_settle", execution)
+            except Exception as exc:  # noqa: BLE001 — accounting never blocks a valid settlement
+                logger.warning("memory_settle_usage_record_failed error_type=%s", type(exc).__name__[:64])
+            result_text = execution.text
+        else:
+            # Preserve routing-off compatibility and injected direct clients;
+            # this legacy branch does not assert confidential processing.
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": SETTLE_PROMPT},
+                    {"role": "user", "content": json.dumps(payload)},
+                ],
+            )
+            try:
+                record_completion(
+                    rung="memory_settle",
+                    provider=provider_from_base_url(str(client.base_url)),
+                    model=model,
+                    response=response,
+                )
+            except Exception:  # noqa: BLE001 — accounting never blocks the sweep
+                pass
+            result_text = response.choices[0].message.content or ""
+        answers = _parse_settlement(result_text)
     except Exception as exc:  # noqa: BLE001 — a failed check leaves reviews open
         logger.warning("memory_settle_failed reviews=%d error_type=%s",
                        len(items), type(exc).__name__[:80])
@@ -1322,8 +1349,8 @@ async def settle_open_reviews(
         if decision["outcome"] == "both_hold":
             result["kept_both"] += 1
         result["settled"] += 1
-        logger.info("memory_review_settled id=%d outcome=%s archived=%s",
-                    review_id, decision["outcome"], [k for k, _ in decision["archive"]])
+        logger.info("memory_review_settled id=%d outcome=%s archived_count=%d",
+                    review_id, decision["outcome"], len(decision["archive"]))
     result["notice"] = _settle_notice(result["archived"], result["kept_both"])
     return result
 
