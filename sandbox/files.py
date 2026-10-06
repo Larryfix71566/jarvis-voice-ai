@@ -4,11 +4,38 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 from sandbox.artifacts import Candidate, File, SandboxError, source_path_allowed
 from sandbox.durable import atomic_bytes, atomic_json
+
+
+@dataclass
+class SourceCapture:
+    """Installed host observer; neither this object nor its policy enters the VM."""
+    input_level: str
+    baseline_level: str
+    observations: list = field(default_factory=list, repr=False)
+
+
+_source_capture = ContextVar('sandbox_source_capture', default=None)
+_levels = {'approved_external': 1, 'confidential': 2, 'local_only': 3}
+
+
+@contextmanager
+def capture_sources(input_level: str, baseline_level: str):
+    if input_level not in _levels or baseline_level not in _levels:
+        raise SandboxError('Invalid host source policy')
+    capture = SourceCapture(input_level, baseline_level)
+    token = _source_capture.set(capture)
+    try:
+        yield capture
+    finally:
+        _source_capture.reset(token)
 
 
 class WorkspaceFiles:
@@ -50,12 +77,47 @@ class WorkspaceFiles:
         if not source_path_allowed(path) or not self.allowed(path):
             raise SandboxError("Path is outside the workspace policy")
 
+    def _observe(self, file: File, journal: dict, *, baseline_only=False):
+        capture = _source_capture.get()
+        if capture is None:
+            return
+        baseline = next((item for item in self.baseline.files if item.path == file.path), None)
+        task_floor = journal.get('source_floor', 'confidential')
+        if task_floor not in _levels:
+            task_floor = 'confidential'
+        level = max(('confidential', task_floor), key=_levels.get)
+        if baseline_only:
+            if file == baseline:
+                level = capture.baseline_level
+        elif journal.get('pending_edit'):
+            pass  # A lost write response never approves a later read.
+        else:
+            edits = [p for p in journal['proposals'] if p.get('path') == file.path]
+            if edits:
+                admitted = edits[-1]
+                expected = Candidate((file,)).fingerprint
+                if admitted.get('fingerprint') == expected:
+                    admitted_level = admitted.get('source_level', 'confidential')
+                    if admitted_level not in _levels:
+                        admitted_level = 'confidential'
+                    level = max((admitted_level, task_floor), key=_levels.get)
+            elif file == baseline:
+                level = capture.baseline_level
+        capture.observations.append((self.task, self.baseline.fingerprint, file,
+                                     baseline, level))
+
+    def observe_baseline(self, file: File):
+        """Record an exact inert baseline read without broadening path permissions."""
+        with self._locked():
+            self._observe(file, self._journal(), baseline_only=True)
+
     def read(self, path: str) -> File:
         self._path(path)
         with self._locked():
             result = Candidate.decode(self.controller.rpc(self.task, {"operation": "read", "path": path}))
             if len(result.files) != 1 or result.files[0].path != path:
                 raise SandboxError("Guest returned a different file")
+            self._observe(result.files[0], self._journal())
             return result.files[0]
 
     def write(self, path: str, content: bytes, rationale: str, mode: int = 0o644) -> File:
@@ -67,10 +129,20 @@ class WorkspaceFiles:
             if (self.directory / "publication.json").exists():
                 raise SandboxError("Publication has started; begin a new session for further edits")
             journal = self._journal()
+            capture = _source_capture.get()
+            level = capture.input_level if capture else 'confidential'
+            prior_floor = journal.get('source_floor', 'approved_external')
+            if prior_floor not in _levels:
+                prior_floor = 'confidential'
+            level = max((level, prior_floor), key=_levels.get)
+            # Persist the strongest floor BEFORE the guest may receive the
+            # bytes. An absent/lost ACK cannot undo their privacy requirement.
+            journal['source_floor'] = level
             # Persist invalidation BEFORE invoking the guest. A lost response
             # can never leave an earlier approval attached to changed code.
             journal.update(candidate=None, verification=None, revision=journal["revision"] + 1,
-                           pending_edit={"path": path, "fingerprint": requested.fingerprint})
+                           pending_edit={"path": path, "fingerprint": requested.fingerprint,
+                                         "source_level": level})
             self._save(journal)
             response = Candidate.decode(self.controller.rpc(self.task, {
                 "operation": "write", "candidate": json.loads(requested.encode())}))
@@ -81,8 +153,10 @@ class WorkspaceFiles:
                 raise SandboxError("Guest file differs after writing")
             journal.pop("pending_edit", None)
             journal["proposals"].append({"path": path, "rationale": rationale,
-                                         "fingerprint": requested.fingerprint})
+                                         "fingerprint": requested.fingerprint,
+                                         "source_level": level})
             self._save(journal)
+            self._observe(requested.files[0], journal)
             return requested.files[0]
 
     def _capture(self) -> Candidate:

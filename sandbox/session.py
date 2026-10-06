@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 import time
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 from sandbox.artifacts import SandboxError, source_path_allowed
 from sandbox.durable import atomic_json
@@ -16,6 +18,17 @@ from sandbox.files import WorkspaceFiles
 SESSION_ID = re.compile(r"[0-9a-f]{32}\Z")
 SKILL_WORKSPACE_KIND = re.compile(r"skill-authoring-[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 MAX_EDITOR_BYTES = 256 * 1024
+_source_identity = ContextVar('sandbox_session_source_identity', default=None)
+
+
+@contextmanager
+def pin_source_identity(session, identity):
+    """Require immutable source/owner fields inside the existing mutation lock."""
+    token = _source_identity.set((session.directory, session.id, tuple(identity)))
+    try:
+        yield
+    finally:
+        _source_identity.reset(token)
 
 
 class Session:
@@ -34,7 +47,14 @@ class Session:
         return lock
 
     def _read(self):
-        return json.loads((self.directory / "session.json").read_bytes())
+        state = json.loads((self.directory / "session.json").read_bytes())
+        pin = _source_identity.get()
+        if pin is not None and (self.directory, self.id) == pin[:2]:
+            identity = (state.get('id'), state.get('task'), state.get('run_id'), state.get('ref'),
+                        state.get('repository', '').casefold(), state.get('kind'))
+            if identity != pin[2][:6]:
+                raise SandboxError('The development source owner changed before execution.')
+        return state
 
     def _save(self, state):
         state["updated_at"] = int(time.time())
@@ -146,7 +166,13 @@ class Session:
             return {"ok": True, "session_id": self.id, "sandbox_task": state["task"], "ready": True}
 
     def _files(self, state):
-        return WorkspaceFiles(self.controller, state["task"], self.allowed)
+        files = WorkspaceFiles(self.controller, state["task"], self.allowed)
+        pin = _source_identity.get()
+        if pin is not None and (self.directory, self.id) == pin[:2]:
+            if (self.controller.read(state['task']).get('source_sha256') != pin[2][6]
+                    or files.baseline.fingerprint != pin[2][7]):
+                raise SandboxError('The development source snapshot changed before execution.')
+        return files
 
     def _editing(self, state):
         if (self.controller.task_dir(state["task"]) / "publication.json").exists():
@@ -180,7 +206,8 @@ class Session:
         state = self._read()
         if (self.directory / "cancelled.json").exists() or state.get("phase") in {"reverted", "cancelled", "setup_failed"}:
             raise SandboxError("This session has ended")
-        file = next((item for item in self._files(state).baseline.files if item.path == path), None)
+        files = self._files(state)
+        file = next((item for item in files.baseline.files if item.path == path), None)
         if file is None:
             return {"ok": True, "path": path, "exists": False, "content": ""}
         if len(file.data) > MAX_EDITOR_BYTES:
@@ -189,6 +216,7 @@ class Session:
             content = file.data.decode("utf-8")
         except UnicodeError:
             raise SandboxError("File is binary; use the artifact workflow") from None
+        files.observe_baseline(file)
         return {"ok": True, "path": path, "exists": True, "content": content, "mode": file.mode}
 
     def propose_edit(self, path: str, content: str, rationale: str, visual_intent: str = "") -> dict:
