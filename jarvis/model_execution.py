@@ -54,6 +54,10 @@ from jarvis.storage_context import state_to_thread
 
 logger = logging.getLogger(__name__)
 
+# The installed Developer's six MCP servers declare forty distinct tools.
+# This bounds registered schemas, independently of native per-run call limits.
+MAX_REGISTERED_TOOL_REFERENCES = 40
+
 
 class ModelExecutionInputError(ValueError):
     """The request contains unsupported or malformed model input."""
@@ -570,8 +574,9 @@ def _validated_inputs(request: ModelExecutionRequest,
 
     if not isinstance(request.tools, tuple):
         raise ModelExecutionInputError("tools must be an immutable tuple")
-    if len(request.tools) > 32:
-        raise ModelExecutionInputError("at most 32 registered tool references are supported")
+    if len(request.tools) > MAX_REGISTERED_TOOL_REFERENCES:
+        raise ModelExecutionInputError(
+            f"at most {MAX_REGISTERED_TOOL_REFERENCES} registered tool references are supported")
     tool_schemas: list[dict[str, Any]] = []
     tool_names: set[str] = set()
     tool_validators: dict[str, Any] = {}

@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-06",
+  "system": "codex",
+  "workstream": "WS-05",
+  "pr": 177,
+  "parent_ref": "4e225f3ad0184b44d2d1161bcebd734d285311df",
+  "source_sha256": {
+    "scripts/run_model_use_development_pilot.py": "59cb9c4416afc77823cd38fe37d03490cdf8fadb420b731b5096ae8eb31a39ba",
+    "scripts/model_use_development_oracle.py": "38356175b9c32979316c6619ba408e4c43ecf38e9bc46bda080a700a7b5b6797",
+    "tests/fixtures/model_use_development_cases.json": "6e3da0f9c65318a274a33187bcb26935856b2423a947b7d688ada9f957f0e867",
+    "tests/unit/test_model_use_development_pilot.py": "08741e95715725c99f77e3c299c75600bddc5408b3dfe3b0fb93b151bb5b035e",
+    "jarvis/model_execution.py": "27c9627c417563afed153b413aaf6540128744a69eca480624aa37fc19972ba0",
+    "tests/unit/test_model_developer_tool_surface.py": "9bba94faf04a97a997a0d785004c892edb1cfb4d7ec912f7d1ffa477971e6c7d"
+  },
+  "implemented": [
+    "real four-operation Upgrade/sandbox substrate with explicit immutable image and frozen nonempty case/oracle",
+    "fresh owned CLI with exact merged route/policy/limits, retained actual SDK worker and private stores",
+    "strict host allocation/generation pinning before rollback/cleanup",
+    "guest-only frozen oracle/independent holdout protocol and source-unchanged/full12 receipt requirement",
+    "atomic no-clobber output with pinned parent and acknowledgement-time path check",
+    "shared registered-schema cap40 matches actual Developer; native per-run call cap and all other controls unchanged"
+  ],
+  "validation": {
+    "prototype_author_affected_passed": 113,
+    "prototype_independent_combined_passed": 132,
+    "prototype_independent_overlap": true,
+    "root_affected_passed": 229,
+    "root_log": "/private/tmp/ws05-full-tool-boundary-permitted.log",
+    "root_junit": "/private/tmp/ws05-full-tool-boundary-permitted.xml",
+    "root_first_run": "7failures: four new test-fixture construction errors corrected, three existing Unix gateway checks denied by restricted execution; original log retained",
+    "shared_managed_path_independent_passed": 53,
+    "managed_path_limit": "actual six MCP subprocesses, managed SubAgent and actual SDK MockTransport; no provider/VM inference acceptance"
+  },
+  "independent_witnesses_preserved": {
+    "/private/tmp/test_ws05_fresh_process_causal_probe.py": "eb92c1bfa0051212334f594e7e0fc79f37a32229bdbe8bc576741562e952e577",
+    "/private/tmp/test_ws05_development_receipt_race.py": "1878258615869b2f9c82e2d5a0375b8b2920f8ea997e7fe3a2df237806941e56",
+    "/private/tmp/test_ws05_fresh_policy_binding.py": "4122578c07019dc5c0f9793a8da89353213192707ab920f38db67cf1e4ede001",
+    "/private/tmp/test_ws05_receipt_parent_link_race.py": "7c1a8d021072432b9e8bd8a8b4f66a413ab2549698a2ca91c8a9fa4126ac50f0"
+  },
+  "holdout_prepared": {
+    "path": "/private/tmp/ws05-development-independent-holdout-2026-10-06.json",
+    "sha256": "b7fa150dea897dbaa4deb353b195d252aee293bd539b790c7fde66ca2ddb9232",
+    "cases": 36,
+    "not_executed": true,
+    "not_sent_to_provider": true
+  },
+  "developer_accepted": false,
+  "mar_i_complete": false,
+  "live_pilot_executed": false,
+  "remaining": [
+    "full40 parent acceptance proof repair and independent review",
+    "exact native4/full40 capability receipts",
+    "operator-issued actual service identity",
+    "fresh image with pinned tokenizer data then unchanged full12/real nonempty edit/holdout acceptance",
+    "research/privacy/confidential-memory/account/voice/deployment gates"
+  ]
+}
