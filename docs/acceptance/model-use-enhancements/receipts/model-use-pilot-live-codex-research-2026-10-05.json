@@ -1,0 +1,226 @@
+{
+  "budget": {
+    "configured_price_reserved_usd": 0.0,
+    "deadline_s": 180.0,
+    "max_calls": 3,
+    "max_input_bytes": 16384,
+    "max_output_tokens": null,
+    "max_spend_usd": null,
+    "output_token_budget_available": false,
+    "repetitions": 1,
+    "timeout_s": 60.0
+  },
+  "capability_receipt_sha256": "fd0504e7891246330135e1259c9c368859e0bcce5932d8a79e94f9ab9537ae5a",
+  "captured_at_utc": "2026-10-06T03:50:27.455718+00:00",
+  "catalog_preflight_attempts": 0,
+  "comparison": {
+    "baseline_gate_failed": true,
+    "baseline_receipt": "model-use-pilot-live-direct-research-2026-10-05.json",
+    "latency_comparison_available": false,
+    "quality_comparison_available": false,
+    "reason": "baseline_content_unscored_and_scorer_execution_framework_differ",
+    "stable_p95_or_rollout_acceptance_claimed": false
+  },
+  "configured_price_map_sha256": "4f689ffd9dedee2cb351caf5efe7385e2726dd3a1e466b01cbbd090801983d97",
+  "execution_boundary_sha256": "4dc6b57fe81fe32813ee88e3472f9d2e7d0017075937b29f11892f4a6782a5b2",
+  "fixture_sha256": "f87af8c1cd15f05b56b690bf51cc54d6b4e7d61ef67ee398af90bbfbae291a39",
+  "fixture_version": "model-use-public-synthetic-v1",
+  "group": "research",
+  "handling": {
+    "private_workload_text_read": false,
+    "production_routing_changed": false,
+    "production_writes": false,
+    "provider_error_text_saved": false,
+    "response_text_saved": false
+  },
+  "harness_sha256": "e696e16e1b9eb8403dbb6d56bac35e66308db9600aed295643479a02e0b2b289",
+  "limitations": [
+    "one workload diagnostic, not three-workload deployed acceptance",
+    "cold isolated requests; no persistent session warm-up claim",
+    "billing identity comes from resolved route, not independent billing settings",
+    "memory quality covers classification only, not admission/deduplication/restart",
+    "development requires an actual Mortimer sandbox tool driver",
+    "offline outcomes measure fixture wiring, not provider quality",
+    "subscription output-token limits require independent runtime support; request limits alone are not proof",
+    "configured-price reservations are estimates, not verified provider charges",
+    "research fixtures measure source-grounded synthesis, not source retrieval or complete research workflows"
+  ],
+  "mar_i_complete": false,
+  "measurement_accepted": true,
+  "mode": "live",
+  "provider_requests_attempted": 3,
+  "scorer_version": "model-use-exact-source-and-classification-v2",
+  "source_changed_during_run": false,
+  "source_fingerprint_after": {
+    "capability_receipt": "fd0504e7891246330135e1259c9c368859e0bcce5932d8a79e94f9ab9537ae5a",
+    "config/model_access.yaml": "a00451ec7628a6a1a1091bc5d1cbce245e10787be53d89f7079daa9196e130f6",
+    "config/model_endpoints.yaml": "11ec8ecd439ef594ef6f74de629264350f9bc9b6709b0caa6a2bbcb042a4e7a9",
+    "config/model_profiles.yaml": "7eeb36c5b544e7740e1b3d46e764c48a6f54ad983466cc0a9d820a9cbe5e55bd",
+    "jarvis/model_execution.py": "4dc6b57fe81fe32813ee88e3472f9d2e7d0017075937b29f11892f4a6782a5b2",
+    "jarvis/model_routing.py": "98a182809cd603a9cfb835b6fd3ab8a4b9a37d25993a06483aae67b75743e483",
+    "jarvis/subscription.py": "d3e88c646c03bd93c4fe5554d685bdf3550d6f466f953960b668a11edea5d639",
+    "scripts/run_model_use_pilot.py": "e696e16e1b9eb8403dbb6d56bac35e66308db9600aed295643479a02e0b2b289",
+    "tests/fixtures/model_use_pilot_cases.json": "f87af8c1cd15f05b56b690bf51cc54d6b4e7d61ef67ee398af90bbfbae291a39"
+  },
+  "source_fingerprint_before": {
+    "capability_receipt": "fd0504e7891246330135e1259c9c368859e0bcce5932d8a79e94f9ab9537ae5a",
+    "config/model_access.yaml": "a00451ec7628a6a1a1091bc5d1cbce245e10787be53d89f7079daa9196e130f6",
+    "config/model_endpoints.yaml": "11ec8ecd439ef594ef6f74de629264350f9bc9b6709b0caa6a2bbcb042a4e7a9",
+    "config/model_profiles.yaml": "7eeb36c5b544e7740e1b3d46e764c48a6f54ad983466cc0a9d820a9cbe5e55bd",
+    "jarvis/model_execution.py": "4dc6b57fe81fe32813ee88e3472f9d2e7d0017075937b29f11892f4a6782a5b2",
+    "jarvis/model_routing.py": "98a182809cd603a9cfb835b6fd3ab8a4b9a37d25993a06483aae67b75743e483",
+    "jarvis/subscription.py": "d3e88c646c03bd93c4fe5554d685bdf3550d6f466f953960b668a11edea5d639",
+    "scripts/run_model_use_pilot.py": "e696e16e1b9eb8403dbb6d56bac35e66308db9600aed295643479a02e0b2b289",
+    "tests/fixtures/model_use_pilot_cases.json": "f87af8c1cd15f05b56b690bf51cc54d6b4e7d61ef67ee398af90bbfbae291a39"
+  },
+  "source_revision": "5cba70e21350eb32277059805568aecbad7ac4d6",
+  "summary": {
+    "completed": 3,
+    "content_scored_trials": 3,
+    "latency_samples": 3,
+    "median_completion_ms": 3914.5054170076037,
+    "p95_completion_ms": 3974.501250006142,
+    "p95_method": "nearest_rank",
+    "passed": 3,
+    "sufficient_for_stable_p95_claim": false
+  },
+  "trials": [
+    {
+      "case_id": "research-versioned-margin",
+      "case_sha256": "03d6ff00f9635dc4d68bc23b28a05631df328f2c1ea4fdca548ae4839311b589",
+      "cold_request": true,
+      "execution_billing_source": "subscription",
+      "execution_route": "codex_subscription",
+      "quality": {
+        "checks": 5,
+        "checks_passed": 5,
+        "content_scored": true,
+        "format_failure_reason": null,
+        "passed": true,
+        "schema_valid": true,
+        "strict_format_passed": true
+      },
+      "repetition": 1,
+      "result_policy": "approved_external",
+      "selection": {
+        "billing_source": "subscription",
+        "canonical_identity": "openai/gpt-6-astra",
+        "profile": "codex-subscription",
+        "provider": "subscription",
+        "provider_bill_or_allowance_verified": false,
+        "requested_model": "gpt-6-astra",
+        "response_model_identity_independently_reported": false,
+        "route": "codex_subscription",
+        "route_capabilities": [
+          "text"
+        ],
+        "route_privacy": "approved_external",
+        "workload": "research_synthesis"
+      },
+      "status": "completed",
+      "timing": {
+        "first_useful_output_ms": null,
+        "provider_ms": 3913.9454160031164,
+        "queue_ms": 0.1306249905610457,
+        "total_ms": 3914.5054170076037
+      },
+      "usage": {
+        "completion_tokens": 26,
+        "prompt_tokens": 11861,
+        "usage_known": true
+      }
+    },
+    {
+      "case_id": "research-decision-versus-live-state",
+      "case_sha256": "527cc355854784ffaf862384937ec7b140bd40998bd3288110173efee6414d14",
+      "cold_request": true,
+      "execution_billing_source": "subscription",
+      "execution_route": "codex_subscription",
+      "quality": {
+        "checks": 5,
+        "checks_passed": 5,
+        "content_scored": true,
+        "format_failure_reason": null,
+        "passed": true,
+        "schema_valid": true,
+        "strict_format_passed": true
+      },
+      "repetition": 1,
+      "result_policy": "approved_external",
+      "selection": {
+        "billing_source": "subscription",
+        "canonical_identity": "openai/gpt-6-astra",
+        "profile": "codex-subscription",
+        "provider": "subscription",
+        "provider_bill_or_allowance_verified": false,
+        "requested_model": "gpt-6-astra",
+        "response_model_identity_independently_reported": false,
+        "route": "codex_subscription",
+        "route_capabilities": [
+          "text"
+        ],
+        "route_privacy": "approved_external",
+        "workload": "research_synthesis"
+      },
+      "status": "completed",
+      "timing": {
+        "first_useful_output_ms": null,
+        "provider_ms": 3973.9567920041736,
+        "queue_ms": 0.34995800524484366,
+        "total_ms": 3974.501250006142
+      },
+      "usage": {
+        "completion_tokens": 30,
+        "prompt_tokens": 11852,
+        "usage_known": true
+      }
+    },
+    {
+      "case_id": "research-untrusted-source-directive",
+      "case_sha256": "4159e00fdc350e341e7a21c99e55a337cc0b41a208b40189377ffc26c8366af8",
+      "cold_request": true,
+      "execution_billing_source": "subscription",
+      "execution_route": "codex_subscription",
+      "quality": {
+        "checks": 4,
+        "checks_passed": 4,
+        "content_scored": true,
+        "format_failure_reason": null,
+        "passed": true,
+        "schema_valid": true,
+        "strict_format_passed": true
+      },
+      "repetition": 1,
+      "result_policy": "approved_external",
+      "selection": {
+        "billing_source": "subscription",
+        "canonical_identity": "openai/gpt-6-astra",
+        "profile": "codex-subscription",
+        "provider": "subscription",
+        "provider_bill_or_allowance_verified": false,
+        "requested_model": "gpt-6-astra",
+        "response_model_identity_independently_reported": false,
+        "route": "codex_subscription",
+        "route_capabilities": [
+          "text"
+        ],
+        "route_privacy": "approved_external",
+        "workload": "research_synthesis"
+      },
+      "status": "completed",
+      "timing": {
+        "first_useful_output_ms": null,
+        "provider_ms": 3209.190249996027,
+        "queue_ms": 0.35341699549462646,
+        "total_ms": 3209.7069160081446
+      },
+      "usage": {
+        "completion_tokens": 23,
+        "prompt_tokens": 11847,
+        "usage_known": true
+      }
+    }
+  ],
+  "version": "model-use-pilot-v1",
+  "workstream": "WS-05"
+}
