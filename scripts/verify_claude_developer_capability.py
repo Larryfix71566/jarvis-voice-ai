@@ -706,6 +706,17 @@ async def acquire(directory, frozen, timeout, started_at):
     return report
 
 
+def system_text_encoding():
+    """Pin macOS's concrete current-UID marker without passing env text."""
+    if sys.platform != 'darwin':
+        return {}
+    expected = f'0x{os.getuid():X}:0x0:0x0'
+    observed = os.environ.get('__CF_USER_TEXT_ENCODING')
+    if observed is not None and observed != expected:
+        raise CapabilityUnavailable('current_uid_system_text_encoding_required')
+    return {'__CF_USER_TEXT_ENCODING': expected}
+
+
 def worker_environment(directory, frozen=None):
     from jarvis.subscription import _subscription_env
     environment = _subscription_env(str(directory))
@@ -717,6 +728,7 @@ def worker_environment(directory, frozen=None):
         'JARVIS_ADMIN_URL': 'http://127.0.0.1:1', 'JARVIS_REPO_ROOT': str(ROOT),
         'JARVIS_TIMEZONE': 'UTC', 'FASTMCP_CHECK_FOR_UPDATES': 'off'})
     environment.update((frozen or {}).get('config_environment') or {})
+    environment.update(system_text_encoding())
     return environment
 
 
@@ -740,6 +752,7 @@ def validate_worker_boundary(request, packet):
     if type(configurations) is not dict or set(configurations) != {'JARVIS_MODEL_ACCESS_CONFIG', 'JARVIS_UPGRADE_MODELS'}:
         raise CapabilityUnavailable('owned_worker_environment_required')
     required.update(configurations)
+    required.update(system_text_encoding())
     standard = {'PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'LC_CTYPE',
                 'TMPDIR', 'TMP', 'TEMP', 'SSL_CERT_FILE', 'SSL_CERT_DIR'}
     if (any(os.environ.get(key) != value for key, value in required.items())

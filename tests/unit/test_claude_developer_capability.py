@@ -68,6 +68,23 @@ def test_default_contract_hashes_loader_owned_registry_sources():
     assert contract['config_environment']['JARVIS_UPGRADE_MODELS'] == str(registry_source().absolute())
 
 
+def test_mac_system_text_encoding_is_derived_not_inherited(monkeypatch):
+    monkeypatch.setattr(probe.sys, 'platform', 'darwin')
+    expected = f'0x{os.getuid():X}:0x0:0x0'
+    monkeypatch.delenv('__CF_USER_TEXT_ENCODING', raising=False)
+    assert probe.system_text_encoding() == {'__CF_USER_TEXT_ENCODING': expected}
+    monkeypatch.setenv('__CF_USER_TEXT_ENCODING', expected)
+    assert probe.system_text_encoding() == {'__CF_USER_TEXT_ENCODING': expected}
+
+
+@pytest.mark.parametrize('bad', ['', 'arbitrary', '0xFFFF:0x0:0x0', '0x1:0x8000100:0x0'])
+def test_foreign_or_malformed_system_text_encoding_refuses(monkeypatch, bad):
+    monkeypatch.setattr(probe.sys, 'platform', 'darwin')
+    monkeypatch.setenv('__CF_USER_TEXT_ENCODING', bad)
+    with pytest.raises(probe.CapabilityUnavailable, match='current_uid_system_text_encoding_required'):
+        probe.system_text_encoding()
+
+
 def owned_capture_parent(tmp_path, monkeypatch):
     """Use the unchanged receipt guard's project anchor, never global /tmp."""
     root = tmp_path / 'receipt-project'
@@ -339,6 +356,39 @@ def test_direct_worker_cannot_borrow_ambient_authority(worker_boundary, monkeypa
             'screen': ('JARVIS_SCREEN_ENABLED', 'true'), 'admin': ('JARVIS_ADMIN_URL', 'http://foreign.invalid')}[change]
         monkeypatch.setenv(key, value)
     with pytest.raises(probe.CapabilityUnavailable): probe.validate_worker_boundary(request, packet)
+
+
+@pytest.mark.parametrize('case', ['positive', 'foreign_uid', 'malformed', 'extra_environment'])
+def test_actual_new_python_worker_checks_system_marker_only(worker_boundary, case):
+    request, packet = worker_boundary
+    environment = probe.worker_environment(request.parent, packet['contract'])
+    program = r'''
+import json, os, sys
+from pathlib import Path
+from scripts import verify_claude_developer_capability as cap
+# macOS normalizes an inherited forged marker at exec; create the inverse
+# after that OS startup but before this exact application boundary check.
+if sys.argv[2]=='foreign_uid': os.environ['__CF_USER_TEXT_ENCODING']=f'0x{os.getuid()+1:X}:0x0:0x0'
+if sys.argv[2]=='malformed': os.environ['__CF_USER_TEXT_ENCODING']='not-a-system-marker'
+if sys.argv[2]=='extra_environment': os.environ['UNAPPROVED_EXTRA_AUTHORITY']='PUBLIC_SYNTHETIC_NOT_A_CREDENTIAL'
+request=Path(sys.argv[1]);packet=json.loads(request.read_bytes())
+# The production constant remains fixed; this inert test uses only the
+# pytest-owned project receipt anchor already captured by worker_boundary.
+cap.CAPTURE_PARENT=request.parent.parent
+try:
+    cap.validate_worker_boundary(request,packet)
+except cap.CapabilityUnavailable as exc:
+    print('REFUSED:'+str(exc))
+else:
+    print('BOUNDARY_ACCEPTED_NO_NATIVE_OR_MCP')
+'''
+    import subprocess
+    result = subprocess.run([sys.executable, '-c', program, str(request), case],
+        cwd=request.parent, env=environment, capture_output=True, text=True, timeout=5, check=True)
+    if case == 'positive': assert result.stdout.strip() == 'BOUNDARY_ACCEPTED_NO_NATIVE_OR_MCP'
+    else: assert result.stdout.startswith('REFUSED:') and 'BOUNDARY_ACCEPTED' not in result.stdout
+    assert not (request.parent/'probe.db').exists() and not (request.parent/'mcp-discovery.json').exists()
+    assert not (request.parent/'result.json').exists()
 
 
 def test_no_clobber_reservation_precedes_any_live_capture(tmp_path, monkeypatch):
