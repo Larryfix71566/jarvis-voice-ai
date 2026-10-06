@@ -297,6 +297,7 @@ class SubAgent:
         # Native owners retain cleanup/quarantine state between runs. API
         # clients are rebuilt after policy validation to read rotated keys.
         self._native_route_clients: dict[tuple[Any, ...], Any] = {}
+        self._native_cleanup_quarantined: set[int] = set()
         self._registry = registry
         self._timeout_s = timeout_s
         self._max_iterations = max(1, int(max_iterations))
@@ -469,7 +470,7 @@ class SubAgent:
     def _routed_client_for(self, route: ResolvedModelRoute):
         # Recreating a native adapter must never bypass failed cleanup on the
         # previous owner. No model/default instance state changes per task.
-        if any(getattr(client, "cleanup_unverified", False)
+        if self._native_cleanup_quarantined or any(getattr(client, "cleanup_unverified", False)
                for client in self._native_route_clients.values()):
             raise ModelRouteError("native runtime cleanup remains unverified")
         native = route.route.adapter in {"subscription_runtime", "codex_subscription_runtime"}
@@ -668,6 +669,7 @@ class SubAgent:
         resolve_model_profile's docstring for why that is unconditional,
         unlike this agent's own on_profile_fallback setting.
         """
+        task_started_at = time.time()
         # K5 — refuse BEFORE anything else: no run row, no model call, no
         # tools. A refusing agent has no assigned model, so there is no
         # work it could honestly attempt; running on the fallback is the
@@ -789,6 +791,7 @@ class SubAgent:
             if run_resolved_route is not None:
                 run_budget = await asyncio.to_thread(
                     begin_model_task_budget, self.name, resolved_run_id, run_resolved_route.limits,
+                    started_at=task_started_at,
                 )
             if on_run_created is not None:
                 try:
@@ -877,6 +880,15 @@ class SubAgent:
             runlog.finish(TIMEOUT_MESSAGE)
             return TIMEOUT_MESSAGE
         except Exception as exc:  # noqa: BLE001 — contract: never raise
+            from jarvis.subscription import SubscriptionRuntimeError
+            if (isinstance(exc, SubscriptionRuntimeError) and exc.category == 'cleanup'
+                    and run_client is not None
+                    and any(owned is run_client for owned in self._native_route_clients.values())):
+                # Stateless native adapters have no cleanup_unverified member;
+                # their trusted runner reports an unverified process cleanup
+                # through this typed category. Keep the failed owner instead
+                # of constructing a fresh runtime on the following run.
+                self._native_cleanup_quarantined.add(id(run_client))
             # Provider/tool exceptions can echo request bodies or protected
             # tool output. Keep only the bounded exception class as a reason
             # code in both logs and the run result.

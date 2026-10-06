@@ -7,7 +7,7 @@ import pytest
 from jarvis.agents.base import SubAgent
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.model_preferences import confirm_preference, stage_preference
-from jarvis.model_routing import AccessRoute, ResolvedModelRoute
+from jarvis.model_routing import AccessRoute, ResolvedModelRoute, WorkloadLimits
 
 
 class Recorder:
@@ -161,6 +161,22 @@ async def test_disabled_routing_does_not_reuse_a_live_routed_client(setup_routes
     assert len([client for client in created if client.calls]) == 1
 
 
+async def test_task_deadline_includes_per_run_route_verification(setup_routes, monkeypatch):
+    import time
+    from dataclasses import replace
+    from jarvis.model_routing import resolve_model_route_checked
+    settings, created, _ = setup_routes
+    resolved = replace(resolve_model_route_checked("developer"),
+                       limits=WorkloadLimits(deadline_seconds=.01))
+    def delayed_resolution(*_args, **_kwargs):
+        time.sleep(.04)
+        return resolved
+    monkeypatch.setattr("jarvis.agents.base.resolve_model_route_checked", delayed_resolution)
+    subject = agent(settings)
+    assert (await run(subject)).startswith("FAILED:")
+    assert created == []
+
+
 def test_model_disclosure_reads_current_choice_without_client(setup_routes):
     settings, created, _ = setup_routes
     subject = agent(settings)
@@ -192,3 +208,29 @@ async def test_native_owner_is_reused_and_quarantine_cannot_be_bypassed(
     assert (await run(subject)).startswith("FAILED:")
     assert len(created) == 1
     assert len(created[0].calls) == 2
+
+
+async def test_actual_stateless_native_cleanup_failure_retains_owner(setup_routes, monkeypatch):
+    from jarvis.subscription import SubscriptionTextClient, SubscriptionRuntimeError
+
+    settings, _, _ = setup_routes
+    native_route = ResolvedModelRoute(
+        'developer', 'native', 'native-fixture', 'subscription', '',
+        AccessRoute('subscription', 'subscription_runtime', 'subscription', None,
+                    'approved_external'), None, 'anthropic/native-fixture', 'interactive')
+    created = []
+    def factory(_route):
+        client = SubscriptionTextClient('native-fixture')
+        created.append(client)
+        return client
+    async def fail(*args, **kwargs):
+        raise SubscriptionRuntimeError('SYNTHETIC_PRIVATE_CLEANUP_17419', category='cleanup')
+    monkeypatch.setattr('jarvis.agents.base.resolve_model_route_checked', lambda *a, **kw: native_route)
+    monkeypatch.setattr('jarvis.agents.base.make_route_client', factory)
+    monkeypatch.setattr('jarvis.agents.base.execute_chat', fail)
+    subject = agent(settings)
+    first = await run(subject)
+    assert first.startswith('FAILED:') and 'SYNTHETIC_PRIVATE' not in first
+    assert subject._native_cleanup_quarantined == {id(created[0])}
+    assert (await run(subject)).startswith('FAILED:')
+    assert len(created) == 1
