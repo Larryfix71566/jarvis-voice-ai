@@ -148,32 +148,61 @@ struct ConsoleActionBar: View {
 
     // MARK: Results ▾
 
+    /// CC7a.3 Recents (plan §7.2, approved design): PINNED, then RECENT
+    /// (about 10), each row numbered to match voice ("open number 3") with
+    /// its age; selected, pinned and unread marks as before. Pin / Close /
+    /// Compare act on any entry. Results past the bound stay reachable
+    /// under Older; the bound never removes a result.
     private func resultsMenu(icons: Bool) -> some View {
         let count = workspace.results.count
         let title = count == 0 ? "Results" : "Results · \(count)"
+        let listing = workspace.recents
+        let now = Date()
         return Menu {
             if workspace.results.isEmpty {
                 Text("No results yet")
             }
-            ForEach(workspace.results) { result in
-                Button {
-                    if let coordinator { _ = coordinator.executePointer(.resultSelect, target: result.id.uuidString) }
-                    else { workspace.select(result.id) }
-                } label: {
-                    if let icon = resultIcon(result) {
-                        Label(result.payload.title ?? "Result", systemImage: icon)
-                    } else {
-                        Text(result.payload.title ?? "Result")
+            if !listing.pinned.isEmpty {
+                Section("Pinned") { recentsRows(listing.pinned, now: now) }
+            }
+            if !listing.recent.isEmpty {
+                Section("Recent") { recentsRows(listing.recent, now: now) }
+            }
+            if !listing.older.isEmpty {
+                Menu("Older · \(listing.older.count)") {
+                    ForEach(listing.older) { card in
+                        Button(card.title) { select(card.id) }
                     }
                 }
             }
-            if !workspace.results.isEmpty {
+            if !listing.entries.isEmpty {
                 Divider()
+                Menu("Pin or unpin") {
+                    ForEach(listing.entries) { entry in
+                        Button(Self.pinCommandTitle(entry, pinned: workspace.pinnedIDs.contains(entry.id))) {
+                            togglePin(entry.id)
+                        }
+                    }
+                }
                 Menu("Close") {
-                    ForEach(workspace.results) { result in
-                        Button(result.payload.title ?? "Result") {
-                            if let coordinator { _ = coordinator.executePointer(.resultClose, target: result.id.uuidString) }
-                            else { workspace.close(result.id) }
+                    ForEach(listing.entries) { entry in
+                        Button(entry.label) {
+                            if let coordinator { _ = coordinator.executePointer(.resultClose, target: entry.id.uuidString) }
+                            else { workspace.close(entry.id) }
+                        }
+                    }
+                }
+                if let shown = workspace.activeResult, mode == .results {
+                    Menu("Compare with shown") {
+                        ForEach(listing.entries.filter { $0.id != shown.id }) { entry in
+                            Button(entry.label) {
+                                if let coordinator {
+                                    _ = coordinator.executePointer(.compareSet, target: shown.id.uuidString,
+                                                                   secondaryTarget: entry.id.uuidString)
+                                } else {
+                                    workspace.compare(with: entry.id)
+                                }
+                            }
                         }
                     }
                 }
@@ -192,16 +221,66 @@ struct ConsoleActionBar: View {
         .padding(.horizontal, 2)
         .background(mode == .results ? AppTheme.accentFaint : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 6))
-        .help("Show results; the arrow lists the open results")
+        .help("Show results; the arrow lists Recents")
         .accessibilityLabel(title)
         .accessibilityIdentifier("console.results")
     }
 
-    /// Selected first, then pinned, then unread.
-    private func resultIcon(_ result: WorkspaceResult) -> String? {
-        if workspace.activeID == result.id { return "checkmark" }
-        if workspace.pinnedIDs.contains(result.id) { return "pin.fill" }
-        if workspace.unreadIDs.contains(result.id) { return "circle.fill" }
+    @ViewBuilder
+    private func recentsRows(_ entries: [WorkspaceRecents.Entry], now: Date) -> some View {
+        ForEach(entries) { entry in
+            Button { select(entry.id) } label: {
+                let text = Self.recentsRowTitle(entry, now: now)
+                if let icon = Self.recentsIcon(entry) {
+                    Label(text, systemImage: icon)
+                } else {
+                    Text(text)
+                }
+            }
+            .accessibilityLabel(Self.recentsAccessibilityLabel(entry, now: now))
+        }
+    }
+
+    private func select(_ id: UUID) {
+        if let coordinator { _ = coordinator.executePointer(.resultSelect, target: id.uuidString) }
+        else { workspace.select(id) }
+    }
+
+    private func togglePin(_ id: UUID) {
+        let pinned = workspace.pinnedIDs.contains(id)
+        if let coordinator {
+            if coordinator.executePointer(pinned ? .resultUnpin : .resultPin, target: id.uuidString) == .noop,
+               !pinned { pinLimitNotice = true }
+        } else if pinned { workspace.unpin(id) }
+        else { pinLimitNotice = !workspace.pin(id) }
+    }
+
+    /// "3  Weather · Folly Beach · 5m".
+    static func recentsRowTitle(_ entry: WorkspaceRecents.Entry, now: Date = Date()) -> String {
+        "\(entry.label) · \(WorkspaceRecents.age(of: entry.receivedAt, now: now))"
+    }
+
+    /// Spoken by VoiceOver: number, title, age, then state.
+    static func recentsAccessibilityLabel(_ entry: WorkspaceRecents.Entry, now: Date = Date()) -> String {
+        var parts = [entry.number.map { "Number \($0)" }, entry.card.title,
+                     WorkspaceRecents.age(of: entry.receivedAt, now: now)].compactMap { $0 }
+        if entry.isActive { parts.append("shown") }
+        if entry.isUnread { parts.append("unread") }
+        if entry.section == .pinned { parts.append("pinned") }
+        if entry.isPrivate { parts.append("private") }
+        return parts.joined(separator: ", ")
+    }
+
+    static func pinCommandTitle(_ entry: WorkspaceRecents.Entry, pinned: Bool) -> String {
+        "\(pinned ? "Unpin" : "Pin") \(entry.label)"
+    }
+
+    /// Selected first, then unread, then pinned (pinned rows already sit
+    /// under their own heading).
+    static func recentsIcon(_ entry: WorkspaceRecents.Entry) -> String? {
+        if entry.isActive { return "checkmark" }
+        if entry.isUnread { return "circle.fill" }
+        if entry.section == .pinned { return "pin.fill" }
         return nil
     }
 

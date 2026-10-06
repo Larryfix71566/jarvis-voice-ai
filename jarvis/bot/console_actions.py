@@ -42,7 +42,13 @@ CONSOLE_ACTION_SCHEMA = {
             "workflows; optional args.screen_id is a screens id from the inventory. "
             "It returns only after the app confirms the content is showing on that "
             "screen; say it is there only when the result says so, and relay its "
-            "reason when it fails."
+            "reason when it fails. "
+            "result_select, result_close, result_pin, result_unpin and compare_set "
+            "take a result id, or the Recents number or subject Larry said "
+            "(\"3\", \"Folly Beach weather\"); the inventory's results list "
+            "each number, kind and subject. When the result is needs_choice, "
+            "nothing changed: ask Larry which of the listed choices he means, "
+            "by number."
         ),
         "parameters": {
             "type": "object",
@@ -91,6 +97,13 @@ def build_console_action_tool(send: Callable[[dict], Any], *, session_id: str,
             # only the bounded, privacy-safe data supplied by the native
             # client; all other actions retain the concise spoken summary.
             data = result.get("data")
+            choices = result.get("choices")
+            if status == "needs_choice" and isinstance(choices, list) and choices:
+                # CC7a.3: an ambiguous Recents number or subject. Return the
+                # bounded labels so Mortimer can ask which one, by number.
+                labels = "; ".join(str(c.get("label", ""))[:120] for c in choices[:10]
+                                   if isinstance(c, dict))
+                return f"{summary or 'More than one result matches.'} Choices: {labels}"
             if action == "inventory" and isinstance(data, dict):
                 encoded = json.dumps(data, separators=(",", ":"), ensure_ascii=True)
                 return f"{summary or 'Console inventory ready.'} {encoded[:12000]}"

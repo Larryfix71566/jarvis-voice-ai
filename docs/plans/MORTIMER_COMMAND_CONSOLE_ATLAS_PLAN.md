@@ -1507,6 +1507,35 @@ record of "working" messages (`ArrivalRunClock`, the latest 64 runs), and a
 payload whose run ID has no recorded start stays a card; only a payload
 with no run ID uses the 120 s window.
 
+**Progress, 2026-10-05 (Claude, Claude Code):** CC7a.3 on branch
+`ws17/cc7a3-recents`, from main `bde22bb` (after WS-21, CX-16).
+`Stores/WorkspaceRecents.swift` holds the rules: pinned first, then the
+newest 10 unpinned (`recentLimit`), each newest first, numbered 1, 2, 3…
+down the list; protected results are listed with no number, so a number
+Mortimer can be asked about never points at a result voice cannot see.
+Results past the bound stay in `WorkspaceStore` and in Output and are listed
+under "Older · N"; nothing is removed by the bound. Results ▾ shows PINNED
+and RECENT sections, each row "3  Weather · Folly Beach · 5m" with the
+selected / unread / pinned mark, plus Pin or unpin, Close and Compare with
+shown for any entry (the single-row rule keeps these inside Results ▾ rather
+than as per-row buttons). Voice (Codex boundary 3): `result_select`,
+`result_close`, `result_pin`, `result_unpin` and `compare_set` accept a
+result UUID as before, or a Recents number ("3", "#3", "number three",
+"second") or subject ("the Folly Beach weather": every spoken word in the
+entry's kind, subject or title; an exact subject beats a longer one). The
+coordinator resolves it to one UUID before anything changes. A UUID that is
+gone stays `invalid_target`; an unmatched number or subject is
+`no_matching_result`; more than one match is `needs_choice` with the
+numbered entries as choices, and nothing changes. `console_actions.py`
+relays those choices so Mortimer asks which one. `pin`/`unpin` now advance
+`inventoryRevision` (they did not), so a number spoken against the old
+order is stale. The inventory's results carry `number` (null past the
+bound), `kind`, `subject` and `unread`. Reopen-by-subject on a fresh
+`subject_key` stays with CC7a.4. Tests: `CC7a3RecentsTests` (listing,
+bound, private numbering, ages, spoken numbers, subjects, ambiguity,
+revision on pin, inventory fields, voice by number and subject, stale
+numbers) and two cases in `tests/unit/test_console_actions.py`.
+
 ## 8. Acceptance evidence and regression gates
 
 Status values: NOT STARTED, IMPLEMENTED/UNVERIFIED, VERIFIED IN SANDBOX,
