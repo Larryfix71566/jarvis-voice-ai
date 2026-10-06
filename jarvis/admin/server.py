@@ -354,6 +354,7 @@ class WorkspaceSourceAssociationIn(BaseModel):
     owner_id: str = Field(min_length=1, max_length=64)
     bot_session_id: str = Field(min_length=36, max_length=36)
     developer_run_id: str = Field(min_length=36, max_length=36)
+    workspace_kind: Literal['selfedit', 'app-build']
 
 
 class WorkspaceSourcePrepareIn(WorkspaceSourceAssociationIn):
@@ -663,10 +664,7 @@ def _open_authoring(service, goal, run_id, target_paths, job):
                     job.update(state="error", error=opened.get("error"))
                 return
         else:
-            if service.branch and (service.goal or "") != goal:
-                discarded = service.revert()
-                if not discarded.get("ok"):
-                    raise RuntimeError("Previous workspace could not be discarded")
+            _cleanup_existing_workspace(service, goal)
             if not service.branch:
                 opened = service.start_session(goal, run_id=run_id)
                 if not opened.get("ok"):
@@ -739,7 +737,7 @@ def _begin_authoring(
         return _prior_staged_selfedit_action(action_run_id, action_scope) or {
             "ok": False, "error": "the self-edit claim could not be reconciled; no session was opened",
         }
-    worker = threading.Thread(target=_open_authoring,
+    worker = threading.Thread(target=_source_worker_target(_open_authoring),
         args=(_selfedit_service, goal, run_id, target_paths, job), daemon=True)
     try:
         worker.start()
@@ -1120,13 +1118,17 @@ def _make_agent(service: SelfEditService, profile: str | None,
 # Only the authenticated source adapter binds this host capability. No
 # Pydantic field or provider-supplied privacy label can construct it.
 _workspace_start_policy = ContextVar('workspace_start_policy', default=None)
+_workspace_lifecycle_context = ContextVar('workspace_lifecycle_context', default=None)
+_workspace_cleanup_context = ContextVar('workspace_cleanup_context', default=None)
+_appbuild_parent_id = ContextVar('appbuild_parent_id', default=None)
 
 
 def _source_plan_observed(path, result):
     source = _workspace_start_policy.get()
     if source is not None:
         from jarvis.development_sources import host_plan_policy
-        source['plan_policy'] = host_plan_policy(_selfedit_service, path, result)
+        from jarvis.privacy_policy import strictest
+        source['plan_policy'] = strictest(source['data_policy'], host_plan_policy(_selfedit_service, path, result))
         if 'run' in source:
             from jarvis.development_sources import retain_workspace_floor
             retain_workspace_floor(source['run'], source['plan_policy'])
@@ -1138,10 +1140,49 @@ def _source_worker_kwargs():
 
 
 def _source_worker_target(target):
-    if _workspace_start_policy.get() is None:
+    from sandbox.workspace import _source_session
+    if (_workspace_start_policy.get() is None and _workspace_lifecycle_context.get() is None
+            and _workspace_cleanup_context.get() is None and _source_session.get() is None):
         return target
     from functools import partial
     return partial(copy_context().run, target)
+
+
+def _lifecycle_service(service, *, terminal=False):
+    context = _workspace_lifecycle_context.get()
+    if context is None:
+        return service
+    from jarvis.development_sources import _live, refresh_workspace_floor
+    if service is not context._service:
+        raise RuntimeError('workspace_source_changed')
+    _live(service, context.as_metadata()['developer_run_id'], context, terminal=terminal)
+    refresh_workspace_floor(context)
+    return service
+
+
+def _cleanup_existing_workspace(service, goal):
+    """Stale cleanup uses its own host proof, never the new start's actor."""
+    context = _workspace_cleanup_context.get()
+    if _workspace_start_policy.get() is None:
+        if service.branch and (service.goal or '') != goal:
+            service.revert()
+        return
+    if context is None:
+        runtime = service._runtime()
+        record = runtime.workspaces / (runtime._key(service._repository(), service._kind) + '.json')
+        try:
+            record.lstat()
+        except FileNotFoundError:
+            return
+        raise RuntimeError('workspace_source_changed')
+    if service is not context._service:
+        raise RuntimeError('workspace_source_changed')
+    from jarvis.development_sources import _live
+    from sandbox.workspace import pin_source_session
+    with pin_source_session(service, context._session, context._identity):
+        _live(service, context.as_metadata()['developer_run_id'], context, terminal=True)
+        if service.branch and (service.goal or '') != goal:
+            service.revert()
 
 
 def _run_finish() -> None:
@@ -1156,12 +1197,13 @@ def _run_finish() -> None:
     publication_dispatched = False
     claimed = False
     try:
+        service = _lifecycle_service(_selfedit_service)
         with _finish_lock:
             if _finish_job.get("cancel_requested"):
                 _finish_job.update(state="cancelled", finished_at=time.time())
                 return
             action_run_id = _finish_job.get("action_run_id")
-        result = _selfedit_service.validate()
+        result = service.validate()
         with _finish_lock:
             _finish_job["checks"] = result.get("checks")
             if _finish_job.get("cancel_requested"):
@@ -1194,7 +1236,7 @@ def _run_finish() -> None:
             return
         if not claimed:
             prior = _prior_selfedit_publish(action_run_id)
-            current = _selfedit_service.status()
+            current = _lifecycle_service(service, terminal=True).status()
             publication = current.get("publication") or {}
             with _finish_lock:
                 if prior and prior.get("state") == "completed" and publication.get("url"):
@@ -1226,7 +1268,7 @@ def _run_finish() -> None:
                 return
             _finish_job["state"] = "submitting"
         publication_dispatched = True
-        submitted = _selfedit_service.submit()
+        submitted = _lifecycle_service(service).submit()
         if submitted.get("ok"):
             try:
                 update_execution_action(
@@ -1297,11 +1339,7 @@ def _run_agent(goal: str, profile: str | None, plan: str | None = None,
         # goal would plan on the old branch with the old proposal still
         # applied. Same goal → resume it (validate/submit by voice); a
         # different goal → drop the leftover first, and say so in the log.
-        stale = _selfedit_service.branch
-        if stale and (_selfedit_service.goal or "") != goal:
-            logger.info("selfedit_stale_session_reverted branch_present=%s",
-                        bool(stale))
-            _selfedit_service.revert()
+        _cleanup_existing_workspace(_selfedit_service, goal)
         policies = {key: value for key, value in {'data_policy': data_policy, 'plan_policy': plan_policy}.items()
                     if value is not None}
         result = agent.run(goal, plan=plan, **policies)
@@ -1380,7 +1418,7 @@ def _busy() -> bool:
 
 def _make_appbuild_agent(workspace: AppWorkspace, profile: str | None) -> AppBuildAgent:
     """Construct the planner (seam for tests), mirroring _make_agent."""
-    return AppBuildAgent(workspace, profile=profile)
+    return AppBuildAgent(workspace, profile=profile, run_id=_appbuild_parent_id.get())
 
 
 def _appbuild_busy() -> bool:
@@ -1477,8 +1515,18 @@ def _run_appbuild_agent(
     global _appbuild_workspace, _appbuild_agent_instance
     workspace = None
     try:
-        workspace = AppWorkspace(app)
-        agent = _make_appbuild_agent(workspace, profile)
+        cleanup = _workspace_cleanup_context.get()
+        workspace = cleanup._service if cleanup is not None else AppWorkspace(app)
+        if _workspace_start_policy.get() is not None:
+            from jarvis.agents.workspace import AppWorkspace as InstalledAppWorkspace
+            if type(workspace) is not InstalledAppWorkspace or workspace.app_name != app:
+                raise RuntimeError('workspace_source_changed')
+            _cleanup_existing_workspace(workspace, goal)
+        parent_token = _appbuild_parent_id.set(run_id)
+        try:
+            agent = _make_appbuild_agent(workspace, profile)
+        finally:
+            _appbuild_parent_id.reset(parent_token)
         with _appbuild_lock:
             _appbuild_workspace = workspace
             _appbuild_agent_instance = agent
@@ -2379,7 +2427,8 @@ def selfedit_finish() -> dict:
     """SE4 — start the finish job: validate, and submit if green."""
     if not authoring_enabled():
         return dict(_AUTHORING_OFF)
-    session = _selfedit_service.status()
+    service = _lifecycle_service(_selfedit_service, terminal=True)
+    session = service.status()
     action_run_id = str(session.get("id") or "")
     if action_run_id:
         prior = _prior_selfedit_publish(action_run_id)
@@ -2408,13 +2457,13 @@ def selfedit_finish() -> dict:
         _finish_job.update(
             state="validating", checks=None, pr_url=None, notice=None, cancel_requested=False,
             human_only=None, apply_command=None,
-            run_id=session.get("run_id") or _selfedit_service.run_id,
+            run_id=session.get("run_id") or service.run_id,
             action_run_id=action_run_id,
             started_at=time.time(), finished_at=None,
         )
     logger.info("selfedit_state_transition state=finish_validating run_id=%s",
                 _selfedit_service.run_id)
-    threading.Thread(target=_run_finish, daemon=True).start()
+    threading.Thread(target=_source_worker_target(_run_finish), daemon=True).start()
     return {
         "ok": True, "started": True, "state": "validating",
         "action_run_id": action_run_id,
@@ -2811,6 +2860,7 @@ def appbuild_job_status(
 
 def _submit_appbuild(workspace, operation_id, session_id, output):
     try:
+        workspace = _lifecycle_service(workspace)
         result = workspace.submit()
     except Exception as exc:
         logger.warning("app_workspace_submission_failed error_type=%s",
@@ -2832,7 +2882,7 @@ def _submit_appbuild(workspace, operation_id, session_id, output):
 
 @app.post("/api/appbuild/submit")
 def appbuild_submit() -> dict:
-    workspace = _recover_appbuild_workspace()
+    workspace = _lifecycle_service(_recover_appbuild_workspace(), terminal=True)
     if workspace is None:
         return {"ok": False, "error": "no active app-build session to submit"}
     workspace_status = workspace.status()
@@ -2875,7 +2925,7 @@ def appbuild_submit() -> dict:
                             submit_action_id=session_id)
     output = {}
     worker = threading.Thread(
-        target=_submit_appbuild,
+        target=_source_worker_target(_submit_appbuild),
         args=(workspace, operation_id, session_id, output), daemon=True,
     )
     try:
@@ -3131,7 +3181,8 @@ def _workspace_source_run(body, request):
                 raise ValueError()
         detail = get_run(body.developer_run_id)
         run = detail['run'] if type(detail) is dict else None
-        if (type(run) is not dict or run.get('agent') != 'developer' or run.get('status') != 'running'
+        role = 'app_builder' if body.workspace_kind == 'app-build' else 'developer'
+        if (type(run) is not dict or run.get('agent') != role or run.get('status') != 'running'
                 or run.get('user_id') != body.owner_id or run.get('session_id') != body.bot_session_id
                 or runtime_owner(body.bot_session_id) != body.owner_id):
             raise ValueError()
@@ -3146,7 +3197,8 @@ def _workspace_source_arguments(body):
     from mcp_servers.mcp_selfedit import logic as selfedit_logic
     from mcp_servers.mcp_apps import logic as apps_logic
 
-    if body.tool_name not in _WORKSPACE_SOURCE_TOOLS or 'run_id' in body.arguments:
+    kind = 'app-build' if body.tool_name.startswith('app_') else 'selfedit'
+    if body.tool_name not in _WORKSPACE_SOURCE_TOOLS or 'run_id' in body.arguments or body.workspace_kind != kind:
         raise HTTPException(status_code=403, detail='tool is outside workspace source capability')
     try:
         bounded_tool_arguments(body.tool_name, body.arguments)
@@ -3239,11 +3291,57 @@ def _workspace_source_context(body, run, values, *, terminal=False):
                             lineage_id=lineage, terminal=terminal)
 
 
+def _workspace_source_cleanup(body, run, values):
+    """Separate local capability for any workspace a fresh start may retire."""
+    if not body.tool_name.endswith('start') or not values.get('confirm'):
+        return None
+    from jarvis.development_sources import ordinary_context, _host_session
+    from jarvis.runlog.store import get_run
+    from sandbox.runtime import Runtime
+    service = _selfedit_service if body.workspace_kind == 'selfedit' else AppWorkspace(validate_app_name(values['app']))
+    runtime = service._runtime()
+    if type(runtime) is not Runtime:
+        raise ValueError()
+    record = runtime.workspaces / (runtime._key(service._repository(), service._kind) + '.json')
+    try:
+        record.lstat()
+    except FileNotFoundError:
+        return None
+    session = _host_session(service)
+    state = session._read()
+    retained = get_run(state['run_id'])['run']
+    return ordinary_context(service, run, retained, workspace_kind=body.workspace_kind,
+                            lineage_id=state['id'], terminal=True)
+
+
+def _same_cleanup(before, after):
+    if before is None or after is None:
+        return before is after
+    from jarvis.development_sources import _verify_workspace_floor_pins
+    _verify_workspace_floor_pins(before)
+    return (before.as_metadata() == after.as_metadata() and before._identity == after._identity
+            and before._pins == after._pins)
+
+
 class _WorkspaceSourceClient:
     """Installed ordinary transformations over existing guarded handlers."""
-    def __init__(self, scope, context, run):
+    def __init__(self, scope, context, run, cleanup=None):
         self.scope, self.context, self.classified = scope, context, None
         self.start_policy = {'data_policy': scope.input_policy, 'run': run}
+        self.cleanup = cleanup
+
+    def _lifecycle(self, invoke):
+        if self.context._session is None:
+            return invoke()
+        from sandbox.workspace import pin_source_session
+        from jarvis.development_sources import _live
+        _live(self.context._service, self.scope.parent_request_id, self.context, terminal=True)
+        token = _workspace_lifecycle_context.set(self.context)
+        try:
+            with pin_source_session(self.context._service, self.context._session, self.context._identity):
+                return invoke()
+        finally:
+            _workspace_lifecycle_context.reset(token)
 
     def _file(self, name, values, invoke):
         from jarvis.development_sources import dispatch_workspace_tool
@@ -3262,9 +3360,9 @@ class _WorkspaceSourceClient:
         if path == '/api/selfedit/models':
             return selfedit_models()
         if path == '/api/selfedit/run':
-            return selfedit_run_status(**params)
+            return self._lifecycle(lambda: selfedit_run_status(**params))
         if path == '/api/appbuild/job':
-            return appbuild_job_status(**params)
+            return self._lifecycle(lambda: appbuild_job_status(**params))
         raise ValueError('workspace_source_unavailable')
 
     def post(self, path, json=None):
@@ -3278,20 +3376,24 @@ class _WorkspaceSourceClient:
             return selfedit_stage(SelfEditStageIn(**values))
         if path == '/api/selfedit/run':
             token = _workspace_start_policy.set(self.start_policy)
+            cleanup_token = _workspace_cleanup_context.set(self.cleanup)
             try:
                 return selfedit_run(GoalIn(**values))
             finally:
                 _workspace_start_policy.reset(token)
+                _workspace_cleanup_context.reset(cleanup_token)
         if path == '/api/selfedit/finish':
-            return selfedit_finish()
+            return self._lifecycle(selfedit_finish)
         if path == '/api/appbuild/start':
             token = _workspace_start_policy.set(self.start_policy)
+            cleanup_token = _workspace_cleanup_context.set(self.cleanup)
             try:
                 return appbuild_start(AppBuildGoalIn(**values))
             finally:
                 _workspace_start_policy.reset(token)
+                _workspace_cleanup_context.reset(cleanup_token)
         if path == '/api/appbuild/submit':
-            return appbuild_submit()
+            return self._lifecycle(appbuild_submit)
         raise ValueError('workspace_source_unavailable')
 
 
@@ -3361,6 +3463,7 @@ def prepare_workspace_source(body: WorkspaceSourcePrepareIn, request: Request) -
         from jarvis.privacy_policy import DataPolicy
         retain_workspace_floor(run, DataPolicy(body.source_input_policy, 'workspace-caller-floor'))
         context = _workspace_source_context(body, run, values, terminal=body.tool_name.endswith(('status', 'finish', 'submit')))
+        cleanup = _workspace_source_cleanup(body, run, values)
         _workspace_source_run(body, request)
         import secrets
         key = secrets.token_hex(32)
@@ -3371,7 +3474,7 @@ def prepare_workspace_source(body: WorkspaceSourcePrepareIn, request: Request) -
                     _workspace_preparations.pop(prior, None)
             if len(_workspace_preparations) >= 4096:
                 raise ValueError()
-            _workspace_preparations[key] = (now, body.model_dump(), context)
+            _workspace_preparations[key] = (now, body.model_dump(), context, cleanup)
         return {'ok': True, 'source_context': context.as_metadata(), 'source_preparation_id': key}
     except Exception:
         raise HTTPException(status_code=409, detail='workspace source context is unavailable') from None
@@ -3380,8 +3483,8 @@ def prepare_workspace_source(body: WorkspaceSourcePrepareIn, request: Request) -
 @app.post('/api/development/source/tool')
 def execute_workspace_source(body: WorkspaceSourceToolIn, request: Request) -> dict:
     from jarvis.development_attestation import sign_workspace_source
-    from jarvis.development_sources import ordinary_context, _verify_workspace_floor_pins
-    from jarvis.privacy_policy import DataPolicy, issue_tool_result, make_tool_execution_scope, strictest
+    from jarvis.development_sources import ordinary_context, _verify_workspace_floor_pins, published_workspace_result
+    from jarvis.privacy_policy import DataPolicy, issue_tool_result, make_tool_execution_scope, strictest, validate_tool_result
     from jarvis.tenant import user_id_scope
 
     run = _workspace_source_run(body, request)
@@ -3396,18 +3499,45 @@ def execute_workspace_source(body: WorkspaceSourceToolIn, request: Request) -> d
         context = prepared[2]
         _verify_workspace_floor_pins(context)
         current_context = _workspace_source_context(body, run, values, terminal=terminal)
+        cleanup = _workspace_source_cleanup(body, run, values)
+        if not _same_cleanup(prepared[3], cleanup):
+            raise ValueError()
         if (context.as_metadata() != body.source_context or current_context.as_metadata() != body.source_context
                 or current_context._identity != context._identity or current_context._pins != context._pins):
             raise ValueError()
+        # A host acquisition can strengthen a run after preparation. The
+        # current verified floor must precede admission of any guest bytes.
+        context = current_context
         scope = make_tool_execution_scope(body.developer_run_id, body.source_task_id, body.source_tool_call_id,
             body.tool_name, body.arguments, strictest(context.input_floor,
+                cleanup.input_floor if cleanup is not None else context.input_floor,
                 DataPolicy(body.source_input_policy, 'workspace-caller-floor')))
         from jarvis.development_sources import retain_workspace_floor
         retain_workspace_floor(run, scope.input_policy)
-        client = _WorkspaceSourceClient(scope, context, run)
+        retained_id = context.as_metadata().get('sandbox_job_id')
+        if retained_id and retained_id != run['run_id']:
+            from jarvis.runlog.store import get_run
+            retained = get_run(retained_id)['run']
+            if retained['user_id'] != run['user_id'] or retained['session_id'] != run['session_id']:
+                raise ValueError()
+            retain_workspace_floor(retained, scope.input_policy)
+        if cleanup is not None:
+            from jarvis.runlog.store import get_run
+            retain_workspace_floor(get_run(cleanup.as_metadata()['sandbox_job_id'])['run'], scope.input_policy)
+            cleanup = _workspace_source_cleanup(body, run, values)
+        # Only the just-issued restriction update may add a missing floor
+        # record. Re-pin that actual host journal before the installed tool.
+        admitted = _workspace_source_context(body, run, values, terminal=terminal)
+        if (admitted.as_metadata() != context.as_metadata() or admitted._identity != context._identity
+                or admitted._pins != context._pins):
+            raise ValueError()
+        context = admitted
+        client = _WorkspaceSourceClient(scope, context, run, cleanup)
         with user_id_scope(run['user_id']):
             result = function(client, **values)
-        policy, source_scope, refs = context.input_floor, 'workspace-generated-lifecycle', ()
+        from jarvis.development_sources import refresh_workspace_floor
+        latest_floor = refresh_workspace_floor(context)
+        policy, source_scope, refs = strictest(context.input_floor, latest_floor), 'workspace-generated-lifecycle', ()
         if client.classified is not None:
             policy = strictest(policy, client.policy)
             source_scope, refs = client.classified.source_scope, client.classified.canonical_refs
@@ -3428,6 +3558,29 @@ def execute_workspace_source(body: WorkspaceSourceToolIn, request: Request) -> d
             if after.as_metadata() != context.as_metadata():
                 raise ValueError()
         policy = strictest(policy, after.input_floor)
+        if (result.get('ok') is True and context._session is not None
+                and body.tool_name in {'selfedit_status', 'selfedit_finish', 'app_build_status', 'app_build_submit'}):
+            metadata = context.as_metadata()
+            identities = {'selfedit_status': ('action_run_id', 'sandbox_session_id'),
+                          'app_build_status': ('submission_id', 'sandbox_session_id')}
+            selected = identities.get(body.tool_name)
+            same = selected is None or not values.get(selected[0]) or values[selected[0]] == metadata.get(selected[1])
+            if body.tool_name == 'app_build_status' and values.get('action_run_id'):
+                same = same and values['action_run_id'] == metadata.get('sandbox_job_id')
+            if same:
+                published = published_workspace_result(context._service, execution_scope=scope, context=context)
+                if published is not None:
+                    pub_policy, pub_content = validate_tool_result(scope, published)
+                    handle = json.loads(pub_content)
+                    result.update(pr_url=handle['pr_url'], pr_number=handle['pr_number'], commit=handle['commit'])
+                    result['summary'] = ('Draft pull request: ' + handle['pr_url'] + '. '
+                        'Review it on GitHub; approval and merging remain with you.')
+                    if handle.get('human_only') is True:
+                        result['human_only'] = True
+                        result['summary'] = ('Human-only proposal: ' + handle['pr_url'] + '. '
+                            'Ask Larry to approve and apply it himself; do not merge this proposal as it is.')
+                    policy = strictest(policy, pub_policy)
+                    refs += published.canonical_refs
         classified = issue_tool_result(scope, json.dumps(result, sort_keys=True, separators=(',', ':'),
             ensure_ascii=True, allow_nan=False), policy, source_scope, refs)
         receipt = sign_workspace_source(scope, classified, context=context.as_metadata(), challenge=body.source_challenge)

@@ -852,7 +852,7 @@ class SkillRegistry:
         raise anyio.ClosedResourceError(f"{server} owner task ended during the call")
 
     @staticmethod
-    def _workspace_live_run(runlog, scope, *, check_floor=True):
+    def _workspace_live_run(runlog, scope, *, check_floor=True, expected_agent='developer'):
         from jarvis.runlog.store import get_run, SENSITIVE_SENTINEL
         from jarvis.skill_runtime import runtime_owner
 
@@ -860,7 +860,7 @@ class SkillRegistry:
             raise ToolResultBindingError()
         detail = get_run(scope.parent_request_id)
         run = detail.get('run') if type(detail) is dict else None
-        if (type(run) is not dict or run.get('agent') != 'developer' or run.get('status') != 'running'
+        if (type(run) is not dict or run.get('agent') != expected_agent or run.get('status') != 'running'
                 or run.get('user_id') != runlog.user_id or run.get('session_id') != runlog.session_id
                 or runtime_owner(runlog.session_id) != runlog.user_id):
             raise ToolResultBindingError()
@@ -879,9 +879,10 @@ class SkillRegistry:
             verify_workspace_source, _workspace_context, DevelopmentSourceAttestationError)
         from jarvis.model_routing import ModelRouteError
         from jarvis.privacy_policy import strictest
+        expected_agent = 'app_builder' if server == 'mcp-apps' else 'developer'
 
         try:
-            self._workspace_live_run(runlog, scope, check_floor=False)
+            self._workspace_live_run(runlog, scope, check_floor=False, expected_agent=expected_agent)
             metadata = {'owner_id': runlog.user_id, 'bot_session_id': runlog.session_id,
                         'developer_run_id': scope.parent_request_id, 'tool_name': tool,
                         'arguments': source_arguments}
@@ -908,7 +909,7 @@ class SkillRegistry:
                     or context['workspace_kind'] != ('app-build' if server == 'mcp-apps' else 'selfedit')
                     or pin_source_authority() != pin):
                 raise ToolResultBindingError()
-            self._workspace_live_run(runlog, scope)
+            self._workspace_live_run(runlog, scope, expected_agent=expected_agent)
             result = await phase('execute', {**call_binding, 'source_context': context,
                 'source_preparation_id': hidden['source_preparation_id']})
             hidden = (getattr(result, 'meta', None) or {}).get('mortimer_development_source')
@@ -923,7 +924,7 @@ class SkillRegistry:
             if (structured is None or unclassified_tool_result(scope, structured).content != content
                     or text != content):
                 raise ToolResultBindingError()
-            floor = self._workspace_live_run(runlog, scope)
+            floor = self._workspace_live_run(runlog, scope, expected_agent=expected_agent)
             if pin_source_authority() != pin or self._source_contract_for(tool, server, session) is None:
                 raise ToolResultBindingError()
             return issue_tool_result(scope, content, strictest(policy, floor),
@@ -933,7 +934,7 @@ class SkillRegistry:
             # reduction to a fixed generated refusal, preserving retries.
             floor = scope.input_policy
             try:
-                floor = strictest(floor, self._workspace_live_run(runlog, scope))
+                floor = strictest(floor, self._workspace_live_run(runlog, scope, expected_agent=expected_agent))
             except (ToolResultBindingError, ModelRouteError, DevelopmentSourceAttestationError):
                 floor = strictest(floor, DataPolicy('confidential', 'unverified-workspace-floor'))
             return issue_tool_result(scope, '{"error":"workspace_source_unavailable","ok":false}',

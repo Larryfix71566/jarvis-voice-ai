@@ -8,7 +8,9 @@ from fastapi import HTTPException
 
 from jarvis.privacy_policy import DataPolicy, make_tool_execution_scope, validate_tool_result
 from jarvis.runlog.context import run_logger_scope
+from jarvis.runlog.store import RunLogger
 from jarvis.skills.registry import SkillRegistry
+from jarvis.tenant import user_id_scope
 from tests.unit.test_development_sources import workspace
 from tests.unit.test_workspace_source_bridge import bridge
 
@@ -69,9 +71,16 @@ async def test_actual_stdio_roundtrip_and_schemas_hide_workspace_metadata(bridge
         schema = next(item for item in registry.openai_tools() if item['function']['name'] == tool)
         assert 'ctx' not in schema['function']['parameters'].get('properties', {})
         assert 'source' not in json.dumps(schema)
-        scope = make_tool_execution_scope(bridge.parent, 'stdio-task', 'stdio-call', tool, args,
+        runlog = bridge.logger
+        if server_name == 'mcp-apps':
+            import uuid
+            with user_id_scope(bridge.owner):
+                runlog = RunLogger(str(uuid.uuid4()), 'app_builder', 'App Builder', 'public app preview',
+                                  session_id=bridge.session_id, root=tmp_path)
+                runlog.start()
+        scope = make_tool_execution_scope(runlog.run_id, 'stdio-task', 'stdio-call', tool, args,
                                          DataPolicy('approved_external', 'caller-public'))
-        with run_logger_scope(bridge.logger):
+        with run_logger_scope(runlog):
             envelope = await registry.call_classified(tool, args, execution_scope=scope)
         policy, content = validate_tool_result(scope, envelope)
         result = json.loads(content)

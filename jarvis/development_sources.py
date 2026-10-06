@@ -323,6 +323,29 @@ def _verify_workspace_floor_pins(context):
             raise ModelRouteError('workspace_source_floor_changed')
 
 
+def refresh_workspace_floor(context):
+    """Live restriction refresh for an authenticated ordinary host capability."""
+    _verify_context(context, context._service)
+    _verify_workspace_floor_pins(context)
+    if not context._journal_pins:
+        return context.input_floor
+    from jarvis.runlog.store import get_run, SENSITIVE_SENTINEL
+    rows, floor = [], context.input_floor
+    for owner, session, run_id, _, _ in context._journal_pins:
+        detail = get_run(run_id)
+        row = detail.get('run') if type(detail) is dict else None
+        if (type(row) is not dict or row.get('user_id') != owner or row.get('session_id') != session
+                or row.get('agent') != ('app_builder' if dict(context._metadata).get('workspace_kind') == 'app-build' else 'developer')):
+            raise ModelRouteError('workspace_source_floor_changed')
+        floor = strictest(floor, workspace_floor(row))
+        if any(row.get(key) == SENSITIVE_SENTINEL for key in ('task', 'task_preview', 'reply_preview')):
+            floor = strictest(floor, DataPolicy('confidential', 'protected-development-lineage'))
+        rows.append(row)
+    for row in rows:
+        retain_workspace_floor(row, floor)
+    return floor
+
+
 def creator_context(service, state, run):
     """Mint from an authenticated admin's durable creator/run association.
 
@@ -387,7 +410,8 @@ def ordinary_context(service, run, retained_run=None, *, workspace_kind, lineage
         from jarvis.development_attestation import _workspace_context
         from jarvis.runlog.store import SENSITIVE_SENTINEL
 
-        if (type(run) is not dict or run.get('agent') != 'developer'
+        role = 'app_builder' if workspace_kind == 'app-build' else 'developer'
+        if (type(run) is not dict or run.get('agent') != role
                 or run.get('status') != 'running'
                 or workspace_kind not in {'selfedit', 'app-build'}):
             raise ValueError()
@@ -398,7 +422,7 @@ def ordinary_context(service, run, retained_run=None, *, workspace_kind, lineage
         floor = _floor('app_builder' if workspace_kind == 'app-build' else 'developer')
         rows = [run]
         if retained_run is not None:
-            if (type(retained_run) is not dict or retained_run.get('agent') != 'developer'
+            if (type(retained_run) is not dict or retained_run.get('agent') != role
                     or retained_run.get('user_id') != run['user_id']
                     or retained_run.get('session_id') != run['session_id']):
                 raise ValueError()
@@ -608,6 +632,58 @@ def _invoke(service, name, args):
     return {'ok': False, 'error': 'development_tool_unavailable'}
 
 
+def _published_metadata(state, result):
+    """The same exact host publication proof for submit and later status."""
+    publication = state.get('publication')
+    if type(publication) is not dict or type(result) is not dict:
+        return None
+    number = publication.get('number')
+    url = f"https://github.com/{state['repository']}/pull/{number}"
+    if (state['phase'] != 'published' or type(number) is not int or number <= 0
+            or publication.get('ok') is not True or publication.get('url') != url
+            or result.get('number') != number or result.get('url') != url
+            or result.get('pr_number') != number or result.get('pr_url') != url
+            or not re.fullmatch(r'[0-9a-f]{40,64}', publication.get('commit', ''))
+            or not re.fullmatch(r'[0-9a-f]{64}', publication.get('candidate', ''))):
+        return None
+    return {'ok': True, 'pr_number': number, 'pr_url': url,
+            'number': number, 'url': url, 'commit': publication['commit'],
+            'candidate': publication['candidate']}
+
+
+def published_workspace_result(service, *, execution_scope, context):
+    """Read an exact saved handle without submitting or invoking any guest."""
+    if type(execution_scope) is not ToolExecutionScope:
+        raise ModelRouteError('development_tool_binding_invalid')
+    context, state = _live(service, execution_scope.parent_request_id, context, terminal=True)
+    publication = state.get('publication')
+    if type(publication) is not dict:
+        return None
+    value = _published_metadata(state, {**publication, 'pr_number': publication.get('number'),
+                                       'pr_url': publication.get('url')})
+    if value is None:
+        return None
+    from jarvis.selfedit.service import SelfEditService
+    if isinstance(service, SelfEditService) and service.human_only_targets(state.get('proposals', [])):
+        value['human_only'] = True
+    floor = strictest(context.input_floor, execution_scope.input_policy)
+    if context._identity[4] != _project:
+        floor = strictest(floor, DataPolicy('confidential', 'foreign-publication-source'))
+    files = context._session._files(state)
+    journal_path = files.directory / 'files.json'
+    if journal_path.exists():
+        level = files._journal().get('source_floor', 'confidential')
+        floor = strictest(floor, DataPolicy(level if level in _levels else 'confidential',
+                                           'published-candidate-floor'))
+    _, after = _live(service, execution_scope.parent_request_id, context, terminal=True)
+    if after.get('publication') != publication or after.get('phase') != 'published':
+        raise ModelRouteError('development_source_snapshot_changed')
+    return issue_tool_result(execution_scope, json.dumps(value, sort_keys=True, separators=(',', ':'),
+        ensure_ascii=True), floor, 'development:' + context._identity[0],
+        (context._identity[6], context._identity[7], context._identity[3],
+         value['commit'], value['candidate']))
+
+
 def dispatch_workspace_tool(service, name, arguments, *, execution_scope, context=None, invoke=None):
     """Execute once, classify before return, and reject changed session bindings."""
     if type(execution_scope) is not ToolExecutionScope:
@@ -641,8 +717,13 @@ def dispatch_workspace_tool(service, name, arguments, *, execution_scope, contex
             input_floor = strictest(input_floor, DataPolicy('confidential', 'private-proposal-baseline'))
     with pin_source_session(service, context._session, context._identity), capture_sources(
             input_floor.level, baseline_level,
-            baseline_policy=lambda path: baseline_level if _project_code(context, path) else 'confidential') as capture:
-        result = invoke() if invoke else _invoke(service, name, arguments)
+            baseline_policy=lambda path: baseline_level if _project_code(context, path) else 'confidential',
+            refresh_input_floor=lambda: refresh_workspace_floor(context).level) as capture:
+        try:
+            result = invoke() if invoke else _invoke(service, name, arguments)
+        finally:
+            live_floor = refresh_workspace_floor(context)
+            capture.input_level = max((capture.input_level, live_floor.level), key=_levels.get)
     _, after = _live(service, execution_scope.parent_request_id, context, terminal=name == 'session_submit')
     source = DataPolicy('confidential', 'unclassified-development-source')
     refs = (context._identity[6], context._identity[7])
@@ -706,20 +787,10 @@ def dispatch_workspace_tool(service, name, arguments, *, execution_scope, contex
                 source = DataPolicy(level, 'verified-development-bytes')
                 refs += (file.path, hashlib.sha256(file.data).hexdigest())
     elif name == 'session_submit' and type(result) is dict and result.get('ok') is True:
-        publication = after.get('publication')
-        if type(publication) is dict:
-            number = publication.get('number')
-            url = f"https://github.com/{after['repository']}/pull/{number}"
-            if (after['phase'] == 'published' and type(number) is int and number > 0
-                    and publication.get('ok') is True and publication.get('url') == url
-                    and result.get('number') == number and result.get('url') == url
-                    and result.get('pr_number') == number and result.get('pr_url') == url
-                    and re.fullmatch(r'[0-9a-f]{40,64}', publication.get('commit', ''))
-                    and re.fullmatch(r'[0-9a-f]{64}', publication.get('candidate', ''))):
-                result = {'ok': True, 'pr_number': number, 'pr_url': url,
-                          'number': number, 'url': url, 'commit': publication['commit'],
-                          'candidate': publication['candidate']}
-                source = context.input_floor
+        verified = _published_metadata(after, result)
+        if verified is not None:
+            result, source = verified, context.input_floor
     content = json.dumps(result, ensure_ascii=True, separators=(',', ':'), allow_nan=False)
-    return issue_tool_result(execution_scope, content, strictest(context.input_floor, source),
+    return issue_tool_result(execution_scope, content, strictest(context.input_floor, source,
+                             DataPolicy(capture.input_level, 'live-development-admission')),
                              'development:' + context._identity[0], refs)

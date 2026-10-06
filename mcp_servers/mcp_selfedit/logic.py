@@ -71,6 +71,7 @@ def workspace_source_request(client, tool_name: str, actual_arguments: dict, met
             raise ValueError()
         phase = metadata['phase']
         body = {name: metadata[name] for name in ('owner_id', 'bot_session_id', 'developer_run_id')}
+        body['workspace_kind'] = 'app-build' if tool_name.startswith('app_') else 'selfedit'
         if phase != 'associate':
             body.update(tool_name=tool_name, arguments=arguments)
             body.update({name: metadata[name] for name in (

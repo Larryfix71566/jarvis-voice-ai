@@ -21,6 +21,7 @@ class SourceCapture:
     baseline_level: str
     observations: list = field(default_factory=list, repr=False)
     baseline_policy: Callable[[str], str] | None = field(default=None, repr=False)
+    refresh_input_floor: Callable[[], str] | None = field(default=None, repr=False)
 
 
 _source_capture = ContextVar('sandbox_source_capture', default=None)
@@ -29,17 +30,32 @@ _levels = {'approved_external': 1, 'confidential': 2, 'local_only': 3}
 
 @contextmanager
 def capture_sources(input_level: str, baseline_level: str, *,
-                    baseline_policy: Callable[[str], str] | None = None):
+                    baseline_policy: Callable[[str], str] | None = None,
+                    refresh_input_floor: Callable[[], str] | None = None):
     if input_level not in _levels or baseline_level not in _levels:
         raise SandboxError('Invalid host source policy')
     if baseline_policy is not None and not callable(baseline_policy):
         raise SandboxError('Invalid host source policy')
-    capture = SourceCapture(input_level, baseline_level, baseline_policy=baseline_policy)
+    if refresh_input_floor is not None and not callable(refresh_input_floor):
+        raise SandboxError('Invalid host source policy')
+    capture = SourceCapture(input_level, baseline_level, baseline_policy=baseline_policy,
+                            refresh_input_floor=refresh_input_floor)
     token = _source_capture.set(capture)
     try:
         yield capture
     finally:
         _source_capture.reset(token)
+
+
+def _refresh_source_floor(capture):
+    if capture is not None and capture.refresh_input_floor is not None:
+        try:
+            level = capture.refresh_input_floor()
+            if level not in _levels:
+                raise ValueError()
+        except Exception:
+            raise SandboxError('The host source scope changed before admission') from None
+        capture.input_level = max((capture.input_level, level), key=_levels.get)
 
 
 class WorkspaceFiles:
@@ -85,6 +101,7 @@ class WorkspaceFiles:
         capture = _source_capture.get()
         if capture is None:
             return
+        _refresh_source_floor(capture)
         baseline = next((item for item in self.baseline.files if item.path == file.path), None)
         task_floor = journal.get('source_floor', 'confidential')
         if task_floor not in _levels:
@@ -118,7 +135,8 @@ class WorkspaceFiles:
         # Acquired source bytes can be copied into another file during this
         # same host operation. Raise admission before any later guest write;
         # classifying only the final result cannot protect that derivative.
-        capture.input_level = max((capture.input_level, level), key=_levels.get)
+        level = max((capture.input_level, level), key=_levels.get)
+        capture.input_level = level
         capture.observations.append((self.task, self.baseline.fingerprint, file,
                                      baseline, level))
 
@@ -130,6 +148,7 @@ class WorkspaceFiles:
     def read(self, path: str) -> File:
         self._path(path)
         with self._locked():
+            _refresh_source_floor(_source_capture.get())
             result = Candidate.decode(self.controller.rpc(self.task, {"operation": "read", "path": path}))
             if len(result.files) != 1 or result.files[0].path != path:
                 raise SandboxError("Guest returned a different file")
@@ -146,6 +165,7 @@ class WorkspaceFiles:
                 raise SandboxError("Publication has started; begin a new session for further edits")
             journal = self._journal()
             capture = _source_capture.get()
+            _refresh_source_floor(capture)
             level = capture.input_level if capture else 'confidential'
             prior_floor = journal.get('source_floor', 'approved_external')
             if prior_floor not in _levels:

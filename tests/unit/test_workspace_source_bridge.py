@@ -481,3 +481,133 @@ async def test_retired_app_writer_fixed_host_refusal_preserves_useful_guidance(b
     assert policy.level == ('confidential' if forged else 'approved_external')
     if not forged:
         assert json.loads(content) == sandbox_required(application=True)
+
+
+async def test_same_owner_session_fresh_goal_cleans_only_verified_old_job_and_keeps_new_parent(bridge, monkeypatch):
+    stopped, destroyed, workers = [], [], []
+    monkeypatch.setattr(bridge.w.controller, 'stop', lambda task: stopped.append(task))
+    monkeypatch.setattr(bridge.w.controller, 'destroy', lambda task: destroyed.append(task))
+    class Agent:
+        def model_label(self):
+            return 'public-fixture'
+        def run(self, *args, **kwargs):
+            workers.append((args, kwargs))
+            return {'ok': False, 'summary': 'stopped before VM/model'}
+    monkeypatch.setattr(bridge.admin, '_make_agent', lambda *args: Agent())
+    class Thread:
+        def __init__(self, *, target, args=(), daemon, kwargs=None):
+            self.target, self.args, self.kwargs = target, args, kwargs or {}
+        def start(self):
+            self.target(*self.args, **self.kwargs)
+    monkeypatch.setattr(bridge.admin.threading, 'Thread', Thread)
+    policy, result, _ = await bridge.call('selfedit_start', {'goal': 'fresh public goal', 'confirm': True})
+    assert result['ok'] and policy.level == 'approved_external'
+    assert stopped == destroyed == [bridge.w.task]
+    assert len(workers) == 1
+    assert bridge.admin._run_job['run_id'] == bridge.parent != bridge.w.parent
+
+
+@pytest.mark.parametrize('foreign', [False, True])
+def test_actual_app_start_carries_retained_cleanup_proof_into_worker(bridge, monkeypatch, tmp_path, foreign):
+    from jarvis.agents.workspace import AppWorkspace
+    from sandbox.durable import atomic_json
+
+    with user_id_scope(bridge.owner):
+        retained = RunLogger(str(uuid.uuid4()), 'app_builder', 'AppBuilder', 'old public app goal',
+                             session_id=bridge.session_id, root=tmp_path)
+        retained.start()
+        retained.finish('previewed')
+        caller = RunLogger(str(uuid.uuid4()), 'app_builder', 'AppBuilder', 'fresh public app goal',
+                           session_id=bridge.session_id, root=tmp_path)
+        caller.start()
+    repository = 'SyntheticOwner/public-fixture'
+    state = {**bridge.w.state, 'repository': repository, 'kind': 'app-build',
+             'run_id': retained.run_id, 'goal': 'old public app goal'}
+    atomic_json(bridge.w.directory / 'session.json', state)
+    atomic_json(bridge.w.runtime.workspaces / (bridge.w.runtime._key(repository, 'app-build') + '.json'),
+                {'session': state['id'], 'repository': repository, 'kind': 'app-build', 'profile': 'mortimer'})
+    service = AppWorkspace('public-fixture', github_client=SimpleNamespace(token='synthetic-unused',
+        _owner=lambda: 'SyntheticOwner'), runtime_factory=lambda: bridge.w.runtime)
+    monkeypatch.setattr(bridge.admin, 'AppWorkspace', lambda app: service)
+    monkeypatch.setattr(bridge.admin, '_appbuild_job', {'state': 'idle', 'run_id': None})
+    if foreign:
+        with get_conn() as conn:
+            conn.execute('UPDATE agent_runs SET user_id=? WHERE run_id=?', ('foreign-owner', retained.run_id))
+    stopped, destroyed, workers = [], [], []
+    monkeypatch.setattr(bridge.w.controller, 'stop', lambda task: stopped.append(task))
+    monkeypatch.setattr(bridge.w.controller, 'destroy', lambda task: destroyed.append(task))
+    class Agent:
+        def model_label(self):
+            return 'public-fixture'
+        def run(self, *args, **kwargs):
+            assert service._session()._read()['phase'] == 'reverted'
+            workers.append((args, kwargs))
+            return {'ok': False, 'summary': 'stopped before VM/model'}
+    monkeypatch.setattr(bridge.admin, '_make_appbuild_agent', lambda *args: Agent())
+    class Thread:
+        def __init__(self, *, target, args=(), daemon, kwargs=None):
+            self.target, self.args, self.kwargs = target, args, kwargs or {}
+        def start(self):
+            self.target(*self.args, **self.kwargs)
+    monkeypatch.setattr(bridge.admin.threading, 'Thread', Thread)
+    arguments = {'app': 'public-fixture', 'goal': 'fresh public app goal', 'confirm': True}
+    base = dict(owner_id=bridge.owner, bot_session_id=bridge.session_id,
+                developer_run_id=caller.run_id, workspace_kind='app-build')
+    bridge.admin.associate_workspace_source(bridge.admin.WorkspaceSourceAssociationIn(**base), bridge.request)
+    pin = attestation.pin_source_authority()
+    scope = make_tool_execution_scope(caller.run_id, 'app-task', 'app-call', 'app_build_start', arguments,
+                                     DataPolicy('approved_external', 'caller'))
+    challenge = attestation.new_source_challenge()
+    body = dict(base, tool_name='app_build_start', arguments=arguments, source_task_id=scope.task_id,
+        source_tool_call_id=scope.tool_call_id, source_challenge=challenge, source_input_policy=scope.input_policy.level)
+    if foreign:
+        with pytest.raises(HTTPException) as error:
+            bridge.admin.prepare_workspace_source(bridge.admin.WorkspaceSourcePrepareIn(**body), bridge.request)
+        assert error.value.status_code == 409
+        assert not stopped and not destroyed and not workers
+        return
+    prepared = bridge.admin.prepare_workspace_source(bridge.admin.WorkspaceSourcePrepareIn(**body), bridge.request)
+    result = bridge.admin.execute_workspace_source(bridge.admin.WorkspaceSourceToolIn(**body,
+        source_context=prepared['source_context'], source_preparation_id=prepared['source_preparation_id']), bridge.request)
+    envelope = attestation.verify_workspace_source(pin, scope, result['source_receipt'],
+        context=prepared['source_context'], challenge=challenge)
+    policy, content = validate_tool_result(scope, envelope)
+    assert json.loads(content)['ok'] and policy.level == 'approved_external'
+    assert stopped == destroyed == [bridge.w.task] and len(workers) == 1
+    assert bridge.admin._appbuild_job['run_id'] == caller.run_id != retained.run_id
+
+
+@pytest.mark.parametrize('role', ['app_builder', 'developer'])
+def test_app_source_association_requires_actual_configured_app_builder_role(bridge, monkeypatch, tmp_path, role):
+    with user_id_scope(bridge.owner):
+        logger = RunLogger(str(uuid.uuid4()), role, 'Caller', 'public app preview',
+                           session_id=bridge.session_id, root=tmp_path)
+        logger.start()
+    body = bridge.admin.WorkspaceSourceAssociationIn(owner_id=bridge.owner, bot_session_id=bridge.session_id,
+        developer_run_id=logger.run_id, workspace_kind='app-build')
+    if role == 'app_builder':
+        assert bridge.admin.associate_workspace_source(body, bridge.request) == {'ok': True}
+    else:
+        with pytest.raises(HTTPException) as error:
+            bridge.admin.associate_workspace_source(body, bridge.request)
+        assert error.value.status_code == 409 and not attestation._issuers
+
+
+@pytest.mark.parametrize('identity', ['native-client', 'other-service'])
+def test_source_endpoints_reject_authenticated_nonservice_bearer_before_issuer(bridge, identity):
+    request = SimpleNamespace(scope={'client_identity': ClientIdentity(identity, bridge.owner)})
+    base = dict(owner_id=bridge.owner, bot_session_id=bridge.session_id,
+                developer_run_id=bridge.parent, workspace_kind='selfedit')
+    prepare = dict(base, tool_name='selfedit_read', arguments={'path': 'jarvis/app.py'},
+        source_task_id='task', source_tool_call_id='call', source_challenge='a' * 64,
+        source_input_policy='approved_external')
+    for function, body in (
+        (bridge.admin.associate_workspace_source, bridge.admin.WorkspaceSourceAssociationIn(**base)),
+        (bridge.admin.prepare_workspace_source, bridge.admin.WorkspaceSourcePrepareIn(**prepare)),
+        (bridge.admin.execute_workspace_source, bridge.admin.WorkspaceSourceToolIn(**prepare,
+            source_context={}, source_preparation_id='b' * 64)),
+    ):
+        with pytest.raises(HTTPException) as error:
+            function(body, request)
+        assert error.value.status_code == 403
+    assert not attestation._issuers and not bridge.w.calls
