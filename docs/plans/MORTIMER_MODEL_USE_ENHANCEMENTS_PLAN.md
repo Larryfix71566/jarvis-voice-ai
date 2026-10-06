@@ -32,7 +32,7 @@ voice-only built-in profile, so readiness checks validate the unchanged voice
 route while the general model registry continues to reject Haiku for
 non-voice workloads.
 
-**Current candidate status (2026-10-05):** The isolated branch
+**Current candidate status (2026-10-06):** Draft [PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177) contains the committed implementation and evidence. The isolated branch
 `codex/ws05-execution-20261005` is claimed on main through #175 and #176.
 Production checkout, installed bundle and deployment receipt agree on
 `bde22bb`; the 10-05 aggregate-only baseline records 26 provider calls (12 LLM)

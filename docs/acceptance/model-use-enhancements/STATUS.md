@@ -27,6 +27,9 @@ no linked receipt are also unreceipted.
 
 ## Candidate validation — 2026-10-06
 
+Candidate: [draft PR #177](https://github.com/Larryfix71566/jarvis-voice-ai/pull/177),
+pushed for cross-system review; not merged or deployed.
+
 See the [aggregate verification receipt](receipts/candidate-verification-2026-10-06.json)
 and [independent subscription review](receipts/independent-subscription-review-2026-10-06.json).
 
