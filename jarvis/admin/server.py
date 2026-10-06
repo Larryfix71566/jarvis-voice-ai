@@ -994,6 +994,7 @@ def _advisory_publish(kind, guard, values, run_id, *, claim_status, policy=None,
 def _advisory_worker_kwargs():
     source = _advisory_transport_context.get()
     return {} if source is None else {'parent_budget': source.parent_budget,
+        'coordinator_budget': source.coordinator_budget, 'context_source': source,
         'data_policy': source.input_floor, 'cancel_event': source.cancel_event}
 
 
@@ -1047,6 +1048,7 @@ def _advisory_owner(
     # Raw API dictionaries and returned crawl JSON cannot approve a source.
     policy = council_mod._host_policy(
         context, workload, DataPolicy() if data_policy is None else data_policy,
+        **({'context_source': _advisory_transport_context.get()} if _advisory_transport_context.get() is not None else {}),
     )
     source = _advisory_transport_context.get()
     if source is not None:
@@ -1092,6 +1094,7 @@ def _run_research_job(
     urls: list[str], focus: str, run_id: str, *,
     parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
     cancel_event: threading.Event | None = None, started_at: float | None = None, job_guard=None,
+    coordinator_budget=None, context_source=None,
 ) -> None:
     """Background thread target (R1): crawl both sites (sync, one at a
     time — Tavily's own crawl is already parallel internally, and two
@@ -1167,6 +1170,7 @@ def _run_research_job(
             execution = council_mod._child_execution(
                 owner, "council", policy, cancel_event, started_at=started_at,
                 sponsored=parent_budget is not None,
+                **({'coordinator': coordinator_budget} if coordinator_budget is not None else {}),
             )
             call_kwargs = {"execution": execution, "data_policy": policy}
         content, _usage = asyncio.run(council_mod._call_profile(
@@ -1756,6 +1760,7 @@ def _run_plan_single(
     run_id: str | None = None,
     *, parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
     cancel_event: threading.Event | None = None, started_at: float | None = None, job_guard=None,
+    coordinator_budget=None, context_source=None,
 ) -> None:
     # MORTIMER_PLAN_REVIEW_AND_DOCS_PLAN.md R3 — single mode now shares
     # the same _proposer_user_message assembly council mode uses, so a
@@ -1776,10 +1781,12 @@ def _run_plan_single(
         call_kwargs = {}
         if owner is not None:
             workload = "council" if is_review else "planning"
-            policy = council_mod._host_policy(context, workload, policy)
+            policy = council_mod._host_policy(context, workload, policy,
+                **({'context_source': context_source} if context_source is not None else {}))
             execution = council_mod._child_execution(
                 owner, workload, policy, cancel_event, started_at=started_at,
                 sponsored=parent_budget is not None,
+                **({'coordinator': coordinator_budget} if coordinator_budget is not None else {}),
             )
             call_kwargs = {"execution": execution, "data_policy": policy}
         content, _usage = asyncio.run(council_mod._call_profile(
@@ -1806,6 +1813,7 @@ def _run_plan_council(
     run_id: str | None = None,
     *, parent_budget: TaskBudget | None = None, data_policy: DataPolicy | None = None,
     cancel_event: threading.Event | None = None, started_at: float | None = None, job_guard=None,
+    coordinator_budget=None, context_source=None,
 ) -> None:
     started_at = time.time() if started_at is None else started_at
     guard = job_guard or _advisory_new_guard('planning', run_id, cancel_event)
@@ -1818,6 +1826,10 @@ def _run_plan_council(
         )
         host_kwargs = ({"parent_budget": owner, "data_policy": policy,
                         "cancel_event": cancel_event} if owner is not None else {})
+        if coordinator_budget is not None:
+            host_kwargs['coordinator_budget'] = coordinator_budget
+        if context_source is not None:
+            host_kwargs['context_source'] = context_source
         result = asyncio.run(council_mod.draft_candidates(
             goal, members=members, judge=True, context=context, run_id=run_id,
             **host_kwargs,
@@ -3774,8 +3786,6 @@ def _advisory_source_arguments(body):
         if 'run_id' in body.arguments:
             raise ValueError()
         values['run_id'] = body.caller_run_id
-    if body.tool_name == 'plan_start' and (values['mode'] != 'single' or values['review_path']):
-        raise HTTPException(status_code=409, detail='advisory nested or review sponsorship is unavailable')
     return function, values
 
 
@@ -3850,6 +3860,11 @@ def prepare_advisory_source(body: AdvisorySourceIn, request: Request) -> dict:
             if body.tool_name in {'plan_start', 'research_compare_start'}:
                 context = sources.prepare_advisory_source(scope, run,
                     owner_scope_id=body.owner_scope_id, child_scope_id=body.child_scope_id)
+                if body.tool_name == 'plan_start' and values['review_path'].strip():
+                    path = values['review_path'].strip()
+                    acquired = repo_logic.repo_read_file(path)
+                    context = sources.acquire_review_source(context, _selfedit_service, path, acquired,
+                        max_chars=council_config.PLAN_REVIEW_DOC_MAX_CHARS)
             else:
                 if body.owner_scope_id is not None or body.child_scope_id is not None:
                     raise ValueError()
@@ -3907,6 +3922,8 @@ def execute_advisory_source(body: AdvisorySourceIn, request: Request) -> dict:
             context = sources.refresh_advisory_source(context, run)
             if context.cancel_event.is_set():
                 raise ValueError()
+            if body.tool_name == 'plan_start' and values['review_path'].strip():
+                sources.prepared_review_source(context, _selfedit_service, values['review_path'].strip())
             if body.tool_name == 'research_status':
                 values['run_id'] = context.as_metadata()['action_run_id']
             token = _advisory_transport_context.set(context)
@@ -5225,13 +5242,18 @@ def plan_start(body: PlanStartIn) -> dict:
         read_result = repo_logic.repo_read_file(review_path)
         if not read_result.get("ok"):
             return {"ok": False, "error": read_result.get("error")}
-        content = read_result.get("content") or ""
-        if len(content) > council_config.PLAN_REVIEW_DOC_MAX_CHARS:
-            content = (
-                content[: council_config.PLAN_REVIEW_DOC_MAX_CHARS]
-                + "\n\n… (truncated for review — flag this truncation in your verdict)"
-            )
-        context = {"document": content, "document_path": review_path}
+        source = _advisory_transport_context.get()
+        if source is not None:
+            from jarvis.advisory_sources import prepared_review_source
+            context = prepared_review_source(source, _selfedit_service, review_path, read_result)
+        else:
+            content = read_result.get("content") or ""
+            if len(content) > council_config.PLAN_REVIEW_DOC_MAX_CHARS:
+                content = (
+                    content[: council_config.PLAN_REVIEW_DOC_MAX_CHARS]
+                    + "\n\n… (truncated for review — flag this truncation in your verdict)"
+                )
+            context = {"document": content, "document_path": review_path}
 
     with _plan_lock:
         try:

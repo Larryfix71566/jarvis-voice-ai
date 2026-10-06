@@ -120,8 +120,17 @@ def test_host_issued_single_call_uses_owner_and_correct_author_or_adviser_worklo
         owner = begin_model_task_budget("developer", "developer-sponsor", WorkloadLimits(7, 60, .1))
         profile = srv.resolve_profile(srv.load_model_registry(), "economy-one" if review else "frontier-one")
         srv._run_plan_single("synthetic host-classified goal", profile,
-            {"document": "synthetic host-classified document"} if review else {}, "telemetry-only",
+            {"document": "unverified document"} if review else {}, "telemetry-only",
             parent_budget=owner, data_policy=DataPolicy("approved_external", "synthetic-host-proof"))
+    if review:
+        # A real money sponsor cannot approve separately acquired bytes.
+        # The typed registered-file positive lives in advisory_review_sources.
+        assert srv._plan_job["state"] == "error" and srv._plan_job["error"] == "model_policy_refused"
+        assert state.sent == [] and state.clients == []
+        assert rows("model_call_budget_reservations") == rows("llm_calls") == []
+        assert {row["workload"] for row in rows("model_task_budgets")} == {"developer", "council"}
+        assert {row["parent_request_id"] for row in rows("model_task_budgets")} == {"developer-sponsor"}
+        return
     assert srv._plan_job["state"] == "done" and len(state.sent) == 1
     request, route, kwargs = state.captured[0]
     assert request.parent_request_id == "developer-sponsor"

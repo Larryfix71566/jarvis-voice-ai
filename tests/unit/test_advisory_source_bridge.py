@@ -214,14 +214,13 @@ def test_retained_status_uses_new_live_caller_without_resetting_completed_origin
     assert rows('model_task_budgets') == before and len(advisory.state.sent) == 1
 
 
-@pytest.mark.parametrize('tamper', ['owner', 'child', 'agent', 'mode', 'review'])
-def test_untrusted_budget_role_and_unsupported_nested_modes_refuse_before_work(advisory, tamper):
+@pytest.mark.parametrize('tamper', ['owner', 'child', 'agent', 'review'])
+def test_untrusted_budget_role_and_unreadable_review_refuse_before_work(advisory, tamper):
     logger = advisory.caller()
     scope, body = advisory.body_for(logger)
     if tamper == 'owner': body['owner_scope_id'] = uuid.uuid4().hex
     if tamper == 'child': body['child_scope_id'] = uuid.uuid4().hex
     if tamper == 'agent': body['caller_agent'] = 'analyst'
-    if tamper == 'mode': body['arguments']['mode'] = 'council'
     if tamper == 'review': body['arguments']['review_path'] = 'docs/private.md'
     with pytest.raises(HTTPException):
         advisory.prepare(scope, body)

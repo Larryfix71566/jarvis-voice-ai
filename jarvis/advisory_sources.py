@@ -9,7 +9,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import secrets
+import stat
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -76,6 +78,8 @@ class _Action:
     metadata: dict = field(repr=False)
     owner: object = field(repr=False)
     floor: DataPolicy = field(repr=False)
+    coordinator: object = field(default=None, repr=False)
+    review: object = field(default=None, repr=False)
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
     slot: object = field(default=None, repr=False)
     content_digest: str | None = field(default=None, repr=False)
@@ -95,7 +99,33 @@ class AdvisorySourceContext:
     @property
     def parent_budget(self):
         _verify(self)
-        return self._action.owner
+        return self.coordinator_budget.owner
+
+    @property
+    def coordinator_budget(self):
+        _verify(self)
+        from jarvis.model_budget import validate_model_child_budget
+        binding = validate_model_child_budget(self._action.coordinator)
+        metadata = self._action.metadata
+        if (binding.owner.scope_id != metadata['owner_scope_id']
+                or binding.child.scope_id != metadata['child_scope_id']
+                or binding.parent_request_id != metadata['origin_run_id']
+                or binding.user_id != metadata['owner_id']
+                or binding.owner.workload != ('developer' if metadata['advisory_kind'] == 'planning' else 'analyst')
+                or binding.child.workload != ('planning' if metadata['advisory_kind'] == 'planning' else 'council')):
+            _fail()
+        return binding
+
+    def context_policy_for(self, value):
+        _verify(self)
+        review = self._action.review
+        if type(value) is not dict or (value != {} if review is None else value != dict(review.context)):
+            _fail()
+        verify_advisory_job(self, self._action.slot)
+        if review is not None:
+            prepared_review_source(self, review.service, review.requested_path)
+        return _join(self.input_floor, self._action.floor,
+            DataPolicy('approved_external', 'no-acquired-advisory-context') if review is None else review.policy)
 
     @property
     def cancel_event(self):
@@ -115,6 +145,8 @@ def _verify(context):
             or not hmac.compare_digest(context._seal, _seal(context))):
         _fail()
     _advisory_context(dict(context._metadata))
+    if context._action.review is not None:
+        _verify_review(context._action.review)
 
 
 def _context(action, run, floor):
@@ -123,6 +155,116 @@ def _context(action, run, floor):
     context = AdvisorySourceContext(floor, tuple(sorted(metadata.items())), action)
     object.__setattr__(context, '_seal', _seal(context))
     return context
+
+
+@dataclass(frozen=True)
+class _ReviewProof:
+    service: object = field(repr=False)
+    service_root: str = field(repr=False)
+    root: str = field(repr=False)
+    requested_path: str = field(repr=False)
+    canonical_path: str = field(repr=False)
+    content: str = field(repr=False)
+    raw_digest: str = field(repr=False)
+    pins: tuple = field(repr=False)
+    policy: DataPolicy = field(repr=False)
+    context: tuple = field(repr=False)
+    _seal: str = field(default='', repr=False)
+
+
+def _review_seal(proof):
+    material = (id(proof.service), proof.service_root, proof.root, proof.requested_path, proof.canonical_path, proof.content,
+                proof.raw_digest, proof.pins, proof.policy.level, proof.policy.source, proof.context)
+    return hmac.new(_key, json.dumps(material, separators=(',', ':'), ensure_ascii=True).encode(),
+                    hashlib.sha256).hexdigest()
+
+
+def _verify_review(proof):
+    if type(proof) is not _ReviewProof or not hmac.compare_digest(proof._seal, _review_seal(proof)):
+        _fail()
+
+
+def _review_snapshot(path, result):
+    from mcp_servers.mcp_repo.logic import _repo_root, resolve_repo_path, REPO_READ_MAX_BYTES
+    root = _repo_root().resolve(strict=True)
+    resolved = resolve_repo_path(root, path)
+    canonical = resolved.relative_to(root).as_posix()
+    components = [root, *(root.joinpath(*resolved.relative_to(root).parts[:i])
+                           for i in range(1, len(resolved.relative_to(root).parts) + 1))]
+    def identities():
+        pins = []
+        for component in components:
+            info = component.lstat()
+            if stat.S_ISLNK(info.st_mode) or (component == resolved and not stat.S_ISREG(info.st_mode)):
+                _fail()
+            pins.append((info.st_dev, info.st_ino, info.st_mode,
+                *((info.st_size, info.st_mtime_ns, info.st_ctime_ns) if component == resolved else ())))
+        return tuple(pins)
+    pins = identities()
+    descriptor = os.open(resolved, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        info = os.fstat(descriptor)
+        if (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns) != pins[-1]:
+            _fail()
+        if info.st_size > REPO_READ_MAX_BYTES:
+            _fail()
+        with os.fdopen(descriptor, 'rb', closefd=False) as stream:
+            raw = stream.read(REPO_READ_MAX_BYTES + 1)
+        after = os.fstat(descriptor)
+        if ((after.st_dev, after.st_ino, after.st_mode, after.st_size, after.st_mtime_ns, after.st_ctime_ns) != pins[-1]
+                or identities() != pins):
+            _fail()
+    finally:
+        os.close(descriptor)
+    content = raw.decode('utf-8').replace('\r\n', '\n').replace('\r', '\n')
+    if (type(result) is not dict or set(result) != {'ok', 'path', 'bytes', 'content'}
+            or result['ok'] is not True or result['path'] != canonical
+            or type(result['bytes']) is not int or type(result['content']) is not str
+            or len(raw) != result['bytes'] or content != result['content']):
+        _fail()
+    return str(root), canonical, hashlib.sha256(raw).hexdigest(), pins
+
+
+def acquire_review_source(context, service, path, result, *, max_chars):
+    """Capture host-acquired bytes before issuing the preparation's floor."""
+    from jarvis.development_sources import host_plan_policy
+    _verify(context)
+    root, canonical, digest, pins = _review_snapshot(path, result)
+    policy = host_plan_policy(service, path, result)
+    content = result['content']
+    provided = content if len(content) <= max_chars else (
+        content[:max_chars] + '\n\n… (truncated for review — flag this truncation in your verdict)')
+    proof = _ReviewProof(service, str(service.repo_root.resolve(strict=True)), root, path, canonical, content, digest, pins, policy,
+                         tuple(sorted({'document': provided, 'document_path': path}.items())))
+    object.__setattr__(proof, '_seal', _review_seal(proof))
+    with _lock:
+        if context._action.review is not None and context._action.review != proof:
+            _fail()
+        context._action.review = proof
+        context._action.floor = _join(context._action.floor, policy)
+    metadata = context.as_metadata()
+    row = get_run(metadata['caller_run_id'])['run']
+    retain_workspace_floor(row, context._action.floor)
+    return _context(context._action, row, _join(context.input_floor, policy))
+
+
+def prepared_review_source(context, service, path, result=None):
+    """Recheck source/root/bytes and supply the exact captured worker input."""
+    from jarvis.development_sources import host_plan_policy
+    _verify(context)
+    proof = context._action.review
+    if (proof is None or path != proof.requested_path or service is not proof.service
+            or str(service.repo_root.resolve(strict=True)) != proof.service_root):
+        _fail()
+    if result is None:
+        from mcp_servers.mcp_repo.logic import repo_read_file
+        result = repo_read_file(path)
+    root, canonical, digest, pins = _review_snapshot(path, result)
+    if ((root, canonical, digest, pins, result['content']) !=
+            (proof.root, proof.canonical_path, proof.raw_digest, proof.pins, proof.content)
+            or host_plan_policy(service, path, result).level != proof.policy.level):
+        _fail()
+    return dict(proof.context)
 
 
 def prepare_advisory_source(scope, run, *, owner_scope_id, child_scope_id):
@@ -153,7 +295,7 @@ def prepare_advisory_source(scope, run, *, owner_scope_id, child_scope_id):
     metadata = {'owner_id': run['user_id'], 'bot_session_id': run['session_id'],
         'origin_run_id': run['run_id'], 'advisory_kind': kind, 'action_run_id': run['run_id'],
         'action_generation': uuid.uuid4().hex, 'owner_scope_id': owner_scope_id, 'child_scope_id': child_scope_id}
-    action = _Action(metadata, owner, floor)
+    action = _Action(metadata, owner, floor, coordinator=binding)
     with _lock:
         _issued[metadata['action_generation']] = action
     return _context(action, run, floor)
