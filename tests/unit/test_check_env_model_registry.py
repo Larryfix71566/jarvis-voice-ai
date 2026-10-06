@@ -47,8 +47,12 @@ REGISTRY_YAML = """
 default: kimi-k3
 profiles:
   - name: kimi-k3
+    provider: moonshot
+    model: kimi-k3
     api_key_env: MOONSHOT_API_KEY
   - name: claude-opus
+    provider: anthropic
+    model: claude-opus-5
     api_key_env: ANTHROPIC_API_KEY
 """
 

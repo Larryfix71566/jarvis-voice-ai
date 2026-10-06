@@ -22,7 +22,11 @@ import hashlib
 import random
 from typing import Any
 
-from jarvis.agents.upgrade_agent import available_models
+from jarvis.agents.upgrade_agent import (
+    available_models,
+    load_model_registry,
+    validate_model_registry_identities,
+)
 
 # ⚙ TUNING KNOB (D12)
 COUNCIL_MAX_ESCALATIONS = 2
@@ -232,12 +236,13 @@ class NoUsableProfilesError(RuntimeError):
 
 
 def _profiles_for_tier_name(
-    tier_name: str, registry_path: str | None = None
+    tier_name: str, registry_path: str | None = None, *,
+    registry: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Registry profiles whose config `tier:` field equals `tier_name`, in
     registry order."""
     return [
-        m for m in available_models(registry_path)
+        m for m in available_models(registry_path, registry=registry)
         if m.get("tier") == tier_name
     ]
 
@@ -246,6 +251,7 @@ def _usable_profiles_for_tier_name(
     tier_name: str, *, registry_path: str | None,
     selected: dict[str, list[str]] | None,
     exclude: set[str] | None = None,
+    registry: dict[str, Any] | None = None,
 ) -> list[str]:
     """D9's picker rules applied to one tier name: narrow to the UI
     selection if one was given (empty/absent selection falls back to the
@@ -256,14 +262,18 @@ def _usable_profiles_for_tier_name(
     disjointness enforcement: a name already used as a proposer in this
     round is never eligible to judge in it, even if its tier name is
     also a judge tier name)."""
-    profiles = _profiles_for_tier_name(tier_name, registry_path)
+    registry = registry if registry is not None else load_model_registry(registry_path)
+    identities = validate_model_registry_identities(registry)
+    profiles = _profiles_for_tier_name(tier_name, registry_path, registry=registry)
     picked = (selected or {}).get(tier_name) or []
     if picked:
         profiles = [p for p in profiles if p["name"] in picked]
     exclude = exclude or set()
+    excluded_identities = {identities.get(name, name) for name in exclude}
     return [
         p["name"] for p in profiles
         if p["key_present"] and p["name"] not in exclude
+        and identities[p["name"]] not in excluded_identities
     ]
 
 
@@ -271,6 +281,7 @@ def _fallback_up(
     tier_name: str, *, registry_path: str | None,
     selected: dict[str, list[str]] | None,
     exclude: set[str] | None = None,
+    registry: dict[str, Any] | None = None,
 ) -> list[str]:
     """D4's degenerate-tier rule: climb _TIER_ORDER from `tier_name`
     (exclusive) until a tier name with at least one usable profile is
@@ -284,6 +295,7 @@ def _fallback_up(
         names = _usable_profiles_for_tier_name(
             candidate, registry_path=registry_path, selected=selected,
             exclude=exclude,
+            registry=registry,
         )
         if names:
             return names
@@ -298,15 +310,18 @@ def resolve_members(
     selected: dict[str, list[str]] | None = None,
     exclude: set[str] | None = None,
     seed: str | None = None,
+    registry: dict[str, Any] | None = None,
 ) -> list[str]:
     """Resolve the actual profile names for one role ('proposers' |
-    'judges') at one escalation tier. Never returns a duplicate name.
+    'judges') at one escalation tier. Never returns a duplicate model identity.
 
     `exclude` (D5): names that may never appear in the result even if
     otherwise eligible — council.py passes the already-resolved proposer
     set when resolving judges, so a model that proposed in this round can
     never also judge it, regardless of whether the tier ladder's tier
     NAMES happen to overlap for this tier number.
+    Canonical identities may also be supplied in ``exclude``. A preloaded
+    ``registry`` is revalidated before any credential lookup.
 
     `seed` (2026-08-19): the round id, used only to rotate TIER_PARTITION's
     judge reservation. Both roles of one round MUST be resolved with the
@@ -318,6 +333,10 @@ def resolve_members(
     with zero candidates for a role silently (D7's size floor still runs
     on top of this in council.py)."""
     tier_names = tier_members(tier)[role]
+    # Validate the complete snapshot before any key-presence filter. Neither
+    # a disabled rollout gate nor a preloaded registry permits alias votes.
+    registry = registry if registry is not None else load_model_registry(registry_path)
+    identities = validate_model_registry_identities(registry)
 
     # TIER_PARTITION — split a tier that both roles claim, BEFORE anything
     # else looks at it. Done as an addition to `exclude` rather than as a
@@ -339,6 +358,7 @@ def resolve_members(
         # is genuinely available, rather than describing the other role.
         pool = _usable_profiles_for_tier_name(
             part_tier, registry_path=registry_path, selected=selected,
+            registry=registry,
         )
         reserved = set(_partition_judges(pool, seed))
         other = set(pool) - reserved
@@ -351,15 +371,17 @@ def resolve_members(
         names = _usable_profiles_for_tier_name(
             tier_name, registry_path=registry_path, selected=selected,
             exclude=exclude,
+            registry=registry,
         )
         if not names:
             names = _fallback_up(
                 tier_name, registry_path=registry_path, selected=selected,
                 exclude=exclude,
+                registry=registry,
             )
         for n in names:
-            if n not in seen:
-                seen.add(n)
+            if identities[n] not in seen:
+                seen.add(identities[n])
                 out.append(n)
 
     # MORTIMER_LLM_COUNCIL_V2_PLAN.md V8 — judge-pool backfill. Judges
@@ -381,12 +403,13 @@ def resolve_members(
                 names = _usable_profiles_for_tier_name(
                     candidate, registry_path=registry_path, selected=selected,
                     exclude=exclude,
+                    registry=registry,
                 )
                 for n in names:
                     if len(out) >= COUNCIL_JUDGE_TARGET:
                         break
-                    if n not in seen:
-                        seen.add(n)
+                    if identities[n] not in seen:
+                        seen.add(identities[n])
                         out.append(n)
 
     if not out:
@@ -402,18 +425,20 @@ def resolve_tier_name_members(
     registry_path: str | None = None,
     selected: dict[str, list[str]] | None = None,
     exclude: set[str] | None = None,
+    registry: dict[str, Any] | None = None,
 ) -> list[str]:
     """D8.2.1 — usable profiles for one raw tier NAME (economy/mid/
     frontier), independent of the escalation ladder. Used for shadow
     judging, where the shadow tier is looked up directly (D8.2.1's
     `COUNCIL_SHADOW_TIERS`), not via `tier_members()`'s tier-NUMBER
-    mapping. Unlike `resolve_members`, this never raises and never
+    mapping. Unlike `resolve_members`, this never raises NoUsableProfilesError and never
     climbs the degenerate-tier fallback — D8.2.1 says a shadow judge
     failure (including "nobody usable") is non-fatal and simply skips
     shadowing that round; returns [] rather than
     NoUsableProfilesError."""
     return _usable_profiles_for_tier_name(
         tier_name, registry_path=registry_path, selected=selected, exclude=exclude,
+        registry=registry,
     )
 
 

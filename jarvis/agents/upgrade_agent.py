@@ -45,12 +45,14 @@ import inspect
 import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
+from urllib.parse import urlsplit
 
 import yaml
 
@@ -301,6 +303,107 @@ class ModelRegistryError(ValueError):
     the routine file is worse than one that refuses to load (split plan
     D3, §3 item 3, §10).
     """
+
+
+class ModelRegistryIdentityError(ModelRegistryError, ModelRouteError):
+    """Unsafe canonical identity, including on the legacy routing-off path."""
+
+
+_CANONICAL_IDENTITY = re.compile(r"[a-z0-9][a-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9_./:-]{0,255}\Z")
+_PROVIDER_NAMESPACE = {"moonshot": "moonshotai"}
+
+
+def _wire_model_identity(profile: dict[str, Any]) -> str:
+    provider = profile.get("provider")
+    if provider is None:
+        base_url = profile.get("base_url")
+        if not isinstance(base_url, str):
+            raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+        try:
+            host = urlsplit(base_url).hostname
+        except ValueError:
+            host = None
+        if host not in {"api.openai.com", "api.anthropic.com", "api.moonshot.ai",
+                        "api.moonshot.cn", "openrouter.ai", "api.saygm.com"}:
+            raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+        provider = provider_from_base_url(base_url)
+    model = profile.get("model")
+    if (not isinstance(provider, str) or provider != provider.strip()
+            or not isinstance(model, str) or model != model.strip()):
+        raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+    namespace = _PROVIDER_NAMESPACE.get(provider, provider)
+    if namespace in {"openrouter", "saygm"}:
+        # A gateway is a route, not the vendor whose model casts the vote.
+        # Its qualified wire model is sufficient; a bare gateway model is
+        # unavailable without an explicit canonical identity.
+        identity = model
+    elif model.startswith(namespace + "/"):
+        identity = model
+    else:
+        identity = f"{namespace}/{model}"
+    if not _CANONICAL_IDENTITY.fullmatch(identity) or "//" in identity or identity.endswith("/"):
+        raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+    return identity
+
+
+def canonical_model_identity(profile: dict[str, Any]) -> str:
+    """One model identity regardless of profile name, credentials or route.
+
+    Historical profiles without ``identity`` derive it from their provider
+    and wire model. This never adds keys to a frozen historical registry.
+    An explicitly malformed identity is a refusal, never a request to
+    guess a replacement from the profile name.
+    """
+    if not isinstance(profile, dict):
+        raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+    if "identity" not in profile:
+        return _wire_model_identity(profile)
+    identity = profile["identity"]
+    if (not isinstance(identity, str) or not _CANONICAL_IDENTITY.fullmatch(identity)
+            or "//" in identity or identity.endswith("/")):
+        raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+    return identity
+
+
+def validate_model_registry_identities(registry: dict[str, Any]) -> dict[str, str]:
+    """Reject alias votes before credential lookup, independent of rollout.
+
+    Also accepts an already loaded registry, so membership callers cannot
+    bypass the loader's check by supplying a previously cached snapshot.
+    Authoritative wire identities additionally catch two profiles that
+    give different declared identities to the exact same provider model.
+    """
+    if not isinstance(registry, dict) or not isinstance(registry.get("profiles"), dict):
+        raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
+    identities: dict[str, str] = {}
+    seen: set[str] = set()
+    seen_wire: set[str] = set()
+    seen_endpoint_models: set[tuple[str, str, str]] = set()
+    for name, profile in registry["profiles"].items():
+        identity = canonical_model_identity(profile)
+        if identity in seen:
+            raise ModelRegistryIdentityError("model registry has duplicate canonical model identities")
+        seen.add(identity)
+        try:
+            wire_identity = _wire_model_identity(profile)
+        except ModelRegistryIdentityError:
+            # Explicit identities remain authoritative when a gateway's
+            # opaque wire model or historical sparse profile cannot derive
+            # a qualified wire identity. Missing identities already failed.
+            wire_identity = None
+        if wire_identity is not None:
+            if wire_identity in seen_wire:
+                raise ModelRegistryIdentityError("model registry has duplicate canonical model identities")
+            seen_wire.add(wire_identity)
+        provider, base_url, model = (profile.get("provider"), profile.get("base_url"), profile.get("model"))
+        if (isinstance(provider, str) and isinstance(model, str) and model
+                and (base_url is None or isinstance(base_url, str))):
+            endpoint_model = (provider, (base_url or "").rstrip("/"), model)
+            if endpoint_model in seen_endpoint_models:
+                raise ModelRegistryIdentityError("model registry has duplicate canonical model identities")
+            seen_endpoint_models.add(endpoint_model)
+        identities[name] = identity
+    return identities
 
 
 # Split plan D3 — the credential boundary is VOCABULARY. A profile in the
@@ -555,15 +658,22 @@ def load_model_registry(path: str | os.PathLike[str] | None = None, *,
     so no caller changes semantics. A missing file returns the empty
     registry ``{"default": None, "profiles": {}}`` so callers fall back to
     legacy mode; an unsafe or inconsistent one raises ModelRegistryError.
+    Canonical identities are validated before credentials, including when
+    shared model routing is disabled; aliases never become independent votes.
     """
     layers = load_registry_layers(path, config_dir=config_dir)
     if layers["shape"] == "legacy":
+        names = [prof["name"] for prof in layers["profiles"]]
+        if len(names) != len(set(names)):
+            raise ModelRegistryError("model registry profile is declared twice")
         profiles = {prof["name"]: prof for prof in layers["profiles"]}
     else:
         endpoints = layers["endpoints"]
         profiles = {prof["name"]: _join_profile(prof, endpoints[str(prof["endpoint"])])
                     for prof in layers["profiles"]}
-    return {"default": layers["default"], "profiles": profiles}
+    registry = {"default": layers["default"], "profiles": profiles}
+    validate_model_registry_identities(registry)
+    return registry
 
 
 # Split plan §4a: what each provider currently offers, one generated file per
@@ -623,6 +733,7 @@ def catalog_retirement(entry: dict[str, Any]) -> str | None:
 
 def resolve_profile(registry: dict[str, Any], requested: str | None = None) -> dict[str, Any]:
     """Resolve which profile to use: explicit > env > registry default."""
+    validate_model_registry_identities(registry)
     profiles: dict[str, dict[str, Any]] = registry.get("profiles", {})
     name = requested or os.environ.get(PROFILE_ENV) or registry.get("default")
     if not name or name not in profiles:
@@ -633,7 +744,8 @@ def resolve_profile(registry: dict[str, Any], requested: str | None = None) -> d
     return profiles[name]
 
 
-def available_models(registry_path: str | os.PathLike[str] | None = None) -> list[dict[str, Any]]:
+def available_models(registry_path: str | os.PathLike[str] | None = None, *,
+                     registry: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """List planner profiles for pickers — includes key presence, never key material.
 
     `tier` (economy | mid | frontier | None) is surfaced here so the
@@ -641,7 +753,8 @@ def available_models(registry_path: str | os.PathLike[str] | None = None) -> lis
     picker (MORTIMER_LLM_COUNCIL_PLAN.md D9) read it from this one place
     rather than re-parsing the registry YAML themselves.
     """
-    registry = load_model_registry(registry_path)
+    registry = registry if registry is not None else load_model_registry(registry_path)
+    validate_model_registry_identities(registry)
     default = registry.get("default")
     out: list[dict[str, Any]] = []
     for name, prof in sorted(registry.get("profiles", {}).items()):

@@ -271,7 +271,8 @@ class TestLoaderShapes:
     def test_env_override_still_wins(self, tmp_path, monkeypatch):
         _write_split(tmp_path / "config")
         legacy = tmp_path / "other.yaml"
-        legacy.write_text("default: x\nprofiles:\n  - name: x\n", encoding="utf-8")
+        legacy.write_text("default: x\nprofiles:\n  - name: x\n    provider: openai\n    model: x-model\n",
+                          encoding="utf-8")
         monkeypatch.setenv(ua.REGISTRY_PATH_ENV, str(legacy))
         assert list(ua.load_model_registry(config_dir=tmp_path / "config")["profiles"]) == ["x"]
 
