@@ -370,15 +370,16 @@ Source: [Skills plan §12, SW-A…SW-L](docs/plans/MORTIMER_SKILLS_WORKSPACE_IMP
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
-- **Status:** landed foundation: PRs #145 (`9da99d4`) and #146 (`92e9528`) merged after the 09-30 `39fc6f9` deployment; their Versions wording and evidence were included in the 10-02 `7c4637e` deployment, but the updated UI has not been visually accepted. SW-B and SW-C remain the only accepted gates (2/12); activation remains off
+- **Status:** claimed: bounded documentation of the deployed Versions wording only; the Skills foundation remains landed and SW-B/C remain the only accepted full gates (2/12). No runtime implementation, authentication, activation or rollback work is claimed by this slice.
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (foundation `539f8f6`; PRs #145 and #146). The former `codex/ws03-live-acceptance-20260930` branch merged as PR #146; a fresh branch is required for further acceptance edits.
+- **Where:** `docs/ws03-versions-proof-20261006`; documentation-only evidence slice from main `6ca7704`. Earlier foundation and PRs #145/#146 remain on main.
 - **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
-- **Scope:** `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer.
-- **Next step:** codex: visually verify the merged Versions explanation on deployed `7c4637e`, then run recorded-run/voice/accessibility, physical-display and real-VM checks against a frozen release. Owner-scoped Versions, runtime inventory and creator await WS-04 local authenticated client onboarding; provider evaluation, activation and rollback remain separate gates.
-- **Updated:** 10-02
+- **Scope:** Active documentation claim only: this WS-03 block, status/progress in `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`, the header and a build-identified receipt under `docs/acceptance/skills-workspace/`, and its dated `docs/roadmap-log/` entry. No application, API, skill, model, test, auth or configuration code is included.
+- **Historical implementation scope (inactive in this documentation claim):** `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer.
+- **Next step:** codex: after this documentation claim lands, publish the build-identified screenshot/accessibility receipt for the Versions dormant-auth explanation and correct the existing plan/status header. Keep SW-A overall and authenticated history, creator, provider, voice/accessibility, display, activation and rollback gates open.
+- **Updated:** 10-06 (Codex documentation-only claim; no new full acceptance gate)
 
 </details>
 
