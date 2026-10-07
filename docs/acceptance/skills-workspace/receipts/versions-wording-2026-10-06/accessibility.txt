@@ -1,0 +1,145 @@
+Window: "Mortimer", App: Mortimer.
+0 standard window Mortimer, ID: console, Secondary Actions: Raise
+	1 container
+		2 text MORTIMER
+		3 button Connect
+		4 text DISCONNECTED VOICE
+		5 pop up button (disabled) (connect first)
+		6 button Description: ◨ Close, Help: Console panels (Esc closes · T opens the Log)
+		7 button Description: ⧉ Display, Help: Open the display window (park it on a second monitor)
+		8 text Command Console
+		9 button Description: Conversation, ID: console.conversation
+		10 pop up button Description: Results, Help: Show results; the arrow lists the open results, ID: console.results
+			11 button Results
+			12 menu button
+		13 menu button Knowledge, Help: Knowledge Atlas and Memory graph, ID: console.knowledge
+		14 menu button Tools, Help: Skills and Workflows, ID: console.tools
+		15 unknown Description: Voice activity — user teal, Mortimer orange, Details: Standby
+		16 text Skills Current weather in Fahrenheit
+		17 button Description: Conversation, Help: Returns to the voice conversation view
+		18 text 6 skills, 5 enabled, 5 need attention
+		19 text field (settable) Description: Search skills by name, purpose, or category, Placeholder: Search skills
+		20 text Retrieve and report current weather for a location — temperature, conditions, wind, humidity and any active alerts — with every temperature in Fahrenheit and the unit stated explicitly. Use for any current-conditions or short-term forecast question.
+		21 pop up button Description: Filter skills, Filter skills by state, Value: All
+		22 pop up button Description: Skill category, Filter skills by category, Value: All categories
+		23 text Enabled Readiness: unknown Verification: not_tested 9064f3d61d68
+		24 scroll area
+			25 text Mortimer STANDBY
+			26 button Description: DEVELOPER, Help: No runs yet — click for Developer's history
+			27 button Description: ANALYST, Help: No runs yet — click for Analyst's history
+			28 button Description: SYSTEMS, Help: No runs yet — click for Systems's history
+			29 button Description: APP BUILDER, Help: No runs yet — click for App Builder's history
+			30 button Description: LIBRARIAN, Help: No runs yet — click for Librarian's history
+			31 button Description: SCHEDULER, Help: No runs yet — click for Scheduler's history
+		32 scroll area Secondary Actions: Scroll Up, Scroll Down
+			33 list
+				34 row (selectable) Value: Enabled, Description: Current weather in Fahrenheit, Enabled, Retrieve and report current weather for a location — temperature, conditions, wind, humidity and any active alerts — with every temperature in Fahrenheit and the unit stated explicitly. Use for any current-conditions or short-term forecast question., Research, Installed, Unknown, Digest-pinned loading is disabled; the legacy skill loader is active.
+				35 row (selectable) Value: Enabled, Description: Git history and status review, Enabled, Report what has recently changed in a local git repository — recent commits with hashes, messages and dates; current branch and its position relative to origin; uncommitted and untracked files; and which files a given commit touched. Use when asked what has shipped, what is in flight, or what state the working tree is in., Development, Installed, Unknown, Digest-pinned loading is disabled; the legacy skill loader is active.
+				36 row (selectable) Value: Enabled, Description: Layered geolocation, Enabled, Design or debug location-resolution code in an application — a layered chain of stored preference, device API, and IP fallback, with consent handling, explicit staleness, and honest reporting of which layer answered. Use when implementing, reviewing or fixing a geolocation feature., Development, Installed, Unknown, Digest-pinned loading is disabled; the legacy skill loader is active.
+				37 row (selectable) Value: Enabled, Description: MCP server authoring, Enabled, Build or extend an MCP skill server in this repository — the logic/server split, tool naming and descriptions, error messages an agent can act on, the draft-confirm gate for writes, the skill.yaml manifest, and the two config files that must both be edited before a new server is reachable. Use when adding a server under mcp_servers/ or adding a tool to an existing one., Development, Installed, Unknown, Digest-pinned loading is disabled; the legacy skill loader is active.
+				38 row (selectable) Value: Disabled, Description: Skill Creator, Draft, review, and improve Mortimer skills. Use when the user asks to create or revise a reusable skill, inspect skill quality, define examples, or compare a skill against its intended behavior. Keep the work in the Mortimer Skills workspace and existing development sandbox., Development, Installed, Blocked, Skill is disabled in the reviewed registry.
+				39 row (selectable) Value: Enabled, Description: Technical plan and specification, Enabled, Write an implementation plan or technical specification that another model can build from without making design decisions — required sections, explicit decisions with their rationale, acceptance criteria, and a self-audit for contradictions. Use when asked to author a spec, design document or phased implementation write-up., Development, Installed, Unknown, Digest-pinned loading is disabled; the legacy skill loader is active.
+			40 scroll bar (settable, float) 0
+				41 value indicator (settable, float) 0
+				42 increment arrow button
+				43 decrement arrow button
+				44 increment page button
+				45 decrement page button
+		46 Skill detail, Value: Versions
+			47 radio button Description: Overview, Value: 0
+			48 radio button Description: Process, Value: 0
+			49 radio button Description: Activity, Value: 0
+			50 radio button Description: Versions, Value: 1
+		51 button Refresh skills
+		52 scroll area skills.detail.scroll
+			53 text Version evidence unavailable Version and candidate history require bearer authentication, which is not enabled for this local session. The Skills library and process remain available.
+		54 text Add content
+		55 button Paste content
+		56 button Choose content
+		57 text Paste text or an image, choose a file, or drop it here for review. Drop text or image files here
+		58 button (disabled) Description: Scroll tabs left, Help: Show more tabs to the left, ID: chevron.left
+		59 scroll area Sidecar tabs
+			60 button REPO
+			61 button EDIT
+			62 button MEMORY
+			63 button RUNS
+			64 button (selected) AGENTS
+			65 button OUTPUT
+			66 button LOG
+			67 button COSTS
+		68 button Description: Scroll tabs right, Help: Show more tabs to the right, ID: chevron.right
+		69 menu button Sidecar tab text size, Help: Change the size of sidecar tab names, Value: Standard
+		70 text Description: Sidecar tab text size, Value: Standard
+		71 button Description: ⧉, Help: Pop the panels out to their own window
+		72 button Description: ×, Help: Close the panels
+		73 scroll area Secondary Actions: Scroll Up, Scroll Down (showing 0-116 of 372 items)
+			74 text No agent activity this session. COUNCIL ROUNDS claude-opus planner · E1 · tier 2 09-07 18:25 proposers
+			75 image (selected) Description: Selected, Help: Proposal D, ID: checkmark.circle.fill
+			76 text Help: Proposal D, Value: claude-opus 8.60
+			77 image Description: Circle, Help: Proposal B, ID: circle
+			78 text Help: Proposal B, Value: claude-sonnet-5 8.55
+			79 image Description: Circle, Help: Proposal E, ID: circle
+			80 text Help: Proposal E, Value: kimi-k3 8.10
+			81 image Description: Circle, Help: Proposal A, ID: circle
+			82 text Help: Proposal A, Value: or-deepseek-v4-pro 7.10
+			83 image Description: Circle, Help: Proposal G, ID: circle
+			84 text Help: Proposal G, Value: or-gpt-5.1 7.05
+			85 image Description: Circle, Help: Proposal C, ID: circle
+			86 text Help: Proposal C, Value: or-grok-4.6 6.95
+			87 image Description: Circle, Help: Proposal F, ID: circle
+			88 text Help: Proposal F, Value: or-grok-4.3 5.20 judges
+			89 image Description: Circle, ID: circle.fill
+			90 text claude-fable-5 frontier 7 scored · 0 abstained
+			91 image Description: Circle, ID: circle.fill
+			92 text or-codex-max frontier 7 scored · 0 abstained 29,483 tokens 77.5s no_retry:prose_end kimi-k2 scope · E2 · tier 1 09-05 19:14 proposers
+			93 image (selected) Description: Selected, Help: Proposal C, ID: checkmark.circle.fill
+			94 text Help: Proposal C, Value: kimi-k2 8.62
+			95 image Description: Circle, Help: Proposal A, ID: circle
+			96 text Help: Proposal A, Value: or-gemini-flash 8.20
+			97 image Description: Circle, Help: Proposal D, ID: circle
+			98 text Help: Proposal D, Value: or-gpt-5-mini 8.15
+			99 image Description: Circle, Help: Proposal B, ID: circle
+			100 text Help: Proposal B, Value: or-deepseek 7.22 judges
+			101 image Description: Circle, ID: circle.fill
+			102 text claude-sonnet-5 mid 4 scored · 0 abstained
+			103 image Description: Circle, ID: circle.fill
+			104 text kimi-k3 mid 4 scored · 0 abstained
+			105 image Description: Circle, ID: circle.fill
+			106 text or-gpt-5.1 mid 4 scored · 0 abstained
+			107 image Description: Circle, ID: circle.fill
+			108 text or-grok-4.3 mid 4 scored · 0 abstained 19,661 tokens 73.3s or-gemini-flash planner · E1 · tier 1
+			109 image Description: Warning, ID: exclamationmark.triangle.fill
+			110 text 09-01 02:17 judge kimi-k3 abstained on every proposal — judge call failed: proposers
+			111 image (selected) Description: Selected, Help: Proposal A, ID: checkmark.circle.fill
+			112 text Help: Proposal A, Value: or-gemini-flash 1 abstained 7.43
+			113 image Description: Circle, Help: Proposal C, ID: circle
+			114 text Help: Proposal C, Value: or-gpt-5-mini 1 abstained 7.07
+			115 image Description: Circle, Help: Proposal D, ID: circle
+			116 text Help: Proposal D, Value: kimi-k2 1 abstained 6.20
+			117 image Description: Circle, Help: Proposal B, ID: circle
+			118 text Help: Proposal B, Value: or-deepseek 1 abstained 5.07 judges
+			119 image Description: Close, ID: xmark
+			120 text kimi-k3 mid 0 scored · 4 abstained judge call failed:
+			121 image circle.fill
+			122 text or-gpt-5.1 mid 4 scored · 0 abstained
+			123 image circle.fill
+			124 text or-grok-4.3 mid 4 scored · 0 abstained
+			125 image circle.fill
+			126 text or-sonnet-5 mid 4 scored · 0 abstained 51,706 tokens 219.2s
+		127 button (disabled) 🔇 Mic off
+		128 text HOLD SPACE TO TALK
+		129 button (disabled) Description: Wake word off, Help: Say "Mortimer" to unmute (local openWakeWord sidecar)
+		130 button Description: 🔊, Help: Sounds on
+		131 text SPACE TALK · T TRANSCRIPT
+	132 close button
+	133 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	134 minimize button
+	135 text Mortimer
+136 menu bar
+	137 Mortimer
+	138 File
+	139 Edit
+	140 View
+	141 Layout
+	142 Window
+	143 Help

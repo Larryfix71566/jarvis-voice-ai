@@ -1,0 +1,49 @@
+{
+  "workstream": "WS-03",
+  "result": "passed_versions_dormant_auth_wording_only",
+  "revision": "bde22bb6425c6bf36a3e0d7cf53f2785c274190d",
+  "native_app_path": "/Users/larryfix/jarvis-voice-ai-clean/macos/MortimerHost/.build/MortimerHost.app",
+  "pid": 32144,
+  "visible_title": "Version evidence unavailable",
+  "visible_body": "Version and candidate history require bearer authentication, which is not enabled for this local session. The Skills library and process remain available.",
+  "voice_connected": false,
+  "auth_changed": false,
+  "service_restart": false,
+  "provider_calls_by_this_check": 0,
+  "full_skills_gates_accepted": [
+    "SW-B",
+    "SW-C"
+  ],
+  "accepts_full_SW_A": false,
+  "evidence": [
+    {
+      "file": "versions.png",
+      "bytes": 685517,
+      "sha256": "c602cdde825fac84583d0e86f0aba96f2d7486a1cb78eaa2717c818c81fd3ae8",
+      "saved_at": "2026-10-06T20:17:03.817797-04:00"
+    },
+    {
+      "file": "accessibility.txt",
+      "bytes": 10803,
+      "sha256": "662f21e9daf152e41074cf4cf7f5866da2f18ca808dac471fb1760af5343d565",
+      "saved_at": "2026-10-06T20:17:12.917173-04:00"
+    },
+    {
+      "file": "http-response.json",
+      "bytes": 407,
+      "sha256": "8f91ea4b8f489369220e3f33c32cc5e4406dd019c0efb4790a30731c082f474b",
+      "saved_at": "2026-10-06T20:21:37.253860-04:00"
+    }
+  ],
+  "http": {
+    "catalog_status": 200,
+    "catalog_revision": "6906d83d2416de672b99669fd172bbe192d9ad5f045966fb0ebf699399596239",
+    "skill_id": "current-weather-with-fahrenheit",
+    "display_name": "Current weather in Fahrenheit",
+    "versions_path": "/api/skills/current-weather-with-fahrenheit/versions",
+    "versions_status": 503,
+    "versions_body": {
+      "detail": "Skills requests require bearer authentication"
+    }
+  }
+}

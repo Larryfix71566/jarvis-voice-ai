@@ -1,6 +1,6 @@
 # Mortimer Skills workspace and skill creation implementation plan
 
-Status: **staged deployment complete at `539f8f6` (PR #96); activation and live acceptance remain open**. Prepared 2026-09-25; reconciled 2026-09-28.
+Status: **foundation deployed; latest identified native app `bde22bb` (2026-10-03). The Versions dormant-auth wording passed its narrow visual/API subcheck on 2026-10-06; SW-A overall, activation and remaining live acceptance stay open. SW-B/C remain the only fully accepted gates (2/12).** Prepared 2026-09-25; factual status reconciled 2026-10-06.
 
 This is the implementation contract for the agreed Skills library, inspectable
 processes, truthful execution history, and sandboxed skill creation. The current
@@ -2874,3 +2874,23 @@ navigation p95 **44.646/28.173 ms** (100 ms limit), with zero detail requests
 during measurement. These are local sub-budget results only. They do not
 replace paired voice p95, a ten-minute live-trace memory soak, actual speech,
 VoiceOver or a physical second-display check; SW-K and SW-I remain open.
+
+
+### 2026-10-06 — deployed Versions dormant-auth wording (Codex)
+
+On the unlocked Mac, the installed native MortimerHost executable and bundle
+identified deployed `bde22bb`. With voice disconnected, Tools → Skills →
+Current weather in Fahrenheit → Versions displayed the intended explanation
+that history requires bearer authentication, which is not enabled for the
+local session. The local catalog returned 200 and the same skill's Versions
+endpoint returned the expected fail-closed 503. See the [build-identified
+receipt](../acceptance/skills-workspace/receipts/versions-wording-2026-10-06/receipt.md)
+for the screenshot, accessibility text, HTTP record, hashes and limitations.
+
+This closes only the previously unverified deployed wording subcheck. It does
+not close SW-A or authenticated history, owner-scoped inventory, creator,
+provider, voice/accessibility, display, VM, activation or rollback gates. The
+initial display-name lookup selected the retired Xcode-built web wrapper;
+opening the already-installed native app resolved that misleading startup
+screen without a rebuild or service restart. No settings or provider routes
+changed and no model was called by this check.

@@ -256,41 +256,7 @@ Source: [mail/calendar/brief plan §§8, 12](docs/plans/MORTIMER_MAIL_CALENDAR_B
 
 </details>
 
-<details id="ws-03">
-<summary>WS-03 — Skills Workspace and skill creator · Codex</summary>
 
-### Acceptance checklist — remaining
-
-SW-B and SW-C are already accepted (2/12). Recorded selection/navigation timing passes are retained; they do not close the remaining SW-K checks.
-
-- [ ] **Codex / Larry · deployed baseline (SW-A):** Visually verify the Versions explanation on the identified installed build; dormant authentication is described truthfully. Original skills, compact Conversation, voice/mute/orb, eight tabs, memory, Atlas, sharing and developer aggregation retain behavior; preexisting faults are identified separately.
-- [ ] **Codex / Larry · recorded runs (SW-D):** Use actual successful/failed/skipped/unknown/legacy runs and duplicate/out-of-order/reconnect events. Intended steps stay distinct from the actual trace, progress is never invented, and details open without extra windows. Owner-scoped activity depends on WS-04 authentication.
-- [ ] **Codex · privacy and owner boundaries (SW-E):** Verify canaries cannot leak through inventory, SQL/JSONL, diagnostics, argv, exports, screenshots, examples, evaluations or supporting displays, including wrong-owner requests.
-- [ ] **Codex / Larry · real sandbox (SW-F):** On an authorized creator draft, the actual VM permits only approved package/fixture changes; offline validation and changed-candidate rejection work. No host fallback, live-checkout write, network/credential mount or receipt-drift activation. Depends on authentication, real VM and source/model readiness.
-- [ ] **Codex / Larry · paired quality evaluation (SW-G):** Run six reviewed cases × two repetitions × baseline/candidate: 12 complete pairs / 24 trials with the frozen rubric. All deterministic safety checks pass; blinded quality passes ≥10/12 and is no worse than baseline. Record latency/calls/cost; eligible provider/budget authorization is a prerequisite.
-- [ ] **Codex / Larry · lifecycle and activation (SW-H):** Duplicate requests produce one job/PR; cancel prevents late publication; restart reconciles uncertainty. Exact-diff review, merge, deploy and atomic activation remain separate; in-flight revisions stay stable and rollback restores the accepted version. Depends on SW-F/G and maintainer review.
-- [ ] **Larry / Codex · voice/accessibility (SW-I):** Every control uses its shared voice action; stale/ambiguous targets clarify. VoiceOver, keyboard, large type, contrast and application accessibility settings work; search/filter persists and steps are usable without hover.
-- [ ] **Larry / Codex · physical displays (SW-J):** One/two displays, two research results and a creator run: move, close/reopen, unplug during validation, reconnect and restart. One append-only creator tile retains steps/retries/selection; no duplicates, focus theft, orphan or unintended new job.
-- [ ] **Codex / Larry · remaining performance (SW-K):** Paired voice p95 regression ≤50 ms; ten-minute library/live-trace memory growth ≤10 MiB, tied to the exact Mac/build. Retain the already-recorded ≤20 ms selection and ≤100 ms navigation sub-results.
-- [ ] **Codex / Larry · release and handoff (SW-L):** Required frozen suites, actual app/backend/config/package identities, visible ready/loaded state, current evidence and rollback agree. Required authentication, evaluation/activation and parent privacy/model gates are satisfied; failed historical full-profile receipts remain failed.
-
-Source: [Skills plan §12, SW-A…SW-L](docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md). Dependencies are WS-04 local onboarding, WS-05 source/model readiness and the applicable parent release gates.
-
-**Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
-
-- **Owner:** `codex`
-- **Status:** claimed: bounded documentation of the deployed Versions wording only; the Skills foundation remains landed and SW-B/C remain the only accepted full gates (2/12). No runtime implementation, authentication, activation or rollback work is claimed by this slice.
-- **Implemented by:** Codex
-- **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** `docs/ws03-versions-proof-20261006` (claim PR #186); documentation-only evidence slice from main `6ca7704`. Earlier foundation and PRs #145/#146 remain on main.
-- **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
-- **Scope:** Active documentation claim only: this WS-03 block, status/progress in `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`, the header and a build-identified receipt under `docs/acceptance/skills-workspace/`, and its dated `docs/roadmap-log/` entry. No application, API, skill, model, test, auth or configuration code is included.
-- **Historical implementation scope (inactive in this documentation claim):** `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer.
-- **Next step:** codex: after this documentation claim lands, publish the build-identified screenshot/accessibility receipt for the Versions dormant-auth explanation and correct the existing plan/status header. Keep SW-A overall and authenticated history, creator, provider, voice/accessibility, display, activation and rollback gates open.
-- **Updated:** 10-06 (Codex documentation-only claim; no new full acceptance gate)
-
-</details>
 
 ### Built: live acceptance or status publication still open
 
@@ -416,6 +382,43 @@ Sources: [subscription-isolation plan SR-1…SR-6 and completion criteria](docs/
 </details>
 
 
+
+<details id="ws-03">
+<summary>WS-03 — Skills Workspace and skill creator · Codex</summary>
+
+### Acceptance checklist — remaining
+
+SW-B and SW-C are already accepted (2/12). Recorded selection/navigation timing passes are retained; they do not close the remaining SW-K checks.
+
+- [ ] **Codex / Larry · remaining deployed baseline (SW-A):** Original skills, compact Conversation, voice/mute/orb, eight tabs, memory, Atlas, sharing and developer aggregation retain behavior; preexisting faults are identified separately.
+- [ ] **Codex / Larry · recorded runs (SW-D):** Use actual successful/failed/skipped/unknown/legacy runs and duplicate/out-of-order/reconnect events. Intended steps stay distinct from the actual trace, progress is never invented, and details open without extra windows. Owner-scoped activity depends on WS-04 authentication.
+- [ ] **Codex · privacy and owner boundaries (SW-E):** Verify canaries cannot leak through inventory, SQL/JSONL, diagnostics, argv, exports, screenshots, examples, evaluations or supporting displays, including wrong-owner requests.
+- [ ] **Codex / Larry · real sandbox (SW-F):** On an authorized creator draft, the actual VM permits only approved package/fixture changes; offline validation and changed-candidate rejection work. No host fallback, live-checkout write, network/credential mount or receipt-drift activation. Depends on authentication, real VM and source/model readiness.
+- [ ] **Codex / Larry · paired quality evaluation (SW-G):** Run six reviewed cases × two repetitions × baseline/candidate: 12 complete pairs / 24 trials with the frozen rubric. All deterministic safety checks pass; blinded quality passes ≥10/12 and is no worse than baseline. Record latency/calls/cost; eligible provider/budget authorization is a prerequisite.
+- [ ] **Codex / Larry · lifecycle and activation (SW-H):** Duplicate requests produce one job/PR; cancel prevents late publication; restart reconciles uncertainty. Exact-diff review, merge, deploy and atomic activation remain separate; in-flight revisions stay stable and rollback restores the accepted version. Depends on SW-F/G and maintainer review.
+- [ ] **Larry / Codex · voice/accessibility (SW-I):** Every control uses its shared voice action; stale/ambiguous targets clarify. VoiceOver, keyboard, large type, contrast and application accessibility settings work; search/filter persists and steps are usable without hover.
+- [ ] **Larry / Codex · physical displays (SW-J):** One/two displays, two research results and a creator run: move, close/reopen, unplug during validation, reconnect and restart. One append-only creator tile retains steps/retries/selection; no duplicates, focus theft, orphan or unintended new job.
+- [ ] **Codex / Larry · remaining performance (SW-K):** Paired voice p95 regression ≤50 ms; ten-minute library/live-trace memory growth ≤10 MiB, tied to the exact Mac/build. Retain the already-recorded ≤20 ms selection and ≤100 ms navigation sub-results.
+- [ ] **Codex / Larry · release and handoff (SW-L):** Required frozen suites, actual app/backend/config/package identities, visible ready/loaded state, current evidence and rollback agree. Required authentication, evaluation/activation and parent privacy/model gates are satisfied; failed historical full-profile receipts remain failed.
+
+- [x] **Codex · Versions wording subcheck:** On deployed native `bde22bb`, the intended dormant-auth explanation is visible and corroborated by the local 200 catalog / 503 Versions response; [dated proof](docs/acceptance/skills-workspace/receipts/versions-wording-2026-10-06/receipt.md). This does not close SW-A or change the 2/12 full-gate count.
+
+Source: [Skills plan §12, SW-A…SW-L](docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md). Dependencies are WS-04 local onboarding, WS-05 source/model readiness and the applicable parent release gates.
+
+**Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
+
+- **Owner:** `codex`
+- **Status:** landed foundation; the deployed Versions dormant-auth wording subcheck is verified on `bde22bb` (10-06) and recorded through this documentation PR. PRs #145/#146 are included in the deployed build. SW-A overall and authenticated/creator/provider/voice/display/activation gates remain open; SW-B/C remain the only accepted full gates (2/12).
+- **Implemented by:** Codex
+- **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (foundation `539f8f6`; PRs #145/#146; documentation claim #186, merge `2d41ccd`). Build-identified Versions evidence is published through this documentation PR.
+- **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
+- **Scope:** `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer.
+- **Next step:** codex: finish the remaining frozen-build SW-A baseline and recorded-run/privacy checks as their prerequisites become available. larry: select WS-04 onboarding and decide eligible source/provider/budget gates, then perform the required voice, accessibility and physical-display checks. Owner-scoped Versions/runtime inventory/creator and activation/rollback remain separate; the dormant-auth wording subcheck is complete.
+- **Updated:** 10-06 (build-identified Versions wording only; no new full acceptance gate)
+
+</details>
 
 <details id="ws-06">
 <summary>WS-06 — Self-service recovery and model registry · Claude implementation; Larry acceptance</summary>
