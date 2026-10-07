@@ -1319,6 +1319,8 @@ clear capability notice, never a fabricated successful action.
 
 ### 7.2 CC7a — Conversation-first stage (Larry, 2026-09-30)
 
+**Ownership/status amendment, 2026-10-07 (Larry):** Codex takes the remaining CC7a.3 repairs and CC7a.4 implementation on `codex/ws17-closure-20261007`. Claude’s earlier increments and PR #173 remain attributed to Claude; preserve that source and its design intent. This is a main-branch ownership claim, not code completion, merge approval, deployment or acceptance. Every increment retains review/verification and Larry’s exact-build acceptance; remove the thread switch only after UI2-22…25 pass. See ROADMAP CX-20 for the active documentation/display overlap boundary.
+
 **Why (Larry, 09-30):** conversation is spread across one tab per turn, only
 Mortimer's side shows, the tab strip fills up, and asking for something again
 fetches it again. Evidence: `App/ResponseResultRouter.swift` creates a
@@ -1336,7 +1338,7 @@ result card (RELEASE_READINESS UI2-19 note):
 | Tab strip | Removed. A **Recents** menu in the header lists results (kind, subject, time), pinned first. |
 | Asking again | Each result carries a subject key (kind + subject, e.g. `weather · Folly Beach`). If a fresh result with that key exists (weather: 15 minutes), reopen it; if stale, refresh that same card in place. Never a duplicate. |
 | Retention | Recents shows pinned results plus about the last 10 unpinned. This is a display limit only: it never erases Output history or an open, compared or pinned result; `WorkspaceStore` retention (20 unpinned) is unchanged. |
-| Ownership | Claude implements; Codex reviews every increment before merge (CX-15). |
+| Ownership | Historical increments: Claude implementation, Codex review (CX-15). Remaining work: Codex explicitly assigned by Larry 2026-10-07; required cross-review, reviewed increments and Larry release/acceptance remain. |
 
 **Contracts that must survive:**
 
