@@ -194,7 +194,7 @@ Sources: [Command Console plan §7.2](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_
 </details>
 
 <details id="ws-13">
-<summary>WS-13 — T5 mail, calendar and brief: review the draft plan against current main · Claude (proposed)</summary>
+<summary>WS-13 — T5 mail, calendar and brief: draft reconciled with main, waiting on Larry's decisions · Claude (review)</summary>
 
 ### Approval and future acceptance checklist
 
@@ -211,15 +211,15 @@ Source: [mail/calendar/brief plan §§8, 12](docs/plans/MORTIMER_MAIL_CALENDAR_B
 **Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
 
 - **Owner:** `claude`
-- **Status:** proposed
-- **Implemented by:** not started
-- **Remaining work / acceptance:** Larry approves or revises the plan
+- **Status:** review: plan §R (reconciliation with main `e7b099b` and Codex's 10-06 handoff) waits on Larry's decisions D1–D8 and Codex's cross-review
+- **Implemented by:** not started (plan only)
+- **Remaining work / acceptance:** Larry answers D1–D8 (plan §R.5) and approves the plan; each increment P1–P5 (§R.6) is then claimed, built, cross-reviewed and accepted on its own (V1–V10 per §R.8)
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** docs branch when claimed
-- **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`. Codex edited this plan on 09-26, so coordinate with Codex before any edit. Migration `0035` stays reserved for T5.
+- **Where:** docs branch `docs/ws13-plan-reconciliation`
+- **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`; §R (10-07) is authoritative and the August text is history except where §R.9 keeps it. No GitHub branch other than this one touches the plan. Migration `0035` stays reserved for T5 (`0035_brief`).
 - **Scope:** that plan file only
-- **Next step:** Larry picks it; confirm with Codex that it has no pending edits to the plan
-- **Updated:** 10-02 (read-only: plan remains draft and no T5 code/claim found)
+- **Next step:** larry: answer D1–D8 in plan §R.5; codex: cross-review §R against your 10-06 handoff; then the increment D1 picks is claimed first (recommended P1, the mail header source)
+- **Updated:** 10-07
 
 </details>
 

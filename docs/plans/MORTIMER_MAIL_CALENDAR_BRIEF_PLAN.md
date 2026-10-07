@@ -1,7 +1,407 @@
 # Mortimer — Mail, Calendar and the Daily Brief (read-only)
 
-**Status:** DRAFT for Larry's approval, 2026-08-26. Implements roadmap track **T5**
-(`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.5). Read scopes only.
+**Status:** DRAFT. Written 2026-08-26 and reconciled with main `e7b099b` on
+2026-10-07 (§R, Claude). §R is authoritative and waits on Larry's decisions D1–D8.
+The August text after §R is history, except where R.9 keeps a section. Implements
+roadmap track **T5** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.5), tracked as
+WS-13. Read scopes only.
+
+## §R Reconciliation with main, 2026-10-07 (Claude, Cowork) — authoritative
+
+**Read this first.** This section reconciles the August draft with `origin/main`
+`e7b099b` (2026-10-07) and with Codex's merged review handoff,
+`docs/roadmap-log/2026-10-06-ws-20-codex-review-handoff.md` (reviewed at `30dcb4e`).
+Each of Codex's eleven findings was re-checked against the code at `e7b099b`, and all
+eleven hold (R.2). Eight more findings are in R.3. Where §R and the August text
+disagree, §R wins. R.9 lists the August sections that stay as specification and the
+corrections each needs; all other August text is history.
+
+Nothing here is implemented, tested or accepted. No mailbox, calendar, provider or
+credential was touched. Approval works in two steps: first Larry answers D1–D8
+(R.5); then each increment in R.6 is claimed, built, cross-reviewed and accepted on
+its own. This section does not authorize implementation.
+
+### R.1 What changed, in short
+
+The August draft gave one new agent mail, calendar and reminders, and let a model
+summarize mail for the voice Supervisor. Current main rules both out:
+
+- K4 classes `mcp-calendar` as outbound.
+- Content that defaults to confidential cannot reach a model without a private
+  route, and none exists today.
+
+The reconciled design therefore makes four changes:
+
+1. Mail and calendar are read only by host code, through tool results bound to a
+   privacy policy.
+2. The brief is assembled and rendered by code in the bot, with no model involved.
+   It arrives as a protected local card. Its speech is held to what the privacy
+   decision allows, and is not written into the LLM context.
+3. A model-written brief (P4) and an agent that answers questions about mail (P5)
+   become later increments, each approved separately. Both depend on the privacy
+   and route decision (D4).
+4. No agent that reads mail holds the calendar, reminders, the screen, or any
+   outbound server.
+
+### R.2 Codex's findings, checked at `e7b099b`
+
+| # | Finding | Evidence at `e7b099b` | Resolution in this plan |
+|---|---|---|---|
+| 1 | The `secretary` roster breaks K4 | `tests/unit/test_agent_isolation.py:30` puts `mcp-calendar` in `OUTBOUND`; `:35` puts `mcp-mail` in `UNTRUSTED_INPUT` | No agent holds mail together with calendar. The brief reads both in host code (R.4). The P5 mail agent holds `[mcp-mail]` and nothing outbound. The K4 sets are not shrunk; D2 proposes growing `UNTRUSTED_INPUT`. |
+| 2 | Reminder writes would be blocked only by the prompt | `mcp_servers/mcp_reminders/server.py:10–37` exposes `set_reminder`, `complete_reminder`, `cancel_reminder` and `get_due_reminders`; `logic.py:277–290` marks due reminders delivered | No agent that reads mail holds `mcp-reminders`. The brief reads reminders with a host call to `list_reminders(status="pending")`, a plain `SELECT` (`logic.py:199–213`), and never calls `get_due_reminders`. Residual RM-11a is removed, not accepted. |
+| 3 | The migration names are obsolete | `jarvis/db.py:909–913` already has `0031`–`0034` and `0036`; ROADMAP §3 reserves `0035` for mail | `0035_brief`, constant `MIGRATION_0035_brief`, appended after the `0036` tuple. `run_migrations` applies any missing id in list order (`db.py:1019–1029`). No `0031_client_tokens` guard, no `0032_brief`, no `<n+1>`. |
+| 4 | A new agent would be the seventh, not the sixth | `tests/unit/test_agents_yaml_frontend_parity.py:80` asserts six agents including `app_builder`; `:126–:143` check `OrbFieldView.swift` | Only P5 adds an agent. P5 edits `config/agents.yaml`, `web/src/agentLayout.ts` and `OrbFieldView.swift`, and turns the six-agent canary into seven. P1–P4 add no agent. |
+| 5 | Supervisor rule 13 is already taken | `jarvis/prompts.py:75` is the detail follow-up rule, and rule 11 cites it | P5 appends a rule 14. Rule 13 is untouched. P3 adds a direct tool and its description, not a numbered rule. |
+| 6 | The model call no longer matches its API or workload | `jarvis/council/council.py:443` requires keyword-only `rung`; `:470` routes every non-plan prompt as workload `council`; `jarvis/model_routing.py:388` refuses unknown workloads; `jarvis/agents/base.py:306` binds an agent's policy to its name | P4 does not use `_call_profile`. It adds workload `brief` to `config/model_access.yaml` (reserved in §3 when claimed), resolves it with `resolve_policy`, and refuses before transmission when the route's privacy is below the digest's. This holds with routing on or off, the same fail-closed rule as `base.py:771–773`. The quality floor stays `mid`. No fallback route. P4 also follows WS-05's execution rules: a deadline, usage recorded in the costs ledger, cancellation when the session ends, and a saved preference that cannot lower the workload's privacy (`model_routing.py:401–410`). P5 adds its agent's workload to `model_access.yaml`, plus `model_profile` and `on_profile_fallback: refuse` in `agents.yaml` (`tests/unit/test_model_floor.py:59`, `:91`). Without them, `resolve_policy` fails and `base.py:307–308` leaves the agent with no policy floor. |
+| 7 | Source policy and derived results are missing | `jarvis/privacy_policy.py:321–326` defaults an unclassified result to confidential; `jarvis/skills/registry.py:644–645` returns raw content when there is no `execution_scope`; `:704–715` arms the sensitive turn and marks the run log | P1 adds a host source contract for `mcp-mail` in `registry.py` (a human-only file, `config/self_edit_allowlist.json:52`). Its envelopes carry policy D4 and source `mail:<account>`. P3 adds one for `mcp-reminders`' `list_reminders`. It has none today (`registry.py:120–123`), so its scoped results default to confidential and would pin every brief there, even under D4b. The brief always calls with a host-owned `ToolExecutionScope`, never plain `registry.call`. Every derived artifact inherits the strictest input policy (R.4). Counts and times are derived values too: none is released to the Supervisor or to speech unless D5 approves a named declassification. |
+| 8 | Native display: ownership, arrival and privacy | `ConversationThreadView.swift:430` exempts only `plan_ready`/`research_report`; a result with no run ID within `directWindow` (`:434`, 120 s) of Larry's last turn opens; `AppMessage.swift:200` `dataPolicy` makes a card protected | The on-request brief (`brief_report`) uses the direct-window rule and opens. The scheduled brief (`brief_scheduled`) joins `backgroundTools` and arrives as a card. Both carry `data_policy`, so the existing protected rule blocks copy, share, export and moving to the supporting display. One renderer, UUID result identity per WS-17 plan §7.2. |
+| 9 | The privilege-manifest assumptions are stale | `self_edit_allowlist.json:52–54` denies `registry.py`, `test_agent_isolation.py` and `test_requires_env_snapshot.py`; `scripts/check_skills.py:118–124` reads `optional_env` | Credentials go in `requires_env`; settings with code defaults go in `optional_env`. `EXPECTED` in `tests/unit/test_requires_env_snapshot.py` is extended by a human commit in the same PR. `BASE_ENV_KEYS` is unchanged, and no vault-wide forwarding. |
+| 10 | Counts and the body-retention text disagree | `tests/integration/test_registry.py:27` has `TOTAL_TOOLS = 81` for 14 servers; the header C3 row says bodies are stored, while M10/M16 say they are not | Each increment re-derives the counts (P1: 15 servers, 82 tools if it adds one tool). Bodies are stored nowhere; R.4 replaces C3. |
+| 11 | The sandbox and operator rules are obsolete | `AGENTS.md`; ROADMAP §0 | R.7 replaces §0.2, §0.4, §0.9 and §0.11. |
+
+### R.3 Additional findings (Claude, 10-07)
+
+- **A1 — Calendar invitations are written by other people.** Anyone with Larry's
+  address can send an invitation, and calendar apps commonly place invitations on
+  the calendar. Whether his accounts do so is untested. M10 puts event titles and
+  locations outside the untrusted fence. Here, calendar text gets the same
+  sanitiser, its own fenced block in the `UNTRUSTED_` family, and the same policy
+  binding as mail.
+- **A2 — Confidential work cannot reach a model today.** `base.py:306–312` binds
+  each agent to its configured workload policy. When that policy is
+  `confidential`/`local_only` and no private route resolves, `:771–773` returns
+  `FAILED: no verified local route is available for this protected request.` The
+  test `tests/unit/test_subagent.py:990` pins this with routing disabled.
+  `config/model_access.yaml` sets `librarian` to `confidential` and `systems` to
+  `local_only`, on main and in production `bde22bb`. So by code and test, those two
+  agents fail closed today. This is untested live: since the change landed (`44cb8ae`,
+  09-28), the Mac's `bot.launchd.log` shows delegations to `analyst` and `developer`
+  only, with no `librarian` or `systems` delegation and no
+  `subagent_refused_sensitive_route` line. The refusal returns before a run-log row is
+  written (`base.py:773` precedes `RunLogger` at `:783`), so `agent_runs` cannot show
+  it either. It is reported for WS-05's owner. For this plan it means any model step over mail needs D4 =
+  `approved_external` or a private route; the deterministic brief needs neither.
+- **A3 — Watcher speech goes into the LLM context by default.** In pipecat-ai 1.4.0
+  (`requirements-lock.txt:119`), `TTSSpeakFrame.append_to_context` defaults to
+  `True`. The assistant aggregator then commits that speech to the context
+  (`llm_response_universal.py`, `_handle_tts_started`/`_handle_push_aggregation`).
+  The existing watchers use the default (`jarvis/bot/pipeline.py:1813`, `:1836`,
+  `:1856`). The brief speaks with `append_to_context=False`, pinned by a test.
+- **A4 — Speech and the Supervisor are both outside the protected boundary.** Spoken
+  text goes to the TTS provider (ElevenLabs), and a tool result goes to the
+  Supervisor's model provider. Under D4 = `confidential`, nothing derived from mail,
+  calendar or reminders reaches either one, counts included. The only exception is
+  a declassification Larry approves in D5. Codex's finding 7 applies: "Fences and
+  short summaries do not declassify source data." The registry's `approved_external`
+  `host-generated-tool-status` label is for branches that acquired no source content
+  (`registry.py:648–656`); it is not reused for derived values.
+- **A5 — A missed brief must not become a stored notice.** `jarvis/notices.py:26`
+  keeps up to 600 characters in `jarvis.db` and speaks them after the next greeting.
+  A missed scheduled brief creates either nothing or a notice with no content (D7).
+- **A6 — The bellsouth.net host in M2 is not AT&T's documented one.** AT&T's current
+  settings page lists `imap.mail.att.net`, port 993, SSL required. It says affected
+  apps need a secure mail key ([AT&T, KM1010523](https://www.att.com/support/article/u-verse-tv/KM1010523)).
+  M2's `imap.mail.yahoo.com` and its "app password" naming are corrected (D6).
+- **A7 — Gmail app passwords are a narrowing path.** Google still documents them but
+  discourages their use. They need 2-Step Verification, may be unavailable for
+  security-key-only, Advanced Protection or work/school accounts, and are revoked
+  when the account password changes ([Google, 185833](https://support.google.com/accounts/answer/185833)).
+  If one cannot be created for Larry's account, Gmail needs OAuth, which is a
+  separate plan (N6).
+- **A8 — Some brief files sit in other rows' scope.** WS-17 (claimed by Codex) locks
+  `ConversationThreadView.swift`, the display-arrival portion of
+  `AppMessageRouter.swift`, DisplayPayload `subject_key` (JarvisKit and
+  `jarvis/bot/display.py`), and the console inventory, turn-binding and
+  result-acknowledgement portions of `jarvis/bot/pipeline.py`.
+  - P3's `backgroundTools` edit is inside that lock.
+  - P2 (a)'s new `calendar/request` case in `AppMessageRouter.swift` shares the file.
+  - Each needs a §4 entry agreed with Codex at claim time, or must wait for WS-17 to
+    land.
+  - WS-05 (landed, Codex) owns source classification in `jarvis/skills/registry.py`
+    and `config/model_access.yaml`, which P1, P3, P4 and P5 edit. Its owner reviews
+    those parts.
+
+### R.4 Reconciled design
+
+**Sources.**
+- **Mail (P1).** A `mcp-mail` stdio server using stdlib `imaplib`. It keeps M3's
+  read path: TLS from the first byte, `EXAMINE` (`select(readonly=True)`) and
+  `BODY.PEEK`. P1 fetches headers only, with
+  `BODY.PEEK[HEADER.FIELDS (DATE FROM SUBJECT MESSAGE-ID CONTENT-TYPE)]`, so no body
+  byte leaves the mail server. The tool is `mail_headlines(window_hours, account)`,
+  which returns M4's contract without `content` and the `body_*` fields. Body
+  fetching (M3's 16 KB partial fetch, M5's fence) arrives only with P5.
+- **Calendar (P2).** The backend is D3. Every backend yields M6's event object,
+  bounded (`MAX_EVENTS = 20`, at most 14 days ahead), with titles, locations and
+  calendar names passed through M5's `_sanitise_field`. No API that writes is
+  referenced anywhere.
+- **Reminders.** A host call to `list_reminders(status="pending")`. Reminders are
+  written by Larry and read without side effects. P3's source contract labels them
+  at the D4 level with source `reminders:local`.
+
+**Isolation.** K4's sets are not shrunk.
+- No sub-agent holds `mcp-mail` in P1–P4, so none can be driven by mail.
+- The brief runs in the bot (August R-M1 stands). Its code calls the registry with a
+  host-owned scope. In P1–P3, untrusted text never enters any model context.
+- The P5 agent holds `[mcp-mail]` and optionally `mcp-time`. It holds no reminders,
+  calendar, screen or web server.
+
+**Policy flow.** "D4 level" is the privacy level Larry chooses in D4.
+
+| Artifact | Policy | Where it may go |
+|---|---|---|
+| Mail headers (P1), bodies (P5) | D4 level, source `mail:<account>` | The host brief assembler; in P5, the mail agent's model only if its route's privacy is at least the D4 level |
+| Calendar events | D4 level, source `calendar` | The host brief assembler |
+| Reminders | D4 level, source `reminders:local` (P3 contract; without it, confidential) | The host brief assembler |
+| Digest and deterministic brief text | strictest of the inputs | The protected card; never a model in P1–P3 |
+| Card (`brief_report` / `brief_scheduled`) | `data_policy` = digest level | Visible locally. When not `approved_external`, the existing native rule blocks copy, share, export and supporting-display transfer |
+| Speech | D5 | A fixed sentence by default ("Your brief is on screen"). Counts and times only under a D5 (b) declassification; names, subjects or titles only under D4b with D5 (c). Always `append_to_context=False` |
+| Supervisor tool result | fixed text, or the D5 (b) declassified counts | No names, subjects or titles in any option |
+| Logs and run log | — | Counts and source status codes only. No headers, titles or account addresses |
+| `brief_digests` (`0035_brief`) | — | `user_id` (`'local'`, per `0020_user_id`), `local_date`, `source`, `delivered_at`, counts and failed-source codes. No `digest_json`, headers or titles |
+| Notices, memory, KB digest, conversations | — | Nothing from the brief (A3, A5) |
+
+**Delivery.**
+- **On request.** A direct Supervisor tool, `daily_brief(day="today")`, registered
+  like `system_status`. It assembles the brief, pushes the protected card, speaks
+  per D5, and returns to the Supervisor only the text D5 allows.
+- **Calendar questions.** "What's on Thursday" is the same tool with `day` set; that
+  is D2's recommended option.
+- **Scheduled.** A `BriefWatcher` in the bot, only while a client is connected. The
+  time and catch-up rule come from D7. It fires at most once a day, guarded by F10's
+  in-memory guard plus the `brief_digests` row. The `brief_requests` queue is
+  removed, because the tool runs in the bot, and F9's backlog bound goes with it.
+
+**Model use.**
+- P1–P3: none.
+- P4: one call over the digest through workload `brief`, using M11's prompt and
+  grounding check and the deterministic text as fallback. The output inherits the
+  digest's policy, so it goes on the card. It is spoken only under D4 =
+  `approved_external` with a D5 that allows it.
+- P5: the agent's workload is its name. The same privacy rule applies. Protected
+  output goes through `make_private_result_sink` (`pipeline.py:601`), as `base.py`
+  already requires for private routes.
+
+**Kill switches**, each read in exactly one place (names reserved in §3 when the
+increment is claimed):
+- `JARVIS_MAIL_ENABLED` — mail tools refuse.
+- `JARVIS_CALENDAR_ENABLED` — calendar requests refuse.
+- `JARVIS_BRIEF_ENABLED` — the tool and the watcher refuse.
+- `JARVIS_BRIEF_TIME` — an empty value disables the schedule only.
+
+### R.5 Decisions for Larry
+
+Each decision gives options and Claude's recommendation. A recommendation is not an
+answer. Record the choice in this plan when it is made.
+
+- **D1 — Scope and order.**
+  - (a) P1–P3 now (mail headers, calendar, deterministic brief), with P4 and P5
+    decided later. *Recommended.*
+  - (b) P1–P5 as one programme.
+  - (c) A calendar-and-reminders brief first (P2, then P3), with mail after.
+- **D2 — Where calendar questions go.** This matters only for D3 (b) or (c). Under
+  D3 (a) there is no calendar MCP server, so no agent can hold one.
+  - (a) No agent holds the calendar. Questions go through `daily_brief(day=…)`, and
+    `mcp-calendar` joins `UNTRUSTED_INPUT`. Because it is already in `OUTBOUND`, any
+    agent holding it then fails K4 by construction. *Recommended.* Growing the set
+    is the change the test's docstring anticipates. It edits a human-only test.
+  - (b) `scheduler` gets `mcp-calendar`. This works only if calendar text is treated
+    as trusted: if `mcp-calendar` stays in `OUTBOUND` and also joins
+    `UNTRUSTED_INPUT`, any agent holding it fails K4, whatever else it holds. So (b)
+    accepts A1's invitation residual.
+  - (c) The P5 mail agent also holds calendar. That needs `mcp-calendar` taken out
+    of `OUTBOUND`, which Codex asked not to do.
+- **D3 — Calendar backend.** Before choosing, confirm O1: is the Google calendar
+  visible in Calendar.app?
+  - (a) The Mortimer app reads EventKit and answers a `calendar/request` on the
+    session channel, the way device location works (`jarvis/bot/device_location.py`,
+    `DeviceLocator.swift`). The app is a bundled GUI app, so macOS can show its
+    permission prompt. No credential is needed. It works only while the app is
+    connected, which the brief needs anyway. It needs `NSCalendarsFullAccessUsageDescription`
+    in the plist that `macos/MortimerHost/scripts/bundle.sh` writes (a human-only
+    file) and edits in WS-17's scope (A8). *Recommended* [likely the most reliable
+    way to get the permission prompt; untested].
+  - (b) A Swift command-line helper started by an MCP child (August M6–M7). Whether
+    macOS grants calendar permission to a helper under the launchd-run bot is
+    untested; V2 tests that before anything is built on it. It works without the app.
+  - (c) CalDAV to iCloud with an app-specific password in the vault. It works with
+    no screen attached (the future Mac mini), but it is a networked credential, and
+    calendars outside iCloud are reachable only if iCloud carries them.
+- **D4 — Privacy level for mail, calendar and reminder content in the brief.**
+  - (a) `confidential`, the code's default. No model sees the content until a
+    private route exists; the card is protected; speech is limited per D5. P4/P5 wait.
+    *Recommended.*
+  - (b) `approved_external`. Headers (and, in P5, bodies) may go to the configured
+    API provider and the TTS provider. This makes P4/P5 possible on `direct_api`.
+  - (c) `local_only`. As (a), and P4/P5 need a local model.
+- **D5 — What may leave the card.** This covers the speech and the Supervisor tool
+  result. Both go to external providers (A4).
+  - (a) Nothing derived. A fixed sentence ("Your brief is on screen"); every fact
+    stays on the protected card. *Recommended under D4a.*
+  - (b) Declassify counts and times only. A named host declassification,
+    `brief-counts`, recorded in code and tested, releases numbers and clock times
+    and never text. Larry's approval here is what makes it legitimate.
+  - (c) Adds sender names, subjects and event titles. This needs D4b.
+  - Storage: `brief_digests` holds counts only. *Recommended.* Pick a retention
+    period (proposed: 30 days).
+- **D6 — Accounts and vault names.**
+  - bellsouth.net: `imap.mail.att.net:993`, logging in with an AT&T secure mail key.
+  - Gmail: `imap.gmail.com:993`, logging in with an app password (needs 2-Step
+    Verification).
+  - Proposed vault names: `MAIL_ATT_USER`, `MAIL_ATT_SECURE_MAIL_KEY`,
+    `MAIL_GMAIL_USER`, `MAIL_GMAIL_APP_PASSWORD`.
+  - Larry sets each with `python -m jarvis.vault set NAME`. No value enters this plan,
+    the roadmap or a prompt.
+- **D7 — Schedule.**
+  - Time: proposed 07:30 local (August M13).
+  - Days: every day or weekdays.
+  - Catch-up window: proposed 120 minutes.
+  - When missed:
+    - (a) nothing. *Recommended.*
+    - (b) a notice with no content.
+- **D8 — Native presentation.** The on-request brief opens. The scheduled brief
+  arrives as a card with the WS-17 New notice and takes no focus. A protected card
+  cannot be shared or moved to the supporting display. Approve this, or allow
+  sharing, which needs D4b.
+
+### R.6 Increments
+
+Each increment is a separate claim (on WS-13, or a new row if Larry prefers) with its
+own branch, its own §3 reservations, Codex cross-review and Larry's merge, deploy and
+Mac checks. P3 can ship with whichever sources exist: M20 requires reporting a
+failed or missing source honestly.
+
+- **P1 — Mail header source.** No agent, no model.
+  - Files: `mcp_servers/mcp_mail/{__init__,logic,server}.py` and `skill.yaml`;
+    `config/mcp_servers.yaml`; the source contract in `jarvis/skills/registry.py`
+    (human); `EXPECTED` in `tests/unit/test_requires_env_snapshot.py` (human);
+    `ALL_SERVERS`/`TOTAL_TOOLS` in `tests/integration/test_registry.py`;
+    `EXPECTED_TOOLS` in `tests/integration/test_mcp_servers.py`; `.env.example`.
+  - Tests:
+    - `test_mcp_mail_logic.py`: a fake IMAP server records the commands. Only
+      `CAPABILITY` (stdlib `imaplib` sends it on connect), `LOGIN`, `EXAMINE`,
+      `SEARCH`, header-only `FETCH BODY.PEEK` and `LOGOUT` are allowed — no
+      `SELECT`, `STORE`, `APPEND`, `EXPUNGE`, `COPY`, `MOVE` or any `UID` form of them.
+    - `test_untrusted_wrapper.py`: M5, with the superset check against
+      `jarvis/memory.py:379`.
+    - Header injection fixtures.
+    - The timeout budget stays under the 30 s `CALL_TIMEOUT`.
+    - The envelope carries the D4 level.
+  - Mac: V1 (the mail secrets reach only `mcp-mail`) and V3 (both accounts' unread
+    state preserved).
+- **P2 — Calendar source** per D3.
+  - Under (a):
+    - JarvisKit `calendar/hello|request|result` types.
+    - A MortimerHost `DeviceCalendar` that reads EventKit, requests full access from
+      the app and is bounded.
+    - The plist key in `bundle.sh` (human).
+    - Bot side: `jarvis/bot/device_calendar.py`, mirroring `device_location.py`.
+    - The `AppMessageRouter.swift` edit (A8).
+  - Tests: protocol parsing and bounds on both sides; a source check that no write
+    API (`save(`, `remove(`, `requestWriteOnlyAccessToEvents`) appears; sanitiser
+    fixtures for invitation text.
+  - Mac: V2 (permission, and parity with Calendar.app, including Google if O1 says
+    it is there).
+- **P3 — Deterministic brief and delivery.**
+  - Files:
+    - `jarvis/brief.py`: M10 assembly, with calendar fenced, plus a deterministic
+      renderer.
+    - `jarvis/bot/brief_tool.py` and `jarvis/bot/brief_watcher.py`.
+    - `MIGRATION_0035_brief` in `jarvis/db.py` (human).
+    - The `mcp-reminders` source contract in `jarvis/skills/registry.py` (human;
+      WS-05's owner reviews it).
+    - Under D5 (b) only: the `brief-counts` declassification.
+    - Tool registration in `pipeline.py` and the payload formatters in `display.py`.
+      Both sit outside WS-17's locked portions (A8).
+    - Inside WS-17's lock (A8): `backgroundTools` in `ConversationThreadView.swift`.
+    - The tool description in `jarvis/prompts.py`.
+    - Cases in `tests/evals/cases.yaml`: brief requests expect `none` (a direct
+      tool); reminder requests still expect `scheduler`.
+  - Tests:
+    - Assembly.
+    - Once a day.
+    - Catch-up.
+    - No second brief after a restart on the same day.
+    - Speech built with `append_to_context=False`.
+    - No headers or titles in logs, the tool result, speech, notices or
+      `brief_digests`. Under D5 (a), nothing derived appears in the tool result or
+      speech.
+    - A hostile header renders as inert text on the card and is never spoken.
+    - The native arrival rule.
+  - Mac: V6 (routing ≥ 90 %), V7 (on request), V8 (scheduled, once), V9 (every fact
+    on the card traces to a source field), V10 (kill switches).
+- **P4 — Model-written brief.** Optional; needs D4b or a private route.
+  - Workload `brief`, reserved in §3.
+  - M11's prompt and entity-subset grounding check, with deterministic fallback.
+  - Tests §7.9.
+  - Mac: V9 with the model, and the fallback rate recorded.
+- **P5 — Mail question agent.** Optional; needs D4b or a private route.
+  - The agent holds `[mcp-mail]`.
+  - Its workload goes in `config/model_access.yaml` (reserved in §3), with
+    `model_profile` and `on_profile_fallback: refuse` in `agents.yaml`.
+  - Body fetch per M3/M5.
+  - Supervisor rule 14.
+  - Routing cases.
+  - Seven-agent parity (web and Swift).
+  - Mac: V4 (K4), V5 (zero tool calls after reading hostile mail), V6 (routing ≥ 90 %).
+
+### R.7 Hand-off rules (replace §0.2, §0.4, §0.9, §0.11)
+
+- Whoever claims an increment names the owner and branch in the row first.
+- Claude builds in its own VM and hands Larry a landing script. Codex builds in its
+  own worktree under `AGENTS.md`. The other system cross-reviews every head before
+  merge.
+- Human-only files are named in the PR body and committed by Larry. In P1–P3 these
+  are `registry.py`, `test_agent_isolation.py`, `test_requires_env_snapshot.py`,
+  `db.py` migrations and `bundle.sh`. They never go through self-edit.
+- §0.4's precondition is met. K2 scoping is on main: `build_child_env` at
+  `registry.py:238`, and `env = dict(os.environ)` no longer appears.
+- Source tests do not prove Mac, account or provider behaviour. V1–V10 stay Larry's
+  gates, and each records the actual result.
+
+### R.8 Acceptance mapping
+
+- P1: V1, V3.
+- P2: V2.
+- P3: V6, V7, V8, V9, V10. V4 holds by construction in P1–P4, since no agent holds
+  `mcp-mail`.
+- P4: V9 with the model.
+- P5: V4, V5, V6.
+
+### R.9 The August text: what stands, what changes
+
+**Stands, with corrections:**
+- M2: the host is `imap.mail.att.net` and the names follow D6.
+- M3: P1 is header-only; the 16 KB partial body fetch is P5 only.
+- M4: P1 omits `content` and `body_*`.
+- M5: verbatim, with the superset check against `jarvis/memory.py:379` (not `:154–180`).
+- M10: calendar fields are fenced; `user_id` is `'local'`; nothing is stored.
+- M11: P4 only, through workload `brief`.
+- M19 and M20.
+- The test lists in §7.1, §7.2 and §7.8–§7.10, re-counted at implementation.
+
+**Superseded:**
+- The header C3, C6 and C8 rows, and K6.
+- Corrections R-M2 and R-M3. R-M1's conclusion that the brief runs in the bot stands.
+- §0.2, §0.4, §0.9, §0.10 and §0.11.
+- §1.1's counts and line numbers.
+- N2.
+- M6–M8, until D3 is answered.
+- M9, M12, M14, M15 and M16.
+- M13: the queue and F9's backlog bound are removed; F10's in-memory guard and the catch-up window stand.
+- M17 and M18, which become P5 only, with seven agents.
+- §4, §5, §9 (rollback now goes per increment: the kill switch first, then revert
+  the PR; `0035_brief` is additive and is never renumbered), §11 and §12 (replaced
+  by R.5).
+
+*Reconciled by Claude (Cowork) on 2026-10-07 against `e7b099b`. Session:
+https://claude.ai/code/session_01L1hFDFBVF6d8f7XrXJei87*
+
+---
+
+
+## August 2026 draft (history, except where §R.9 keeps a section)
+
 
 **Author / origin.** Larry, quoted in the roadmap's origin section: *"access to my
 email and calendars to organize and remind in the daily brief"*. Providers, also his:
