@@ -374,7 +374,7 @@ Source: [Skills plan §12, SW-A…SW-L](docs/plans/MORTIMER_SKILLS_WORKSPACE_IMP
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `docs/ws03-versions-proof-20261006`; documentation-only evidence slice from main `6ca7704`. Earlier foundation and PRs #145/#146 remain on main.
+- **Where:** `docs/ws03-versions-proof-20261006` (claim PR #186); documentation-only evidence slice from main `6ca7704`. Earlier foundation and PRs #145/#146 remain on main.
 - **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
 - **Scope:** Active documentation claim only: this WS-03 block, status/progress in `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`, the header and a build-identified receipt under `docs/acceptance/skills-workspace/`, and its dated `docs/roadmap-log/` entry. No application, API, skill, model, test, auth or configuration code is included.
 - **Historical implementation scope (inactive in this documentation claim):** `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer.

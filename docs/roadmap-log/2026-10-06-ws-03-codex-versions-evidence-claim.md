@@ -2,7 +2,7 @@
 date: 2026-10-06
 system: codex
 rows: [WS-03]
-prs: []
+prs: [186]
 ---
 
 # WS-03 — bounded Versions visual-evidence documentation claim
