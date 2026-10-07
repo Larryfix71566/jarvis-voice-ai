@@ -7,6 +7,7 @@ a test implementation; the real action handler consumes their acknowledgement.
 import ast
 import asyncio
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -14,24 +15,36 @@ import uuid
 
 import pytest
 
-from jarvis.bot.console_actions import build_console_action_tool, handle_console_request
+from jarvis.bot.console_actions import build_console_action_tool, handle_console_request, _disclosed_inventory
+from jarvis.bot.console_protocol import MAX_MESSAGE
+from jarvis.bot.console_protocol import validate_inventory
+from jarvis.bot.console_session import ConsoleSession
 
 SESSION = "00000000-0000-4000-8000-00000000000a"
 GENERATION = "00000000-0000-4000-8000-00000000000b"
 
 
-def bridge():
+def bridge(*, with_sender=False):
     path = Path(__file__).resolve().parents[2] / "jarvis/bot/pipeline.py"
     tree = ast.parse(path.read_text())
-    names = {"_unwrap_client_message", "await_console_result", "handle_console_result"}
+    names = {"_unwrap_client_message", "await_console_result", "handle_console_result", "_send_ui_message", "handle_console"}
     nodes = [node for node in ast.walk(tree)
              if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names]
-    assert len(nodes) == 3
+    assert len(nodes) == 5
     waiters = {}
-    namespace = dict(asyncio=asyncio, uuid=uuid, json=json, Any=Any,
+    namespace = dict(asyncio=asyncio, uuid=uuid, json=json, os=os, Any=Any,
+                     MAX_MESSAGE=MAX_MESSAGE, _disclosed_inventory=_disclosed_inventory,
+                     validate_inventory=validate_inventory,
+                     console_session=ConsoleSession(session_id=SESSION, generation=GENERATION),
+                     console_inventory_revision={"value": 0},
+                     _log_console_validation_failure=lambda *_: None,
                      runtime=SimpleNamespace(session_id=SESSION),
+                     transport=object(),
                      console_generation=GENERATION, console_waiters=waiters)
     exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), "exec"), namespace)
+    if with_sender:
+        return (namespace["await_console_result"], namespace["handle_console_result"], waiters,
+                namespace["_send_ui_message"], namespace)
     return namespace["await_console_result"], namespace["handle_console_result"], waiters
 
 
@@ -403,4 +416,239 @@ def test_unicode_numbered_inventory_over_budget_refuses_without_caching():
         assert len(sent) == 1
         await asyncio.sleep(0)
         assert waiters == {}
+    asyncio.run(run())
+
+
+def test_actual_hundred_row_inventory_projects_before_shared_reply_budget():
+    async def run():
+        prepare, callback, waiters, send_ui, namespace = bridge(with_sender=True)
+        data = native_large_inventory()
+        rows = data["results"]
+        for i in range(30, 100):
+            rows.append({**row(str(uuid.uuid4()), None, (f"Older place {i} " + "forecast details " * 10)[:120]),
+                "title": (f"Older weather report {i} " + "conditions and forecast " * 8)[:120],
+                "index": i, "pinned": False, "unread": False, "can_connections": False})
+        sent, lengths = [], {}
+        async def send(_transport, request):
+            sent.append(request)
+            if request["action"] == "inventory":
+                reply = native_reply(request, code="inventory", data=data)
+                lengths["spaced_ascii"] = len(json.dumps(reply, ensure_ascii=True).encode("utf-8"))
+                lengths["compact_utf8"] = len(json.dumps(reply, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+                assert lengths["spaced_ascii"] > MAX_MESSAGE
+                assert lengths["compact_utf8"] > MAX_MESSAGE
+                await callback(reply)
+            else:
+                await callback(native_reply(request, summary="Opened thirty."))
+        namespace["send_app_message"] = send
+        _, handler = build_console_action_tool(send_ui, session_id=SESSION, generation=GENERATION,
+            revision=8, await_result=prepare)
+        # This deadline proves the callback fulfilled the real pending Future,
+        # rather than the handler reaching its five-second timeout.
+        reply = await asyncio.wait_for(handler({"action": "inventory"}), timeout=0.25)
+        disclosed = json.loads(reply.split(". ", 1)[1])
+        assert disclosed["scope"] == "results"
+        assert {r["number"] for r in disclosed["results"] if r.get("number") is not None} == set(range(1, 31))
+        assert disclosed["results_omitted"] > 0 and len(disclosed["results"]) >= 30
+        assert await handler({"action": "result_select", "target": "30", "inventory_revision": 8}) == "Opened thirty."
+        assert sent[-1]["target"] == data["results"][29]["id"]
+        print(f"100-row inventory ACK bytes: {lengths}; shared ceiling: {MAX_MESSAGE}; disclosed rows: {len(disclosed['results'])}")
+        await asyncio.sleep(0)
+        assert waiters == {}
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("prior_omitted", [0, 25])
+def test_explicit_results_hundred_row_ack_preserves_preprojection_omissions(prior_omitted):
+    async def run():
+        prepare, callback, waiters, send_ui, ns = bridge(with_sender=True)
+        original = hundred_row_inventory()
+        if prior_omitted:
+            original["results_omitted"] = prior_omitted
+        projected = []
+        async def send(_transport, request):
+            await callback(native_reply(request, code="inventory", data=original))
+            projected.append(waiters[request["request_id"]].result()["data"])
+        ns["send_app_message"] = send
+        _, handler = build_console_action_tool(send_ui, session_id=SESSION,
+            generation=GENERATION, revision=8, await_result=prepare)
+        reply = await asyncio.wait_for(handler({"action": "inventory", "args": {"scope": "results"}}), 0.25)
+        disclosed = json.loads(reply.split(". ", 1)[1])
+        assert disclosed == projected[0]
+        assert disclosed["results_omitted"] == prior_omitted + 100 - len(disclosed["results"])
+        assert disclosed["results_omitted"] > 0
+        assert {"skills", "screens", "panels"} <= set(disclosed["omitted_fields"])
+        assert not {"scope", "results_omitted", "omitted_fields"}.intersection(disclosed["omitted_fields"])
+        assert _disclosed_inventory(disclosed, scope="results")[0] == disclosed
+        await asyncio.sleep(0)
+        assert waiters == {}
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("metadata", [
+    {"results_omitted": True}, {"results_omitted": -1}, {"results_omitted": 2.5},
+    {"results_omitted": "68"}, {"omitted_fields": "skills"}, {"omitted_fields": [False]},
+])
+def test_malformed_prior_projection_metadata_is_not_disclosed_or_cached(metadata):
+    async def run():
+        sent = []
+        async def send(request):
+            sent.append(request)
+        async def ack(_request_id):
+            return {"status": "ok", "data": {"revision": 8,
+                "results": [row(str(uuid.uuid4()), 1, "Weather")], **metadata}}
+        _, handler = build_console_action_tool(send, session_id=SESSION,
+            generation=GENERATION, revision=8, await_result=ack)
+        reply = await handler({"action": "inventory", "args": {"scope": "results"}})
+        assert "unavailable" in reply
+        assert "Nothing changed" in await handler({"action": "result_close", "target": "1", "inventory_revision": 8})
+        assert len(sent) == 1
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("scope", ["screens", "panels"])
+def test_actual_sender_preserves_requested_scope_before_large_ack_guard(scope):
+    async def run():
+        prepare, callback, waiters, send_ui, namespace = bridge(with_sender=True)
+        data = native_large_inventory()
+        data["results"] += [{**row(str(uuid.uuid4()), None, "older " + "x" * 110),
+            "title": "Older weather " + "x" * 106, "pinned": False, "unread": False}
+            for _ in range(70)]
+        async def send(_transport, request):
+            assert waiters[request["request_id"]]._mortimer_inventory_scope == scope
+            reply = native_reply(request, code="inventory", data=data)
+            assert len(json.dumps(reply, separators=(",", ":")).encode()) > MAX_MESSAGE
+            await callback(reply)
+        namespace["send_app_message"] = send
+        _, handler = build_console_action_tool(send_ui, session_id=SESSION,
+            generation=GENERATION, revision=8, await_result=prepare)
+        reply = await asyncio.wait_for(handler({"action": "inventory", "args": {"scope": scope}}), 0.25)
+        actual = json.loads(reply.split(". ", 1)[1])
+        assert actual[scope] == data[scope] and actual["scope"] == scope
+        assert actual["revision"] == 8 and "results" not in actual
+        await asyncio.sleep(0)
+        assert waiters == {}
+    asyncio.run(run())
+
+
+def test_scoped_reply_without_results_does_not_replace_observed_result_ids():
+    async def run():
+        result_id, sent = str(uuid.uuid4()), []
+        async def send(request):
+            sent.append(request)
+        async def ack(_request_id):
+            request = sent[-1]
+            if request["action"] != "inventory":
+                return {"status": "ok", "summary": "Closed."}
+            data = ({"revision": 3, "screens": [{"id": "screen-1"}], "scope": "screens"}
+                if request["args"].get("scope") == "screens" else
+                {"revision": 3, "results": [row(result_id, 1, "Weather")]})
+            return {"status": "ok", "data": data}
+        _, handler = build_console_action_tool(send, session_id=SESSION,
+            generation=GENERATION, revision=3, await_result=ack)
+        await handler({"action": "inventory", "args": {"scope": "results"}})
+        assert '"screens"' in await handler({"action": "inventory", "args": {"scope": "screens"}})
+        assert await handler({"action": "result_close", "target": "1", "inventory_revision": 3}) == "Closed."
+        assert sent[-1]["target"] == result_id
+    asyncio.run(run())
+
+
+def test_genuinely_over_budget_noninventory_reply_is_not_reduced_or_accepted():
+    async def run():
+        prepare, callback, waiters = bridge()
+        request = {"request_id": str(uuid.uuid4())}
+        pending = prepare(request["request_id"])
+        await callback(native_reply(request, code="weather_reused", data={"source": "x" * MAX_MESSAGE}))
+        assert not pending.done()
+        # Even a nominal inventory cannot hide an oversized non-data field.
+        await callback(native_reply(request, code="inventory", data=native_large_inventory(),
+            summary="x" * MAX_MESSAGE))
+        assert not pending.done()
+        pending.cancel()
+        await asyncio.sleep(0)
+        assert waiters == {}
+    asyncio.run(run())
+
+
+def passive_inventory(inventory_data, **overrides):
+    return {"type": "console/inventory", "version": 1,
+        "session_id": SESSION.upper(), "generation": GENERATION.upper(),
+        "revision": 8, "data": inventory_data, **overrides}
+
+
+def hundred_row_inventory():
+    data = native_large_inventory()
+    data["results"] += [{**row(str(uuid.uuid4()), None, "older " + "x" * 110),
+        "title": "Older weather " + "x" * 106, "pinned": False, "unread": False}
+        for _ in range(70)]
+    return data
+
+
+def test_passive_hundred_row_inventory_updates_latest_not_observed_revision(monkeypatch):
+    async def run():
+        monkeypatch.setenv("JARVIS_COMMAND_CONSOLE_ENABLED", "true")
+        prepare, callback, waiters, send_ui, ns = bridge(with_sender=True)
+        data = hundred_row_inventory()
+        packet = passive_inventory(data)
+        raw_compact = len(json.dumps(packet, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+        raw_repr = len(repr(packet))
+        assert raw_compact > MAX_MESSAGE and raw_repr > MAX_MESSAGE
+        await ns["handle_console"](packet)
+        assert ns["console_inventory_revision"]["value"] == 8
+        stored = ns["console_session"].inventory
+        assert stored["scope"] == "results" and stored["results_omitted"] > 0
+        assert {r["number"] for r in stored["results"] if r.get("number") is not None} == set(range(1, 31))
+        sent = []
+        async def send(_transport, request):
+            sent.append(request)
+            await callback(native_reply(request, code="inventory", data=data)
+                if request["action"] == "inventory" else native_reply(request, summary="Opened."))
+        ns["send_app_message"] = send
+        _, handler = build_console_action_tool(send_ui, session_id=SESSION, generation=GENERATION,
+            revision=lambda: ns["console_inventory_revision"]["value"], await_result=prepare)
+        # Passive updates are not an inventory disclosure to the model.
+        assert "Nothing changed" in await handler({"action": "result_close", "target": "30", "inventory_revision": 8})
+        assert sent == []
+        # A stable UUID still uses the latest validated passive revision.
+        assert await handler({"action": "result_select", "target": data["results"][-1]["id"]}) == "Opened."
+        assert sent[-1]["revision"] == 8
+        await asyncio.wait_for(handler({"action": "inventory", "args": {"scope": "results"}}), 0.25)
+        assert await handler({"action": "result_select", "target": "30", "inventory_revision": 8}) == "Opened."
+        assert sent[-1]["target"] == data["results"][29]["id"]
+        print(f"100-row passive inventory bytes: repr={raw_repr}, compact_utf8={raw_compact}; shared ceiling={MAX_MESSAGE}")
+        await asyncio.sleep(0)
+        assert waiters == {}
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("changes", [
+    {"session_id": str(uuid.uuid4())}, {"generation": str(uuid.uuid4())},
+    {"version": 2}, {"version": True}, {"revision": True}, {"revision": 8.5},
+    {"data": []}, {"unknown": "x" * MAX_MESSAGE},
+])
+def test_invalid_passive_inventory_never_updates_latest_or_snapshot(changes, monkeypatch):
+    async def run():
+        monkeypatch.setenv("JARVIS_COMMAND_CONSOLE_ENABLED", "true")
+        _, _, _, _, ns = bridge(with_sender=True)
+        await ns["handle_console"](passive_inventory(hundred_row_inventory(), **changes))
+        assert ns["console_inventory_revision"]["value"] == 0
+        assert ns["console_session"].inventory is None
+    asyncio.run(run())
+
+
+def test_unprojectable_numbered_passive_inventory_is_rejected_not_truncated(monkeypatch):
+    async def run():
+        monkeypatch.setenv("JARVIS_COMMAND_CONSOLE_ENABLED", "true")
+        _, _, _, _, ns = bridge(with_sender=True)
+        data = native_large_inventory()
+        data["results"] = [{**row(str(uuid.uuid4()), i + 1, "界" * 120),
+            "title": "界" * 120} for i in range(30)]
+        # SkillsStore's existing wire ceiling is 32 catalogue entries. This
+        # legal outer metadata makes the original publication exceed budget;
+        # its thirty numbered Unicode rows cannot fit the voice disclosure.
+        data["skills"] = [{**data["skills"][i % 6], "id": f"skill-{i}"} for i in range(32)]
+        assert len(json.dumps(passive_inventory(data), ensure_ascii=False, separators=(",", ":")).encode()) > MAX_MESSAGE
+        await ns["handle_console"](passive_inventory(data))
+        assert ns["console_inventory_revision"]["value"] == 0
+        assert ns["console_session"].inventory is None
     asyncio.run(run())
