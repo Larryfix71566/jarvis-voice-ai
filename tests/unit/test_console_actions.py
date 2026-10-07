@@ -133,3 +133,51 @@ def test_display_show_with_no_reply_is_not_reported_as_done():
         generation="00000000-0000-4000-8000-000000000002", await_result=silent)
     assert asyncio.run(handler({"action": "display_show", "target": str(uuid.uuid4())})) == \
         "I couldn't confirm that console action."
+
+
+def test_result_actions_accept_a_spoken_number_or_subject():
+    """CC7a.3: a Recents number or subject is a valid target string; the app
+    resolves it to the result UUID, and the request shape is unchanged."""
+    sent = []
+
+    async def push(message):
+        sent.append(message)
+
+    async def opened(_request_id):
+        if sent[-1]["action"] == "inventory":
+            return {"status": "ok", "code": "inventory", "data": {
+                "revision": 0, "results": [{"id": result_id, "number": 3,
+                    "kind": "Weather", "subject": "Folly Beach", "title": "Folly Beach weather"}]}}
+        return {"status": "ok", "code": "applied", "summary": "Console action applied."}
+
+    _, handler = build_console_action_tool(
+        push, session_id="00000000-0000-4000-8000-000000000001",
+        generation="00000000-0000-4000-8000-000000000002", await_result=opened)
+    result_id = str(uuid.uuid4())
+    asyncio.run(handler({"action": "inventory"}))
+    for target in ("3", "Folly Beach weather"):
+        assert asyncio.run(handler({"action": "result_select", "target": target, "inventory_revision": 0})) == \
+            "Console action applied."
+    assert [m["target"] for m in sent[1:]] == [result_id, result_id]
+
+
+def test_ambiguous_result_reference_returns_the_choices_to_ask_about():
+    """CC7a.3: needs_choice means nothing changed; the Supervisor gets the
+    numbered labels so Mortimer can ask which one."""
+    async def push(_message):
+        return None
+
+    async def ambiguous(_request_id):
+        return {"status": "needs_choice", "code": "ambiguous_result",
+                "summary": "More than one result matches. Ask which one, by number.",
+                "choices": [{"id": str(uuid.uuid4()), "label": "2  Weather · Folly Beach · 5m"},
+                            {"id": str(uuid.uuid4()), "label": "4  Weather · Folly Beach · 1h"}]}
+
+    _, handler = build_console_action_tool(
+        push, session_id="00000000-0000-4000-8000-000000000001",
+        generation="00000000-0000-4000-8000-000000000002", await_result=ambiguous)
+    # Stable UUIDs do not need an observed snapshot; native clarification
+    # replies must still retain their labels through legacy injected seams.
+    reply = asyncio.run(handler({"action": "result_select", "target": str(uuid.uuid4())}))
+    assert reply.startswith("More than one result matches.")
+    assert "2  Weather · Folly Beach · 5m; 4  Weather · Folly Beach · 1h" in reply

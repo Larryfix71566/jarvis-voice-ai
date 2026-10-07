@@ -713,16 +713,17 @@ def build_pipeline(
     # success merely because a frame was queued.
     console_waiters: dict[str, asyncio.Future[dict[str, Any]]] = runtime.console_waiters
 
-    async def await_console_result(request_id: str) -> dict[str, Any] | None:
+    def await_console_result(request_id: str) -> asyncio.Future[dict[str, Any]]:
+        # Called before send: creating this Future in an async body lost a
+        # native acknowledgement delivered while the send callback yielded.
         loop = asyncio.get_running_loop()
         future: asyncio.Future[dict[str, Any]] = loop.create_future()
         console_waiters[request_id] = future
-        try:
-            return await asyncio.wait_for(future, timeout=5.0)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
-            return None
-        finally:
-            console_waiters.pop(request_id, None)
+        def finished(_future: asyncio.Future) -> None:
+            if console_waiters.get(request_id) is future:
+                console_waiters.pop(request_id, None)
+        future.add_done_callback(finished)
+        return future
     catalog = load_voice_catalog()
     default_voice = next(
         v for v in catalog["voices"] if v["id"] == catalog["default"])
@@ -1941,10 +1942,33 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         async def handle_console_result(message: Any) -> None:
             """Resolve a pending voice action acknowledgement from the Mac."""
             msg = _unwrap_client_message(message)
-            if not isinstance(msg, dict) or msg.get("type") != "console/result":
+            if (not isinstance(msg, dict) or msg.get("type") != "console/result"
+                    or type(msg.get("version")) is not int or msg["version"] != 1):
                 return
             request_id = msg.get("request_id")
             if not isinstance(request_id, str):
+                return
+            try:
+                # Foundation encodes UUIDs with uppercase hex; compare UUID
+                # identity, not that presentation spelling.
+                request_id = str(uuid.UUID(request_id))
+                if (uuid.UUID(str(msg.get("session_id"))) != uuid.UUID(runtime.session_id)
+                        or uuid.UUID(str(msg.get("generation"))) != uuid.UUID(console_generation)):
+                    return
+                if len(json.dumps(msg, ensure_ascii=True)) > 32 * 1024:
+                    return
+            except (ValueError, TypeError, OverflowError):
+                return
+            if (not isinstance(msg.get("status"), str)
+                    or msg["status"] not in {"ok", "noop", "needs_choice", "pending_user", "unsupported", "error"}):
+                return
+            choices = msg.get("choices")
+            if choices is not None and (not isinstance(choices, list) or any(
+                not isinstance(choice, dict)
+                or not isinstance(choice.get("id"), str)
+                or not isinstance(choice.get("label"), str)
+                for choice in choices[:10]
+            )):
                 return
             future = console_waiters.get(request_id)
             if future is not None and not future.done():
@@ -1953,6 +1977,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                     "summary": str(msg.get("summary", ""))[:240],
                     "code": str(msg.get("code", "invalid")),
                     "data": msg.get("data") if isinstance(msg.get("data"), dict) else None,
+                    "choices": [{"id": choice["id"][:120], "label": choice["label"][:120]}
+                                for choice in choices[:10]] if choices is not None else None,
                 })
 
         async def handle_location(message: Any) -> None:

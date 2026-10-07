@@ -195,4 +195,9 @@ public struct ConsoleResult: Codable, Sendable, Equatable {
 public struct ConsoleChoice: Codable, Sendable, Equatable {
     public let id: String
     public let label: String
+    /// CC7a.3: the app offers choices when a spoken result reference is
+    /// ambiguous. Bounded to the wire's 120-character identity limit.
+    public init(id: String, label: String) {
+        self.id = String(id.prefix(120)); self.label = String(label.prefix(120))
+    }
 }

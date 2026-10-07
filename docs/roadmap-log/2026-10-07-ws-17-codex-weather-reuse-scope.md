@@ -46,3 +46,5 @@ the Production line are preserved. No runtime test/provider/production operation
 was performed for this documentation slice.
 
 System: Codex. Session: `codex://threads/01a088c1-681c-70b0-ad7e-50ad6bccf83f`.
+
+Concurrent main integration: PR #173 merged as `bd18033` during scope CI. Kept its full Claude/Codex progress and evidence, then added this reuse contract. This scope publication does not imply pre-merge cross-review or a completed independent receipt; the actual cross-review request-changes and verification follow-ups remain code-review work.

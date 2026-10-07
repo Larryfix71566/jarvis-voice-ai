@@ -178,6 +178,7 @@ final class AppMessageRouter {
                     let status: String
                     let code: String
                     let summary: String
+                    var choices: [ConsoleChoice]?
                     switch outcome {
                     case .applied: status = "ok"; code = "applied"; summary = "Console action applied."
                     case .previewReady(let previewID):
@@ -198,6 +199,13 @@ final class AppMessageRouter {
                     case .capacity: status = "error"; code = "panel_limit"; summary = "Return a panel before opening another."
                     case .invalid: status = "error"; code = "invalid_target"; summary = "That console target is no longer available."
                     case .stale: status = "error"; code = "stale_selection"; summary = "The console changed; please choose the item again."
+                    case .needsChoice(let offered):
+                        // CC7a.3: ambiguous number or subject; nothing changed.
+                        status = "needs_choice"; code = "ambiguous_result"; choices = offered
+                        summary = "More than one result matches. Ask which one, by number."
+                    case .noMatch:
+                        status = "error"; code = "no_matching_result"
+                        summary = "No result in Recents matches that number or subject."
                     }
                     // WS-21 D6: the requested inventory carries the same data
                     // as the published one.
@@ -207,6 +215,7 @@ final class AppMessageRouter {
                                                 requestID: request.requestID,
                                                 status: status, code: isInventory ? "inventory" : code,
                                                 summary: isInventory ? "Console inventory ready." : summary,
+                                                choices: choices,
                                                 data: isInventory ? consoleCoordinator.inventoryJSON() : nil)
                     notices?.showConsoleResult(result)
                     client.send(.consoleResult(result))

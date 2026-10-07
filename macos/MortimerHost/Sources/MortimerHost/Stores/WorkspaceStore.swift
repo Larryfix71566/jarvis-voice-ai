@@ -98,11 +98,38 @@ final class WorkspaceStore {
         results.contains { $0.id == id }
     }
 
+    /// CC7a.3: the Recents list behind Results ▾ (pinned, then about the
+    /// last 10 unpinned, numbered to match voice). A display limit only.
+    var recents: WorkspaceRecents.Listing {
+        WorkspaceRecents.listing(results: results, pinned: pinnedIDs,
+                                 unread: unreadIDs, active: activeID)
+    }
+
+    /// The Recents number and card for each result that has one, keyed by
+    /// result. Shared by both inventory forms so voice numbers always
+    /// match the menu.
+    private var recentsByID: [UUID: WorkspaceRecents.Entry] {
+        Dictionary(uniqueKeysWithValues: recents.entries.map { ($0.id, $0) })
+    }
+
+    /// Resolve a voice or pointer result reference: a result UUID, or
+    /// (CC7a.3) a Recents number or subject. A UUID must name a result in
+    /// the workspace; a number or subject resolves against Recents only.
+    func resolveResultReference(_ reference: String?) -> WorkspaceRecents.Resolution {
+        guard let reference, !reference.isEmpty else { return .none }
+        if let id = UUID(uuidString: reference) {
+            return results.contains(where: { $0.id == id }) ? .result(id) : .none
+        }
+        let titles = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0.payload.title ?? "") })
+        return WorkspaceRecents.resolve(reference, in: recents.entries, titles: titles)
+    }
+
     /// Snapshot consumed by the command-console router. IDs are stable for the
     /// session; the count is a conservative revision for inventory checks.
     var consoleInventory: [String: Any] {
         let visibleResults = results.filter { !$0.payload.isProtectedLocal }
         let visibleIDs = Set(visibleResults.map(\.id))
+        let recentsByID = recentsByID
         return ["revision": inventoryRevision,
          "mode": showsConversation ? "conversation" : (showsSkills ? "skills" : (showsMemoryGraph ? "memory" : (showsAtlas ? "atlas" : (showsWorkflows ? "workflows" : "results")))),
          "active_result_id": activeID.flatMap { visibleIDs.contains($0) ? $0.uuidString : nil } as Any,
@@ -112,6 +139,10 @@ final class WorkspaceStore {
               "title": String((result.payload.title ?? "Result").prefix(120)),
               "index": index,
               "pinned": pinnedIDs.contains(result.id),
+              "number": recentsByID[result.id]?.number as Any,
+              "kind": recentsByID[result.id]?.card.kind ?? ConversationThread.card(result).kind,
+              "subject": String((recentsByID[result.id]?.card.subject ?? ConversationThread.card(result).subject).prefix(120)),
+              "unread": unreadIDs.contains(result.id),
               "can_connections": MemoryGraphSource.imageURL(result.payload) != nil]
          },
          "comparison": comparisonID.flatMap { visibleIDs.contains($0) ? $0.uuidString : nil } as Any,
@@ -126,11 +157,21 @@ final class WorkspaceStore {
         // Do not forward even their titles or identifiers to the voice supervisor.
         let visibleResults = results.filter { !$0.payload.isProtectedLocal }
         let visibleIDs = Set(visibleResults.map(\.id))
+        // CC7a.3: `number` is the Recents number shown in Results ▾ (null
+        // past the Recents bound); `kind` and `subject` are the card's, so
+        // "open number 3" and "the Folly Beach weather" resolve to the
+        // same entry Larry sees.
+        let recentsByID = recentsByID
         let resultValues: [JSONValue] = visibleResults.enumerated().map { index, result in
-            .object([
+            let card = recentsByID[result.id]?.card ?? ConversationThread.card(result)
+            return .object([
                 "id": .string(result.id.uuidString),
                 "title": .string(String((result.payload.title ?? "Result").prefix(120))),
                 "index": .number(Double(index)),
+                "number": recentsByID[result.id]?.number.map { .number(Double($0)) } ?? .null,
+                "kind": .string(card.kind),
+                "subject": .string(String(card.subject.prefix(120))),
+                "unread": .bool(unreadIDs.contains(result.id)),
                 "pinned": .bool(pinnedIDs.contains(result.id)),
                 "can_connections": .bool(MemoryGraphSource.imageURL(result.payload) != nil),
             ])
@@ -398,11 +439,16 @@ final class WorkspaceStore {
     func pin(_ id: UUID) -> Bool {
         guard results.contains(where: { $0.id == id }) else { return false }
         guard pinnedIDs.contains(id) || pinnedIDs.count < pinLimit else { return false }
-        pinnedIDs.insert(id)
+        // Codex boundary 3 (CX-15): pinning renumbers Recents, so a voice
+        // request built on the old numbers must be stale.
+        if pinnedIDs.insert(id).inserted { inventoryRevision += 1 }
         return true
     }
 
-    func unpin(_ id: UUID) { pinnedIDs.remove(id); trimHistory() }
+    func unpin(_ id: UUID) {
+        if pinnedIDs.remove(id) != nil { inventoryRevision += 1 }
+        trimHistory()
+    }
 
     @discardableResult
     func compare(with id: UUID?) -> Bool {
