@@ -2,7 +2,7 @@
 date: 2026-10-06
 system: codex
 rows: [WS-04]
-prs: []
+prs: [187]
 ---
 
 Codex claims a bounded documentation-only R2 guard status/header/checkpoint correction on `docs/ws04-guard-status-20261006`, from fetched `origin/main` `6ca7704a997d8f6dd94558c97e5b091ac5b1a287`. Session: `01a088c1-681c-70b0-ad7e-50ad6bccf83f`. Larry's standing goal is to complete existing work that does not need him; the existing Codex-owned WS-04 guard's recorded merge/deployment facts can be reconciled independently of his pending onboarding-method decision.
