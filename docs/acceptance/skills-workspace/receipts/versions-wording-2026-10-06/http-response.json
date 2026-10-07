@@ -1,0 +1,11 @@
+{
+  "catalog_status": 200,
+  "catalog_revision": "6906d83d2416de672b99669fd172bbe192d9ad5f045966fb0ebf699399596239",
+  "skill_id": "current-weather-with-fahrenheit",
+  "display_name": "Current weather in Fahrenheit",
+  "versions_path": "/api/skills/current-weather-with-fahrenheit/versions",
+  "versions_status": 503,
+  "versions_body": {
+    "detail": "Skills requests require bearer authentication"
+  }
+}

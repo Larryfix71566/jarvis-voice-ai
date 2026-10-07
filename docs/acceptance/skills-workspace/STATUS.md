@@ -6,13 +6,20 @@ Status vocabulary: `not_started`, `in_progress`, `implemented_unverified`,
 `blocked`, `accepted`. Implementation/deployment evidence is distinct from
 live feature acceptance and activation.
 
-Latest live UI audit (2026-09-30): the installed app and production checkout
-both report `39fc6f9`; Skills library, Overview, intended Process navigation,
-and the no-trace Activity state were observed in the connected native app.
-The Versions endpoint returned the expected fail-closed 503 while bearer auth
-is dormant; the running UI's generic connection message is corrected in merged
-PR #145 (`9da99d4`) but is not yet deployed. No SW-A–SW-L gate was newly accepted.
-See [live UI audit](receipts/live-ui-audit-2026-09-30.md).
+Latest live UI subcheck (2026-10-06): the running native MortimerHost executable
+and bundle identify deployed `bde22bb`. With voice disconnected, the Versions
+view displays the intended dormant-auth explanation; the local catalog returns
+200 and Versions returns the expected fail-closed 503. This closes only that
+wording subcheck. SW-A overall remains open; SW-B/C remain the only accepted
+full gates (2/12). See the [build-identified receipt](receipts/versions-wording-2026-10-06/receipt.md)
+for screenshot, accessibility text, HTTP record, hashes and limits.
+
+Earlier live UI audit (2026-09-30): at deployed `39fc6f9`, Skills library,
+Overview, intended Process navigation and the no-trace Activity state were
+observed. Versions returned the expected dormant-auth 503, but the UI still
+used a generic connection message; PR #145's correction had not yet been
+deployed at that audit. The wording subsequently shipped and is now observed
+in `bde22bb`. See the [earlier audit](receipts/live-ui-audit-2026-09-30.md).
 
 Merged-source native check on the MacBook Air `Mac17,4` (Apple M5, macOS
 27.0): JarvisKit passed 219 tests; the full MortimerHost test command passed.
@@ -21,7 +28,7 @@ Its 100-sample rendered Skills selection-to-layout p95 was 13.099 ms wide /
 voice latency and the ten-minute live-trace memory soak remain unmeasured, so
 SW-K remains open.
 
-Latest checkpoint (2026-09-28 20:19 EDT): PR #96 (`539f8f6`) is deployed on
+Historical foundation checkpoint (2026-09-28 20:19 EDT): PR #96 (`539f8f6`) is deployed on
 the Mac through DEPLOY-MAIN. All CI workflows passed; exact merged-release
 checks passed 4,860 Python tests (seven skips), JarvisKit 219 tests, and
 MortimerHost 372 tests (seven environment skips), with zero failures. Both
