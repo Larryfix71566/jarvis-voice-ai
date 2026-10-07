@@ -1538,6 +1538,77 @@ bound, private numbering, ages, spoken numbers, subjects, ambiguity,
 revision on pin, inventory fields, voice by number and subject, stale
 numbers) and two cases in `tests/unit/test_console_actions.py`.
 
+#### CC7a.4 weather reuse — contract and scope amendment (2026-10-07)
+
+**Dated progress (Codex, documentation only):** Starting from main `e7b099b`
+(ownership claim #194), this amendment reserves the reuse contract and the
+additional narrow implementation paths before their code changes. The docs
+branch is `docs/ws17-reuse-scope-20261007`; the main WS-17 implementation
+claim/`Where` remains `codex/ws17-closure-20261007`. Claude's earlier increments
+and PR #173 keep their attribution. This is scope/contract publication, not
+implemented reuse, a test receipt, merge/deploy permission or live acceptance.
+
+1. **One cache/freshness owner.** Native `WorkspaceStore` owns retained weather
+   results, original source data and freshness. No backend TTL mirror, second
+   cache, new persistent cache, model route or provider selection is added.
+   Inventory exposes subject/freshness metadata only, never the new raw source
+   object, aliases or bodies. Backend metadata can identify a candidate UUID;
+   native guards decide whether that candidate can actually supply a hit.
+2. **Shared bounded payload fields.** `subject_key` is kind plus canonical
+   subject, at most 200 characters. Existing `ts` and `fresh_until` use finite
+   UTC epoch seconds. Optional `weather_source` holds only original public
+   `{weather, radar, place}` JSON from the existing weather path; optional
+   `subject_aliases` are bounded canonical requested-city aliases inside that
+   object, at most 8 strings of 120 characters each. Cached model content is
+   excluded. Python and JarvisKit apply the same 16 KiB encoded-JSON cap to this
+   field without increasing an existing message/wire/tool budget. Malformed or
+   oversized cache metadata disables reuse; the legacy display body and safe
+   same-key upsert remain usable. Preserve actual source-fetch `ts`, including
+   explicit zero, and require finite `fresh_until <= ts + 900`. Replay does not
+   replace a zero with now, extend expiry or claim a new fetch occurred.
+3. **Freshness-aware query, canonical target.** Reserve shared console action
+   `weather_reuse` with a canonical result UUID `target` taken from the observed
+   native inventory. Closed typed `args`: `subject_key`; `tool` from
+   `local_weather|get_weather|get_weather_radar`; integer `days` 1–7; `units`
+   `metric|imperial`; optional originating `run_id`. Existing wire bounds and
+   session/generation/revision checks still apply. The native query returns
+   original public source data only on a hit after ordinary-turn, exact-key,
+   expiry, requested-capability/completeness and protection checks. Source data
+   is not returned from protected/private results or unsafe/stale identities.
+4. **Miss and refusal are distinct.** No matching public inventory candidate,
+   genuine missing/expired cache, or incomplete requested capability may use
+   the existing fetch after its protected-source guard. Ambiguity, stale target
+   or revision, disconnect/timeout and unsafe failures report a truthful
+   refusal; they never silently turn into another fetch. A freshness timestamp
+   in inventory does not authorize bypassing the native query.
+5. **Explicit reopen and arrival behavior.** Shared `result_reopen` selects a
+   retained cached result through the existing canonical-UUID coordinator;
+   spoken subject/index resolves against the observed inventory revision, with
+   clarification/refusal on ambiguity/staleness. It performs no fresh fetch and
+   retains existing protection/action rules. Automatic weather reuse follows
+   the existing requested-result arrival contract: a result/view being read
+   keeps focus and receives New/Show/Dismiss. It does not become an unconditional
+   select. Fresh reuse adds the ordered reference line to the same result;
+   optional originating `run_id` permits only one reference per run. Stale
+   refresh upserts the same key/UUID, retaining pins, comparison, scroll,
+   inspector and Output history. Weather A → Atlanta → A yields two cards;
+   fresh A performs zero duplicate fetch, and stale A refreshes in place.
+6. **Narrow registry seam.** Additional paths are new
+   `jarvis/bot/weather_reuse.py` and its tests, and only weather-call interception
+   in `jarvis/skills/registry.py` `_invoke`. Bind the weather hook with a
+   request-owned ContextVar after the existing guards; do not install a
+   process-global registry callback. Cache hits and real fetches preserve the
+   existing classified `_finish_invocation`/ToolResultEnvelope path, source
+   policy, sensitive-turn handling, latency/run-log rules and shared-registry
+   lifecycle. Non-weather invocation behavior is unchanged. Python/JarvisKit
+   payload/action contracts and native cache/upsert/reference changes remain in
+   the existing WS-17 scope and are tested through both transport paths.
+7. **Acceptance boundary.** Required cross-system review, exact-candidate
+   verification, WS-21 transfer/screen contracts and Larry's live UI2-22…25
+   outcomes remain open. Keep the temporary thread switch until those gates
+   pass. This amendment reserves no environment/config key, migration, port,
+   launch label, credential, allowlist change or new model/provider route.
+
 ## 8. Acceptance evidence and regression gates
 
 Status values: NOT STARTED, IMPLEMENTED/UNVERIFIED, VERIFIED IN SANDBOX,
