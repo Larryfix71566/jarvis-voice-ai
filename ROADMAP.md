@@ -110,7 +110,7 @@ Claude’s work or enable any runtime feature.
 B1–B4 implementation is merged; the 72-entry migration is already verified.
 
 - [ ] **Codex / Claude · documentation:** Land the owned status corrections, including WS-10/11's lifecycle labels; the roadmap checker reports no unresolved errors against the current production receipt.
-- [ ] **Codex / Claude · observation:** Record ten post-migration PR merges with no change-log conflict. Record the actual PRs; do not infer this from the number of commits.
+- [x] **Codex / Claude · observation:** The first ten published post-migration PR merges (#161/#162/#163/#165/#166/#167/#168/#164/#169/#170) and their recorded integration merges replay with no conflict in §8 or `docs/roadmap-log/`. Exact complete merge trees and unchanged §8 are verified; [receipt](docs/roadmap-log/2026-10-06-ws-20-codex-ten-pr-change-log-observation.md). Unrecorded manual history is not claimed.
 - [ ] **Larry · decision:** After the warn-only rollout period and owned corrections, decide whether the checker becomes a blocking CI gate; the chosen behavior is recorded and verified.
 - [ ] **Each acceptance owner · evidence:** Link the remaining live checks to their own rows (WS-17, WS-18 and the other open gates); publish the final Phase A/B exit record without treating implementation as live acceptance.
 
@@ -119,15 +119,15 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
 - **Owner:** `claude` (B4 checker, plan) and `codex` (B1–B3, claimed by Codex on 10-02 at Larry's request)
-- **Status:** in-progress: Phase A landed — plan #153, WS-07 fix #154, #138 closed, #142 merged as `d01f9af`; #147 and #156 merged after Codex's re-review (`1faa75f`, `ae70f2c`), and `ae70f2c` was deployed 10-02 19:23 with a clean receipt. B2's production line and event-wording sweep plus B3's after-merge/C1–C5 rules landed in #158 (`04eb3f0`). B4 landed in #156. B1 moved all 72 §8 entries verbatim to individual log files in PR #160, merged as `30fa3db` on 10-02; the 72/72 body comparison was rechecked against `cc64d50` on 10-06.
+- **Status:** in-progress: Phase A landed — plan #153, WS-07 fix #154, #138 closed, #142 merged as `d01f9af`; #147 and #156 merged after Codex's re-review (`1faa75f`, `ae70f2c`), and `ae70f2c` was deployed 10-02 19:23 with a clean receipt. B2's production line and event-wording sweep plus B3's after-merge/C1–C5 rules landed in #158 (`04eb3f0`). B4 landed in #156. B1 moved all 72 §8 entries verbatim to individual log files in PR #160, merged as `30fa3db` on 10-02; the 72/72 body comparison was rechecked against `cc64d50` on 10-06. The first ten published post-B1 PR merges are verified without change-log conflict (10-06 receipt); checker rollout remains open.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
-- **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; the 10-02 19:23 deployment and Larry's one-row, supporting-display and single-answer checks recorded; WS-18 AirPods and UI2-22 five-turn checks remain separate. Phase B: B1 migration is complete; checker warn-only rollout remains open; WS-10/11 lifecycle wording awaits their acceptance owner; next 10 PRs merge without change-log conflict. Phase C rules are in §0.
+- **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; the 10-02 19:23 deployment and Larry's one-row, supporting-display and single-answer checks recorded; WS-18 AirPods and UI2-22 five-turn checks remain separate. Phase B: B1 migration is complete; checker warn-only rollout remains open; WS-10/11 lifecycle wording awaits their acceptance owner; the first ten published post-B1 merges are verified without change-log conflict (10-06 receipt); strict-mode rollout stays open. Phase C rules are in §0.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (plan #153, B1–B3 claim #157, B2/B3 #158, B4 #156, B1 log migration #160); bounded acceptance-checklist documentation: `codex/ws05-execution-20261005` (#184).
+- **Where:** main (plan #153, B1–B3 claim #157, B2/B3 #158, B4 #156, B1 log migration #160); acceptance-checklist documentation merged in #184 (`a4ad5a4`, 10-06).
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
 - **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 (Codex): `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`, and dated status/progress in `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`.
-- **Next step:** codex and claude: write new entries under `docs/roadmap-log/`; the migrated count and unchanged bodies are verified. Both systems: monitor the next 10 PRs for change-log conflicts; the WS-10/11 acceptance owner corrects their lifecycle wording before CI leaves warn-only mode.
-- **Updated:** 10-06 (Codex B1/B2 reconciliation and Larry-requested acceptance lists; no new acceptance)
+- **Next step:** claude: repair the validated CC7a.3 findings on #173 and resolve #172/#174 roadmap integration, preserving the merged acceptance lists. codex: re-review the repaired exact heads and record current checks. Both systems: retain the verified ten-PR observation and use `docs/roadmap-log/`; WS-10/11 lifecycle corrections and strict-mode rollout remain open.
+- **Updated:** 10-06 (acceptance lists and published ten-PR change-log observation verified; no new product acceptance)
 
 </details>
 

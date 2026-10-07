@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** IN PROGRESS, reconciled 2026-10-06. B2/B3 merged in #158, B4 merged in #156, and B1's 72-entry log migration merged in #160 (`30fa3db`). The ten-PR no-conflict observation and warn-only checker rollout remain open.
+**Status:** IN PROGRESS, reconciled 2026-10-06. B2/B3 merged in #158, B4 merged in #156, and B1's 72-entry log migration merged in #160 (`30fa3db`). The first ten published post-migration PR/integration merges are verified without a change-log conflict (2026-10-06 receipt); warn-only/strict checker rollout remains open.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -138,3 +138,17 @@ The original 72 entries in §8 at `cc64d50` match 72 migrated file bodies at #16
 ### 2026-10-06 — Per-item acceptance lists (Codex; requested by Larry)
 
 Added a concrete checklist near the top of every unfinished ROADMAP block, derived from its existing plan/readiness record. Each item names the actor, prerequisite or decision when applicable, and pass criteria. Existing accepted gates and partial passes are retained; no checkbox is newly accepted and no implementation owner/status is reassigned. The list distinguishes proposed mail/brief approval, future CC7a implementation and actual Mac tests, and exposes the untracked WS-06 eleven-item numbering as a documentation prerequisite. Shared receipts can close matching requirements without duplicate runs; source titles disambiguate reused UI2 numbers. This is the bounded roadmap documentation slice authorized in Larry's current request, not a new implementation plan or activation authority.
+
+### 2026-10-06 — Resumed autonomous review and post-merge bookkeeping (Codex)
+
+PR #184 merged as `a4ad5a4` with all five checks successful at `c32620f`. Its checklist documentation is on main; WS-20's historical branch reference is now written as a merged event so the checker does not misidentify the joint workstream as an already-merged active branch. The checker retains only the pre-existing WS-10/11 lifecycle findings; #174 proposes their correction.
+
+Codex completed the assigned CC7a.3 review at #173 head `fb2e06f`: the actual Python revision-stamping/native dispatch closes the wrong newly arrived result after renumbering; the real acknowledgement callback loses ambiguity choices; an opened Older result is absent from the console Close list. Existing 10 Python and 13 Recents tests pass, while the independent wrong-target native witness fails two safety assertions. A separate existing voice comparison schema/secondary-target gap is documented without claiming it was introduced. Findings and causal artifact paths are on the PR; implementation remains Claude's. #172/#174 documentation reviews also record actual merge-tree conflicts and instructions to preserve the checklist/merged-state facts. No deployment, source grant, provider call or acceptance flag changed.
+
+### 2026-10-06 — Review evidence available without human file transfer (Codex)
+
+Embedded the exact public synthetic Python/native witnesses and observed output in the existing resumed-review log entry, exposed through #185. Claude can read/adopt them from the repository without Larry copying `/private/tmp` files. The entry separates defect-confirming Python assertions from the native intended-safety regression and preserves the focused-run/full-runtime distinction; no original product test or implementation behavior changed. #173 remains unapproved until its owner repairs the findings and Codex re-reviews the repaired head.
+
+### 2026-10-06 — Ten published PRs observed without change-log conflict (Codex)
+
+The first ten main merges after #160 are #161/#162/#163/#165/#166/#167/#168/#164/#169/#170, in actual merge order. Root and independent audits replay the exact published parents: all ten complete trees match and §8 is unchanged; both contributing integration merges have clean dated-log/§8 state, including a positive control reproducing one unrelated WS-05 row conflict. The ten-PR published-history observation is closed with [its receipt](../roadmap-log/2026-10-06-ws-20-codex-ten-pr-change-log-observation.md). Erased/rebased/unpublished manual attempts are not inferred. CI strict-mode decision/rollout and the remaining owned status corrections remain open; no live product gate is closed.
