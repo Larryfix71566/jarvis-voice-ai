@@ -170,22 +170,20 @@ struct ConsoleActionBar: View {
             }
             if !listing.older.isEmpty {
                 Menu("Older · \(listing.older.count)") {
-                    ForEach(listing.older) { card in
-                        Button(card.title) { select(card.id) }
-                    }
+                    recentsRows(listing.olderEntries, now: now)
                 }
             }
-            if !listing.entries.isEmpty {
+            if !listing.actionableEntries.isEmpty {
                 Divider()
                 Menu("Pin or unpin") {
-                    ForEach(listing.entries) { entry in
+                    ForEach(listing.actionableEntries) { entry in
                         Button(Self.pinCommandTitle(entry, pinned: workspace.pinnedIDs.contains(entry.id))) {
                             togglePin(entry.id)
                         }
                     }
                 }
                 Menu("Close") {
-                    ForEach(listing.entries) { entry in
+                    ForEach(listing.actionableEntries) { entry in
                         Button(entry.label) {
                             if let coordinator { _ = coordinator.executePointer(.resultClose, target: entry.id.uuidString) }
                             else { workspace.close(entry.id) }
@@ -194,7 +192,7 @@ struct ConsoleActionBar: View {
                 }
                 if let shown = workspace.activeResult, mode == .results {
                     Menu("Compare with shown") {
-                        ForEach(listing.entries.filter { $0.id != shown.id }) { entry in
+                        ForEach(listing.actionableEntries.filter { $0.id != shown.id }) { entry in
                             Button(entry.label) {
                                 if let coordinator {
                                     _ = coordinator.executePointer(.compareSet, target: shown.id.uuidString,

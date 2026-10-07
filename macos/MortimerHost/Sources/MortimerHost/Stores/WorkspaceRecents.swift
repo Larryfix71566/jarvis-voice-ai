@@ -15,7 +15,7 @@ enum WorkspaceRecents {
     /// "About the last 10 unpinned."
     static let recentLimit = 10
 
-    enum Section: String, Equatable { case pinned, recent }
+    enum Section: String, Equatable { case pinned, recent, older }
 
     struct Entry: Identifiable, Equatable {
         let id: UUID
@@ -36,9 +36,14 @@ enum WorkspaceRecents {
     struct Listing: Equatable {
         let entries: [Entry]
         /// Unpinned results beyond the Recents bound, newest first.
-        let older: [ConversationThread.Card]
+        let olderEntries: [Entry]
+        var older: [ConversationThread.Card] { olderEntries.map(\.card) }
         var pinned: [Entry] { entries.filter { $0.section == .pinned } }
         var recent: [Entry] { entries.filter { $0.section == .recent } }
+        /// Pointer actions remain available for every retained result,
+        /// including an open or compared Older item. Only `entries` supply
+        /// voice numbers; Older controls must never expand that inventory.
+        var actionableEntries: [Entry] { entries + olderEntries }
     }
 
     /// Pinned first, then the newest unpinned results, each newest first.
@@ -64,8 +69,12 @@ enum WorkspaceRecents {
                                      isActive: active == result.id))
             }
         }
-        return Listing(entries: entries,
-                       older: unpinned.dropFirst(shown.count).map(ConversationThread.card))
+        let olderEntries = unpinned.dropFirst(shown.count).map { result in
+            Entry(id: result.id, number: nil, section: .older,
+                  card: ConversationThread.card(result),
+                  isUnread: unread.contains(result.id), isActive: active == result.id)
+        }
+        return Listing(entries: entries, olderEntries: olderEntries)
     }
 
     /// The "fresh" age: "now", "4m", "2h", "3d".

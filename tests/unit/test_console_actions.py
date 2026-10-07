@@ -144,15 +144,21 @@ def test_result_actions_accept_a_spoken_number_or_subject():
         sent.append(message)
 
     async def opened(_request_id):
+        if sent[-1]["action"] == "inventory":
+            return {"status": "ok", "code": "inventory", "data": {
+                "revision": 0, "results": [{"id": result_id, "number": 3,
+                    "kind": "Weather", "subject": "Folly Beach", "title": "Folly Beach weather"}]}}
         return {"status": "ok", "code": "applied", "summary": "Console action applied."}
 
     _, handler = build_console_action_tool(
         push, session_id="00000000-0000-4000-8000-000000000001",
         generation="00000000-0000-4000-8000-000000000002", await_result=opened)
+    result_id = str(uuid.uuid4())
+    asyncio.run(handler({"action": "inventory"}))
     for target in ("3", "Folly Beach weather"):
-        assert asyncio.run(handler({"action": "result_select", "target": target})) == \
+        assert asyncio.run(handler({"action": "result_select", "target": target, "inventory_revision": 0})) == \
             "Console action applied."
-    assert [m["target"] for m in sent] == ["3", "Folly Beach weather"]
+    assert [m["target"] for m in sent[1:]] == [result_id, result_id]
 
 
 def test_ambiguous_result_reference_returns_the_choices_to_ask_about():
@@ -170,6 +176,8 @@ def test_ambiguous_result_reference_returns_the_choices_to_ask_about():
     _, handler = build_console_action_tool(
         push, session_id="00000000-0000-4000-8000-000000000001",
         generation="00000000-0000-4000-8000-000000000002", await_result=ambiguous)
-    reply = asyncio.run(handler({"action": "result_select", "target": "Folly Beach"}))
+    # Stable UUIDs do not need an observed snapshot; native clarification
+    # replies must still retain their labels through legacy injected seams.
+    reply = asyncio.run(handler({"action": "result_select", "target": str(uuid.uuid4())}))
     assert reply.startswith("More than one result matches.")
     assert "2  Weather · Folly Beach · 5m; 4  Weather · Folly Beach · 1h" in reply
