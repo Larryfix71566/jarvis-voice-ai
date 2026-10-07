@@ -25,7 +25,7 @@ second state owner, provider route or production edit.
 
 ## Local verification on this source
 
-- `RUN_LIVE=0 PYTHONPATH=<candidate> <existing-venv-python> -m pytest tests/unit/test_console_actions.py tests/unit/test_console_voice_bridge.py tests/unit/test_console_protocol.py tests/unit/test_pipeline_names.py tests/unit/test_console_session.py -q`: 67 passed, two dependency warnings.
+- `PYTHONPATH=<candidate> <existing-venv-python> -m pytest tests/unit/test_console_actions.py tests/unit/test_console_voice_bridge.py tests/unit/test_console_protocol.py tests/unit/test_pipeline_names.py tests/unit/test_console_session.py -q`: 67 passed, two dependency warnings. Only `PYTHONPATH` was explicitly set for that command; inherited `RUN_LIVE` was not separately captured. These focused tests use synthetic/mocked boundaries; do not infer live configuration from them.
 - `RUN_LIVE=0 JARVIS_DB_PATH=/private/tmp/ws17-bot-wiring-tests-final.db PYTHONPATH=<candidate> <existing-venv-python> -m pytest tests/integration/test_bot_wiring.py -q`: 64 passed, two dependency warnings. Vault/costs/test state is isolated by the repository fixtures; no live provider or user database test.
 - `swift test --disable-sandbox --skip-update --build-system native --package-path macos/JarvisKit`: 226 tests, zero failures.
 - Same Swift command for `macos/MortimerHost`: 512 tests, six skips, zero failures. Skips: three external-display prerequisites, and three existing WindowVisibility tests whose host could not become active. ProtectedDisplayContent’s actual fixture-window capture and DisplayWindowPrivacyBoundaryTests passed; this is not an actual protected conversation receipt.
