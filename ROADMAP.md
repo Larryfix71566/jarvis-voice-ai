@@ -402,15 +402,15 @@ Source: [remote-access plan Addenda R1/R2 and §8](docs/plans/MORTIMER_REMOTE_AC
 **Workstream:** Remote access T2: bearer tokens, fail-closed bind, Tailscale
 
 - **Owner:** `codex` (Larry, 09-27)
-- **Status:** landed foundation: R2 local-only design and separate remote-bind guard merged in PR #149 (`a39136a`) after the 09-30 `39fc6f9` deployment; the guard was deployed in `7c4637e` on 10-02 with authentication and remote binding still off. Token provisioning and enabled-mode acceptance remain open
+- **Status:** claimed: docs-only R2 status/header and guard-checkpoint reconciliation on `docs/ws04-guard-status-20261006`. Foundation remains landed: R2 local-only design and separate remote-bind guard merged in PR #149 (`a39136a`) after the 09-30 `39fc6f9` deployment; the guard was deployed in `7c4637e` on 10-02 with authentication and remote binding still off. Token provisioning and enabled-mode acceptance remain open
 - **Implemented by:** Codex (remote foundation and R1)
-- **Remaining work / acceptance:** Codex prepares local-only onboarding; Larry separately decides activation and any remote bind
+- **Remaining work / acceptance:** Codex first corrects the existing R2 plan's stale branch-only guard wording after this documentation claim merges. Larry's onboarding-method decision, token provisioning, local activation and any remote-bind decision remain separate open work; no live acceptance is claimed by this slice
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (R1 foundation `539f8f6`; R2 guard PR #149 `a39136a`). The former `codex/ws04-local-onboarding-20260930` branch merged as PR #149; a fresh branch is required for provisioning work.
+- **Where:** `docs/ws04-guard-status-20261006` (docs-only claim). Foundation: main (R1 `539f8f6`; R2 guard PR #149 `a39136a`); the former implementation branch is recorded as inactive history in the claim log. Later provisioning requires its own fresh claim after the method decision.
 - **Plan:** `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` (R1 implemented; R2 local-only onboarding design)
-- **Scope:** `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers. The R2 design proposes `scripts/provision_local_auth.py`, a small JarvisKit stdin-to-Keychain executable, its `Package.swift` target, and tests; no provisioner is implemented.
-- **Next step:** Larry selects the local token-onboarding method (supervised deploy setup, one-time CLI, or Mac pairing). Then Codex implements and tests the chosen vault/Keychain path and corrects the R2 plan header, which still calls the merged guard branch-only. Preparation does not itself enable auth; local activation and any remote bind remain separate decisions.
-- **Updated:** 10-02
+- **Scope:** Active documentation slice only: `ROADMAP.md` WS-04 block; `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` Addendum R2 status header, 2026-09-30 R2 guard checkpoint and dated factual progress; WS-04 dated entries under `docs/roadmap-log/`. Prior runtime implementation scope is historical/inactive for this slice and preserved in the [claim log](docs/roadmap-log/2026-10-06-ws-04-codex-r2-guard-status-claim.md); this claim reserves no runtime paths and authorizes no provisioning implementation.
+- **Next step:** codex: after the docs-only claim merges, reconcile only the R2 guard's header/checkpoint against merged/deployed evidence, then restore the row's inactive foundation scope in the completion record. larry: separately choose the local token-onboarding method (supervised deploy setup, one-time CLI, or Mac pairing) before a new provisioning claim. Local activation and any remote bind remain separate decisions.
+- **Updated:** 10-06 (bounded documentation claim; no R2 plan-body edit or live acceptance)
 
 </details>
 
