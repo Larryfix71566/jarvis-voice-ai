@@ -102,6 +102,35 @@ Claude’s work or enable any runtime feature.
 
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
 
+<details id="ws-20">
+<summary>WS-20 — Roadmap joint working: catch-up and drift prevention · Claude + Codex</summary>
+
+### Acceptance checklist — remaining
+
+B1–B4 implementation is merged; the 72-entry migration is already verified.
+
+- [x] **Codex · documentation cleanup:** WS-10/11 lifecycle prefixes now describe their landed foundations while every acceptance gate stays open. The roadmap checker passes on this documentation candidate; the single Production line still matches the recorded `bde22bb` deployment. [Dated cleanup proof](docs/roadmap-log/2026-10-06-ws-20-codex-lifecycle-closeout.md).
+- [x] **Codex / Claude · observation:** The first ten published post-migration PR merges (#161/#162/#163/#165/#166/#167/#168/#164/#169/#170) and their recorded integration merges replay with no conflict in §8 or `docs/roadmap-log/`. Exact complete merge trees and unchanged §8 are verified; [receipt](docs/roadmap-log/2026-10-06-ws-20-codex-ten-pr-change-log-observation.md). Unrecorded manual history is not claimed.
+- [ ] **Larry · decision:** After the warn-only rollout period and owned corrections, decide whether the checker becomes a blocking CI gate; the chosen behavior is recorded and verified.
+- [ ] **Each acceptance owner · evidence:** Link the remaining live checks to their own rows (WS-17, WS-18 and the other open gates); publish the final Phase A/B exit record without treating implementation as live acceptance.
+
+Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.md).
+
+**Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
+
+- **Owner:** `codex` (active bounded operational-roadmap documentation claim); `claude` retains existing B4/plan and WS-13/17 implementation/review ownership unless Larry separately reassigns it
+- **Status:** claimed: Larry authorized the WS-20 operational-roadmap documentation expansion on 2026-10-07. B1–B4 implementation, the published ten-PR observation and #191 lifecycle/evidence closeout (`b6f09f4`) remain landed. Live acceptance and checker enforcement decisions remain open.
+- **Implemented by:** Codex (B1–B3); Claude (B4)
+- **Remaining work / acceptance:** Larry decides checker enforcement after the approved warning period. Acceptance owners record their remaining live checks and the final Phase A/B exit evidence. Claude repairs #173 and resolves #172/#174 against current main; Codex reviews the repaired heads. The WS-10/11 lifecycle-label errors are reconciled; all their acceptance conditions and owners remain unchanged.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** `docs/ws20-operational-roadmap-20261007` (new authorized Codex documentation slice, after claim #192 lands); prior bounded closeout #191 (`b59ec9b`) merged as `b6f09f4`; foundation and earlier review evidence through `30dcb4e` and claim #190 (`c1c2d96`).
+- **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
+- **Scope:** Active Codex documentation expansion authorized by Larry, 2026-10-07: `ROADMAP.md` top operational summary (actions, owners, blockers, pass conditions), Larry decision queue, and linked acceptance grouping (ready now versus waiting on code or decisions); this WS-20 block; narrow stale state/Where/Next step/Updated and evidence-reference wording in WS-17/21/11, reusing pending #172/#174 corrections and #191 exact-build results rather than creating parallel fixes or repeating tests; `docs/roadmap-log/**`; dated status/progress in the existing `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`. The #191 lifecycle-prefix corrections and exact-build receipts are already merged as `b6f09f4`; preserve them and reuse the existing evidence. Preserve all detailed source blocks, open/accepted gates, ownership, implementation scopes, production receipts and human decisions. Claude retains #173 repairs and #172/#174 integration; no edits to their branches, code or plans. No new plan, tracking copy, checker enforcement, credentials, provider workload, product change, activation or deployment. Historical B4 (Claude) and B1–B3 (Codex) scopes are inactive. Larry authorized merging only this claim PR after checks; the substantive roadmap update must remain a separate draft PR for Larry.
+- **Next step:** codex: validate and publish #192; after its authorized merge, refresh main and open PRs, then prepare a separate operational-roadmap draft under this scope. Reuse the merged #191 evidence and #172/#174 pending fixes without merging other PRs. claude: retain #173 repairs and #172/#174 integration. larry: review the substantive draft and retain all implementation, deployment, acceptance and checker-enforcement decisions.
+- **Updated:** 10-07 (Larry-authorized claim expansion; concurrent #191 evidence preserved; no new acceptance)
+
+</details>
+
 
 
 
@@ -201,34 +230,7 @@ Source: [mail/calendar/brief plan §§8, 12](docs/plans/MORTIMER_MAIL_CALENDAR_B
 
 ### Built: live acceptance or status publication still open
 
-<details id="ws-20">
-<summary>WS-20 — Roadmap joint working: catch-up and drift prevention · Claude + Codex</summary>
 
-### Acceptance checklist — remaining
-
-B1–B4 implementation is merged; the 72-entry migration is already verified.
-
-- [x] **Codex · documentation cleanup:** WS-10/11 lifecycle prefixes now describe their landed foundations while every acceptance gate stays open. The roadmap checker passes on this documentation candidate; the single Production line still matches the recorded `bde22bb` deployment. [Dated cleanup proof](docs/roadmap-log/2026-10-06-ws-20-codex-lifecycle-closeout.md).
-- [x] **Codex / Claude · observation:** The first ten published post-migration PR merges (#161/#162/#163/#165/#166/#167/#168/#164/#169/#170) and their recorded integration merges replay with no conflict in §8 or `docs/roadmap-log/`. Exact complete merge trees and unchanged §8 are verified; [receipt](docs/roadmap-log/2026-10-06-ws-20-codex-ten-pr-change-log-observation.md). Unrecorded manual history is not claimed.
-- [ ] **Larry · decision:** After the warn-only rollout period and owned corrections, decide whether the checker becomes a blocking CI gate; the chosen behavior is recorded and verified.
-- [ ] **Each acceptance owner · evidence:** Link the remaining live checks to their own rows (WS-17, WS-18 and the other open gates); publish the final Phase A/B exit record without treating implementation as live acceptance.
-
-Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.md).
-
-**Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
-
-- **Owner:** `claude` (B4 checker, plan) and `codex` (B1–B3 and bounded documentation closeout)
-- **Status:** landed foundation: B1–B4, the 72-entry migration, published ten-PR observation and lifecycle-word cleanup are implemented. The checker passes on this documentation candidate; strict CI enforcement and the remaining Phase A/B live-evidence closure are open. This slice creates no product acceptance.
-- **Implemented by:** Codex (B1–B3); Claude (B4)
-- **Remaining work / acceptance:** Larry decides checker enforcement after the approved warning period. Acceptance owners record their remaining live checks and the final Phase A/B exit evidence. Claude repairs #173 and resolves #172/#174 against current main; Codex reviews the repaired heads. The WS-10/11 lifecycle-label errors are reconciled; all their acceptance conditions and owners remain unchanged.
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** main foundation through `30dcb4e`; bounded claim PR #190 (`c1c2d96`) on `docs/ws20-closeout-20261006`; completion and review handoff published through this documentation PR
-- **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
-- **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 and bounded documentation closeout (Codex): `ROADMAP.md` §0, §8 and production wording, WS-20 fields and C2-authorized lifecycle prefixes in WS-10/11; `docs/roadmap-log/**`; dated status/progress in `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`. These landed scopes are inactive; no Claude implementation or plan ownership is transferred.
-- **Next step:** claude: repair the reviewed #173 voice-target/choice/Close defects and resolve #172/#174 roadmap integration without removing merged acceptance lists; use the dated WS-13 review handoff when its review is dispatched. codex: re-review changed exact heads and record current checks. larry: settle WS-13 plan/ownership decisions, select warn-only or blocking checker behavior after the warning period, and complete the remaining live checks. No new provider, auth, rollout or deployment permission is inferred.
-- **Updated:** 10-06 (lifecycle wording and reviewer handoff reconciled; no new live acceptance)
-
-</details>
 
 <details id="ws-05">
 <summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex</summary>
