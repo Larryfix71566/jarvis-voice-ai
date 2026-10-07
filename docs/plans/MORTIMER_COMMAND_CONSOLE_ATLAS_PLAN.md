@@ -1938,3 +1938,29 @@ separate synthetic thread checks exposed a retention-position shift; its runtime
 repair and tests are a separate slice, excluded from this corrective commit/PR.
 No deployment, product acceptance, permission override or checker enforcement
 change is claimed. See the dated inventory-correction log.
+
+
+**CC7a.4 integration clarification, 2026-10-07 (Codex, before code):** Native
+`JarvisClient`/`AppMessageRouter` have no current-turn privacy classifier.
+Do not invent one or default an unknown native turn to ordinary. Reserve the
+host-only `weather_reuse.args.ordinary_turn` exact boolean. The existing
+backend protected-turn/source guard supplies this only through the internal
+query adapter, checking eligibility before and after awaiting the Mac. The
+model-facing console tool refuses this internal action. Native enforces a true
+attestation under its negotiated authenticated channel, canonical identity,
+revision, key/capability/freshness and explicitly `approved_external` cached
+policy; missing/false eligibility returns no source. This is the same backend
+classification authority, not a claim of independent native turn inference.
+
+Canonical named weather identity uses the complete original requested city,
+NFKC/casefold/trimmed collapsed whitespace, never fuzzy matching. Local identity
+uses only a newly resolved source/approximation and coordinates formatted to
+four decimal places, matching actual NWS URL precision; a location label is
+presentation only. No new spatial radius/jitter policy is inferred. Original
+host fetch times govern freshness; radar frame and provider observation times
+are not fetch times. Mixed cached/fetched halves use the minimum original
+fetch time and expiry. Pure cache hits are arranged by the native query and do
+not emit another display replay. Close/eviction retains no extra hidden cache;
+`result_reopen` targets only an actually retained workspace result. These
+clarifications preserve the sole native cache and existing retention/Output
+ownership; they add no config key, budget, provider route or activation.
