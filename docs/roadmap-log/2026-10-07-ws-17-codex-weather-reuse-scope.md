@@ -48,3 +48,5 @@ was performed for this documentation slice.
 System: Codex. Session: `codex://threads/01a088c1-681c-70b0-ad7e-50ad6bccf83f`.
 
 Concurrent main integration: PR #173 merged as `bd18033` during scope CI. Kept its full Claude/Codex progress and evidence, then added this reuse contract. This scope publication does not imply pre-merge cross-review or a completed independent receipt; the actual cross-review request-changes and verification follow-ups remain code-review work.
+
+Post-merge reconciliation: #173 merged as `bd18033` before cross-review completed. Larry supplied Claude’s read-only review of `fee4ac0`, which requests changes for oversized inventory acknowledgements and records the oldest-first 100-row issue. Codex is repairing those on the still-active implementation branch; this scope-only PR establishes no repaired-code or live acceptance. Historical branch references are qualified as merged, and the current active implementation branch includes unmerged provenance/main-integration commits.
