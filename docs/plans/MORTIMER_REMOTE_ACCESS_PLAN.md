@@ -2725,7 +2725,7 @@ status/evidence records changed.
 
 ## Addendum R2 (2026-09-30) — prepare local bearer authentication without remote access
 
-**Status: guard implemented on branch; provisioning design only.** Larry approved preparing this WS-04 step so WS-03 can
+**Status: guard merged in PR #149 (`a39136a`) and deployed in `7c4637e` on 2026-10-02; provisioning design only.** Larry approved preparing this WS-04 step so WS-03 can
 eventually read owner-scoped Versions, runtime inventory and creator activity.
 This addendum does not authorize turning on production authentication, binding
 off-host, minting live credentials, or activating a skill. R1.9's remote T2
@@ -2851,11 +2851,40 @@ Mac.
 
 ### 2026-09-30 R2 guard checkpoint
 
-The separate `JARVIS_REMOTE_BIND_ENABLED` gate is implemented in `jarvis/bind.py`
-on the WS-04 branch, with an explicit-true test table and updated R1 remote
-cases. `.env.example` documents the two independent flags. Auth/bind/
-middleware/caller tests and bot/service-token/launch-guard tests pass 109/109
-combined, including both real startup entry points' resolved loopback host
-arguments. The supervised provisioner, native Keychain helper, local
-activation and live acceptance have not been implemented. The production
-flags and credentials have not changed.
+At the 2026-09-30 checkpoint, the separate `JARVIS_REMOTE_BIND_ENABLED` gate
+was implemented in `jarvis/bind.py` on the WS-04 branch, with an explicit-true
+test table and updated R1 remote cases. `.env.example` documented the two
+independent flags. Auth/bind/middleware/caller tests and bot/service-token/
+launch-guard tests passed 109/109 combined, including both real startup entry
+points' resolved loopback host arguments. The supervised provisioner, proposed
+R2 stdin-to-Keychain provisioning helper, local activation and live acceptance
+were not implemented, and production flags and credentials were unchanged by
+that checkpoint.
+These are the original checkpoint's implementation/test facts, not a new run.
+
+The guard subsequently merged in PR #149 as `a39136a` on 2026-09-30 and was
+deployed in `7c4637e` on 2026-10-02; ROADMAP records authentication and remote
+binding off for that deployment. Token onboarding, local activation and any
+remote-bind decision remain open.
+
+### 2026-10-06 — R2 guard status reconciliation (Codex)
+
+Read-only merge/receipt reconciliation confirms PR #149's merge
+`a39136a4a51c3ccb85ee60b432412a032b70c28c`. The 10-02 deployment receipt
+`~/MortimerRollback/logs/deployment-receipt-7c4637e.json` records `deployed`
+at 15:51:04 EDT with matching main, production and bundle revision
+`7c4637ede98add988079431a44d6ec965309f757` and no reported problems. The
+latest recorded production receipt is
+`~/MortimerRollback/logs/deployment-receipt-bde22bb.json`: `deployed` on
+2026-10-03 at 16:34:04 EDT, with matching main, production and bundle revision
+`bde22bb6425c6bf36a3e0d7cf53f2785c274190d` and no reported problems.
+
+This corrects the stale branch-only status without changing the R2 design.
+The authentication/remote-binding-off deployment wording comes from the
+existing roadmap event; this documentation check does not remeasure effective
+runtime settings or current process state. Larry's onboarding-method choice
+is still pending under the authoritative WS-04 row. The supervised
+provisioner and proposed R2 stdin-to-Keychain provisioning helper remain
+unimplemented; credential preparation, local activation, remote binding and
+live acceptance remain separate open gates. No code, test, credential,
+provider or production setting changed, and no new live acceptance is claimed.
