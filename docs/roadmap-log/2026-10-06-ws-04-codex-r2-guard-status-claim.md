@@ -16,3 +16,5 @@ The former implementation branch `codex/ws04-local-onboarding-20260930` merged i
 Prior runtime implementation scope, retained as historical/inactive metadata rather than an active lock for this documentation slice:
 
 > `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers. The R2 design proposes `scripts/provision_local_auth.py`, a small JarvisKit stdin-to-Keychain executable, its `Package.swift` target, and tests; no provisioner is implemented.
+
+The claimed WS-04 block is placed above the Built/live-acceptance group, as the shared update format requires for work in progress. Its complete content and every other workstream block are preserved; foundation deployment remains recorded separately from the active documentation claim.
