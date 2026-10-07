@@ -6,7 +6,12 @@ import JarvisKit
 /// voice dispatch submit the same request; unsupported actions are explicit.
 @MainActor
 final class ConsoleActionCoordinator {
-    enum Outcome: Equatable { case applied, previewReady(String), draftStarted, stepDetailsOpened, examplePreviewOpened, noop, pendingUser, unsupported, capacity, invalid, stale }
+    enum Outcome: Equatable { case applied, previewReady(String), draftStarted, stepDetailsOpened, examplePreviewOpened, noop, pendingUser, unsupported, capacity, invalid, stale
+        /// CC7a.3: a spoken number or subject matched more than one Recents
+        /// entry. Nothing changed; the choices go back so Mortimer can ask.
+        case needsChoice([ConsoleChoice])
+        /// CC7a.3: no Recents entry matches the spoken number or subject.
+        case noMatch }
     private let workspace: WorkspaceStore
     private let display: DisplayWindowStore
     private let placement: WindowPlacement
@@ -302,33 +307,25 @@ final class ConsoleActionCoordinator {
             workspace.openSkills()
             return .draftStarted
         case .resultSelect:
-            guard let id = request.target.flatMap(UUID.init(uuidString:)),
-                  workspace.results.contains(where: { $0.id == id }) else { return .invalid }
-            workspace.select(id); return .applied
+            return withResult(request.target) { workspace.select($0); return .applied }
         case .resultPin:
-            guard let id = request.target.flatMap(UUID.init(uuidString:)),
-                  workspace.results.contains(where: { $0.id == id }) else { return .invalid }
-            return workspace.pin(id) ? .applied : .noop
+            return withResult(request.target) { workspace.pin($0) ? .applied : .noop }
         case .resultUnpin:
-            guard let id = request.target.flatMap(UUID.init(uuidString:)),
-                  workspace.results.contains(where: { $0.id == id }) else { return .invalid }
-            workspace.unpin(id); return .applied
+            return withResult(request.target) { workspace.unpin($0); return .applied }
         case .resultClose:
-            guard let id = request.target.flatMap(UUID.init(uuidString:)),
-                  workspace.results.contains(where: { $0.id == id }) else { return .invalid }
-            workspace.close(id); return .applied
+            return withResult(request.target) { workspace.close($0); return .applied }
         case .resultNext:
             return workspace.selectAdjacentResult(step: 1) ? .applied : .noop
         case .resultPrevious:
             return workspace.selectAdjacentResult(step: -1) ? .applied : .noop
         case .compareSet:
-            guard let id = request.target.flatMap(UUID.init(uuidString:)),
-                  let other = request.secondaryTarget.flatMap(UUID.init(uuidString:)),
-                  id != other,
-                  workspace.results.contains(where: { $0.id == id }),
-                  workspace.results.contains(where: { $0.id == other }) else { return .invalid }
-            workspace.select(id)
-            return workspace.compare(with: other) ? .applied : .invalid
+            return withResult(request.target) { id in
+                withResult(request.secondaryTarget) { other in
+                    guard id != other else { return .invalid }
+                    workspace.select(id)
+                    return workspace.compare(with: other) ? .applied : .invalid
+                }
+            }
         case .compareEnd:
             workspace.compare(with: nil); return .applied
         case .compareSide:
@@ -712,6 +709,20 @@ final class ConsoleActionCoordinator {
 
     private func isProtectedResult(_ id: UUID) -> Bool {
         workspace.results.first(where: { $0.id == id })?.payload.isProtectedLocal ?? false
+    }
+
+    /// CC7a.3 (Codex boundary 3, CX-15): a result target is a UUID, or a
+    /// Recents number or subject that resolves to exactly one UUID. A UUID
+    /// that is gone stays `.invalid` as before; an unmatched number or
+    /// subject is `.noMatch`; an ambiguous one is never acted on.
+    private func withResult(_ reference: String?, _ body: (UUID) -> Outcome) -> Outcome {
+        switch workspace.resolveResultReference(reference) {
+        case .result(let id): return body(id)
+        case .ambiguous(let entries): return .needsChoice(WorkspaceRecents.choices(entries))
+        case .none:
+            if let reference, UUID(uuidString: reference) != nil { return .invalid }
+            return .noMatch
+        }
     }
 
     private func stringArg(_ request: ConsoleRequest, _ key: String) -> String? {
