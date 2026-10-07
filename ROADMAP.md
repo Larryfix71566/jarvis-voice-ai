@@ -118,16 +118,16 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
-- **Owner:** `claude` (B4 checker, plan) and `codex` (B1–B3, claimed by Codex on 10-02 at Larry's request)
-- **Status:** in-progress: Phase A landed — plan #153, WS-07 fix #154, #138 closed, #142 merged as `d01f9af`; #147 and #156 merged after Codex's re-review (`1faa75f`, `ae70f2c`), and `ae70f2c` was deployed 10-02 19:23 with a clean receipt. B2's production line and event-wording sweep plus B3's after-merge/C1–C5 rules landed in #158 (`04eb3f0`). B4 landed in #156. B1 moved all 72 §8 entries verbatim to individual log files in PR #160, merged as `30fa3db` on 10-02; the 72/72 body comparison was rechecked against `cc64d50` on 10-06. The first ten published post-B1 PR merges are verified without change-log conflict (10-06 receipt); checker rollout remains open.
+- **Owner:** `codex` (active bounded WS-20 documentation closeout); `claude` retains B4 and WS-13/17 implementation/review ownership unless Larry separately reassigns it
+- **Status:** claimed: Larry authorized proceeding with WS-13/17/20 on 2026-10-06; this Codex slice corrects WS-10/11 lifecycle wording and records verified review handoffs. B1–B4 and the published ten-PR observation remain complete; live acceptance and checker enforcement decisions remain open.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
 - **Remaining work / acceptance:** Phase A: #138 closed; #142, #147 and #152 merged; the 10-02 19:23 deployment and Larry's one-row, supporting-display and single-answer checks recorded; WS-18 AirPods and UI2-22 five-turn checks remain separate. Phase B: B1 migration is complete; checker warn-only rollout remains open; WS-10/11 lifecycle wording awaits their acceptance owner; the first ten published post-B1 merges are verified without change-log conflict (10-06 receipt); strict-mode rollout stays open. Phase C rules are in §0.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (plan #153, B1–B3 claim #157, B2/B3 #158, B4 #156, B1 log migration #160); acceptance-checklist documentation merged in #184 (`a4ad5a4`, 10-06).
+- **Where:** `docs/ws20-closeout-20261006` (Codex, dedicated isolated checkout); foundation and prior review evidence are on main through `30dcb4e`
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
-- **Scope:** B4 (Claude): `scripts/check_roadmap.py`, `tests/unit/test_check_roadmap.py`, the drift-check step in `.github/workflows/validate.yml`. B1–B3 (Codex): `ROADMAP.md` §0, §8 and production wording, `docs/roadmap-log/**`, and dated status/progress in `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`.
-- **Next step:** claude: repair the validated CC7a.3 findings on #173 and resolve #172/#174 roadmap integration, preserving the merged acceptance lists. codex: re-review the repaired exact heads and record current checks. Both systems: retain the verified ten-PR observation and use `docs/roadmap-log/`; WS-10/11 lifecycle corrections and strict-mode rollout remain open.
-- **Updated:** 10-06 (acceptance lists and published ten-PR change-log observation verified; no new product acceptance)
+- **Scope:** Active Codex slice: this WS-20 block; only the lifecycle-prefix text of the Larry-owned WS-10/11 Status fields under C2; `docs/roadmap-log/**`; dated status/progress in `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`. Review handoffs may cite WS-13/17 and PRs #172/#173/#174 without editing their code or plans. Preserve every open acceptance gate, owner, production receipt, implementation scope and completed milestone. No checker enforcement, new credentials, provider call, application change or deployment. Historical B4 (Claude) and B1–B3 (Codex) scopes are inactive in this slice.
+- **Next step:** codex: land the evidence-backed WS-10/11 lifecycle-word corrections, run the roadmap checker and publish exact review handoffs. claude: retain the assigned #173 repairs and #172/#174 integration; WS-13 review dispatch/ownership is being clarified. larry: decide strict checker enforcement after warning rollout and the remaining plan/live-acceptance decisions.
+- **Updated:** 10-06 (bounded documentation closeout claimed; no new product acceptance)
 
 </details>
 
