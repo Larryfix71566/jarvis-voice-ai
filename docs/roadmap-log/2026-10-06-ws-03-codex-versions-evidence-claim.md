@@ -19,3 +19,7 @@ another row. No provider, model, configuration, authentication, onboarding,
 activation, rollback or full SW-A–SW-L acceptance decision is included. SW-B
 and SW-C remain the only accepted full Skills gates. Publish the existing-plan
 progress and receipt only after this claim reaches main.
+
+The documentation claim sits in the open-work section while active, as the
+shared update format requires; the landed foundation and accepted gates remain
+explicit in its fields. Only the WS-03 block is moved.
