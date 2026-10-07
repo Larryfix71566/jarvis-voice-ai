@@ -1805,3 +1805,30 @@ existing Mortimer functionality takes precedence over visual resemblance.
 
 
 **Progress, 2026-10-07 (Codex, WS-17):** Claim #194 merged as `e7b099b` with five passing checks. Integrated current main and preserved PR #173 head `fb2e06f` by a merge into `codex/ws17-closure-20261007`; the original source/tests and Claude attribution remain. Recents is not yet on main or deployed. Repair the reproduced real-path numbered-target race, lost choice labels, Older Close access and comparison transport before cross-review. Reuse and full UI2-22…25 acceptance remain open.
+
+
+**Progress, 2026-10-07 (Codex, CC7a.3 repair):** Preserved #173 and committed
+repair `fee4ac058f18094867c0476e1aa588512c20ea66`. Spoken number/subject actions
+require the explicitly observed inventory revision and resolve only a valid,
+actually disclosed snapshot to canonical UUIDs; neither a new arrival nor a
+second disclosure silently rebinds a late command. UUID actions honor an
+explicit stale revision too. Comparison carries both targets. Native replies
+register a waiter before sending, normalize Foundation UUID spelling, retain
+bounded choice labels, validate session/generation/version and reject malformed
+status types; terminal paths clean their waiters. Existing inventory scopes
+remain supported: bounded valid JSON preserves every numbered Recents row,
+with a clearly labeled results projection for oversized inventories and actual
+screen/panel projections. Extreme Unicode over-budget inventories refuse
+truthfully, without partial subject resolution or unseen cached identities.
+Older retained results keep unnumbered Close/Pin/Compare controls, without
+expanding numbered Recents or changing Workspace/Output retention.
+
+Local evidence on that code: 67 focused Python tests and 64 actual bot wiring
+tests passed; JarvisKit 226 / zero failures; MortimerHost 512 / six existing
+hardware/session skips / zero failures. The real protected fixture window
+capture passed; that alone does not close protected conversation-thread/live
+acceptance. Independent Codex causal review found no further actionable issue.
+The unchanged full baseline/candidate VM verifier is running separately; no
+passing VM receipt is claimed yet. Required Claude cross-review, release and
+UI2-22…25 remain open. Reuse contract/scope is separate docs-only PR #195;
+CC7a.4 implementation has not started. See the dated WS-17 repair log.
