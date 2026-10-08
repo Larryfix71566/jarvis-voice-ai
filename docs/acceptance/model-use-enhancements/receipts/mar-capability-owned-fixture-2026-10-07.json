@@ -95,5 +95,6 @@
     "production_changed": false,
     "deployed": false
   },
-  "next_step": "Review and approve a corrected baseline/reference, integrate the repair into the exact WS-17 candidate, then run the unchanged independent full12 comparison. Required exact-source Claude cross-review and live acceptance remain separate."
+  "next_step": "Review and approve a corrected baseline/reference, integrate the repair into the exact WS-17 candidate, then run the unchanged independent full12 comparison. Required exact-source Claude cross-review and live acceptance remain separate.",
+  "implementation_pr": 200
 }

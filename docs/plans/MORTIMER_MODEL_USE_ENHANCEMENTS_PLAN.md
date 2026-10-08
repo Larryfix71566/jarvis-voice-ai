@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status:** LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIR — foundation #177 (`c38d895`); test-only repair via this PR after main claim #199 (`99993eb`). Frozen `a5b6f88` passes the local full offline Python gate; independent VM comparison, live acceptance and rollout remain gated.
+**Status:** LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIR — foundation #177 (`c38d895`); test-only repair via PR #200 after main claim #199 (`99993eb`). Frozen `a5b6f88` passes the local full offline Python gate; independent VM comparison, live acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -688,3 +688,5 @@ Claim #199 passed all five CI checks and merged as `99993eb`; it was integrated 
 The existing local capability suite passed146 before edits. On an exact scratch copy with the repair withheld, the two source/CLI regressions fail and the foreign-owner guard inverse passes; after repair all three pass. The affected capability/development/full-development suites pass293. The full offline Python gate passes6,461 plus2 subtests /7 existing skips /zero failures (230.97s;13 warnings retained). The independent Codex fixture reviewer approves the two-file repair. Fixture teardown verifies exact source fingerprints and no added source files. [Evidence](../acceptance/model-use-enhancements/receipts/mar-capability-owned-fixture-2026-10-07.json).
 
 These are local test results, not an actual different-UID VM retest, provider/runtime acceptance or deployment. The original `b2e17b4`→`fee4ac0` failed comparison remains failed. Before repeating WS-17 verification, review and approve a corrected reference, integrate this repair into the frozen candidate, and use the unchanged all12 verifier. WS-17's required exact-source Claude review remains separate and pending; no new source was sent to Claude in this repair. All broader source/identity/account/activation decisions remain unchanged.
+
+Publication: draft [PR #200](https://github.com/Larryfix71566/jarvis-voice-ai/pull/200) contains the exact reviewed `a5b6f88` test source plus evidence/status only. It is not merged or deployed at publication; CI and corrected-reference approval remain open.
