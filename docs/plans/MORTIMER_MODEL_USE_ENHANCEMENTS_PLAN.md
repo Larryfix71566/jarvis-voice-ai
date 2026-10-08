@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status:** LANDED FOUNDATION AND BOUNDED REPAIRS — PR #177 merged as `c38d895` on 2026-10-06; live acceptance and rollout remain gated.
+**Status:** LANDED FOUNDATION; BOUNDED CAPABILITY FIXTURE REPAIR CLAIMED — PR #177 merged as `c38d895` on 2026-10-06. Larry assigned the separate test-only repair on 2026-10-07; live acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -674,3 +674,9 @@ close the item.**
 ### 2026-10-06 — Post-merge roadmap reconciliation (Codex)
 
 GitHub and fetched main confirm #177 merged as `c38d895`. The roadmap now places WS-05 with built work whose acceptance remains open. Existing scoped diagnostics and CI evidence retain their exact revisions. The latest recorded production receipt is `bde22bb`, deployed 10-03 16:34 EDT; no deployment was performed. Exact external-payload authorization, operator-issued identity, native-test assignment, manual-source policy, cross-system review recording, runtime capability/workload, account and rollout gates remain open. No full acceptance flag was changed.
+
+### 2026-10-07 — Bounded capability host-fixture repair claim (Codex)
+
+Larry assigned the bounded repair to `test_claude_developer_capability.py` to unblock WS-17 independent verification. The existing `owned_pilot_source` fixture copies the exact frozen test source into new worker-owned, single-link, read-only files through the unchanged source scanner; it does not adopt the administrator-owned baseline. The capability module has not bound this fixture, and the independent `b2e17b4`→`fee4ac0` comparison failed on its baseline (7 failures and 84 setup errors), although every candidate check passed.
+
+The isolated branch is `codex/ws05-capability-fixture-20261007`. Scope is test-fixture binding and directly related regressions only, with the existing fixture helper changed only if necessary. Every production owner/read/link/mode guard, scanner/pin, source byte, baseline snapshot and all twelve profile checks stays intact. No provider call, baseline adoption, account change, production activation or deployment is authorized by this claim. A corrected baseline/reference must be separately reviewed and approved before a new independent comparison; this claim closes no acceptance gate.
