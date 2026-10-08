@@ -65,4 +65,31 @@ final class ConsoleProtocolTests: XCTestCase {
                                                   from: try JSONSerialization.data(withJSONObject: encoded))
         XCTAssertEqual(roundTrip, inventory)
     }
+
+    func testWholeNumberInventoryFieldsEncodeAsJSONIntegersOnBothNativeRoutes() throws {
+        // Python intentionally rejects bools and floating-point revision/number
+        // tokens. Exercise the actual encoder, including JSONValue's Double.
+        let session = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+        let generation = UUID(uuidString: "00000000-0000-4000-8000-000000000002")!
+        let data: JSONValue = .object([
+            "revision": .number(Double(6)),
+            "results": .array([.object(["number": .number(Double(6))])])
+        ])
+        let inventory = ConsoleInventory(sessionID: session, generation: generation,
+                                         revision: 6, data: data)
+        let result = ConsoleResult(sessionID: session, generation: generation,
+                                   requestID: UUID(), status: "applied", code: "inventory",
+                                   summary: "Console inventory ready.", data: data)
+        for message in [ClientMessage.consoleInventory(inventory), .consoleResult(result)] {
+            let wire = String(decoding: try message.jsonData(), as: UTF8.self)
+            let fullRange = NSRange(wire.startIndex..<wire.endIndex, in: wire)
+            let revisions = try NSRegularExpression(pattern: #""revision":6(?=[,}])"#)
+            let numbers = try NSRegularExpression(pattern: #""number":6(?=[,}])"#)
+            XCTAssertEqual(revisions.numberOfMatches(in: wire, range: fullRange),
+                           message == .consoleInventory(inventory) ? 2 : 1, wire)
+            XCTAssertEqual(numbers.numberOfMatches(in: wire, range: fullRange), 1, wire)
+            XCTAssertFalse(wire.contains("\"revision\":6.0"), wire)
+            XCTAssertFalse(wire.contains("\"number\":6.0"), wire)
+        }
+    }
 }

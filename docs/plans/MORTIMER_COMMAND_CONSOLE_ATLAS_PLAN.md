@@ -1903,3 +1903,38 @@ The unchanged full baseline/candidate VM verifier is running separately; no
 passing VM receipt is claimed yet. Required Claude cross-review, release and
 UI2-22…25 remain open. Reuse contract/scope is separate docs-only PR #195;
 CC7a.4 implementation has not started. See the dated WS-17 repair log.
+
+
+**Progress, 2026-10-07 (Codex, post-merge inventory correction):** Claude’s
+read-only review of `fee4ac0` reproduced a blocking raw-inventory drop; #173
+had already merged as `bd18033`. Corrective code is
+`065d50058534d6e16e0c59cae0100d0b9bbb5406`. It projects only inventory data
+before the unchanged 32,768-byte acknowledgement/passive-inventory guards,
+preserves explicit requested scopes and every numbered public result, and
+retains cumulative omission counts across repeated disclosure. Passive updates
+never replace the list actually observed by the model. Native cap-100 inventory
+keeps public numbered Recents first, then newest Older, retaining original
+public-store indexes and reporting excluded public rows. Workspace selection,
+privacy, pins, scroll and Output/history ownership are unchanged.
+
+Focused evidence: 90 Python console/callback tests; 64 actual bot-wiring tests;
+7 native encoder tests proving whole-number JSON tokens on both native routes;
+21 related native Recents/Older/capacity tests, including two new capacity cases.
+The actual native 100-row/120-character-title sender encoded 42,729 bytes,
+confirming the correction reaches a real oversized frame. Independent read-only
+Codex probes found no remaining corrective-slice finding. Full native suites are
+running against a frozen source-only copy of `065d500`; do not claim their result
+before completion. The earlier unchanged VM verifier on `fee4ac0` completed all
+12 checks: every candidate check and both native baselines passed, but baseline
+Python failed 7 tests and 84 setups (`host_file_unverified` on baseline registry
+sources). Overall verification failed; owned VMs stopped and sandbox settings
+remained unchanged. That run neither verifies this correction nor establishes a
+clean release comparison. The first pinned Claude subscription review timed out
+without a verdict; sending this new corrective diff was rejected by automatic
+approval review pending its exact-source permission. No new source was sent.
+
+Reuse scope #195 merged as `4cf452e` and is integrated before CC7a.4 code. The
+separate synthetic thread checks exposed a retention-position shift; its runtime
+repair and tests are a separate slice, excluded from this corrective commit/PR.
+No deployment, product acceptance, permission override or checker enforcement
+change is claimed. See the dated inventory-correction log.
