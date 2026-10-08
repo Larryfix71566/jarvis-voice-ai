@@ -255,13 +255,13 @@ struct ConsoleActionBar: View {
 
     /// "3  Weather · Folly Beach · 5m".
     static func recentsRowTitle(_ entry: WorkspaceRecents.Entry, now: Date = Date()) -> String {
-        "\(entry.label) · \(WorkspaceRecents.age(of: entry.receivedAt, now: now))"
+        "\(entry.label) · \(WorkspaceRecents.age(of: entry.freshnessDate, now: now))"
     }
 
     /// Spoken by VoiceOver: number, title, age, then state.
     static func recentsAccessibilityLabel(_ entry: WorkspaceRecents.Entry, now: Date = Date()) -> String {
         var parts = [entry.number.map { "Number \($0)" }, entry.card.title,
-                     WorkspaceRecents.age(of: entry.receivedAt, now: now)].compactMap { $0 }
+                     WorkspaceRecents.age(of: entry.freshnessDate, now: now)].compactMap { $0 }
         if entry.isActive { parts.append("shown") }
         if entry.isUnread { parts.append("unread") }
         if entry.section == .pinned { parts.append("pinned") }
