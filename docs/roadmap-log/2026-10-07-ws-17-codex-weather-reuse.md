@@ -2,12 +2,12 @@
 date: 2026-10-07
 system: codex
 rows: [WS-17]
-prs: [173, 195, 197]
+prs: [173, 195, 197, 198]
 ---
 
 # Native-owned weather reuse and conversation reading state
 
-Implementation is published by this PR on `codex/ws17-closure-20261007`:
+Implementation is published by PR #198 on `codex/ws17-closure-20261007`:
 core reuse `6e218cd`/`47f9e05`, measured retention `adf2597`, exact synthetic
 thread capture readiness `0a2ff94`, and source-age menu projection `748b1e5`.
 The critical post-merge inventory correction remains the frozen #197 review
