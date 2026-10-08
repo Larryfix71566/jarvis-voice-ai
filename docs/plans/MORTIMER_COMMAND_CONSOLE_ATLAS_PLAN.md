@@ -1509,6 +1509,106 @@ record of "working" messages (`ArrivalRunClock`, the latest 64 runs), and a
 payload whose run ID has no recorded start stays a card; only a payload
 with no run ID uses the 120 s window.
 
+**Progress, 2026-10-05 (Claude, Claude Code):** CC7a.3 on branch
+`ws17/cc7a3-recents`, from main `bde22bb` (after WS-21, CX-16).
+`Stores/WorkspaceRecents.swift` holds the rules: pinned first, then the
+newest 10 unpinned (`recentLimit`), each newest first, numbered 1, 2, 3…
+down the list; protected results are listed with no number, so a number
+Mortimer can be asked about never points at a result voice cannot see.
+Results past the bound stay in `WorkspaceStore` and in Output and are listed
+under "Older · N"; nothing is removed by the bound. Results ▾ shows PINNED
+and RECENT sections, each row "3  Weather · Folly Beach · 5m" with the
+selected / unread / pinned mark, plus Pin or unpin, Close and Compare with
+shown for any entry (the single-row rule keeps these inside Results ▾ rather
+than as per-row buttons). Voice (Codex boundary 3): `result_select`,
+`result_close`, `result_pin`, `result_unpin` and `compare_set` accept a
+result UUID as before, or a Recents number ("3", "#3", "number three",
+"second") or subject ("the Folly Beach weather": every spoken word in the
+entry's kind, subject or title; an exact subject beats a longer one). The
+coordinator resolves it to one UUID before anything changes. A UUID that is
+gone stays `invalid_target`; an unmatched number or subject is
+`no_matching_result`; more than one match is `needs_choice` with the
+numbered entries as choices, and nothing changes. `console_actions.py`
+relays those choices so Mortimer asks which one. `pin`/`unpin` now advance
+`inventoryRevision` (they did not), so a number spoken against the old
+order is stale. The inventory's results carry `number` (null past the
+bound), `kind`, `subject` and `unread`. Reopen-by-subject on a fresh
+`subject_key` stays with CC7a.4. Tests: `CC7a3RecentsTests` (listing,
+bound, private numbering, ages, spoken numbers, subjects, ambiguity,
+revision on pin, inventory fields, voice by number and subject, stale
+numbers) and two cases in `tests/unit/test_console_actions.py`.
+
+#### CC7a.4 weather reuse — contract and scope amendment (2026-10-07)
+
+**Dated progress (Codex, documentation only):** Starting from main `e7b099b`
+(ownership claim #194), this amendment reserves the reuse contract and the
+additional narrow implementation paths before their code changes. The docs
+branch is `docs/ws17-reuse-scope-20261007`; the main WS-17 implementation
+claim/`Where` remains `codex/ws17-closure-20261007`. Claude's earlier increments
+and PR #173 keep their attribution. This is scope/contract publication, not
+implemented reuse, a test receipt, merge/deploy permission or live acceptance.
+
+1. **One cache/freshness owner.** Native `WorkspaceStore` owns retained weather
+   results, original source data and freshness. No backend TTL mirror, second
+   cache, new persistent cache, model route or provider selection is added.
+   Inventory exposes subject/freshness metadata only, never the new raw source
+   object, aliases or bodies. Backend metadata can identify a candidate UUID;
+   native guards decide whether that candidate can actually supply a hit.
+2. **Shared bounded payload fields.** `subject_key` is kind plus canonical
+   subject, at most 200 characters. Existing `ts` and `fresh_until` use finite
+   UTC epoch seconds. Optional `weather_source` holds only original public
+   `{weather, radar, place}` JSON from the existing weather path; optional
+   `subject_aliases` are bounded canonical requested-city aliases inside that
+   object, at most 8 strings of 120 characters each. Cached model content is
+   excluded. Python and JarvisKit apply the same 16 KiB encoded-JSON cap to this
+   field without increasing an existing message/wire/tool budget. Malformed or
+   oversized cache metadata disables reuse; the legacy display body and safe
+   same-key upsert remain usable. Preserve actual source-fetch `ts`, including
+   explicit zero, and require finite `fresh_until <= ts + 900`. Replay does not
+   replace a zero with now, extend expiry or claim a new fetch occurred.
+3. **Freshness-aware query, canonical target.** Reserve shared console action
+   `weather_reuse` with a canonical result UUID `target` taken from the observed
+   native inventory. Closed typed `args`: `subject_key`; `tool` from
+   `local_weather|get_weather|get_weather_radar`; integer `days` 1–7; `units`
+   `metric|imperial`; optional originating `run_id`. Existing wire bounds and
+   session/generation/revision checks still apply. The native query returns
+   original public source data only on a hit after ordinary-turn, exact-key,
+   expiry, requested-capability/completeness and protection checks. Source data
+   is not returned from protected/private results or unsafe/stale identities.
+4. **Miss and refusal are distinct.** No matching public inventory candidate,
+   genuine missing/expired cache, or incomplete requested capability may use
+   the existing fetch after its protected-source guard. Ambiguity, stale target
+   or revision, disconnect/timeout and unsafe failures report a truthful
+   refusal; they never silently turn into another fetch. A freshness timestamp
+   in inventory does not authorize bypassing the native query.
+5. **Explicit reopen and arrival behavior.** Shared `result_reopen` selects a
+   retained cached result through the existing canonical-UUID coordinator;
+   spoken subject/index resolves against the observed inventory revision, with
+   clarification/refusal on ambiguity/staleness. It performs no fresh fetch and
+   retains existing protection/action rules. Automatic weather reuse follows
+   the existing requested-result arrival contract: a result/view being read
+   keeps focus and receives New/Show/Dismiss. It does not become an unconditional
+   select. Fresh reuse adds the ordered reference line to the same result;
+   optional originating `run_id` permits only one reference per run. Stale
+   refresh upserts the same key/UUID, retaining pins, comparison, scroll,
+   inspector and Output history. Weather A → Atlanta → A yields two cards;
+   fresh A performs zero duplicate fetch, and stale A refreshes in place.
+6. **Narrow registry seam.** Additional paths are new
+   `jarvis/bot/weather_reuse.py` and its tests, and only weather-call interception
+   in `jarvis/skills/registry.py` `_invoke`. Bind the weather hook with a
+   request-owned ContextVar after the existing guards; do not install a
+   process-global registry callback. Cache hits and real fetches preserve the
+   existing classified `_finish_invocation`/ToolResultEnvelope path, source
+   policy, sensitive-turn handling, latency/run-log rules and shared-registry
+   lifecycle. Non-weather invocation behavior is unchanged. Python/JarvisKit
+   payload/action contracts and native cache/upsert/reference changes remain in
+   the existing WS-17 scope and are tested through both transport paths.
+7. **Acceptance boundary.** Required cross-system review, exact-candidate
+   verification, WS-21 transfer/screen contracts and Larry's live UI2-22…25
+   outcomes remain open. Keep the temporary thread switch until those gates
+   pass. This amendment reserves no environment/config key, migration, port,
+   launch label, credential, allowlist change or new model/provider route.
+
 ## 8. Acceptance evidence and regression gates
 
 Status values: NOT STARTED, IMPLEMENTED/UNVERIFIED, VERIFIED IN SANDBOX,
@@ -1773,3 +1873,33 @@ product's assets: [Linear's interface refresh](https://linear.app/now/behind-the
 [Obsidian graph](https://help.obsidian.md/plugins/graph). The accepted direction
 combines a restrained command console with a useful spatial knowledge view;
 existing Mortimer functionality takes precedence over visual resemblance.
+
+
+**Progress, 2026-10-07 (Codex, WS-17):** Claim #194 merged as `e7b099b` with five passing checks. Integrated current main and preserved PR #173 head `fb2e06f` by a merge into `codex/ws17-closure-20261007`; the original source/tests and Claude attribution remain. Recents is not yet on main or deployed. Repair the reproduced real-path numbered-target race, lost choice labels, Older Close access and comparison transport before cross-review. Reuse and full UI2-22…25 acceptance remain open.
+
+
+**Progress, 2026-10-07 (Codex, CC7a.3 repair):** Preserved #173 and committed
+repair `fee4ac058f18094867c0476e1aa588512c20ea66`. Spoken number/subject actions
+require the explicitly observed inventory revision and resolve only a valid,
+actually disclosed snapshot to canonical UUIDs; neither a new arrival nor a
+second disclosure silently rebinds a late command. UUID actions honor an
+explicit stale revision too. Comparison carries both targets. Native replies
+register a waiter before sending, normalize Foundation UUID spelling, retain
+bounded choice labels, validate session/generation/version and reject malformed
+status types; terminal paths clean their waiters. Existing inventory scopes
+remain supported: bounded valid JSON preserves every numbered Recents row,
+with a clearly labeled results projection for oversized inventories and actual
+screen/panel projections. Extreme Unicode over-budget inventories refuse
+truthfully, without partial subject resolution or unseen cached identities.
+Older retained results keep unnumbered Close/Pin/Compare controls, without
+expanding numbered Recents or changing Workspace/Output retention.
+
+Local evidence on that code: 67 focused Python tests and 64 actual bot wiring
+tests passed; JarvisKit 226 / zero failures; MortimerHost 512 / six existing
+hardware/session skips / zero failures. The real protected fixture window
+capture passed; that alone does not close protected conversation-thread/live
+acceptance. Independent Codex causal review found no further actionable issue.
+The unchanged full baseline/candidate VM verifier is running separately; no
+passing VM receipt is claimed yet. Required Claude cross-review, release and
+UI2-22…25 remain open. Reuse contract/scope is separate docs-only PR #195;
+CC7a.4 implementation has not started. See the dated WS-17 repair log.
