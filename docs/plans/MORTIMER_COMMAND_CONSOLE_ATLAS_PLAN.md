@@ -1,7 +1,11 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** SANDBOX IMPLEMENTATION COMPLETE; RELEASE ACCEPTANCE IN PROGRESS,
-2026-09-18. Core protocol, stores,
+**Status:** Baseline Command Console implementation is present; WS-17 CC7a
+closure is implemented on the Codex candidate and release acceptance remains
+open (2026-10-07). Exact source, current evidence and remaining gates are in
+the dated progress and [CC7a.4 receipt](../acceptance/command-console/CC7A4_REUSE_2026-10-07.md).
+The following baseline describes the earlier 2026-09-18 implementation:
+core protocol, stores,
 Atlas composition, attachment bounds, approved inbound transfer state (including
 server-issued accept, one-chunk acknowledgement pacing, session-lifetime
 temporary-content memory latch and cancellation) and
@@ -1964,3 +1968,60 @@ not emit another display replay. Close/eviction retains no extra hidden cache;
 `result_reopen` targets only an actually retained workspace result. These
 clarifications preserve the sole native cache and existing retention/Output
 ownership; they add no config key, budget, provider route or activation.
+
+
+**Progress, 2026-10-07 (Codex, CC7a.4 implementation):** Core reuse is
+`6e218cd07977eb10d4fe93cddc7d9ce08bf17a3c`, with the final mixed-source
+regression at `47f9e05f70198df9d61602dc4b60e25e7ff3229e`. The existing
+native cache owns exact subject identity, original public source and expiry.
+The guarded host reads the actual inventory and queries its canonical UUID
+at that observed revision; this internal query never replaces the model's
+disclosed voice list. Named MCP weather interception remains request-scoped
+and preserves source guards/classified envelopes; local weather resolves a
+new device/IP fix before checking that exact identity. Missing/expired or
+incomplete cache may fetch; unsafe identities/privacy/ambiguity/timeouts
+refuse without a paid fallback. Fresh hits send no duplicate display replay;
+stale updates keep UUID, pins, compare/scroll/inspector and Output ownership.
+
+Both D2 reference cases are present: fresh reuse shows the original source
+clock and cached age; a genuinely newer complete-source refresh adds or
+updates one ordered reference under the same UUID per originating run.
+Same/older timestamps, failed/malformed/private source and missing public
+approval cannot claim an update. A mixed cached-weather/new-radar payload
+retains its minimum aggregate clock/expiry and original cached reference
+while making radar available; no fabricated freshness. References belong
+to retained ConversationStore history, including across reconnects, rather
+than a second cache/model transcript/persistent store.
+
+Full offline backend verification passed **6,567 tests / 7 skips / 2 subtests /
+zero failures** with explicit test-default noise/console flags and local
+socket/owned-child prerequisites. The earlier restricted run's 28 failures
+and four setups were traced and all 32 passed on prerequisite retry; the
+five flag cases arise from an unchanged installed-runner dotenv import,
+not the new reversible test fixtures. No tests or production configuration
+were changed to obtain this pass. Focused causal Python checks passed 326;
+JarvisKit payload/console checks passed 12; native cache/query checks passed
+17 and actual SDK/router/reference integration passed 10. The rendered
+reader/control/privacy set passed four cases with one explicit thread
+capture prerequisite skip. Independent Codex read-only reviews found no
+remaining blocking code defect; they do not replace required Claude review.
+
+The separate `adf2597` retention repair uses measured content coordinates
+to preserve a reader's retained row when variable-height old rows leave
+the 200-entry history; growing replies follow only at the bottom and
+New/Show keeps its authority. Final frozen native verification on `0a2ff94`
+passed JarvisKit 232 / zero failures and MortimerHost 546 / six existing
+hardware/activation skips / zero failures. All 1,829 source hashes/modes and
+pins still match. The actual thread SCK window capture passed its same-window
+full-pixel equality and card-removal/dimensions witnesses after replacing the
+overly strict AppKit prerequisite with exact SCK inventory evidence; the
+existing protected body-only capture also passed. Required
+cross-system exact-source review, clean independent VM comparison, release/
+deployment and UI2-22…25 remain open; keep the temporary thread switch.
+See [CC7a.4 local evidence](../acceptance/command-console/CC7A4_REUSE_2026-10-07.md)
+for executed scope and remaining gates. No new acceptance checkbox is closed.
+
+
+**Progress, 2026-10-07 (Codex, final source-age projection):** `748b1e5ab7a00cf208b775816355fe339abbe879` fixes the final Recents age gap. Card/arrival position and voice numbers remain tied to original receivedAt; only the transient menu/VoiceOver/choice age uses finite original payload.ts, including zero, with arrival fallback for missing/nonfinite source time. Safe exact integer conversion returns unknown for unrepresentable ages. The actual Store→listing→all three labels reproduced six failures before the repair; five new regressions and related Recents/reuse/router tests then passed (45 total).
+
+Complete frozen verification on `748b1e5`: JarvisKit **232 passed**, MortimerHost **551 executed / 6 existing hardware/activation skips / zero failures**, with actual protected-thread capture and existing protected body-only capture passed. Totals use XCTest's final execution summaries; one interleaved case line was absent from an earlier raw line count. All **1,830 tracked hashes/modes and pins** still match after verification. Backend source/tests are unchanged from the 6,567-pass offline run. Required Claude review, clean independent release comparison, reviewed merge/deployment and Larry UI2-22…25 remain open; this is implemented candidate source, not accepted production.

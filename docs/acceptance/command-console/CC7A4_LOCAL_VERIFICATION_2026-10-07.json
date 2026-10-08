@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "system": "codex",
+  "workstream": "WS-17",
+  "date": "2026-10-07",
+  "source_commit": "748b1e5ab7a00cf208b775816355fe339abbe879",
+  "source_files": 1830,
+  "source_match_before": true,
+  "source_match_after": true,
+  "source_mismatches": [],
+  "scope": "Local exact-source implementation verification; no independent VM, deployment or live acceptance",
+  "backend": {
+    "runtime_tree": "6e218cd07977eb10d4fe93cddc7d9ce08bf17a3c",
+    "unchanged_through_native_ref": "748b1e5ab7a00cf208b775816355fe339abbe879",
+    "passed": 6567,
+    "skipped": 7,
+    "failed": 0,
+    "subtests_passed": 2,
+    "seconds": 218.79,
+    "run_live": false,
+    "test_defaults": {
+      "JARVIS_NS_ENABLED": false,
+      "JARVIS_COMMAND_CONSOLE_ENABLED": false
+    },
+    "host_loopback_and_owned_process_prerequisites": true
+  },
+  "native": {
+    "JarvisKit": {
+      "exit_code": 0,
+      "case_counts": {
+        "passed": 232,
+        "skipped": 0,
+        "failed": 0
+      },
+      "tests_executed": 232,
+      "summary": "Executed 232 tests, with 0 failures (0 unexpected) in 6.808 (6.831) seconds",
+      "seconds": 6.831,
+      "log_sha256": "f625601511eee1ad95c6ee8072536829eea5414a622ae689f3540a7d59590ea5"
+    },
+    "MortimerHost": {
+      "exit_code": 0,
+      "case_counts": {
+        "passed": 545,
+        "skipped": 6,
+        "failed": 0
+      },
+      "tests_executed": 551,
+      "summary": "Executed 551 tests, with 6 tests skipped and 0 failures (0 unexpected) in 131.534 (131.576) seconds",
+      "seconds": 131.576,
+      "log_sha256": "46b216f568bdd53802647d6f74a9f4ca16a740f033eaaa5835156c86a941e45f"
+    }
+  },
+  "actual_thread_window_capture": {
+    "passed": true,
+    "seconds": 7.126,
+    "exact_on_screen_sck_fixture": true,
+    "private_body_equality": true,
+    "card_removal_difference_at_equal_dimensions": true
+  },
+  "existing_protected_body_window_capture": {
+    "passed": true,
+    "seconds": 4.844
+  },
+  "crystal_orb_p95_ms": 13.563,
+  "release_gates_open": [
+    "required_cross_system_review",
+    "clean_independent_full_profile_comparison",
+    "reviewed_merge_and_deploy",
+    "exact_build_UI2_22_through_25",
+    "physical_supporting_display_acceptance",
+    "Larry_final_acceptance"
+  ],
+  "native_count_authority": "Final XCTest suite execution summaries; interleaved individual case-line counts are not authoritative"
+}
