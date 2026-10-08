@@ -353,24 +353,38 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
         XCTAssertEqual(f.coordinator.executePointer(.viewSet, args: ["mode": .string("conversation")]), .applied)
         let hosted = host(threadView(f), width: 760, height: 420)
         defer { closeRenderingFixtureWindow(hosted.window) }
-        do {
-            try await waitUntil("private thread fixture on screen") {
-                hosted.window.isVisible && hosted.window.occlusionState.contains(.visible)
-                    && self.labels(hosted.view).contains { $0.contains(ConversationThread.privateSummary) }
-            }
-        } catch {
-            let onScreen = NSScreen.screens.contains { $0.frame.intersects(hosted.window.frame) }
-            let cardRendered = self.labels(hosted.view).contains { $0.contains(ConversationThread.privateSummary) }
-            if cardRendered && onScreen && (!app.isActive || !hosted.window.isOnActiveSpace) {
-                throw XCTSkip("Synthetic thread rendered, but this XCTest process could not activate on its desktop Space; actual window capture remains unaccepted")
-            }
-            XCTFail("Synthetic thread capture readiness: visible=\(hosted.window.isVisible), "
-                + "unoccluded=\(hosted.window.occlusionState.contains(.visible)), "
-                + "active app=\(app.isActive), active Space=\(hosted.window.isOnActiveSpace), "
-                + "on a screen=\(onScreen), private card AX=\(cardRendered)")
-            throw error
+        try await waitUntil("private card AX ready for window capture") {
+            self.labels(hosted.view).contains { $0.contains(ConversationThread.privateSummary) }
         }
         hosted.window.displayIfNeeded()
+        // AppKit's activation and occlusion flags are not the capture inventory.
+        // Require ScreenCaptureKit to identify this exact on-screen fixture.
+        let windowID = CGWindowID(hosted.window.windowNumber)
+        let deadline = Date().addingTimeInterval(4)
+        var captureWindowReady = false
+        while true {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            if content.windows.contains(where: { $0.windowID == windowID }) {
+                captureWindowReady = true
+                break
+            }
+            guard Date() < deadline else { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        guard captureWindowReady else {
+            let onScreen = NSScreen.screens.contains { $0.frame.intersects(hosted.window.frame) }
+            let diagnostics = "windowID=\(windowID), visible=\(hosted.window.isVisible), "
+                + "unoccluded=\(hosted.window.occlusionState.contains(.visible)), "
+                + "active app=\(app.isActive), active Space=\(hosted.window.isOnActiveSpace), "
+                + "on a screen=\(onScreen), SCK matched=\(captureWindowReady)"
+            if onScreen && (!app.isActive || !hosted.window.isOnActiveSpace) {
+                throw XCTSkip("Synthetic fixture window is absent from ScreenCaptureKit's on-screen inventory "
+                    + "while the test app or its Space is inactive; actual window capture remains unaccepted; "
+                    + diagnostics)
+            }
+            XCTFail("Synthetic thread capture readiness: " + diagnostics)
+            throw prerequisite("Synthetic fixture window did not enter ScreenCaptureKit's on-screen inventory")
+        }
         try await Task.sleep(for: .milliseconds(200)) // Allow the WindowServer to composite this fixture.
         let original = try await captureWindow(hosted.window)
         // Same window and identical public card metadata, but entirely
@@ -398,6 +412,8 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
         hosted.window.displayIfNeeded()
         try await Task.sleep(for: .milliseconds(200))
         let withoutCard = try await captureWindow(hosted.window)
+        XCTAssertEqual(withoutCard.width, referenceImage.width)
+        XCTAssertEqual(withoutCard.height, referenceImage.height)
         XCTAssertFalse(referenceImage.bytes == withoutCard.bytes, "Equal empty captures do not prove that the private card was visible")
     }
 
