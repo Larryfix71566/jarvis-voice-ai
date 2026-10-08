@@ -1,8 +1,10 @@
 # Mortimer — Mail, Calendar and the Daily Brief (read-only)
 
 **Status:** DRAFT. Written 2026-08-26 and reconciled with main `e7b099b` on
-2026-10-07 (§R, Claude). §R is authoritative and waits on Larry's decisions D1–D8.
-The August text after §R is history, except where R.9 keeps a section. Implements
+2026-10-07 (§R, Claude). Revision 2 (same day) answers Codex's review of `0de8a2e`
+(R.0). §R is authoritative and waits on Larry's decisions D1–D9. The August text
+after §R is history: R.9 says which parts remain background, and R.10–R.12 govern
+wherever they differ. Implements
 roadmap track **T5** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.5), tracked as
 WS-13. Read scopes only.
 
@@ -13,13 +15,70 @@ WS-13. Read scopes only.
 `docs/roadmap-log/2026-10-06-ws-20-codex-review-handoff.md` (reviewed at `30dcb4e`).
 Each of Codex's eleven findings was re-checked against the code at `e7b099b`, and all
 eleven hold (R.2). Eight more findings are in R.3. Where §R and the August text
-disagree, §R wins. R.9 lists the August sections that stay as specification and the
-corrections each needs; all other August text is history.
+disagree, §R wins. The binding contracts for P1–P3 are in R.10, the prerequisites
+for P4/P5 in R.11, and acceptance in R.12. R.9 lists which August sections are kept
+as background. All other August text is history, and each such section carries a
+banner saying so.
 
 Nothing here is implemented, tested or accepted. No mailbox, calendar, provider or
-credential was touched. Approval works in two steps: first Larry answers D1–D8
+credential was touched. Approval works in two steps: first Larry answers D1–D9
 (R.5); then each increment in R.6 is claimed, built, cross-reviewed and accepted on
 its own. This section does not authorize implementation.
+
+### R.0 Revision 2 (2026-10-07, after Codex's review of `0de8a2e`)
+
+Codex reviewed revision 1 at `0de8a2e`, read the cited source at `e7b099b`, and
+checked changes through main `bd18033`. It requested 27 changes:
+
+- items 1–18 for P1–P3;
+- items 19–23 as prerequisites for P4/P5;
+- items 24–27 on specification and handoff.
+
+Claude re-checked each item against the code, and all 27 hold. Four were confirmed
+offline here:
+
+- With no `ssl_context`, CPython 3.11.15's `imaplib.IMAP4_SSL` uses
+  `ssl._create_stdlib_context`, which is `_create_unverified_context`
+  (`verify_mode == CERT_NONE`, `check_hostname == False`).
+- 24 hours before noon on 2026-11-01 in `America/New_York` is 25 elapsed hours.
+- M11's checker reports no offender for "I found an email from Verizon." against a
+  digest that names only Chase.
+- `case_is_correct({"none"}, set())` is `True`.
+
+Codex also corrected its earlier review: the August limits on lookback (1–168 hours),
+messages (25 per account, 50 in total) and sender/subject length (200 characters)
+already existed, and they stay.
+
+Revision 2 adds R.10 (binding contracts for P1–P3), R.11 (prerequisites for P4/P5),
+R.12 (the acceptance matrix, which replaces R.8 and August §8) and R.13 (coordination
+against `bd18033`). It also revises R.2, R.4–R.7 and R.9. D1–D9 remain unanswered
+until Larry records his choices. D9 is new.
+
+| Item | Resolution |
+|---|---|
+| 1 TLS does not authenticate the server | R.10.1; M3's default-context claims are withdrawn |
+| 2 Calendar policy adapter | R.10.2 |
+| 3 Local retention vs disclosure | R.10.3, new D9 |
+| 4 Scheduled work and the foreground sensitive turn | R.10.4 |
+| 5 Eligible protected-display recipient | R.10.5 |
+| 6 D4(b) and D8 are coupled | R.10.6, D4, D8 |
+| 7 Durable delivery | R.10.7, D7 |
+| 8 Arrival bound to the initiating request | R.10.8 |
+| 9 Bounded mail call | R.10.9 |
+| 10 Count semantics | R.10.10 |
+| 11 Rolling-hour arithmetic across DST | R.10.11 |
+| 12 Header byte bound and schema | R.10.12 |
+| 13 Stable IMAP identity | R.10.13 |
+| 14 Calendar wire contract and event semantics | R.10.14 |
+| 15 Calendar questions | R.10.15 |
+| 16 Inert rendering | R.10.16 |
+| 17 Routing gate | R.10.17 |
+| 18 Watcher lifecycle and switches | R.10.18 |
+| 19–23 P4/P5 prerequisites | R.11.1–R.11.5 |
+| 24 Semantic replacements | R.9 rewritten, R.12; superseded August sections marked in place |
+| 25 Migration and backend manifests | R.10.7, R.12 S3-10, R.6 |
+| 26 Replace V1 | R.12 S1-8 and M1-1 |
+| 27 Unsafe D2 alternatives; refreshed scope | R.5 (exceptions list), R.13 |
 
 ### R.1 What changed, in short
 
@@ -54,7 +113,7 @@ The reconciled design therefore makes four changes:
 | 5 | Supervisor rule 13 is already taken | `jarvis/prompts.py:75` is the detail follow-up rule, and rule 11 cites it | P5 appends a rule 14. Rule 13 is untouched. P3 adds a direct tool and its description, not a numbered rule. |
 | 6 | The model call no longer matches its API or workload | `jarvis/council/council.py:443` requires keyword-only `rung`; `:470` routes every non-plan prompt as workload `council`; `jarvis/model_routing.py:388` refuses unknown workloads; `jarvis/agents/base.py:306` binds an agent's policy to its name | P4 does not use `_call_profile`. It adds workload `brief` to `config/model_access.yaml` (reserved in §3 when claimed), resolves it with `resolve_policy`, and refuses before transmission when the route's privacy is below the digest's. This holds with routing on or off, the same fail-closed rule as `base.py:771–773`. The quality floor stays `mid`. No fallback route. P4 also follows WS-05's execution rules: a deadline, usage recorded in the costs ledger, cancellation when the session ends, and a saved preference that cannot lower the workload's privacy (`model_routing.py:401–410`). P5 adds its agent's workload to `model_access.yaml`, plus `model_profile` and `on_profile_fallback: refuse` in `agents.yaml` (`tests/unit/test_model_floor.py:59`, `:91`). Without them, `resolve_policy` fails and `base.py:307–308` leaves the agent with no policy floor. |
 | 7 | Source policy and derived results are missing | `jarvis/privacy_policy.py:321–326` defaults an unclassified result to confidential; `jarvis/skills/registry.py:644–645` returns raw content when there is no `execution_scope`; `:704–715` arms the sensitive turn and marks the run log | P1 adds a host source contract for `mcp-mail` in `registry.py` (a human-only file, `config/self_edit_allowlist.json:52`). Its envelopes carry policy D4 and source `mail:<account>`. P3 adds one for `mcp-reminders`' `list_reminders`. It has none today (`registry.py:120–123`), so its scoped results default to confidential and would pin every brief there, even under D4b. The brief always calls with a host-owned `ToolExecutionScope`, never plain `registry.call`. Every derived artifact inherits the strictest input policy (R.4). Counts and times are derived values too: none is released to the Supervisor or to speech unless D5 approves a named declassification. |
-| 8 | Native display: ownership, arrival and privacy | `ConversationThreadView.swift:430` exempts only `plan_ready`/`research_report`; a result with no run ID within `directWindow` (`:434`, 120 s) of Larry's last turn opens; `AppMessage.swift:200` `dataPolicy` makes a card protected | The on-request brief (`brief_report`) uses the direct-window rule and opens. The scheduled brief (`brief_scheduled`) joins `backgroundTools` and arrives as a card. Both carry `data_policy`, so the existing protected rule blocks copy, share, export and moving to the supporting display. One renderer, UUID result identity per WS-17 plan §7.2. |
+| 8 | Native display: ownership, arrival and privacy | `ConversationThreadView.swift:430` exempts only `plan_ready`/`research_report`; a result with no run ID within `directWindow` (`:434`, 120 s) of Larry's last turn opens; `AppMessage.swift:200` `dataPolicy` makes a card protected | Revision 2: the payload carries `arrival` and `result_id`, and every brief arrives as a card until WS-17 provides a turn identity (R.10.8). Only an eligible native recipient receives it, with `data_policy` set by the emitter (R.10.5). Rendering is typed and literal (R.10.16). For D4 (b), see R.10.6. One renderer, with UUID result identity per WS-17 plan §7.2. |
 | 9 | The privilege-manifest assumptions are stale | `self_edit_allowlist.json:52–54` denies `registry.py`, `test_agent_isolation.py` and `test_requires_env_snapshot.py`; `scripts/check_skills.py:118–124` reads `optional_env` | Credentials go in `requires_env`; settings with code defaults go in `optional_env`. `EXPECTED` in `tests/unit/test_requires_env_snapshot.py` is extended by a human commit in the same PR. `BASE_ENV_KEYS` is unchanged, and no vault-wide forwarding. |
 | 10 | Counts and the body-retention text disagree | `tests/integration/test_registry.py:27` has `TOTAL_TOOLS = 81` for 14 servers; the header C3 row says bodies are stored, while M10/M16 say they are not | Each increment re-derives the counts (P1: 15 servers, 82 tools if it adds one tool). Bodies are stored nowhere; R.4 replaces C3. |
 | 11 | The sandbox and operator rules are obsolete | `AGENTS.md`; ROADMAP §0 | R.7 replaces §0.2, §0.4, §0.9 and §0.11. |
@@ -113,10 +172,9 @@ The reconciled design therefore makes four changes:
   `AppMessageRouter.swift`, DisplayPayload `subject_key` (JarvisKit and
   `jarvis/bot/display.py`), and the console inventory, turn-binding and
   result-acknowledgement portions of `jarvis/bot/pipeline.py`.
-  - P3's `backgroundTools` edit is inside that lock.
-  - P2 (a)'s new `calendar/request` case in `AppMessageRouter.swift` shares the file.
-  - Each needs a §4 entry agreed with Codex at claim time, or must wait for WS-17 to
-    land.
+  - The revision 2 list of P3 and P2 (a) work inside that lock is in R.13.
+  - Each item needs a §4 entry agreed with Codex at claim time, or must wait for
+    WS-17 to land.
   - WS-05 (landed, Codex) owns source classification in `jarvis/skills/registry.py`
     and `config/model_access.yaml`, which P1, P3, P4 and P5 edit. Its owner reviews
     those parts.
@@ -124,17 +182,22 @@ The reconciled design therefore makes four changes:
 ### R.4 Reconciled design
 
 **Sources.**
-- **Mail (P1).** A `mcp-mail` stdio server using stdlib `imaplib`. It keeps M3's
-  read path: TLS from the first byte, `EXAMINE` (`select(readonly=True)`) and
-  `BODY.PEEK`. P1 fetches headers only, with
-  `BODY.PEEK[HEADER.FIELDS (DATE FROM SUBJECT MESSAGE-ID CONTENT-TYPE)]`, so no body
-  byte leaves the mail server. The tool is `mail_headlines(window_hours, account)`,
-  which returns M4's contract without `content` and the `body_*` fields. Body
-  fetching (M3's 16 KB partial fetch, M5's fence) arrives only with P5.
-- **Calendar (P2).** The backend is D3. Every backend yields M6's event object,
-  bounded (`MAX_EVENTS = 20`, at most 14 days ahead), with titles, locations and
-  calendar names passed through M5's `_sanitise_field`. No API that writes is
-  referenced anywhere.
+- **Mail (P1).** A `mcp-mail` stdio server using stdlib `imaplib`.
+  - TLS with an explicitly verified context (R.10.1).
+  - `EXAMINE`, `UID SEARCH` and `UID FETCH` with `BODY.PEEK` (R.10.13).
+  - Headers only, byte-bounded with
+    `BODY.PEEK[HEADER.FIELDS (DATE FROM SUBJECT MESSAGE-ID)]<0.4096>` (R.10.12).
+  - Counts based on `INTERNALDATE` arrival (R.10.10), within one bounded call
+    (R.10.9).
+  - The tool is `mail_headlines(window_hours, account)`. It returns M4's contract
+    without `content`, the `body_*` fields and `attachment_count`, and with the
+    count fields of R.10.10.
+  - Body retrieval arrives only with P5 (R.11.5).
+- **Calendar (P2).** The backend is D3. Under D3 (a), the wire contract and event
+  semantics are R.10.14, and the policy boundary is R.10.2. The brief shows at most
+  20 events a day, says how many more there are, and looks at most 14 days ahead.
+  Titles, locations and calendar names pass through M5's `_sanitise_field`. No API
+  that writes is referenced anywhere.
 - **Reminders.** A host call to `list_reminders(status="pending")`. Reminders are
   written by Larry and read without side effects. P3's source contract labels them
   at the D4 level with source `reminders:local`.
@@ -151,26 +214,29 @@ The reconciled design therefore makes four changes:
 | Artifact | Policy | Where it may go |
 |---|---|---|
 | Mail headers (P1), bodies (P5) | D4 level, source `mail:<account>` | The host brief assembler; in P5, the mail agent's model only if its route's privacy is at least the D4 level |
-| Calendar events | D4 level, source `calendar` | The host brief assembler |
+| Calendar events | D4 level, source `calendar:device` (R.10.2) | The host brief assembler |
 | Reminders | D4 level, source `reminders:local` (P3 contract; without it, confidential) | The host brief assembler |
 | Digest and deterministic brief text | strictest of the inputs | The protected card; never a model in P1–P3 |
-| Card (`brief_report` / `brief_scheduled`) | `data_policy` = digest level | Visible locally. When not `approved_external`, the existing native rule blocks copy, share, export and supporting-display transfer |
-| Speech | D5 | A fixed sentence by default ("Your brief is on screen"). Counts and times only under a D5 (b) declassification; names, subjects or titles only under D4b with D5 (c). Always `append_to_context=False` |
-| Supervisor tool result | fixed text, or the D5 (b) declassified counts | No names, subjects or titles in any option |
-| Logs and run log | — | Counts and source status codes only. No headers, titles or account addresses |
-| `brief_digests` (`0035_brief`) | — | `user_id` (`'local'`, per `0020_user_id`), `local_date`, `source`, `delivered_at`, counts and failed-source codes. No `digest_json`, headers or titles |
+| Card (typed kind `brief`, R.10.16) | `data_policy` = digest level, set by the emitter | Only an eligible native recipient (R.10.5). When not `approved_external`, the existing native rule blocks copy, share, export and supporting-display transfer; D4 (b) is covered by R.10.6 and D8 |
+| Speech | D5 | A fixed sentence by default ("Your brief is on screen"). Counts and times only under a D5 (b) declassification; names, subjects or titles only under D4 (b) with D5 (c). Always `append_to_context=False` |
+| Supervisor tool result | fixed rule (R.10.3) | Always the fixed acknowledgement, returned before acquisition. No derived value in any option |
+| Logs and run log | fixed rule (R.10.3) | Content-free: event names, states, source-status codes and durations only. No counts, because `log_search` exposes bot logs to agents |
+| `brief_deliveries` (`0035_brief`, R.10.7) | D9 | Delivery bookkeeping and source-status codes. Under D9 (b) only, adds the typed `brief-counts`, classified at the digest level and readable only by the brief module. No `digest_json`, headers, titles or text |
 | Notices, memory, KB digest, conversations | — | Nothing from the brief (A3, A5) |
 
 **Delivery.**
-- **On request.** A direct Supervisor tool, `daily_brief(day="today")`, registered
-  like `system_status`. It assembles the brief, pushes the protected card, speaks
-  per D5, and returns to the Supervisor only the text D5 allows.
-- **Calendar questions.** "What's on Thursday" is the same tool with `day` set; that
-  is D2's recommended option.
-- **Scheduled.** A `BriefWatcher` in the bot, only while a client is connected. The
-  time and catch-up rule come from D7. It fires at most once a day, guarded by F10's
-  in-memory guard plus the `brief_digests` row. The `brief_requests` queue is
-  removed, because the tool runs in the bot, and F9's backlog bound goes with it.
+- **On request.** A direct Supervisor tool, `daily_brief(day, scope)` (R.10.15),
+  registered like `system_status`. It checks for an eligible recipient (R.10.5),
+  starts the brief job in its own context (R.10.4), and returns to the Supervisor
+  the fixed acknowledgement. The job pushes the protected card (R.10.8) and speaks
+  per D5.
+- **Calendar questions.** "What's on Thursday" is the same tool with `day` set and
+  `scope="calendar"`, which reads no mail (R.10.15). That is D2's recommended option.
+- **Scheduled.** A `BriefWatcher` in the bot, for the eligible live session only
+  (R.10.5). Its lifecycle is R.10.18. The time and catch-up rule come from D7.
+  Delivery is the durable claim/send/ack contract of R.10.7, which replaces the
+  August in-memory guard and the `brief_digests` row. The `brief_requests` queue,
+  and F9's backlog bound with it, are removed.
 
 **Model use.**
 - P1–P3: none.
@@ -182,8 +248,9 @@ The reconciled design therefore makes four changes:
   output goes through `make_private_result_sink` (`pipeline.py:601`), as `base.py`
   already requires for private routes.
 
-**Kill switches**, each read in exactly one place (names reserved in §3 when the
-increment is claimed):
+**Kill switches**, each read in exactly one place. Names are reserved in §3 when the
+increment is claimed. They are environment settings, so a change takes effect at the
+next bot restart (R.10.18):
 - `JARVIS_MAIL_ENABLED` — mail tools refuse.
 - `JARVIS_CALENDAR_ENABLED` — calendar requests refuse.
 - `JARVIS_BRIEF_ENABLED` — the tool and the watcher refuse.
@@ -199,59 +266,75 @@ answer. Record the choice in this plan when it is made.
     decided later. *Recommended.*
   - (b) P1–P5 as one programme.
   - (c) A calendar-and-reminders brief first (P2, then P3), with mail after.
-- **D2 — Where calendar questions go.** This matters only for D3 (b) or (c). Under
-  D3 (a) there is no calendar MCP server, so no agent can hold one.
-  - (a) No agent holds the calendar. Questions go through `daily_brief(day=…)`, and
-    `mcp-calendar` joins `UNTRUSTED_INPUT`. Because it is already in `OUTBOUND`, any
-    agent holding it then fails K4 by construction. *Recommended.* Growing the set
-    is the change the test's docstring anticipates. It edits a human-only test.
-  - (b) `scheduler` gets `mcp-calendar`. This works only if calendar text is treated
-    as trusted: if `mcp-calendar` stays in `OUTBOUND` and also joins
-    `UNTRUSTED_INPUT`, any agent holding it fails K4, whatever else it holds. So (b)
-    accepts A1's invitation residual.
-  - (c) The P5 mail agent also holds calendar. That needs `mcp-calendar` taken out
-    of `OUTBOUND`, which Codex asked not to do.
+- **D2 — Where calendar questions go.**
+  - (a) No agent holds the calendar. Questions go through
+    `daily_brief(day=…, scope="calendar")` (R.10.15). *Recommended.*
+  - Under D3 (a) there is no calendar MCP server, so no agent can hold one.
+  - Under D3 (b) or (c), `mcp-calendar` also joins `UNTRUSTED_INPUT`. Because it is
+    already in `OUTBOUND`, any agent holding it then fails K4 by construction.
+    Growing the set is the change the test's docstring anticipates, and it edits a
+    human-only test.
+  - Revision 1's other two options are no longer normal choices. They are listed
+    under *Architectural exceptions* at the end of R.5.
 - **D3 — Calendar backend.** Before choosing, confirm O1: is the Google calendar
   visible in Calendar.app?
   - (a) The Mortimer app reads EventKit and answers a `calendar/request` on the
     session channel, the way device location works (`jarvis/bot/device_location.py`,
-    `DeviceLocator.swift`). The app is a bundled GUI app, so macOS can show its
-    permission prompt. No credential is needed. It works only while the app is
-    connected, which the brief needs anyway. It needs `NSCalendarsFullAccessUsageDescription`
-    in the plist that `macos/MortimerHost/scripts/bundle.sh` writes (a human-only
-    file) and edits in WS-17's scope (A8). *Recommended* [likely the most reliable
-    way to get the permission prompt; untested].
-  - (b) A Swift command-line helper started by an MCP child (August M6–M7). Whether
-    macOS grants calendar permission to a helper under the launchd-run bot is
-    untested; V2 tests that before anything is built on it. It works without the app.
-  - (c) CalDAV to iCloud with an app-specific password in the vault. It works with
-    no screen attached (the future Mac mini), but it is a networked credential, and
-    calendars outside iCloud are reachable only if iCloud carries them.
+    `DeviceLocator.swift`).
+    - The full wire contract is R.10.14, and the policy boundary is R.10.2.
+    - The app is a bundled GUI app, so macOS can show its permission prompt.
+    - No credential is needed.
+    - It works only while the app is connected, which the brief needs anyway.
+    - It needs `NSCalendarsFullAccessUsageDescription` in the plist that
+      `macos/MortimerHost/scripts/bundle.sh` writes (a human-only file), and edits in
+      WS-17's scope (R.13).
+    - *Recommended*, on condition that its permission and parity checks (M2-1,
+      M2-2) pass. That it is the most reliable way to get the prompt is likely but
+      untested.
+  - (b) A Swift command-line helper started by an MCP child (August M6–M7).
+    - Whether macOS grants calendar permission to a helper under the launchd-run bot
+      is untested.
+    - It works without the app.
+  - (c) CalDAV to iCloud with an app-specific password in the vault.
+    - It works with no screen attached (the future Mac mini).
+    - It is a networked credential.
+    - Calendars outside iCloud are reachable only if iCloud carries them.
+  - Choosing (b) or (c) requires publishing that backend's full manifest and
+    acceptance in this plan before P2 is claimed (R.10.14).
 - **D4 — Privacy level for mail, calendar and reminder content in the brief.**
   - (a) `confidential`, the code's default. No model sees the content until a
-    private route exists; the card is protected; speech is limited per D5. P4/P5 wait.
-    *Recommended.*
+    private route exists; the card is protected; speech is limited per D5; P4/P5
+    wait. *Recommended.*
   - (b) `approved_external`. Headers (and, in P5, bodies) may go to the configured
-    API provider and the TTS provider. This makes P4/P5 possible on `direct_api`.
+    API provider and the TTS provider. That makes P4/P5 possible on `direct_api`.
+    Under today's native code it also enables copy, share, export and supporting-display
+    transfer for the card (R.10.6), unless D8 (c) is chosen.
   - (c) `local_only`. As (a), and P4/P5 need a local model.
-- **D5 — What may leave the card.** This covers the speech and the Supervisor tool
-  result. Both go to external providers (A4).
+- **D5 — What the spoken line may contain.** Speech goes to an external provider
+  (A4). The Supervisor tool result is always the fixed acknowledgement, whichever
+  option is chosen (R.10.3).
   - (a) Nothing derived. A fixed sentence ("Your brief is on screen"); every fact
-    stays on the protected card. *Recommended under D4a.*
-  - (b) Declassify counts and times only. A named host declassification,
-    `brief-counts`, recorded in code and tested, releases numbers and clock times
-    and never text. Larry's approval here is what makes it legitimate.
-  - (c) Adds sender names, subjects and event titles. This needs D4b.
-  - Storage: `brief_digests` holds counts only. *Recommended.* Pick a retention
-    period (proposed: 30 days).
+    stays on the protected card. *Recommended under D4 (a).*
+  - (b) Declassify the typed `brief-counts` allowlist only (R.10.3). Numbers and clock
+    times, never text. Larry's approval here is what makes it legitimate.
+  - (c) Adds sender names, subjects and event titles. This needs D4 (b).
 - **D6 — Accounts and vault names.**
   - bellsouth.net: `imap.mail.att.net:993`, logging in with an AT&T secure mail key.
-  - Gmail: `imap.gmail.com:993`, logging in with an app password (needs 2-Step
-    Verification).
+  - Gmail: `imap.gmail.com:993`, logging in with an app password, which needs 2-Step
+    Verification.
   - Proposed vault names: `MAIL_ATT_USER`, `MAIL_ATT_SECURE_MAIL_KEY`,
     `MAIL_GMAIL_USER`, `MAIL_GMAIL_APP_PASSWORD`.
   - Larry sets each with `python -m jarvis.vault set NAME`. No value enters this plan,
     the roadmap or a prompt.
+  - How the credential names are declared:
+    - (a) Both accounts required: the names go in `requires_env`, so
+      `scripts/check_skills.py:114–116` fails until all four are set.
+    - (b) Each account optional: the names go in `optional_env`. An account whose
+      names are unset reports `not_configured` and the other account still works.
+      This fits A7, where a Gmail app password may not be available. *Recommended.*
+    - Either way the names are frozen in `test_requires_env_snapshot.py`, and no other
+      server receives them.
+  - Whether each account accepts these is a live check (M1-3).
 - **D7 — Schedule.**
   - Time: proposed 07:30 local (August M13).
   - Days: every day or weekdays.
@@ -259,91 +342,113 @@ answer. Record the choice in this plan when it is made.
   - When missed:
     - (a) nothing. *Recommended.*
     - (b) a notice with no content.
-- **D8 — Native presentation.** The on-request brief opens. The scheduled brief
-  arrives as a card with the WS-17 New notice and takes no focus. A protected card
-  cannot be shared or moved to the supporting display. Approve this, or allow
-  sharing, which needs D4b.
+  - An on-request full brief for today:
+    - (a) suppresses that day's scheduled brief. *Recommended.*
+    - (b) is independent of it.
+  - Fixed defaults stated for approval: a brief with at least one source `ok` or
+    `partial` consumes the day once acked. An all-failed brief does not; it is retried within
+    the window, up to `BRIEF_MAX_ATTEMPTS` (R.10.7).
+- **D8 — Native presentation.**
+  - Arrival: every brief arrives as a card with the WS-17 New notice and takes no
+    focus. A requested brief may open only once WS-17 provides a turn identity, and
+    only under its focus rule (R.10.8).
+  - Display actions, which are coupled with D4 (R.10.6):
+    - (a) Under D4 (a), copy, share, export and supporting-display transfer are
+      blocked. *Recommended.*
+    - (b) Under D4 (b), the four actions are allowed.
+    - (c) Under D4 (b), a separate `display_actions: "none"` permission keeps them
+      blocked, enforced at all four sinks.
+- **D9 — Local storage of derived values** (new in revision 2; R.10.3).
+  - (a) `brief_deliveries` keeps delivery bookkeeping and source-status codes only.
+    *Recommended.*
+  - (b) It also keeps the typed `brief-counts`, classified at the digest level and
+    readable only by the brief module.
+  - Under either option: a retention period (proposed 30 days), and logs stay
+    content-free.
+
+**Architectural exceptions** (outside the normal approval path). Each would need a
+revised plan and a new review before it could be chosen:
+
+- `scheduler` holding `mcp-calendar`. This treats invitation text as trusted,
+  contrary to A1.
+- The P5 mail agent also holding calendar. This needs `mcp-calendar` removed from
+  K4's `OUTBOUND`.
 
 ### R.6 Increments
 
-Each increment is a separate claim (on WS-13, or a new row if Larry prefers) with its
-own branch, its own §3 reservations, Codex cross-review and Larry's merge, deploy and
-Mac checks. P3 can ship with whichever sources exist: M20 requires reporting a
-failed or missing source honestly.
+Each increment is a separate claim (on WS-13, or a new row if Larry prefers). Each
+has its own branch, its own §3 reservations, Codex cross-review, and Larry's merge,
+deploy and Mac checks. P3 can ship with whichever sources exist; it reports a failed,
+missing or turned-off source honestly on the card (R.10.3 codes). The contracts are
+in R.10 and the acceptance rows in R.12.
 
-- **P1 — Mail header source.** No agent, no model.
-  - Files: `mcp_servers/mcp_mail/{__init__,logic,server}.py` and `skill.yaml`;
-    `config/mcp_servers.yaml`; the source contract in `jarvis/skills/registry.py`
-    (human); `EXPECTED` in `tests/unit/test_requires_env_snapshot.py` (human);
-    `ALL_SERVERS`/`TOTAL_TOOLS` in `tests/integration/test_registry.py`;
-    `EXPECTED_TOOLS` in `tests/integration/test_mcp_servers.py`; `.env.example`.
-  - Tests:
-    - `test_mcp_mail_logic.py`: a fake IMAP server records the commands. Only
-      `CAPABILITY` (stdlib `imaplib` sends it on connect), `LOGIN`, `EXAMINE`,
-      `SEARCH`, header-only `FETCH BODY.PEEK` and `LOGOUT` are allowed — no
-      `SELECT`, `STORE`, `APPEND`, `EXPUNGE`, `COPY`, `MOVE` or any `UID` form of them.
-    - `test_untrusted_wrapper.py`: M5, with the superset check against
-      `jarvis/memory.py:379`.
-    - Header injection fixtures.
-    - The timeout budget stays under the 30 s `CALL_TIMEOUT`.
-    - The envelope carries the D4 level.
-  - Mac: V1 (the mail secrets reach only `mcp-mail`) and V3 (both accounts' unread
-    state preserved).
-- **P2 — Calendar source** per D3.
-  - Under (a):
-    - JarvisKit `calendar/hello|request|result` types.
-    - A MortimerHost `DeviceCalendar` that reads EventKit, requests full access from
-      the app and is bounded.
-    - The plist key in `bundle.sh` (human).
-    - Bot side: `jarvis/bot/device_calendar.py`, mirroring `device_location.py`.
-    - The `AppMessageRouter.swift` edit (A8).
-  - Tests: protocol parsing and bounds on both sides; a source check that no write
-    API (`save(`, `remove(`, `requestWriteOnlyAccessToEvents`) appears; sanitiser
-    fixtures for invitation text.
-  - Mac: V2 (permission, and parity with Calendar.app, including Google if O1 says
-    it is there).
-- **P3 — Deterministic brief and delivery.**
+- **P1 — Mail header source.** No agent and no model.
+  - Contracts: R.10.1, R.10.2 (MCP part), R.10.3 (logs), R.10.9–R.10.13.
   - Files:
-    - `jarvis/brief.py`: M10 assembly, with calendar fenced, plus a deterministic
-      renderer.
-    - `jarvis/bot/brief_tool.py` and `jarvis/bot/brief_watcher.py`.
-    - `MIGRATION_0035_brief` in `jarvis/db.py` (human).
-    - The `mcp-reminders` source contract in `jarvis/skills/registry.py` (human;
+    - `mcp_servers/mcp_mail/{__init__,logic,server}.py` and `skill.yaml`:
+      credentials per D6 (`requires_env` or `optional_env`), and defaulted settings
+      such as `JARVIS_MAIL_ENABLED` in `optional_env`.
+    - `config/mcp_servers.yaml`.
+    - The `mcp-mail` source contract in `jarvis/skills/registry.py` (human-only;
       WS-05's owner reviews it).
-    - Under D5 (b) only: the `brief-counts` declassification.
-    - Tool registration in `pipeline.py` and the payload formatters in `display.py`.
-      Both sit outside WS-17's locked portions (A8).
-    - Inside WS-17's lock (A8): `backgroundTools` in `ConversationThreadView.swift`.
+    - `EXPECTED` in `tests/unit/test_requires_env_snapshot.py` (human-only).
+    - `ALL_SERVERS`/`TOTAL_TOOLS` in `tests/integration/test_registry.py`:
+      15 servers, and 82 tools if `mail_headlines` is the only new tool.
+    - `EXPECTED_TOOLS` in `tests/integration/test_mcp_servers.py`.
+    - The names-only preflight for M1-1.
+    - `.env.example`.
+  - Acceptance: S1-1 to S1-9, M1-1 to M1-3.
+- **P2 — Calendar source**, per D3. The manifest below is for D3 (a).
+  - Contracts: R.10.2 (calendar part) and R.10.14.
+  - Files:
+    - JarvisKit message types for `calendar/hello`, `calendar/request` and
+      `calendar/result`.
+    - MortimerHost `DeviceCalendar` and where it is constructed.
+    - The `AppMessageRouter.swift` case (R.13).
+    - The usage string in `bundle.sh` (human-only).
+    - Bot side: `jarvis/bot/device_calendar.py` (`CalendarSourceAdapter`), registered
+      on both client-message paths.
+  - Acceptance: S2-1 to S2-4, M2-1, M2-2.
+- **P3 — Deterministic brief and delivery.**
+  - Contracts: R.10.3–R.10.8 and R.10.15–R.10.18.
+  - Files:
+    - `jarvis/brief.py`: M10's assembly, revised by R.10, plus the deterministic
+      renderer that builds the typed `brief` payload.
+    - `jarvis/bot/brief_tool.py` and `jarvis/bot/brief_watcher.py`.
+    - `MIGRATION_0035_brief` in `jarvis/db.py` (human-only), plus `tests/unit/test_db.py`
+      (S3-10).
+    - The `mcp-reminders` source contract in `registry.py` (human-only; WS-05
+      reviews it).
+    - Under D5 (b) or D9 (b) only, the `brief-counts` code.
+    - Tool registration in `pipeline.py`, outside WS-17's locked portions.
+    - The `brief/hello` and `brief/ack` handling on both client-message paths.
+    - Inside WS-17's lock (R.13):
+      - the `arrival` rule in `ConversationThreadView.swift`;
+      - in-place replacement by `result_id` in `WorkspaceStore.swift` and
+        `ResponseResultRouter.swift`;
+      - `brief/ack` in the result-acknowledgement portion of `pipeline.py`;
+      - the typed `brief` kind in JarvisKit `DisplayPayload`, with its MortimerHost
+        renderer.
+    - Under D8 (c) only, the `display_actions` check in `ShareCoordinator.swift`,
+      `WorkspaceExportCoordinator.swift`, `SupportingDisplayCoordinator.swift` (WS-21)
+      and the copy action in `WorkspaceResultPane.swift`.
     - The tool description in `jarvis/prompts.py`.
-    - Cases in `tests/evals/cases.yaml`: brief requests expect `none` (a direct
-      tool); reminder requests still expect `scheduler`.
-  - Tests:
-    - Assembly.
-    - Once a day.
-    - Catch-up.
-    - No second brief after a restart on the same day.
-    - Speech built with `append_to_context=False`.
-    - No headers or titles in logs, the tool result, speech, notices or
-      `brief_digests`. Under D5 (a), nothing derived appears in the tool result or
-      speech.
-    - A hostile header renders as inert text on the card and is never spoken.
-    - The native arrival rule.
-  - Mac: V6 (routing ≥ 90 %), V7 (on request), V8 (scheduled, once), V9 (every fact
-    on the card traces to a source field), V10 (kill switches).
-- **P4 — Model-written brief.** Optional; needs D4b or a private route.
-  - Workload `brief`, reserved in §3.
-  - M11's prompt and entity-subset grounding check, with deterministic fallback.
-  - Tests §7.9.
-  - Mac: V9 with the model, and the fallback rate recorded.
-- **P5 — Mail question agent.** Optional; needs D4b or a private route.
+    - The scorer and menu in `tests/evals/routing_eval.py`, and cases in
+      `tests/evals/cases.yaml` (R.10.17).
+  - Acceptance: S3-1 to S3-10, M3-1 to M3-5.
+- **P4 — Model-written brief.** Optional. It needs D4 (b) or a private route, plus
+  R.11.1–R.11.2.
+  - Workload `brief`, reserved in §3, following WS-05's execution rules (R.2 row 6).
+  - Acceptance: per R.11.1, recorded at claim time.
+- **P5 — Mail question agent.** Optional. It needs D4 (b) or a private route, plus
+  R.11.2–R.11.5.
   - The agent holds `[mcp-mail]`.
   - Its workload goes in `config/model_access.yaml` (reserved in §3), with
     `model_profile` and `on_profile_fallback: refuse` in `agents.yaml`.
-  - Body fetch per M3/M5.
   - Supervisor rule 14.
-  - Routing cases.
-  - Seven-agent parity (web and Swift).
-  - Mac: V4 (K4), V5 (zero tool calls after reading hostile mail), V6 (routing ≥ 90 %).
+  - Routing cases, using the R.10.17 scorer.
+  - Seven-agent parity: Swift, plus the frozen-web parity maintenance (R.13).
+  - Acceptance: K4, injection and routing checks, recorded at claim time.
 
 ### R.7 Hand-off rules (replace §0.2, §0.4, §0.9, §0.11)
 
@@ -356,51 +461,877 @@ failed or missing source honestly.
   `db.py` migrations and `bundle.sh`. They never go through self-edit.
 - §0.4's precondition is met. K2 scoping is on main: `build_child_env` at
   `registry.py:238`, and `env = dict(os.environ)` no longer appears.
-- Source tests do not prove Mac, account or provider behaviour. V1–V10 stay Larry's
-  gates, and each records the actual result.
+- Source tests do not prove Mac, account or provider behaviour. R.12's M rows stay
+  Larry's gates, and each records the actual result. Asking an agent to print its
+  environment is not an isolation test; M1-1 and S1-8 are names-only host checks.
 
 ### R.8 Acceptance mapping
 
-- P1: V1, V3.
-- P2: V2.
-- P3: V6, V7, V8, V9, V10. V4 holds by construction in P1–P4, since no agent holds
-  `mcp-mail`.
-- P4: V9 with the model.
-- P5: V4, V5, V6.
+Replaced in revision 2 by R.12, the increment-specific acceptance matrix.
 
-### R.9 The August text: what stands, what changes
+### R.9 The August text: background or history
 
-**Stands, with corrections:**
-- M2: the host is `imap.mail.att.net` and the names follow D6.
-- M3: P1 is header-only; the 16 KB partial body fetch is P5 only.
-- M4: P1 omits `content` and `body_*`.
-- M5: verbatim, with the superset check against `jarvis/memory.py:379` (not `:154–180`).
-- M10: calendar fields are fenced; `user_id` is `'local'`; nothing is stored.
-- M11: P4 only, through workload `brief`.
-- M19 and M20.
-- The test lists in §7.1, §7.2 and §7.8–§7.10, re-counted at implementation.
+The August text is not an executable specification.
 
-**Superseded:**
-- The header C3, C6 and C8 rows, and K6.
-- Corrections R-M2 and R-M3. R-M1's conclusion that the brief runs in the bot stands.
-- §0.2, §0.4, §0.9, §0.10 and §0.11.
-- §1.1's counts and line numbers.
-- N2.
-- M6–M8, until D3 is answered.
-- M9, M12, M14, M15 and M16.
-- M13: the queue and F9's backlog bound are removed; F10's in-memory guard and the catch-up window stand.
-- M17 and M18, which become P5 only, with seven agents.
-- §4, §5, §9 (rollback now goes per increment: the kill switch first, then revert
-  the PR; `0035_brief` is additive and is never renumbered), §11 and §12 (replaced
-  by R.5).
+**Kept as background.** R.10–R.12 govern wherever these differ. Each section carries a
+"Background" banner in place:
 
-*Reconciled by Claude (Cowork) on 2026-10-07 against `e7b099b`. Session:
+- M2: the host and the names follow D6.
+- M3: the TLS context, commands, fetch items, deadlines and counts are replaced by
+  R.10.1 and R.10.9–R.10.13. The 16 KB body prefix is withdrawn (R.11.5).
+- M4: P1 returns it without `content`, the `body_*` fields or `attachment_count`,
+  with `received_at` = `INTERNALDATE` and R.10.10's count fields.
+- M5: the sanitiser and its superset check against `jarvis/memory.py:379` stand.
+  The canonical copy moves to `jarvis/untrusted_text.py` (R.11.2).
+- M10: the assembly rules, revised by R.10.3, R.10.11, R.10.14 and R.10.15. No
+  digest is stored, and `user_id` is `'local'`.
+- M11: P4 only. Its checker is replaced by R.11.1.
+- M19: day boundaries, revised by R.10.11.
+- M20: per-source failure is reported on the protected card. The spoken line and the
+  tool acknowledgement stay fixed under D5 (a), so the August failure speech is
+  withdrawn.
+
+**History.** Each section carries a "Historical" banner in place, and none is
+implemented:
+
+- the header table, contracts K6/M-BRIEF-1 and the corrections R-M2/R-M3 (R-M1's
+  conclusion that the brief runs in the bot stands);
+- §0, §1, §2's N2;
+- M1's rationale, which stands only as rationale; M6–M9; M12–M18;
+- §4–§12, including every §7 test list, which R.12 replaces, and every executable
+  example that uses `user_id="larry"`, `brief_requests`, `digest_json`, queue claims,
+  `_call_profile`, plain `SEARCH`/`FETCH`, `IMAP4_SSL` without an explicit context,
+  or spoken source facts.
+
+**Rollback** is per increment. Turn the increment's kill switch off first, then
+revert its PR. `0035_brief` is additive and is never renumbered; a reverted build
+leaves the table in place (S3-10).
+
+### R.10 Binding contracts for P1–P3
+
+These contracts govern P1–P3. Where an August section that R.9 keeps disagrees with
+them, R.10 wins. Every constant below is the plan's proposed value and is a tuning
+knob in the implementing module. None is an answer to D1–D9.
+
+#### R.10.1 Mail TLS authenticates the server (item 1)
+
+- **Connection.** Each connection is
+  `imaplib.IMAP4_SSL(host, 993, ssl_context=ctx, timeout=<connect timeout, R.10.9>)`.
+  `ctx` is a fresh `ssl.create_default_context()`, and the helper then sets
+  `ctx.minimum_version = ssl.TLSVersion.TLSv1_2` itself, because the default
+  minimum depends on how Python was built: Ubuntu's 3.12.3 reports
+  `MINIMUM_SUPPORTED`, while 3.11.15 and 3.13.13 report `TLSv1_2`. Before
+  connecting, it asserts `ctx.verify_mode == ssl.CERT_REQUIRED`,
+  `ctx.check_hostname is True` and `ctx.minimum_version == ssl.TLSVersion.TLSv1_2`.
+- **Nothing weakens verification.** No code path sets `check_hostname = False` or
+  `CERT_NONE`, loads extra trust anchors, or reads a context or a CA path from
+  configuration.
+- **Test seam.** The only seam is a keyword argument, used by tests alone, that
+  supplies a context built the same way plus a test CA. `server.py` never passes it.
+- **Interpreter.** The unverified default is confirmed here on CPython 3.11, 3.12
+  and 3.13. `scripts/mortimer.sh:147` suggests 3.12 for the production venv. Because
+  verification and the TLS minimum are both set explicitly, the contract holds on any
+  of them. The Mac's actual interpreter is untested until P1.
+- **Withdrawn.** M3's claims that `IMAP4_SSL` defaults to
+  `ssl.create_default_context()`, and "never a custom `ssl_context`", are wrong and
+  withdrawn.
+- **Acceptance (S1-1).** A local TLS server presents a self-signed certificate, an
+  expired certificate and a wrong-host certificate. Each connection fails with a
+  certificate error, and the server records no `LOGIN`. A valid certificate chained
+  to the test CA succeeds.
+
+#### R.10.2 Every source arrives through a host-validated policy boundary (item 2)
+
+- **MCP sources (mail, reminders).** They are read only with
+  `registry.call_classified(tool, args, execution_scope=<host scope>)`
+  (`jarvis/skills/registry.py:746`), never `registry.call`. The P1 and P3 source
+  contracts assign the D4 level and the sources `mail:<account>` and
+  `reminders:local`.
+- **Calendar under D3 (a).** The only consumer of `calendar/result` is
+  `CalendarSourceAdapter` in `jarvis/bot/device_calendar.py`. It:
+  1. accepts a result only for a request it issued itself, in the same session and
+     console generation, with a matching `request_id` and the host-owned interval;
+  2. validates the whole message against R.10.14 and rejects it entirely on any
+     violation, including unknown keys;
+  3. gives client-supplied labels no authority. The protocol defines no policy, source
+     or label field, so such a key is an unknown key and rejects the message;
+  4. assigns `DataPolicy(<D4 level>, "calendar:device")` itself;
+  5. issues the result through the same envelope mechanism the registry uses
+     (`privacy_policy.issue_tool_result`), with a host `ToolExecutionScope` for the
+     pseudo-tool `calendar_events`. If that function's source-scope validation does
+     not admit a device source, P2 adds a reviewed source scope there, and WS-05's
+     owner reviews it;
+  6. cancels its pending request on a session or generation change, and drops any
+     result that arrives late.
+- **Assembly.** It consumes validated envelopes only. The digest's policy is
+  `privacy_policy.strictest(...)` over every input.
+- **Acceptance (S2-2).** A forged label key, a wrong `request_id`, a wrong interval,
+  a result from a replaced session or generation, and a duplicate result are each
+  rejected or ignored. None lowers the policy or substitutes content. Every derived
+  artifact carries the strictest validated input policy.
+
+#### R.10.3 Local metadata, logs and external disclosure are separate (item 3)
+
+Three separate permissions:
+
+| Path | Governed by | Contents |
+|---|---|---|
+| Supervisor tool result | fixed rule | Always the fixed acknowledgement, returned before acquisition starts (R.10.4). It never carries a derived value, under any D5 option. |
+| Speech | D5 | D5 (a): a fixed line only. D5 (b): adds the `brief-counts` allowlist below. D5 (c): adds names, subjects and titles, and needs D4 (b). |
+| Local storage | D9 | `brief_deliveries` (R.10.7) holds delivery bookkeeping and source-status codes. Under D9 (b) only, it adds the `brief-counts` fields, classified at the digest level and readable only by the brief module. |
+| Logs | fixed rule | Content-free: event names, delivery state, source-status codes, durations. |
+
+- **Why logs carry no values.** `log_search` exposes `logs/bot.launchd.log` to the
+  systems and developer agents (`jarvis/status/logs.py:18`), and through them to
+  external models. So brief logs carry no counts, times, names, addresses, subjects,
+  titles or reminder text.
+- **`brief-counts`.** An exact typed allowlist, computed from typed fields of
+  validated envelopes and never parsed from text. Its fields:
+  - `events_on_day: int`
+  - `first_timed_event_local: "HH:MM" | null`
+  - `mail_new: {"state": "exact" | "lower_bound" | "unknown", "value": int | null}`
+  - `reminders_due_on_day: int`
+
+  A fixed template renders it. Nothing else is released.
+- **Source-status codes.** `ok`, `partial`, `failed`, `disabled`, `not_authorized`,
+  `not_configured`, `timeout`.
+- **Retention.** Rows older than `BRIEF_RETENTION_DAYS` (D9; proposed 30) are purged
+  at bot start and once a day by the watcher.
+- **Acceptance (S3-9).**
+  - Canary strings placed in the sender, subject, event title, location and reminder
+    text never appear in logs, `brief_deliveries`, notices, conversations, memory,
+    the KB digest, the tool result, the speech text or the LLM context.
+  - A schema test pins `brief_deliveries` to its enumerated columns.
+  - The retention purge removes expired rows under a test clock.
+  - The tool result is byte-identical for any two source contents under every D5
+    option, and under D5 (a) so is the speech text (a property test). That shows no
+    source-derived value reaches either external path beyond what D5 permits.
+
+#### R.10.4 Brief work has its own sensitivity, policy and logging context (item 4)
+
+- **Problem.** The session publishes one mutable `SensitiveTurn` before creating any
+  child task (`jarvis/bot/pipeline.py:1505` at `e7b099b`, `:1506` at `bd18033`), and classified confidential calls arm
+  whatever holder is current (`registry.py:704–715`, `:773`).
+- **Own context.** Each brief job, scheduled or on request, runs acquisition and
+  assembly in its own task, created under `contextvars.copy_context()` with
+  `current_sensitive_turn` set to a brief-owned `SensitiveTurn` and no foreground
+  `RunLogger`.
+- **Foreground isolation.** The session's holder is never armed or cleared by brief
+  work. The transcript observer's new-turn `clear()` reaches only the session's
+  holder, so a new user turn cannot clear the brief's.
+- **On request.** The `daily_brief` handler returns a fixed acknowledgement and starts
+  the brief job. The foreground turn receives no source content, so nothing arms it.
+- **Logging.** Brief logging uses its own content-free events (R.10.3).
+- **Acceptance (S3-1).**
+  - A scheduled confidential brief runs during an analyst request that uses an
+    external tool. The analyst's permitted continuation proceeds with no
+    `tool_protected` refusal, and its context and arguments contain no canary.
+  - A new user turn during acquisition leaves the brief holder armed.
+  - The session holder's state is unchanged by the brief.
+
+#### R.10.5 Only an eligible native recipient receives a protected brief (item 5)
+
+- **Eligible recipient.** The process's current live session (`notices.set_live_session`,
+  `jarvis/notices.py:113`) whose client sent, on this connection,
+  `brief/hello {"version": 1, "capabilities": ["protected_display_v1"]}`. Only native
+  builds that enforce `data_policy` at every display sink send it. Calendar
+  capability is announced separately, in `calendar/hello` (R.10.14). The frozen
+  browser console and unknown clients send neither.
+- **No recipient, no acquisition.**
+  - On request: the fixed reply "The brief needs the Mortimer app.", with no source
+    read.
+  - Scheduled: no claim and no acquisition.
+- **Other sessions.** Only the live session can be a recipient.
+- **Final check before send.** Same session, same generation, still eligible.
+  Otherwise nothing is sent, and the row becomes `released`, so a later eligible
+  session can claim it (R.10.7).
+- **The emitter sets `data_policy` explicitly.** The generic builder in
+  `jarvis/bot/display.py` has no `data_policy` field.
+- **Acceptance (S3-2).**
+  - Native and eligible: delivered.
+  - Browser or unknown: no protected payload and zero source calls.
+  - A disconnect, or a new hello without the capability, during acquisition: the
+    delivery is abandoned.
+  - Swift: `data_policy` survives serialization and `DisplayPayload` decoding.
+
+#### R.10.6 D4 (b) and D8 are coupled under the current native code (item 6)
+
+- **The coupling.** `DisplayPayload.isProtectedLocal` is `dataPolicy != "approved_external"`
+  (`macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`). So under D4 (b), the existing
+  native rules allow copy, share, export and moving to the supporting display.
+- **D8 records the choice:**
+  - (a) D4 (a): protected, and all four actions blocked. This is the current
+    behaviour.
+  - (b) D4 (b) with the four actions enabled.
+  - (c) D4 (b) with a separate `display_actions: "none"` permission. Each of the four
+    sinks enforces it: `ShareCoordinator`, `WorkspaceExportCoordinator`,
+    `SupportingDisplayCoordinator`, and copy in `WorkspaceResultPane`.
+- **Acceptance.** The chosen combination is tested. For D8 (c): approved model
+  processing is allowed, and all four actions are blocked.
+
+#### R.10.7 Durable, idempotent delivery (items 7, 25)
+
+The table records scheduled deliveries only. An on-request brief is ephemeral: it
+gets a fresh `result_id` per request and no row. Its one durable effect is D7's
+optional suppression of that day's scheduled brief.
+
+**Table `brief_deliveries`** (migration `0035_brief`):
+
+```sql
+CREATE TABLE IF NOT EXISTS brief_deliveries (
+  id INTEGER PRIMARY KEY,
+  user_id TEXT NOT NULL DEFAULT 'local',
+  delivery_date TEXT NOT NULL,              -- local YYYY-MM-DD of the scheduled slot
+  state TEXT NOT NULL CHECK (state IN
+    ('claimed','sent','acked','failed','released','abandoned','suppressed')),
+  result_id TEXT NOT NULL,                  -- UUID fixed at first claim; reused on every re-send
+  claim_session TEXT,
+  claim_expires_at TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  source_status TEXT NOT NULL DEFAULT '{}', -- JSON of R.10.3 codes only
+  created_at TEXT NOT NULL,
+  sent_at TEXT,
+  acked_at TEXT,
+  UNIQUE (user_id, delivery_date)
+);
+```
+
+Under D9 (b), the `brief-counts` columns are added, and nothing else.
+
+**Claim.** One `BEGIN IMMEDIATE` transaction, attempted only inside the day's
+catch-up window (D7) and only for an eligible recipient (R.10.5). The claim
+succeeds when:
+
+| Current row | Claim action |
+|---|---|
+| None | Insert `claimed`, with a new `result_id` and `claim_expires_at = now + BRIEF_CLAIM_TTL_S` (proposed 300). |
+| `claimed`, expired | Take it over with the same `result_id` and `attempts + 1`. |
+| `released` | Take it over with the same `result_id`. Attempts are unchanged, since nothing was sent. |
+| `failed`, `attempts < BRIEF_MAX_ATTEMPTS` (proposed 3) | Take it over with the same `result_id` and `attempts + 1`. |
+| `sent`, not acked, `sent_at` older than `BRIEF_ACK_TIMEOUT_S` (proposed 60), `attempts < BRIEF_MAX_ATTEMPTS` | Take it over to re-send with the same `result_id` and `attempts + 1`. |
+
+Otherwise it does not. That covers `acked`, `suppressed`, `abandoned`, a live claim,
+and the cases where attempts have run out.
+
+A database error at any step means nothing is acquired or sent (fail closed), and a
+content-free log line is written. When the window closes, a row that is not `acked`
+or `suppressed` is set to `abandoned`.
+
+**States.**
+
+| State | Set when | Proves / means |
+|---|---|---|
+| `sent` | After the transport send returns, by one `UPDATE` guarded by `claim_session` | Only that the bot handed the message to the transport |
+| `acked` | On `brief/ack {"version": 1, "result_id"}` from the native client | The app applied it. The day counts as delivered. |
+| `failed` | Every source failed (no `ok` or `partial` status) | Not consumed; retryable as above |
+| `released` | The final recipient check failed (R.10.5) | Nothing sent; claimable again |
+| `abandoned` | Attempts exhausted, or the window closed | Terminal |
+| `suppressed` | Under D7 (a), when an on-request full brief for today is acked | Terminal; counts as delivered |
+
+A brief with at least one source `ok` or `partial` consumes the day once acked.
+
+**Idempotent client.** A brief payload whose `result_id` already exists replaces
+that result in place, under WS-17's identity rules (`WorkspaceStore`,
+`ResponseResultRouter`; see R.13), without a second New notice. So a re-send after a
+crash or a lost ack never duplicates a card.
+
+**Crash cases.**
+
+| Crash point | Outcome |
+|---|---|
+| Before send | The claim expires, and the next eligible tick takes it over. |
+| After send, before `sent` is recorded | The claim expires, and the takeover re-sends the same `result_id`. |
+| After `sent`, before ack | The ack-timeout path re-sends the same `result_id`. |
+
+**Acceptance (S3-3).**
+- Two sessions sharing the database claim at once: exactly one claims.
+- A reconnect during acquisition: the takeover keeps the same `result_id`.
+- A recipient-check failure leaves the row `released`, and a later eligible session
+  delivers it.
+- An all-failed brief is retried, then `abandoned`.
+- Simulated crashes at each step give the outcomes above.
+- No ack ever arrives: bounded re-sends, then `abandoned`.
+- A database error at claim: no send.
+- Under D7 (a), an on-request brief for today suppresses the scheduled one.
+
+Sequential reconnect alone is not sufficient evidence.
+
+#### R.10.8 Arrival is bound to the request that asked (item 8)
+
+- **Payload fields.** `arrival: "requested" | "scheduled"`, a `result_id`, and, when
+  requested, a `brief_request_id`.
+- **No turn identity exists yet.** Display payloads carry none. The only
+  `user_turn_id` at `bd18033` is a fresh UUID on consent messages
+  (`jarvis/bot/pipeline.py:1569`). Turn binding belongs to WS-17.
+- **Until WS-17 provides one,** every brief, including a requested one, arrives as a
+  card with the New notice and never opens by itself.
+- **Once WS-17 provides an identity** the bot can attach and the app can match, a
+  requested brief opens only if its initiating turn is still the latest user turn
+  and WS-17's focus rule allows it: nothing else is being read, and the existing
+  supporting-display rules hold. Otherwise it arrives as a card.
+- **Native.** For brief payloads, `arrival` replaces the 120-second heuristic
+  (`ConversationThreadView.swift:426–452`). That is in WS-17's scope, so Codex agrees
+  the change at claim time.
+- **Acceptance (S3-4).** Cover:
+  - arrival after 121 s;
+  - a newer question asked meanwhile;
+  - two overlapping requests;
+  - another result being read;
+  - an open supporting display.
+
+  Only the correctly owned current answer opens. Before WS-17's binding exists, none
+  opens.
+
+#### R.10.9 One bounded mail call (item 9)
+
+- **Parallel accounts.** Each account runs in its own worker thread on its own
+  connection.
+- **Deadlines.**
+  - `MAIL_ACCOUNT_DEADLINE_S` (proposed 10.0) per account.
+  - `MAIL_CALL_DEADLINE_S` (proposed 12.0) for the whole call. That leaves margin
+    under the registry's 30-second `CALL_TIMEOUT` (`registry.py:58`).
+  - The two accounts no longer run back to back or share time.
+- **Connect phase.** The watchdog can reach the socket only after `open()` sets
+  `self.sock`. Until then, TCP connect and the TLS handshake are bounded by the
+  constructor's `timeout = min(IMAP_CONNECT_TIMEOUT_S (5.0), remaining)`.
+  `socket.create_connection` applies that timeout to each resolved address in turn.
+  So the call does not rely on it: the call's main thread joins the workers with the
+  call deadline and returns at that deadline regardless. A worker still connecting
+  is a daemon thread; its account is reported `failed` (timeout), and it closes its
+  socket when its connect returns.
+- **Watchdog.** Once the socket exists, a per-account watchdog (`threading.Timer`)
+  runs `sock.shutdown(SHUT_RDWR)` and then `close()` at the account deadline. Every
+  blocking read unblocks with an error. That also bounds a slowly dripped literal,
+  which per-receive socket timeouts cannot. A local TLS test confirmed this unblocks a
+  stalled `CAPABILITY` and a dripped literal (Linux; macOS untested).
+- **Per command.** Before each command, the socket timeout is set to
+  `min(IMAP_OP_TIMEOUT_S (8.0), remaining)`. `LOGOUT` gets at most
+  `min(1.0, remaining)`; after that the socket is closed without waiting.
+- **Partial results kept.** Results read before a deadline or a drop are kept. Each
+  account reports R.10.3's source-status code: `ok`, `partial`, `failed`,
+  `timeout`, `disabled` or `not_configured`.
+- **Cancellation.** Ending or cancelling the call fires every watchdog at once.
+  Threads are joined with a one-second bound.
+- **Acceptance (S1-3).** Use a fake server for:
+  - many slow operations, each under 8 s;
+  - a slowly dripped literal;
+  - a stalled `LOGOUT`;
+  - a first account that exhausts its deadline;
+  - a connect that never completes.
+
+  The call returns within `MAIL_CALL_DEADLINE_S` plus one second, the other
+  account's results are intact, and partial results are kept.
+
+#### R.10.10 Counts mean arrivals, and unknown never becomes zero (items 10, 13)
+
+- **Candidates.** `UID SEARCH UNSEEN SINCE <UTC date of (window_start_utc − 1 day)>`.
+  `SINCE` uses internal date at day granularity (RFC 3501 §6.4.4), so this
+  over-selects on purpose.
+- **Exact filter.** `UID FETCH <candidate UIDs> (INTERNALDATE)` in chunks of 200.
+  Keep those with `INTERNALDATE >= window_start_utc`.
+- **Candidate cap.** `MAX_CANDIDATES = 1000`. Above it, only the 1,000 highest UIDs
+  are examined (UIDs are assigned in ascending order within a `UIDVALIDITY`), and
+  the count is a `lower_bound`.
+- **Count result:**
+
+  | State | When | Value |
+  |---|---|---|
+  | `exact` | Enumeration completed | the count |
+  | `lower_bound` | Enumeration was partial | at least this many |
+  | `unknown` | Enumeration failed | `null`, never 0 |
+
+  A count of zero appears only as an exact zero.
+- **Headlines.** The 25 newest per account by `INTERNALDATE`, merged to at most 50.
+  The August limits stay: lookback 1–168 hours and fields of 200 characters.
+- **Field names.**
+  - `received_at` is `INTERNALDATE`, the server's arrival time.
+  - The sender-supplied `Date` header is kept only as `header_date`, labelled
+    sender-claimed, and never used to filter or order.
+  - The old `unread_in_window = len(ids)` (August §5, `logic.py` sketch) is withdrawn.
+- **Acceptance (S1-4).** Cover:
+  - candidates outside the hourly cutoff;
+  - more than 25 and more than 1,000 mixed-date matches;
+  - delayed mail with an old `Date`;
+  - a future or missing `Date`;
+  - partial enumeration.
+
+  Unknown and incomplete never read as zero.
+
+#### R.10.11 Instants for windows, local midnights for days (item 11)
+
+- **Mail windows** are UTC instants:
+  `window_start_utc = now_utc − timedelta(hours=window_hours)`. They are never
+  computed by local-time subtraction.
+- **Calendar days** run from local midnight of D to local midnight of D + 1, in
+  `JARVIS_TIMEZONE` with `zoneinfo`. A day can therefore be 23 or 25 hours long.
+  - Ambiguous local times resolve with `fold=0`.
+  - A nonexistent local midnight resolves to the first valid instant after it.
+- **Acceptance (S3-5).** In `America/New_York` on 2026-03-08 and 2026-11-01:
+  - a 24-hour mail window spans 24 elapsed hours;
+  - the day boundaries are 23 and 25 hours apart.
+
+#### R.10.12 Header retrieval is byte-bounded; no attachment claim (item 12)
+
+- **Fetch item.** `BODY.PEEK[HEADER.FIELDS (DATE FROM SUBJECT MESSAGE-ID)]<0.4096>`
+  together with `INTERNALDATE`. Partial fetch applies to any section (RFC 3501
+  §6.4.5).
+- **Literal cap.** The connection subclass overrides `read(size)` and aborts the
+  account when `size > LITERAL_MAX_BYTES` (4,096 plus 64 bytes of slack). `imaplib`
+  reads every literal through `self.read(size)` in `_get_response`. So a server that
+  ignores the partial cannot make the client read more.
+- **Line cap.** Non-literal lines keep `imaplib`'s 1,000,000-byte limit (`_MAXLINE`).
+  The `UID SEARCH` reply is a single line, and a lower cap would fail an inbox with
+  about 8,000 candidates instead of reporting `lower_bound`. A reply over the limit
+  marks that account `failed`, with count `unknown`.
+- **Aggregate bound,** per account: at most 1,000,000 bytes of `UID SEARCH` reply,
+  plus at most 1,000 short `INTERNALDATE` lines, plus 25 × 4 KiB of headers.
+- **Parsing.**
+  - `email.parser.BytesHeaderParser(policy=email.policy.default)` parses the at most
+    4 KiB block.
+  - For a duplicated header, the first occurrence wins. Folded headers are unfolded.
+  - A truncated or undecodable encoding yields replacement characters. Any parse
+    exception marks that message's fields `unavailable` and never escapes.
+  - M5's `_sanitise_field` then runs, with the 200-character cap.
+- **No attachment claim.** `attachment_count` is removed from P1's contract. P1 says
+  nothing about attachments.
+- **Acceptance (S1-5).**
+  - Oversized, folded and duplicated headers, and truncated encodings, stay bounded.
+  - A literal over the cap aborts that account with state `partial` or `failed`.
+  - No attachment value is fabricated.
+
+#### R.10.13 Stable read identity (item 13)
+
+- **Commands permitted, and nothing else:**
+  - `CAPABILITY`, which `imaplib` sends on connect;
+  - `LOGIN`;
+  - `EXAMINE`;
+  - `UID SEARCH`;
+  - `UID FETCH`, limited to `INTERNALDATE` and `BODY.PEEK[...]` items;
+  - `LOGOUT`.
+
+  Plain `SEARCH` and `FETCH` are not used. `SELECT`, `STORE`, `APPEND`, `EXPUNGE`,
+  `COPY` and `MOVE`, and their `UID` forms, are never sent.
+- **Identity.** `UIDVALIDITY` comes from the `EXAMINE` response. A message's
+  identity is the first 32 hex characters of
+  `sha256("<account>\0INBOX\0<uidvalidity>\0<uid>")`. `Message-ID` is not identity:
+  it can be absent, duplicated or forged.
+- **Disappearing messages.** A server may answer a `UID FETCH` that names an expunged
+  message with `NO`, with the data, or with nothing (RFC 3501 §6.4.8; RFC 2180 §4.1).
+  - Every `FETCH` response is bound to its `UID` item. Data for a UID that was not
+    requested is ignored.
+  - A requested UID with no data is skipped.
+  - A `NO` on a chunk drops that chunk's data. No other UIDs are retried in its place.
+  - In each of these cases, the count becomes a `lower_bound` if the UID was a
+    counted candidate, and an `INTERNALDATE` chunk answered `NO` makes the count a
+    `lower_bound` too.
+- **Acceptance (S1-6).** Cover:
+  - another client expunging between `UID SEARCH` and `UID FETCH`;
+  - disappearing messages;
+  - duplicate `Message-ID`;
+  - sequence renumbering.
+
+  None can substitute a different message. Identities are stable across calls, and
+  a `UIDVALIDITY` change yields new identities.
+
+#### R.10.14 Calendar wire contract under D3 (a) (item 14)
+
+**Messages.** All are JSON, carry `"version": 1` and are at most 65,536 bytes. A
+missing or different version, an unknown key, or any other violation rejects the
+whole message.
+
+- `calendar/hello`, client to bot, once per connection. It is the only place calendar
+  capability is announced (R.10.5's `brief/hello` announces display capability only):
+  - `version: 1`
+  - `authorization`: `"full" | "denied" | "restricted" | "not_determined" | "write_only"`
+  - `capabilities`: `["calendar_events_v1"]`
+- `calendar/request`, bot to client:
+  - `version: 1`, `request_id` (UUID), `session_id`, `generation`
+  - `start_utc`, `end_utc`, both ISO-8601 Z and host-owned, at most 15 days apart
+  - `max_events: 50`
+- `calendar/result`, client to bot:
+  - `version: 1`, `request_id`, `ok`
+  - `error`: `null | "not_authorized" | "unavailable" | "too_many" | "internal"`
+  - `authorization`, `total_in_range` (int), `truncated` (bool)
+  - `events` (at most 50)
+- **event:**
+
+  | Field | Value |
+  |---|---|
+  | `occurrence_id` | At most 128 characters; an opaque hash of the item identifier and the occurrence start |
+  | `start_utc`, `end_utc` | instants |
+  | `all_day` | bool |
+  | `start_date`, `end_date_exclusive` | local `YYYY-MM-DD`; all-day events only |
+  | `status` | `"confirmed" \| "tentative" \| "cancelled" \| "none"` |
+  | `participation` | `"accepted" \| "declined" \| "tentative" \| "pending" \| "none" \| "unknown"` |
+  | `recurring` | bool |
+  | `calendar` | at most 100 characters |
+  | `title`, `location` | at most 200 characters each |
+
+  The client omits organizer, attendees, URL and notes.
+
+**Behaviour.**
+
+- **Requests.** `CALENDAR_REQUEST_TIMEOUT_S` is proposed at 5. At most one request
+  per session is pending.
+- **Duplicate and late results.** A duplicate result for an answered request is
+  ignored. A late result, or one for an unknown request, is ignored with a
+  content-free log line.
+- **Authorization.** The client re-checks EventKit authorization on every request.
+  If access was revoked, it returns `not_authorized`, and the card says calendar
+  access is off.
+- **Teardown.** A disconnect or a generation change cancels the pending request.
+- **Event semantics:**
+
+  | Event kind | Handling |
+  |---|---|
+  | Cancelled | Hidden, and counted |
+  | Declined | Hidden, and counted |
+  | Tentative | Shown and labelled |
+  | Recurring | Expanded by EventKit occurrence queries, including exceptions (untested on Larry's data) |
+  | Overlapping | Listed in start order |
+  | Overnight timed | Appears on each local day it overlaps |
+  | All-day | Normalised to `[start_date, end_date_exclusive)`; tests cover both inclusive- and exclusive-end inputs |
+  | More than 20 on a day | The card says "and N more", from `total_in_range` and `truncated` |
+
+**Manifest:**
+
+- JarvisKit: decode `calendar/request`; encode `calendar/hello` and `calendar/result`.
+- MortimerHost:
+  - `DeviceCalendar`, constructed where `DeviceLocator` is.
+  - A case in `AppMessageRouter.swift` (WS-17 scope; R.13).
+  - The usage string in `scripts/bundle.sh`, which is human-only.
+- Bot: `jarvis/bot/device_calendar.py`, registered on both client-message paths:
+  the WebSocket `ClientMessageProcessor` and WebRTC `on_app_message`. A browser
+  never sends the hello, so it is never eligible.
+
+**Acceptance (S2-1, S2-3, M2-1, M2-2).** Cover:
+- malformed and oversized results;
+- permission revoked mid-session;
+- stale and duplicate replies;
+- a recurrence exception;
+- an all-day event with an exclusive end date;
+- an overnight event;
+- cancelled and declined events;
+- more than 20 events on one day ("and N more");
+- a request that times out (no result within `CALENDAR_REQUEST_TIMEOUT_S`);
+- both client-message paths: the WebSocket path works, and the WebRTC browser path is
+  never eligible;
+- parity with Calendar.app on the Mac.
+
+**D3 (b) or (c).** If either is chosen, its full manifest, dependencies, credential
+scope and acceptance are published in this plan before P2 is claimed.
+
+#### R.10.15 Calendar questions are defined, not inferred (item 15)
+
+**Signature.** `daily_brief(day: str = "today", scope: "brief" | "calendar" = "brief")`.
+
+**Accepted `day` values:**
+
+| Value | Meaning |
+|---|---|
+| `"today"`, `"tomorrow"` | as said |
+| `"YYYY-MM-DD"` | that date |
+| `"monday"`…`"sunday"` | the nearest date on or after today with that weekday; today counts |
+
+- Code resolves the date in `JARVIS_TIMEZONE` at call time.
+- Any other value gets the fixed reply "I can only look up today, tomorrow, a weekday
+  or a date."
+- **Horizon.** Today through today + 13. A past date, or one beyond the horizon, gets
+  a fixed refusal.
+
+**What each scope reads:**
+
+| Scope | Day | Reads |
+|---|---|---|
+| `calendar` | any | Events for that date only. No mail or reminder reads. |
+| `brief` | today | Calendar, reminders and mail. |
+| `brief` | any other day | Calendar and reminders due that date. No mail: mail means new arrivals relative to now. |
+
+**Three distinct dates.** `query_date` is the day asked about. `generated_at` is the
+instant the brief was built. `delivery_date` belongs to scheduled delivery only.
+On-request queries never change scheduled delivery state, except where D7 makes an
+on-request full brief for today suppress the scheduled one.
+
+**Acceptance (S3-5).** Cover:
+- today and explicit dates;
+- a weekday name said on that weekday;
+- 23:59 versus 00:01;
+- DST days;
+- unsupported strings;
+- a calendar-only query, which makes zero mail and reminder calls (asserted on a
+  fake registry).
+
+#### R.10.16 Source text renders inert at every privacy level (item 16)
+
+- **Typed payload.** The brief payload is a typed kind, `brief`, with structured
+  sections: items of literal strings, typed times and counts.
+- **Literal rendering.** The native app renders it as literal text, with no Markdown
+  interpretation, at both `confidential` and `approved_external`. Source text never
+  goes into the generic Markdown body.
+- **No links.** No URL is carried, so no source-derived link exists.
+- **Manifest.** JarvisKit `DisplayPayload` and a MortimerHost renderer; WS-17 agrees
+  at claim time (R.13).
+- **Acceptance (S3-6, Swift).** Subjects and titles containing Markdown links, images,
+  headings, emphasis, code fences, HTML and bare URLs render as their literal
+  characters under both levels.
+
+#### R.10.17 The routing gate checks the call, not the absence of delegation (item 17)
+
+- **Why.** `case_is_correct` (`tests/evals/routing_eval.py:233–253`) accepts any turn
+  with no delegation when `expect` is `none`.
+- **Brief cases.** Each gains `tool: daily_brief` and `args: {day, scope}`. The scorer
+  requires that exact direct tool, with matching normalised arguments and no
+  delegation.
+- **Eval setup.** The eval's tool menu and profile include the brief schema behind
+  its flag. The tool is a stub with no source access.
+- **Reporting.** Brief accuracy is reported on its own line. The aggregate ≥ 90 %
+  floor stays. Negative cases stay: reminder writes still expect `scheduler`, and a
+  mail-send request expects a refusal with no tool.
+- **Files.** `tests/evals/routing_eval.py`, `tests/evals/cases.yaml`.
+- **Acceptance (S3-7, offline).**
+  - Fail: a no-op answer, a wrong direct tool, a wrong date, an unwanted delegation.
+  - Pass: the correct stubbed call.
+
+#### R.10.18 Watcher lifecycle and switches (item 18)
+
+- **Start.** The watcher starts once the pipeline is ready and an eligible recipient's
+  hello has arrived.
+- **Stop.** It stops in the session teardown `finally`, before the transport closes.
+- **Cancellation.** It cancels the brief task. That fires the mail watchdogs through
+  the call's cancellation or deadline, and cancels the calendar futures.
+- **Final check.** R.10.5's check runs immediately before send.
+- **Foreground speech.**
+  - The card is sent when it is ready.
+  - The fixed spoken line waits until neither the bot nor the user is speaking, using
+    the existing speaking-state tracker. If 120 seconds pass first, the line is
+    dropped and the card stays.
+- **Switches** are environment settings read by the running process, so a change
+  takes effect at the next bot restart. Tests set them in-process.
+  - `JARVIS_BRIEF_ENABLED=false`: the tool replies "The brief is turned off.", makes
+    zero source calls, and the watcher stays idle.
+  - `JARVIS_BRIEF_TIME=""`: no scheduled brief; on request still works.
+  - `JARVIS_MAIL_ENABLED=false` or `JARVIS_CALENDAR_ENABLED=false`: that source shows
+    as "turned off" on the card, and the other sources proceed.
+- **Acceptance (S3-8).**
+  - Each switch, including an empty `JARVIS_BRIEF_TIME`, behaves as stated.
+  - A disconnect mid-read leaves no pending watcher, brief or request task
+    (`asyncio.all_tasks()` check).
+
+### R.11 Prerequisites before P4 or P5 can be approved (items 19–23)
+
+These change the August material that P4 and P5 would build on. P4 and P5 stay
+separately gated (D1, D4).
+
+#### R.11.1 Correct the grounding checker and its claim (item 19)
+
+**The flaw.** M11's `unsourced_proper_nouns` skips the first regex match in every
+sentence, not just a capitalised word at the start of the sentence. Against a digest
+that names only Chase, it accepts:
+
+- "I found an email from Verizon."
+- "I found Verizon. I also found Verizon."
+
+**The fix.** A token is exempt only if both:
+- its match starts at the sentence's first character (after any opening quotes); and
+- its lower-case form is in a closed `SENTENCE_OPENERS` list.
+
+Every other capitalised token must be in the digest.
+
+**Added checks.** Each must hold:
+- every clock time in the prose appears among the digest's times;
+- every number appears among the digest's numbers;
+- status words (cancelled, declined, tentative, moved) attach only to events with
+  that status;
+- a sender and a subject named in one sentence belong to the same message.
+
+**The claim, revised.** The checker catches unsourced names, times, numbers and
+status words. It does not catch relationship errors in general. Model prose is
+labelled "Summary (model-written)", and the typed facts below it are authoritative.
+The typed facts do not validate the prose: prose that fails any check is replaced
+by the deterministic text.
+
+**Acceptance.** Cover:
+- the two Verizon cases;
+- a wrong time;
+- a fabricated number;
+- a reversed cancellation;
+- a swapped sender and subject.
+
+The August corpus measurements (F4) do not count as acceptance of the revised
+checker.
+
+#### R.11.2 One fence family for mail and calendar (item 20)
+
+- **Markers.** The calendar block uses `<<<UNTRUSTED_CALENDAR>>>` and
+  `<<<END_UNTRUSTED_CALENDAR>>>`.
+- **Shared sanitiser.** The canonical sanitiser moves to `jarvis/untrusted_text.py`,
+  which MCP servers may import. Its `_FENCE_RE` covers the `UNTRUSTED_(EMAIL|CALENDAR)`
+  family, with M5's rules for casing and suffixes.
+- **Prompt.** The model prompt names both markers, and treats all calendar text by
+  outsiders as data.
+- **Acceptance.** A mail field forging calendar markers, and a calendar field forging
+  mail markers, can neither close nor forge either block.
+
+#### R.11.3 Mail-derived answers never return to the Supervisor (item 21)
+
+- **Local sink on every route.** P5 sends every answer derived from mail to an
+  ephemeral local result sink, whatever the route's privacy. The Supervisor gets only
+  host-generated status and an opaque reference.
+- **Why.** The existing private-result sink applies only to private routes
+  (`jarvis/agents/base.py:858–882`).
+- **Speech.** What P5 may speak is a separate decision, made when P5 is claimed.
+- **Acceptance.**
+  - Injected instructions never reach the Supervisor's context, notices or outbound
+    arguments.
+  - The P5 injection check rejects actions that only the mail authorised.
+  - A follow-up read that Larry himself asks for still works.
+
+#### R.11.4 Mail runs log no content, on any route (item 22)
+
+- **What is logged.** Mail tool calls and the P5 agent's runs record metadata only:
+  tool name, ok, latency, and source-status codes.
+- **What is not.** No argument, result or reply previews, and no JSONL payload
+  content. This covers the tool-result, final-reply, interruption, late-result and
+  notice paths.
+- **How.** A content-free logging policy keyed to the mail server and the mail agent,
+  applied whatever the route. Sensitivity is not armed for logging, because that
+  would also refuse an approved external route.
+- **Acceptance.** Under D4 (b), non-financial canaries in headers and bodies are
+  absent from `agent_runs`, `agent_events`, JSONL payloads, conversations, notices,
+  memory and the KB digest.
+
+#### R.11.5 Body retrieval reads text parts only; financial protection still applies (item 23)
+
+- **Body fetch.** P5 reads a body with `UID FETCH (BODYSTRUCTURE)`, then
+  `BODY.PEEK[<part>]<0.4096>`, for the first `text/plain` part only, or the first
+  `text/html` part converted to text. No attachment part is fetched. M3's 16 KB
+  full-message prefix is withdrawn.
+- **Allowlist.** For P5 only, this extends R.10.13's command allowlist and S1-2 with
+  `UID FETCH (BODYSTRUCTURE)` and `UID FETCH (BODY.PEEK[<part>]<0.4096>)`.
+- **Tool.** `mail_read(message_ref, max_chars=2000)`.
+- **Supported questions.**
+  - who wrote;
+  - what does this message say;
+  - summarise one message.
+
+  There is no search.
+- **D4 (b) does not override stricter protections.** A message caught by the existing
+  financial/sensitive detection still refuses external continuation.
+- **Acceptance.** Fixtures cover attachment-first and mixed multipart messages.
+  Ordinary permitted mail and financially protected mail each follow their own rule.
+
+### R.12 Acceptance matrix (replaces R.8 and August §8 V1–V10)
+
+"S" rows are source tests, run offline in the increment's PR. "M" rows are Larry's
+Mac checks on the deployed build; each one records the actual outcome. Source tests
+do not prove Mac, account or provider behaviour.
+
+| ID | Inc. | Check | Pass condition |
+|---|---|---|---|
+| S1-1 | P1 | TLS verification (R.10.1) | Untrusted, expired and wrong-host certificates fail before `LOGIN`; a valid one succeeds |
+| S1-2 | P1 | Commands and read-only (R.10.13) | Only the permitted commands are recorded; `EXAMINE`, `BODY.PEEK` and `UID` forms only |
+| S1-3 | P1 | Deadlines (R.10.9) | Every slow case returns within the bound, with partial results kept |
+| S1-4 | P1 | Count semantics and windows (R.10.10, R.10.11) | Exact, lower-bound and unknown states as specified; never a false zero. A 24-hour window spans 24 elapsed hours across both 2026 New York transitions |
+| S1-5 | P1 | Header bounds (R.10.12) | Byte, line and parse limits hold; no attachment claim |
+| S1-6 | P1 | Stable identity (R.10.13) | No substitution under expunge or renumbering |
+| S1-7 | P1 | Policy envelope (R.10.2) | `call_classified` only; the envelope carries the D4 level and `mail:<account>` |
+| S1-8 | P1 | Child environment, names only (item 26) | With synthetic sentinel values, `build_child_env` for every server puts the `MAIL_*` names in `mcp-mail`'s environment only. A set `JARVIS_MAIL_ENABLED` (an `optional_env` setting) reaches `mcp-mail` and no other server. `env_scoping_enabled()` is true under the default configuration (`registry.py:238–253` has the disabled branch). A missing credential gives that account `not_configured`, or under D6 (a) fails `check_skills`. No value is printed. |
+| S1-9 | P1 | Content-free logs (R.10.3) | Header canaries are absent from log output |
+| S2-1 | P2 | Calendar wire schema (R.10.14) | Malformed or oversized messages are rejected |
+| S2-2 | P2 | Adapter binding (R.10.2) | Forged, stale, mismatched and replaced-session results cannot lower policy or substitute content |
+| S2-3 | P2 | Event semantics (R.10.14) | Cancelled, declined, tentative, recurring, overlapping, overnight and all-day cases as specified |
+| S2-4 | P2 | No write API | `EKEventStore` appears only in `DeviceCalendar.swift`, and that file contains no `save(`, `remove(`, `commit(` or `requestWriteOnlyAccessToEvents` (the wider Swift sources already use `save(`/`remove(` elsewhere) |
+| S3-1 | P3 | Sensitivity isolation (R.10.4) | As specified |
+| S3-2 | P3 | Eligible recipient (R.10.5) | As specified, including Swift decoding of `data_policy` |
+| S3-3 | P3 | Durable delivery (R.10.7) | Concurrency, crash, ack and database-failure cases as specified |
+| S3-4 | P3 | Arrival (R.10.8) | Only the correctly owned answer opens; none before WS-17's binding |
+| S3-5 | P3 | Dates (R.10.11, R.10.15) | DST and date-resolution cases; calendar-only scope makes zero mail and reminder calls |
+| S3-6 | P3 | Inert rendering (R.10.16) | Literal under both privacy levels |
+| S3-7 | P3 | Routing scorer (R.10.17) | Wrong or no-op calls fail; the correct stubbed call passes |
+| S3-8 | P3 | Lifecycle and switches (R.10.18) | As specified; no leftover tasks |
+| S3-9 | P3 | Disclosure and storage (R.10.3) | The property test, canaries absent from every store, and retention; an integrated canary across speech, LLM context (`append_to_context=False`) and conversation storage |
+| S3-10 | P3 | Migration `0035_brief` (item 25) | See below |
+| S3-11 | P3 | Display actions (R.10.6) | The chosen D4/D8 combination is tested at all four sinks. Under D8 (c), approved model processing is allowed and all four actions are blocked |
+| M1-1 | P1 | Environment on the Mac | A names-only preflight prints, for each MCP server, whether each `MAIL_*` name is forwarded (yes or no, never a value) and the effective `JARVIS_ENV_SCOPING_ENABLED`. Only `mcp-mail` says yes, and scoping is on |
+| M1-2 | P1 | Unread preserved (old V3) | A message noted as unread in each account's webmail is still unread after a headers read |
+| M1-3 | P1 | Accounts reachable | bellsouth.net with its secure mail key and Gmail with its app password each report `ok`, or a specific status code |
+| M2-1 | P2 | Permission | The Mortimer app raises the calendar prompt; denial and revocation are handled as specified |
+| M2-2 | P2 | Parity | One test week (recurring, all-day, overnight, and Google if O1 says it is there) matches Calendar.app |
+| M3-1 | P3 | Live routing | `RUN_LIVE=1` eval: aggregate ≥ 90 %, and the brief score recorded |
+| M3-2 | P3 | Brief on request | A card arrives (a card until WS-17's binding), with the fixed spoken line under D5 (a); its facts match the sources |
+| M3-3 | P3 | Brief on schedule | With the time set two minutes ahead and a restart, exactly one card arrives; a reconnect brings no second |
+| M3-4 | P3 | Switches | Each switch off, and an empty `JARVIS_BRIEF_TIME`, after a restart |
+| M3-5 | P3 | Browser console | A web-console session gets no brief and causes no source call |
+
+**S3-10 in full.** `tests/unit/test_db.py` checks the migration ids in two orders.
+Appending `0035_brief` after `0036` in `MIGRATIONS` separates them:
+
+- **Application order.** `EXPECTED_MIGRATION_IDS` is compared with what
+  `run_migrations()` returns on a fresh database (`:75`, `:88`), and with
+  `SELECT id FROM migrations` read in insertion order (`:92`). Both are list order, so
+  `EXPECTED_MIGRATION_IDS` gains `0035_brief` last, after `0036`.
+- **Sorted order.** `:117` compares `SELECT id FROM migrations ORDER BY id`. It must
+  compare against `sorted(EXPECTED_MIGRATION_IDS)`, where `0035_brief` comes before
+  `0036_skill_step_check_receipts`.
+- **Upgrade lists** (`:110–115`, `:464–470`) gain `0035_brief` at the end.
+- **Tables.** `EXPECTED_TABLES` (`:18`, asserted at `:76`) gains `brief_deliveries`.
+
+Test each of these:
+- a fresh database;
+- an existing database with `0036` but not `0035`, which applies only `0035_brief`;
+- a repeat run, which applies nothing;
+- the retention purge;
+- rollback by reverting the code, which leaves the table in place, then re-upgrading
+  with rows and delivery state preserved.
+
+P4 and P5 rows are defined by R.11's acceptance and recorded when those increments
+are claimed. Old V4–V6 become P5's K4, injection and routing checks.
+
+### R.13 Coordination against main `bd18033` (item 27)
+
+- **Main has moved.** Main is now `bd18033`; Codex merged its repair of CC7a.3 as
+  #173.
+- **WS-17's lock stands.** WS-17 is still claimed by Codex, and a partial landing does
+  not release the rest of its scope. Work inside that scope needs a §4 entry agreed
+  with Codex at claim time:
+  - the arrival change in `ConversationThreadView.swift` (R.10.8);
+  - in-place replacement by `result_id` in `Stores/WorkspaceStore.swift` and
+    `App/ResponseResultRouter.swift` (R.10.7);
+  - `brief/ack` handling in the result-acknowledgement portion of
+    `jarvis/bot/pipeline.py` (R.10.7);
+  - the typed `brief` kind (`DisplayPayload` and its renderer, R.10.16);
+  - the `calendar/request` case in `AppMessageRouter.swift`.
+- **WS-21 (Claude; landed, Mac acceptance open)** owns `SupportingDisplayCoordinator.swift`.
+  Under D8 (c), the `display_actions` check there is coordinated with WS-21's open
+  acceptance, so its physical checks are re-run on the changed build.
+- **WS-05 reviews source classification.** WS-05 is landed but still the owner of
+  source classification. It reviews the P1/P3 source contracts in `registry.py` and,
+  for P4/P5, the workloads in `config/model_access.yaml`.
+- **The frozen web console.** The P5 roster edit to `web/src/agentLayout.ts` is
+  parity maintenance only. The web console never receives a protected brief (R.10.5).
+- **Main moved again to `4cf452e` (#195) while this revision was written.** WS-17's
+  scope gained two more portions:
+  - the weather-call interception in `jarvis/skills/registry.py` `_invoke`;
+  - an optional `weather_source` field in the Python and JarvisKit `DisplayPayload`.
+
+  P1/P3's source contracts touch `registry.py` too. They change source
+  classification, not `_invoke`'s weather hook. Both they and the typed `brief` kind
+  are coordinated with Codex at claim time.
+- **Re-check at each claim.** Scope is checked again against `origin/main` whenever an
+  increment is claimed.
+
+*Reconciled by Claude (Cowork) on 2026-10-07 against `e7b099b`; revision 2 against `bd18033` the same day. Session:
 https://claude.ai/code/session_01L1hFDFBVF6d8f7XrXJei87*
 
 ---
 
 
 ## August 2026 draft (history, except where §R.9 keeps a section)
+
+> **Historical (superseded by §R; see R.9).** This applies to the header material
+> below: the C1–C10 constraint table, the contracts K6, M-MAIL-1, M-CAL-1 and
+> M-BRIEF-1, and the list of consumed contracts. None of it is an implementation
+> instruction.
 
 
 **Author / origin.** Larry, quoted in the roadmap's origin section: *"access to my
@@ -468,6 +1399,8 @@ secured from any intruder."*
 
 ## Revision table (findings closed 2026-08-27)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 One row per review/cross-plan finding closed, mapping the id to the section changed
 and what changed. Re-measured fixes cite the sandbox command in §7.
 
@@ -501,6 +1434,8 @@ tests gate this merge (R-M2). See §0.10.
 ---
 
 ## Corrections to the roadmap
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 Three. All verified against source; the plan proceeds on the corrected facts.
 
@@ -552,6 +1487,8 @@ rule 13 (M9) states the split explicitly. C7 re-baseline is §8 V6.
 ---
 
 ## §0 Binding constraints for the implementing model
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 0.1 **Make no design decisions.** Every value, name, threshold, prompt string and
 error sentence you need is in this document. If you find something you believe is
@@ -636,7 +1573,11 @@ constant `MIGRATION_<n+1>`." Do not cite an absolute line for the insertion.
 
 ## §1 What exists today (verified, `path:line`) and the gap
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 ### 1.1 The pieces this plan builds on
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 | Fact | Where |
 |---|---|
@@ -666,6 +1607,8 @@ constant `MIGRATION_<n+1>`." Do not cite an absolute line for the insertion.
 
 ### 1.2 The gap
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 Nothing in the repository can read a mailbox, read a calendar, or produce a brief.
 There is no sixth agent, no `mcp-mail`, no `mcp-calendar`, no Swift calendar helper,
 no untrusted-content convention (mail is the first input Larry did not author), and
@@ -675,6 +1618,8 @@ fires on rows becoming due, not on a clock.
 ---
 
 ## §2 Non-goals
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 **N1 — Sending, replying, forwarding.** No SMTP, no IMAP `APPEND`, no draft, no
 `mail_send` tool, not even behind a kill switch. Roadmap §2.5 "Out of scope"; it is a
@@ -720,7 +1665,11 @@ entry so two existing tests pass (R-M2). No new panel, no brief tab.
 
 ## §3 Decisions — M1 … M20
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 ### M1 — Read scopes only; the write surface does not exist in this plan
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 Every tool added here is a read. There is no confirm-gated write to gate, so the
 `actions`-table two-phase pattern (C4) is **not** instantiated — a point worth stating
@@ -731,6 +1680,8 @@ introduces it.
 write in the same release is precisely the risk R-T5 names.
 
 ### M2 — `mcp_mail` is stdlib `imaplib`, one code path, two accounts declared as data
+
+> **Background (R.9).** R.10–R.12 govern wherever this section differs; R.9 lists the corrections. Withdrawn here: `imap.mail.yahoo.com` and the "app password" naming for bellsouth.net (A6, D6).
 
 `ACCOUNTS` is a module-level tuple of frozen dataclasses in
 `mcp_servers/mcp_mail/logic.py`. Adding an account is adding a tuple entry plus two
@@ -774,11 +1725,14 @@ content.
 
 ### M3 — The exact IMAP read path
 
+> **Background (R.9).** R.10–R.12 govern wherever this section differs; R.9 lists the corrections. Withdrawn here: the claim that `IMAP4_SSL` defaults to a verifying context, and "never a custom `ssl_context`" (R.10.1); plain `SEARCH`/`FETCH` and sequence numbers (R.10.13); `len(ids)` counting and `Date`-header windows (R.10.10); the 16 KB body prefix (R.11.5); sequential accounts and the timeout arithmetic (R.10.9).
+
 The transcript, per account, is exactly five commands and nothing else:
 
 1. `IMAP4_SSL(host=…, port=993, timeout=IMAP_TIMEOUT_S)` — TLS from the first byte,
-   default `ssl.create_default_context()` (certificate + hostname verification on).
-   **Never** `IMAP4` + `STARTTLS`, never a custom `ssl_context`.
+   ~~default `ssl.create_default_context()` (certificate + hostname verification on).~~
+   **Withdrawn 2026-10-07:** CPython's `IMAP4_SSL` uses an unverified context by
+   default; R.10.1 requires an explicit verified context. **Never** `IMAP4` + `STARTTLS`.
 2. `login(user, password)`.
 3. `select("INBOX", readonly=True)` — `readonly=True` is load-bearing: it opens the
    mailbox in EXAMINE mode so the server itself refuses flag changes.
@@ -833,8 +1787,9 @@ readonly=True)` issues `EXAMINE`, so the server itself refuses flag changes;
 `BODY.PEEK[…]` does not set `\Seen` where `BODY[…]` would; `<0.16384>` is valid
 partial-fetch syntax and `imaplib` returns `[(b'… BODY[]<0> {n}', b'<raw>'), b')']`, so
 `payload[0][1]` is the raw bytes and the `isinstance(payload[0], tuple)` guard is correct.
-`IMAP4_SSL(host=, port=, timeout=)` is a valid 3.11 signature defaulting to
-`ssl.create_default_context()`. `IMAP4.abort` and `IMAP4.readonly` **are subclasses of**
+`IMAP4_SSL(host=, port=, timeout=)` is a valid 3.11 signature. ~~defaulting to
+`ssl.create_default_context()`~~ **Withdrawn 2026-10-07:** without `ssl_context` it
+uses `ssl._create_stdlib_context`, which does not verify (R.10.1). `IMAP4.abort` and `IMAP4.readonly` **are subclasses of**
 `IMAP4.error` (measured: `issubclass(imaplib.IMAP4.abort, imaplib.IMAP4.error) is True`),
 which is why F6 orders `_error_sentence`'s branches most-specific first.
 
@@ -861,6 +1816,8 @@ which is why F6 orders `_error_sentence`'s branches most-specific first.
   response, and the total budget (F7) caps wall-clock time.
 
 ### M4 — `mail_unread`'s return contract, typed field by field
+
+> **Background (R.9).** R.10–R.12 govern wherever this section differs; R.9 lists the corrections. Withdrawn here: `attachment_count`, `unread_in_window` and the `Date`-based `received_at` (R.10.10, R.10.12).
 
 `mail_unread(window_hours: int = 24, account: str = "all") -> dict`
 
@@ -918,6 +1875,8 @@ strings. They are attacker-authored, so they pass through `_sanitise_field` (M5)
 the injection tests place hostile text in the **subject** as well as the body.
 
 ### M5 — The untrusted-content wrapper, as literal code
+
+> **Background (R.9).** R.10–R.12 govern wherever this section differs; R.9 lists the corrections. Stands; its canonical copy moves to `jarvis/untrusted_text.py` with the calendar markers (R.11.2).
 
 `mcp_servers/mcp_mail/logic.py`, verbatim (this block incorporates the F1/F8/F17
 hardening; it needs `re` + `unicodedata`, both stdlib):
@@ -1102,6 +2061,8 @@ one sentence (M9) — both, not either.
 
 ### M6 — `mcp_calendar` is a Python server shelling out to a Swift helper; the helper's CLI and JSON schema
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 **Helper location and name.** SPM executable at `macos/jarvis-calendar/`, product
 `jarvis-calendar`, built with `swift build -c release`, binary at
 `macos/jarvis-calendar/.build/release/jarvis-calendar`.
@@ -1190,6 +2151,8 @@ the shape roadmap §2.5 specifies (R10).
 
 ### M7 — EventKit permission flow and entitlement
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 **Entitlement** (`macos/jarvis-calendar/templates/jarvis-calendar.entitlements.template`):
 
 ```xml
@@ -1232,6 +2195,8 @@ require a foreground user; a first-run prompt inside an MCP child is a hang, not
 dialog.
 
 ### M8 — O3 decision tree: EventKit vs CalDAV, both branches fully specified
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 The backend is selected by one env var read in one place —
 `mcp_servers/mcp_calendar/logic.py::_backend()`:
@@ -1294,6 +2259,8 @@ possibility, and the switch must then be an env var, not a project.
 
 ### M9 — The `secretary` agent (K6), its description, and Supervisor rule 13
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 `config/agents.yaml` gains, appended after `developer`:
 
 ```yaml
@@ -1349,6 +2316,8 @@ added to scheduler has to be re-checked against injection. A named agent with a 
 server list is a boundary a test can enforce; a convention is not.
 
 ### M10 — The digest, assembled in code
+
+> **Background (R.9).** R.10–R.12 govern wherever this section differs; R.9 lists the corrections. Withdrawn here: `user_id: "larry"` (use `'local'`), unfenced event fields, and any stored digest (R.10.3).
 
 `jarvis/brief.py`. The digest is a `dataclass` serialised to a plain dict; **every
 field is produced by code from tool results, never by a model.**
@@ -1422,6 +2391,8 @@ interpolates only `_sanitise_field`-cleaned strings, so no attacker-authored byt
 outside it.
 
 ### M11 — Exactly one model call, with its prompt written out
+
+> **Background (R.9).** R.10–R.12 govern wherever this section differs; R.9 lists the corrections. P4 only. Its checker is replaced by R.11.1, and its call by workload `brief` (R.2 row 6).
 
 Two new constants in `jarvis/prompts.py`:
 
@@ -1558,6 +2529,8 @@ on the safe list.
 
 ### M12 — `brief_report` renders through the existing display pipeline
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 `jarvis/bot/display.py` gains, in the three places a pseudo-tool is registered:
 
 - `DISPLAY_TOOLS`: `"brief_report"` — with the same comment convention as
@@ -1597,6 +2570,8 @@ lesson: the card is what makes a wrong summary visible. If the model drops an ev
 the user sees it in the list underneath.
 
 ### M13 — Two paths into one job: `BriefWatcher` in the bot, queued through the DB
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 Per R-M1 the job lives in the bot process. Both paths converge on
 `BriefWatcher.run_brief(source)`.
@@ -1700,6 +2675,8 @@ long); for a brief the card must be up before the words start, so the user can f
 
 ### M14 — Kill switches, each read in exactly one place
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 | Env var | Default | The one place it is read | Effect when `false` |
 |---|---|---|---|
 | `JARVIS_MAIL_ENABLED` | `true` | `mcp_servers/mcp_mail/logic.py::_mail_enabled()` | both mail tools return `{"error": "mail access is turned off"}`; no socket is opened |
@@ -1725,6 +2702,8 @@ the calendar down, and a noisy brief should be silenceable without losing "what'
 calendar".
 
 ### M15 — `requires_env`, declared correctly (K2)
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 `MORTIMER_SECURITY_HARDENING_PLAN.md` Correction R-1 found six of twelve existing
 servers declaring less than they read. These two do not repeat that. Every name below is
@@ -1770,6 +2749,8 @@ header.
 
 ### M16 — Migration `0032_brief`, with `user_id` from the first migration
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 Roadmap §6: *"the `user_id` column exists in every new table … from the first
 migration, hardcoded to one value."*
 
@@ -1814,6 +2795,8 @@ statement runs against `brief_requests`.
 
 ### M17 — Frontend parity for the sixth agent (R-M2)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 `web/src/agentLayout.ts`'s `AGENT_LAYOUT` gains exactly one entry, at the end:
 
 ```ts
@@ -1834,11 +2817,15 @@ this test rather than a silent pass either way" — this is that edit.
 
 ### M18 — Routing-eval fixture: 12 positives, 6 negatives (K6)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 Written out in §5 Step 12. Case count goes 68 → 86; the header comment's arithmetic is
 updated in the same edit. The eval threshold is unchanged at 0.90
 (`tests/evals/routing_eval.py:30`).
 
 ### M19 — Time, timezone and the window, defined once
+
+> **Background (R.9).** R.10–R.12 govern wherever this section differs; R.9 lists the corrections. Withdrawn here: local-time window subtraction (R.10.11).
 
 - The timezone is `ZoneInfo(os.environ["JARVIS_TIMEZONE"])`, with the exact fallback
   `mcp_servers/mcp_reminders/logic.py:44–72` uses (empty, `"${"`-containing or invalid
@@ -1857,6 +2844,8 @@ updated in the same edit. The eval threshold is unchanged at 0.90
   offset change inside the 168 h window cannot mis-order.
 
 ### M20 — Failure semantics, uniform across all three sources
+
+> **Background (R.9).** R.10–R.12 govern wherever this section differs; R.9 lists the corrections. Withdrawn here: every spoken failure sentence. Failures appear on the protected card; the spoken line and the tool acknowledgement stay fixed under D5 (a) (R.9).
 
 No source failure ever produces an empty brief or a silent omission.
 
@@ -1877,6 +2866,8 @@ usernames — the shape `mcp_web`'s `{"error": …}` dicts already use.
 ---
 
 ## §4 Files (create / modify / delete — complete manifest)
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 **Create (23).**
 
@@ -1939,7 +2930,11 @@ usernames — the shape `mcp_web`'s `{"error": …}` dicts already use.
 
 ## §5 Implementation steps, in order
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 ### Step 0 — Secrets and flags (Larry runs the vault commands; the implementer edits `.env.example`)
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 **0a — always.** Larry runs, on his machine:
 
@@ -1984,6 +2979,8 @@ values.
 ---
 
 ### Step 1 — `mcp_mail`
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 **`mcp_servers/mcp_mail/logic.py`** — complete:
 
@@ -2448,6 +3445,8 @@ test: "python3 -m pytest tests/unit/test_mcp_mail_logic.py -q"
 
 ### Step 2 — The injection cases (G5(a)), before anything is wired to an agent
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 Write `tests/unit/test_mail_injection.py` (§7.3) now, not later. It is the gate on
 Step 10: if a hostile message can produce a tool call, the agent must not exist yet.
 
@@ -2457,6 +3456,8 @@ fake agent loop made **zero** tool calls.
 ---
 
 ### Step 3 — The Swift helper `macos/jarvis-calendar`
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 **`Package.swift`:**
 
@@ -2667,6 +3668,8 @@ site is followed by an integer exit code.
 
 ### Step 4 — `mcp_calendar` (Python side)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 **`mcp_servers/mcp_calendar/logic.py`** — the parts that carry decisions:
 
 ```python
@@ -2875,6 +3878,8 @@ def brief_today() -> dict:
 
 ### Step 5 — `caldav_backend.py` (written on both branches; wired only on Branch B)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 Same three public functions as M8. Uses `httpx` (already a dependency).
 
 Discovery, once per process, cached in a module global:
@@ -2936,6 +3941,8 @@ fixtures inline in the test file, `http_client` injected.
 
 ### Step 6 — Migration `0032_brief`, and the O3 branch decision
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 First run the §0.11 cross-guard: `grep -c 0031_client_tokens jarvis/db.py`; if `0`,
 **stop and report** (REMOTE must land first). Then add `MIGRATION_0032` (M16's SQL, as a
 module-level triple-quoted string beside the other `MIGRATION_*` constants — locate them
@@ -2953,6 +3960,8 @@ in `.env.example` accordingly, recording the branch taken in §12.
 ---
 
 ### Step 7 — `jarvis/brief.py`, the prompts, and the `brief_report` renderer
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 Create `jarvis/brief.py` with, in this order: the knobs (§6), `brief_enabled()`,
 `_tz()`, `_clock()`, `BriefDigest`, `assemble_digest`, `render_digest_text`,
@@ -2996,6 +4005,8 @@ Add `brief_report` to `jarvis/bot/display.py` in the three registration places, 
 
 ### Step 8 — `BriefWatcher` and its construction site
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 `jarvis/bot/brief_watcher.py` follows `reminders_watcher.py`'s shape exactly:
 `__init__(registry, speak, push_display, is_connected, interval_s=BRIEF_POLL_INTERVAL_S)`,
 `start()`, `async stop()`, `async _run()`, `async tick_once()` (public, never raises),
@@ -3036,6 +4047,8 @@ and push_display all injected; no event loop timing dependence beyond
 
 ### Step 9 — Register the servers, update `TOTAL_TOOLS`
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 `config/mcp_servers.yaml`:
 
 ```yaml
@@ -3065,6 +4078,8 @@ calendar_events/calendar_list/calendar_status/brief_today)`.
 
 ### Step 10 — The `secretary` agent and Supervisor rule 13
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 Apply M9 verbatim: the `secretary` block appended to `config/agents.yaml`, the
 `scheduler` description edit (R-M3), and rule 13 appended to `SUPERVISOR_PROMPT` in
 `jarvis/prompts.py`.
@@ -3075,6 +4090,8 @@ Apply M9 verbatim: the `secretary` block appended to `config/agents.yaml`, the
 ---
 
 ### Step 11 — Frontend parity (R-M2)
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 Apply M17: one `AGENT_LAYOUT` entry in `web/src/agentLayout.ts`; rename and extend
 `test_exactly_five_agents_today`. **Both edits are transitional (§0.10):** add a comment
@@ -3089,6 +4106,8 @@ type-check, not a behaviour change.
 ---
 
 ### Step 12 — Routing-eval fixture (M18)
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 Append to `tests/evals/cases.yaml`, and update the header comment's arithmetic from
 `= 68 total` to `+ 12 secretary + 6 secretary-negative = 86 total`:
@@ -3138,6 +4157,8 @@ run and record LOCAL's ladder either entirely before or entirely after this Step
 
 ### Step 13 — Live tests and the acceptance checklist
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 `tests/integration/test_mail_calendar_live.py`, every test guarded by
 `pytest.mark.skipif(not os.environ.get("RUN_LIVE"), reason="live")`:
 `test_bellsouth_login_and_search`, `test_gmail_login_and_search`,
@@ -3152,10 +4173,14 @@ file skips).
 
 ## §6 Tuning knobs — where every number lives (one place each)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 Every value below lives in exactly one module-level constant or one env read. A number
 that appears twice is a bug; §11 item 4 walks this list against §5.
 
 ### 6.1 `mcp_servers/mcp_mail/logic.py`
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 | Name | Default | Meaning | Env override |
 |---|---|---|---|
@@ -3174,6 +4199,8 @@ that appears twice is a bug; §11 item 4 walks this list against §5.
 
 ### 6.2 `mcp_servers/mcp_calendar/logic.py`
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 | Name | Default | Meaning | Env override |
 |---|---|---|---|
 | `HELPER_TIMEOUT_S` | `20.0` | subprocess timeout | none |
@@ -3185,12 +4212,16 @@ that appears twice is a bug; §11 item 4 walks this list against §5.
 
 ### 6.3 `mcp_servers/mcp_calendar/caldav_backend.py`
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 | Name | Default | Env override |
 |---|---|---|
 | `CALDAV_TIMEOUT_S` | `20.0` | none |
 | base URL / user / password | none — required | `CALDAV_URL`, `CALDAV_USER`, `CALDAV_APP_PASSWORD` (vault) |
 
 ### 6.4 `jarvis/brief.py`
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 | Name | Default | Meaning | Env override |
 |---|---|---|---|
@@ -3207,6 +4238,8 @@ that appears twice is a bug; §11 item 4 walks this list against §5.
 
 ### 6.5 `jarvis/bot/brief_watcher.py` / `jarvis/bot/pipeline.py`
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 | Name | Default | Meaning | Env override |
 |---|---|---|---|
 | `BRIEF_POLL_INTERVAL_S` | `20.0` | tick period (`brief_watcher.py`) | none |
@@ -3217,6 +4250,8 @@ that appears twice is a bug; §11 item 4 walks this list against §5.
 
 ### 6.6 `web/src/agentLayout.ts`
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 | Name | Value | Meaning |
 |---|---|---|
 | `secretary` `x`, `y` | `50`, `79` | M17's bottom vertex; the five existing entries are unchanged |
@@ -3225,12 +4260,16 @@ that appears twice is a bug; §11 item 4 walks this list against §5.
 
 ## §7 Tests — enumerated by file and function, with inputs and expected outputs
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 Counts: **12 sections (§7.1–§7.12), ~140 test functions** (grew from the review fixes —
 F1/F4/F6/F7/F9/F10/F14/F15 each add rows). All offline except §7.12. Treat each section's
 own header count as authoritative; the total is approximate because several rows are
 parametrised.
 
 ### 7.1 `tests/unit/test_mcp_mail_logic.py` (26 functions)
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 A `FakeIMAP` class implements `login`, `select`, `search`, `fetch`, `logout` and
 **records every call**. It is passed as `imap_factory`.
@@ -3267,6 +4306,8 @@ A `FakeIMAP` class implements `login`, `select`, `search`, `fetch`, `logout` and
 
 ### 7.2 `tests/unit/test_untrusted_wrapper.py` (16 functions)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 Extracted verbatim to the sandbox and run before writing (measured: 0 survivors, §M5).
 
 | Function | Input | Expected |
@@ -3290,6 +4331,8 @@ Extracted verbatim to the sandbox and run before writing (measured: 0 survivors,
 | `test_sender_and_subject_are_repeated_inside_the_fence` | any | the fenced block contains `From:` and `Subject:` lines carrying the same sanitised values |
 
 ### 7.3 `tests/unit/test_mail_injection.py` — roadmap G5(a) (13 functions)
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 **The nine hostile messages** (`INJECTION_CASES`, a module constant so §7.12 and the
 live test share them). Each is `(id, subject, body)`:
@@ -3353,6 +4396,8 @@ follow-up commit) replays them offline and asserts
 
 ### 7.4 `tests/unit/test_mcp_calendar_logic.py` (16 functions)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 `runner` is a fake returning a `CompletedProcess`-shaped object.
 
 | Function | Input | Expected |
@@ -3377,6 +4422,8 @@ follow-up commit) replays them offline and asserts
 
 ### 7.5 `tests/unit/test_caldav_backend.py` (9 functions)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 Three inline XML fixtures (principal, home-set, calendar-query response) and an
 injected `http_client`.
 
@@ -3395,6 +4442,8 @@ injected `http_client`.
 
 ### 7.6 `tests/unit/test_calendar_helper_source.py` (4 functions)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 Runs everywhere, needs no Swift toolchain — it reads
 `macos/jarvis-calendar/Sources/jarvis-calendar/main.swift` as text.
 
@@ -3407,6 +4456,8 @@ Runs everywhere, needs no Swift toolchain — it reads
 
 ### 7.7 `tests/unit/test_secretary_agent.py` (7 functions)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 | Function | Expected |
 |---|---|
 | `test_secretary_exists_with_the_k6_server_list` | `config/agents.yaml`'s `secretary` has exactly `[mcp-mail, mcp-calendar, mcp-reminders]` — no `mcp-screen` (F3/§B) |
@@ -3418,6 +4469,8 @@ Runs everywhere, needs no Swift toolchain — it reads
 | `test_rule_13_routes_reminders_to_scheduler` | it contains `"is still scheduler"` |
 
 ### 7.8 `tests/unit/test_brief.py` — assembly (14 functions)
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 `assemble_digest` is pure, so every case is a literal input/output pair.
 
@@ -3439,6 +4492,8 @@ Runs everywhere, needs no Swift toolchain — it reads
 | `test_prune_removes_rows_older_than_30_days` | 40-day-old row + today's | one row left in each table |
 
 ### 7.9 `tests/unit/test_brief.py` — grounding, roadmap G5(d) (13 functions)
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 Re-specified with **adversarial** fixtures, not author-chosen ones (F4). `OPENER_CORPUS`
 is a module constant: the review's 100-word sentence-opener list. Measured before writing
@@ -3462,6 +4517,8 @@ adversarial-entity misses, speech self-check PASS.
 | `test_render_digest_speech_does_not_greet` (F11) | any digest | `not render_digest_speech(d).startswith(("Good","Hello","Hi "))`; it starts `"It's "` |
 
 ### 7.10 `tests/unit/test_brief_watcher.py` (15 functions)
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 Registry, clock, `speak` and `push_display` all injected; every test is
 `await watcher.tick_once()`.
@@ -3487,6 +4544,8 @@ Registry, clock, `speak` and `push_display` all injected; every test is
 
 ### 7.11 `tests/unit/test_display.py` — additions (5 functions)
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 | Function | Expected |
 |---|---|
 | `test_brief_report_is_a_display_tool` | in `DISPLAY_TOOLS`, surface `"window"`, formatter present |
@@ -3496,6 +4555,8 @@ Registry, clock, `speak` and `push_display` all injected; every test is
 | `test_brief_report_never_renders_a_body` | digest built from a message whose body is `"SECRETSENTINEL"` | that string is absent from the payload |
 
 ### 7.12 `tests/integration/test_mail_calendar_live.py` — `RUN_LIVE=1` only (8 functions)
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 `test_bellsouth_login_and_search`, `test_gmail_login_and_search`,
 `test_unread_does_not_mark_seen` (fetch `FLAGS` before and after `mail_unread`; assert
@@ -3509,11 +4570,15 @@ stubbed to return that message, and assert the recorded tool-call list after the
 
 ### 7.13 Full-suite gate
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 `pytest tests/unit tests/integration -q` — green, no `RUN_LIVE`.
 `python scripts/check_skills.py` — exit 0.
 `cd web && npm run build` — exit 0.
 
 ## §8 Verification Larry runs on his hardware
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 The sandbox has no Keychain, no network, no Xcode and no mic. Everything below needs
 his Mac. `tests/acceptance/T5_mail_calendar_brief.md` is this list in checkbox form.
@@ -3596,6 +4661,8 @@ V1, V2/V2b, V3, V5, V6, V7, V8, V9.
 
 ## §9 Rollback
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 **Instant, no code change.** Set all four kill switches false:
 
 ```
@@ -3641,6 +4708,8 @@ tool returns M7's `denied` sentence.
 
 ## §10 Risks
 
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
+
 | Id | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|---|
 | **RM-1** | Prompt injection via mail reaches an outbound/write/capture tool (roadmap R-T5) | medium | high | C6/K4 isolation is the primary control, now correct: with `mcp-screen` dropped (F3/§B), `secretary` holds **no** tool that can send, fetch, commit, execute or capture the screen (§7.3's `test_secretary_cannot_reach_any_outbound_or_write_tool`; K4's `OUTBOUND` now names `mcp-screen`, SEC §7.4). M5's fence and notice are defence in depth. G5(a) verified live at V5. (The earlier "no tool that could send or fetch" claim was false while `mcp-screen` was present — `screen_view` is an outbound channel — hence this rewrite.) |
@@ -3663,6 +4732,8 @@ tool returns M7's `denied` sentence.
 ---
 
 ## §11 Self-audit — the nine-item taxonomy, walked
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 **1 — Multi-consumer contracts named but not typed.** Four contracts here are read by
 more than one consumer, and each is typed member-by-member:
@@ -3769,6 +4840,8 @@ hardware-only list (§8).
 ---
 
 ## §12 Approval checklist
+
+> **Historical (superseded by §R; see R.9).** Not an implementation instruction.
 
 - [ ] Larry approves **M1** — read-only in this plan; sending, replying and calendar
       writes are a later, C4-gated plan.

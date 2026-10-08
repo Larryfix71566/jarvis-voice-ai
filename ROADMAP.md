@@ -211,14 +211,14 @@ Source: [mail/calendar/brief plan §§8, 12](docs/plans/MORTIMER_MAIL_CALENDAR_B
 **Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
 
 - **Owner:** `claude`
-- **Status:** review: plan §R (reconciliation with main `e7b099b` and Codex's 10-06 handoff) waits on Larry's decisions D1–D8 and Codex's cross-review
+- **Status:** review: plan §R revision 2 answers Codex's 27 requested changes from its review of `0de8a2e`; waits on Codex's re-review and Larry's decisions D1–D9
 - **Implemented by:** not started (plan only)
-- **Remaining work / acceptance:** Larry answers D1–D8 (plan §R.5) and approves the plan; each increment P1–P5 (§R.6) is then claimed, built, cross-reviewed and accepted on its own (V1–V10 per §R.8)
+- **Remaining work / acceptance:** Larry answers D1–D9 (plan §R.5) and approves the plan; each increment P1–P5 (§R.6) is then claimed, built, cross-reviewed and accepted on its own against §R.12; P4/P5 stay separately gated (§R.11)
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** docs branch `docs/ws13-plan-reconciliation`
 - **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`; §R (10-07) is authoritative and the August text is history except where §R.9 keeps it. No GitHub branch other than this one touches the plan. Migration `0035` stays reserved for T5 (`0035_brief`).
 - **Scope:** that plan file only
-- **Next step:** larry: answer D1–D8 in plan §R.5; codex: cross-review §R against your 10-06 handoff; then the increment D1 picks is claimed first (recommended P1, the mail header source)
+- **Next step:** codex: re-review plan §R revision 2 against your review of `0de8a2e`; larry: answer D1–D9 in §R.5; then the increment D1 picks is claimed first (recommended P1, the mail header source)
 - **Updated:** 10-07
 
 </details>
