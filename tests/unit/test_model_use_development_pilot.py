@@ -33,6 +33,7 @@ def _copy_owned_pilot_source(source, destination):
     packages = {'jarvis', 'sandbox', 'mcp_servers', 'config', 'scripts'}
     fixed = set(MORTIMER.dependencies) | {
         'tests/fixtures/model_use_development_cases.json',
+        'docs/REPO_MAP.md',
         'docs/acceptance/model-use-enhancements/receipts/mar-f-claude-native-fixture-capability-2026-10-05.json',
     }
     def selected(name):
