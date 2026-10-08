@@ -230,7 +230,56 @@ final class ConsoleActionCoordinator {
         }
     }
 
+    /// Internal host-attested cache query, intercepted by the router before
+    /// the generic dispatcher. A pointer/model console action cannot reuse
+    /// public source data by pretending to be this authenticated adapter.
+    func executeWeatherReuse(_ request: ConsoleRequest, now: Date = Date(),
+                             answersCurrentRequest: Bool = false) -> ConsoleResult? {
+        guard request.action == .weatherReuse else { return nil }
+        func reply(_ status: String, _ code: String, _ summary: String, data: JSONValue? = nil) -> ConsoleResult {
+            ConsoleResult(sessionID: request.sessionID, generation: request.generation,
+                          requestID: request.requestID, status: status, code: code,
+                          summary: summary, data: data)
+        }
+        guard let client, let sessionID = client.consoleSessionID,
+              let generation = client.consoleGeneration else {
+            return reply("error", "not_ready", "Weather reuse needs the current console session.")
+        }
+        guard request.sessionID == sessionID, request.generation == generation,
+              request.revision == workspace.consoleRevision else {
+            return reply("error", "stale_selection", "The console changed; choose the result again.")
+        }
+        guard request.args["ordinary_turn"] == .bool(true) else {
+            return reply("error", "protected_turn", "This turn is not eligible for public weather reuse.")
+        }
+        guard request.type == "console/request", request.version == 1,
+              registry.validate(request, currentRevision: workspace.consoleRevision),
+              let target = request.target.flatMap(UUID.init(uuidString:)),
+              let key = stringArg(request, "subject_key"), let tool = stringArg(request, "tool"),
+              let days = doubleArg(request, "days"), days.isFinite,
+              days.rounded(.towardZero) == days, (1...7).contains(days),
+              let units = stringArg(request, "units") else {
+            return reply("error", "invalid_request", "That weather cache query is invalid.")
+        }
+        switch workspace.queryWeatherReuse(target: target, subjectKey: key, tool: tool,
+                                           days: Int(days), units: units, now: now, ordinaryTurn: true,
+                                           answersCurrentRequest: answersCurrentRequest) {
+        case .hit(let source, let ts, let expiry, let revision):
+            return reply("ok", "cache_hit", "Reused the retained weather result; no new lookup.", data: .object([
+                "weather_source": source, "ts": .number(ts), "fresh_until": .number(expiry),
+                "revision": .number(Double(revision)),
+            ]))
+        case .miss(let code):
+            return reply("ok", code, "The retained weather result cannot satisfy this query.")
+        case .refused(let code):
+            return reply("error", code, "The retained weather result could not be safely confirmed.")
+        }
+    }
+
     func execute(_ request: ConsoleRequest) -> Outcome {
+        // The host-only query has its own reply/identity/eligibility guards.
+        // In particular, executePointer must never turn it into a mutation.
+        guard request.action != .weatherReuse else { return .unsupported }
         guard request.revision == workspace.consoleRevision else { return .stale }
         guard registry.validate(request, currentRevision: workspace.consoleRevision) else { return .invalid }
         switch request.action {
@@ -306,8 +355,10 @@ final class ConsoleActionCoordinator {
                   skills.consumeVoiceDraftPreview(previewID) else { return .invalid }
             workspace.openSkills()
             return .draftStarted
-        case .resultSelect:
+        case .resultSelect, .resultReopen:
             return withResult(request.target) { workspace.select($0); return .applied }
+        case .weatherReuse:
+            return .unsupported
         case .resultPin:
             return withResult(request.target) { workspace.pin($0) ? .applied : .noop }
         case .resultUnpin:

@@ -87,6 +87,7 @@ from jarvis.bot.follow_up import (
 )
 from jarvis.bot.status_tool import build_system_status_tool
 from jarvis.bot.weather_tool import build_local_weather_tool
+from jarvis.bot.weather_reuse import WeatherReuseBridge, current_weather_reuse, weather_reuse_scope
 from jarvis.bot.device_location import DeviceLocation, resolve_location, summarize_location
 from jarvis import ambient_weather
 from jarvis.bot.console_actions import build_console_action_tool, _disclosed_inventory
@@ -198,6 +199,23 @@ from jarvis.usage_ledger import provider_from_base_url, record_call
 from jarvis.vision import execution_route_summary, resolve_vision_execution_route
 
 _logger = logging.getLogger(__name__)
+
+
+def _weather_candidate_inventory(data: dict, subject_key: str) -> dict | None:
+    """A host-only exact-key query projection; never a model-observed list."""
+    if (type(data.get("revision")) is not int or data["revision"] < 0
+            or not isinstance(data.get("results"), list) or len(data["results"]) > 100):
+        return None
+    matches = []
+    for row in data["results"]:
+        if not isinstance(row, dict) or row.get("subject_key") != subject_key:
+            continue
+        try:
+            identity = str(uuid.UUID(row["id"]))
+        except (KeyError, ValueError, TypeError, AttributeError):
+            return None
+        matches.append({"id": identity, "subject_key": subject_key})
+    return {"revision": data["revision"], "results": matches}
 
 
 def _log_best_effort_failure(
@@ -513,12 +531,17 @@ def make_agent_event_handler(transport: Any) -> Any:
                 # tool's result on its own; offer() returns a payload only
                 # once both halves are accounted for (or None while still
                 # waiting on the pair — see WeatherReportMerger).
+                bridge = current_weather_reuse.get()
+                arguments = event.get("arguments") if isinstance(event.get("arguments"), dict) else {}
+                metadata = bridge.take_dispatch_metadata(tool=tool_name, arguments=arguments,
+                    run_id=str(event.get("run_id") or "")) if bridge is not None else None
                 payload = weather_merger.offer(
                     run_id=str(event.get("run_id") or ""),
                     agent=str(event.get("agent") or ""),
                     display_name=str(event.get("display_name") or ""),
                     tool=tool_name,
                     result_str=str(event.get("result") or ""),
+                    arguments=arguments, metadata=metadata,
                 )
             else:
                 payload = build_display_payload(
@@ -562,8 +585,7 @@ def make_agent_event_handler(transport: Any) -> Any:
             # (offer() only fires once both are accounted for). Flush it
             # now rather than losing it silently: the run is over, so
             # nothing more is coming.
-            flushed = weather_merger.finalize(str(event.get("run_id") or ""))
-            if flushed is not None:
+            for flushed in weather_merger.finalize_all(str(event.get("run_id") or "")):
                 try:
                     asyncio.get_running_loop().create_task(
                         send_app_message(
@@ -790,8 +812,6 @@ def build_pipeline(
                      payload.get("surface"), payload.get("kind"))
         await send_app_message(transport, {"type": "display", "display": payload})
 
-    _, local_weather_handler = build_local_weather_tool(
-        locate=_weather_location, push_display=_push_weather_card)
     local_weather_on = True
     # W12 — both read their kill switch once, here, and pass it to the menu,
     # the prompt and registration, so the three cannot disagree.
@@ -833,6 +853,99 @@ def build_pipeline(
     _, ui_control_handler = build_ui_control_tool(_send_ui_message)
     command_console_enabled = os.environ.get("JARVIS_COMMAND_CONSOLE_ENABLED", "false").strip().lower() in ("1", "true", "yes")
     runtime.command_console_enabled = command_console_enabled
+    weather_query_lock = asyncio.Lock()
+
+    async def _query_native_weather(*, subject_key: str, tool: str, days: int,
+                                    units: str, run_id: str | None = None) -> dict:
+        """Query the sole native cache under this connection's guarded waiter."""
+        def refused(code: str) -> dict:
+            return {"status": "refused", "code": code}
+
+        if _voice_is_sensitive():
+            return refused("protected_turn")
+        if not console_ready["value"]:
+            return refused("not_ready")
+        async with weather_query_lock:
+            if _voice_is_sensitive():
+                return refused("protected_turn")
+            async def request(action: str, args: dict, target: str | None = None,
+                              observed_revision: int | None = None) -> dict:
+                request_id = str(uuid.uuid4())
+                pending = await_console_result(request_id)
+                if action == "inventory":
+                    # Filter only actual native metadata for this exact key;
+                    # the model-facing inventory/disclosure remains untouched.
+                    pending._mortimer_weather_subject_key = subject_key
+                message = {"type": "console/request", "version": 1,
+                    "session_id": runtime.session_id, "generation": console_generation,
+                    "request_id": request_id, "revision": (console_inventory_revision["value"]
+                        if observed_revision is None else observed_revision),
+                    "action": action, "args": args}
+                if target is not None:
+                    message["target"] = target
+                try:
+                    await _send_ui_message(message)
+                    return await asyncio.wait_for(pending, timeout=4.5)
+                finally:
+                    if not pending.done():
+                        pending.cancel()
+
+            try:
+                inventory = await request("inventory", {"scope": "results"})
+                if _voice_is_sensitive():
+                    return refused("protected_turn")
+                data = inventory.get("data")
+                if inventory.get("status") not in {"ok", "applied"} or not isinstance(data, dict):
+                    return refused("invalid_reply")
+                revision = data.get("revision")
+                rows = data.get("results")
+                if type(revision) is not int or revision < 0 or not isinstance(rows, list):
+                    return refused("invalid_reply")
+                console_inventory_revision["value"] = max(console_inventory_revision["value"], revision)
+                if not rows:
+                    return {"status": "miss", "code": "no_matching_result"}
+                if len(rows) != 1:
+                    return refused("ambiguous_result")
+                target = rows[0].get("id")
+                if (not isinstance(target, str) or rows[0].get("subject_key") != subject_key):
+                    return refused("invalid_reply")
+                args = {"subject_key": subject_key, "tool": tool, "days": days,
+                        "units": units, "ordinary_turn": True}
+                if run_id is not None:
+                    args["run_id"] = run_id
+                reply = await request("weather_reuse", args, target, observed_revision=revision)
+                if _voice_is_sensitive():
+                    return refused("protected_turn")
+                code = reply.get("code")
+                source = reply.get("data")
+                if reply.get("status") == "ok" and code == "cache_hit" and isinstance(source, dict):
+                    final_revision = source.get("revision")
+                    if type(final_revision) is not int or final_revision < revision:
+                        return refused("invalid_reply")
+                    console_inventory_revision["value"] = max(console_inventory_revision["value"], final_revision)
+                    return {"status": "hit", "code": code,
+                        **{key: source.get(key) for key in ("weather_source", "ts", "fresh_until")}}
+                if reply.get("status") == "ok" and code in {"cache_missing", "cache_expired", "cache_incomplete"}:
+                    return {"status": "miss", "code": code}
+                reasons = {"stale_selection", "result_unavailable", "protected_result", "protected_turn",
+                           "not_ready", "unsupported", "ambiguous_result"}
+                return refused(code if isinstance(code, str) and code in reasons else "invalid_reply")
+            except asyncio.TimeoutError:
+                return refused("timeout")
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                return refused("query_failed")
+
+    _, local_weather_handler = build_local_weather_tool(
+        locate=_weather_location, push_display=_push_weather_card,
+        reuse=WeatherReuseBridge(_query_native_weather) if command_console_enabled else None)
+
+    async def weather_delegate_handler(arguments: dict) -> Any:
+        # Detached runs inherit this request-owned ContextVar. Its bridge
+        # carries consumed dispatch timing only, with no reusable source cache.
+        with weather_reuse_scope(WeatherReuseBridge(_query_native_weather)):
+            return await delegate_handler(arguments)
     shared_content_enabled = command_console_enabled and os.environ.get(
         "JARVIS_SHARED_CONTENT_ENABLED", "false").strip().lower() in ("1", "true", "yes")
     vision_route = None
@@ -1088,7 +1201,7 @@ def build_pipeline(
             session_id=runtime.session_id,
         )
 
-    register_voice_tool("delegate_task", delegate_handler)
+    register_voice_tool("delegate_task", weather_delegate_handler if command_console_enabled else delegate_handler)
     register_voice_tool("set_voice", set_voice_handler)
     register_voice_tool("remember", remember_handler)
     register_voice_tool("cost_summary", cost_summary_handler)
@@ -1973,6 +2086,15 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 # disclosure needs; reduce only that code through the same
                 # bounded disclosure that the tool actually returns.
                 encoded = json.dumps(msg, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+                weather_key = getattr(future, "_mortimer_weather_subject_key", None)
+                if weather_key is not None:
+                    if msg.get("code") != "inventory" or not isinstance(msg.get("data"), dict):
+                        return
+                    candidate = _weather_candidate_inventory(msg["data"], weather_key)
+                    if candidate is None:
+                        return
+                    msg = {**msg, "data": candidate}
+                    encoded = json.dumps(msg, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
                 if len(encoded) > MAX_MESSAGE:
                     expected_action = getattr(future, "_mortimer_console_action", None)
                     if (msg.get("code") != "inventory" or not isinstance(msg.get("data"), dict)

@@ -118,6 +118,24 @@ struct ConsoleActionRegistry: Sendable {
                   let previewID = request.args["preview_id"]?.stringValue,
                   UUID(uuidString: previewID) != nil else { return false }
         }
+        if request.action == .resultReopen || request.action == .weatherReuse {
+            guard let target = request.target, UUID(uuidString: target) != nil else { return false }
+        }
+        if request.action == .weatherReuse {
+            guard let key = request.args["subject_key"]?.stringValue,
+                  !key.isEmpty, key.unicodeScalars.count <= 200,
+                  let tool = request.args["tool"]?.stringValue,
+                  ["local_weather", "get_weather", "get_weather_radar"].contains(tool),
+                  case .number(let days) = request.args["days"],
+                  days.isFinite, days.rounded(.towardZero) == days, (1...7).contains(days),
+                  let units = request.args["units"]?.stringValue,
+                  ["metric", "imperial"].contains(units),
+                  request.args["ordinary_turn"] == .bool(true) else { return false }
+            if let run = request.args["run_id"]?.stringValue {
+                guard !run.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      run.unicodeScalars.count <= 120 else { return false }
+            }
+        }
         return true
     }
 
@@ -126,6 +144,7 @@ struct ConsoleActionRegistry: Sendable {
 
     private static let argumentFields: [ConsoleAction: Set<String>] = [
         .inventory: ["scope", "cursor"],
+        .weatherReuse: ["subject_key", "tool", "days", "units", "run_id", "ordinary_turn"],
         .viewSet: ["mode"], .resultMode: ["mode"], .compareSide: ["side"],
         .contentScroll: ["panel", "direction", "viewport"],
         .sourceSelect: ["source", "index"], .sourceOpen: ["source", "index"],
@@ -175,9 +194,9 @@ struct ConsoleActionRegistry: Sendable {
                             "source", "relation", "name", "group", "query", "kind",
                             "screen_id", "key", "format", "question", "scope",
                             "state", "category", "tab"]
-            + ["operation", "preview_id", "skill_id", "task_brief"]
+            + ["operation", "preview_id", "skill_id", "task_brief", "subject_key", "tool", "units", "run_id"]
         guard stringFields.allSatisfy(string), ["viewport", "points", "x", "y", "value"].allSatisfy(number),
-              ["open", "visible", "collapsed", "enabled", "expanded", "confirmed"].allSatisfy(bool) else { return false }
+              ["open", "visible", "collapsed", "enabled", "expanded", "confirmed", "ordinary_turn"].allSatisfy(bool) else { return false }
         if let value = request.args["index"] { guard value.intValue != nil else { return false } }
         if let value = request.args["ordinal"] { guard value.intValue != nil else { return false } }
         if let value = request.args["row"] { guard value.intValue != nil else { return false } }
@@ -196,7 +215,7 @@ struct ConsoleActionRegistry: Sendable {
         // Targets are required only where the action cannot safely use the
         // current selection. Enum-like values remain arguments (with the
         // legacy target fallback retained by the coordinator).
-        .resultSelect, .resultPin, .resultUnpin, .resultClose, .resultMode,
+        .resultSelect, .resultPin, .resultUnpin, .resultClose, .resultReopen, .weatherReuse, .resultMode,
         .compareSet, .groupRename, .groupAssign, .groupRemoveCard, .groupDissolve,
         .atlasMove, .graphFocus, .graphSelect, .graphSelectEdge, .graphFilter,
         .graphGroup, .graphPath, .graphCenter, .graphMoveNode,

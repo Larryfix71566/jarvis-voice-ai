@@ -120,6 +120,8 @@ def build_display_payload(
     arguments: dict[str, Any],
     result_str: str,
     run_id: str | None = None,
+    *,
+    weather_metadata: dict | None = None,
 ) -> dict | None:
     """Format a tool result as a display payload, or None to stay voice-only."""
     if tool not in DISPLAY_TOOLS:
@@ -180,6 +182,17 @@ def build_display_payload(
         if view is not None:
             payload["kind"] = "weather"
             payload["weather"] = view
+        if isinstance(weather_metadata, dict):
+            from jarvis.bot.weather_reuse import weather_display_metadata, valid_weather_timing
+
+            cache_fields = weather_display_metadata(weather_metadata.get("subject_key"), data,
+                weather_metadata.get("ts"), weather_metadata.get("fresh_until"))
+            payload.update(cache_fields)
+            # Only the guarded registry/direct tool can supply this one-use
+            # fetch provenance. Legacy city labels are not source authority.
+            if ("subject_key" in cache_fields and valid_weather_timing(
+                    weather_metadata.get("ts"), weather_metadata.get("fresh_until")) is not None):
+                payload["data_policy"] = "approved_external"
     return payload
 
 
@@ -490,62 +503,113 @@ _FORMATTERS = {
 
 class WeatherReportMerger:
     """W5 — pairs a run's get_weather and get_weather_radar tool results
-    into ONE weather_report display payload, in code rather than by
+    into ONE weather_report display payload per requested subject, rather than
     asking the model to combine two stacked cards sensibly. One instance
     per connection (constructed once in
     jarvis.bot.pipeline.make_agent_event_handler, mirroring every other
-    per-connection dict built there), keyed by run_id so concurrent
+    per-connection dict built there), keyed by run_id and requested subject so concurrent
     delegations (barge-in survival can run more than one at once) never
     cross-contaminate each other's pending halves.
 
     Call `offer()` for every get_weather/get_weather_radar tool result;
     it returns a merged display payload once both halves are accounted
     for (either arrived, or the other definitively failed), else None
-    (still waiting on the pair). Call `finalize(run_id)` on delegate_done
-    to flush a lone pending half — the other tool was simply never called
+    (still waiting on the pair). Call `finalize_all(run_id)` on delegate_done
+    to flush every pending subject — the other tool was simply never called
     (e.g. the model only asked about conditions) — so a real result is
     never silently dropped."""
 
     def __init__(self) -> None:
-        self._pending: dict[str, dict[str, Any]] = {}
+        self._pending: dict[tuple[str, str], dict[str, Any]] = {}
 
     def offer(
         self, run_id: str, agent: str, display_name: str, tool: str,
         result_str: str,
+        arguments: dict | None = None,
+        metadata: dict | None = None,
     ) -> dict | None:
         if not run_id or tool not in ("get_weather", "get_weather_radar"):
             return None
-        slot = self._pending.setdefault(
-            run_id, {"agent": agent, "display_name": display_name,
-                     "run_id": run_id})
         try:
             data = json.loads(result_str)
         except (json.JSONDecodeError, TypeError):
             data = None
-        if isinstance(data, dict) and not data.get("error"):
+        from jarvis.bot.weather_reuse import (
+            canonical_weather_subject, named_weather_subject_key, valid_weather_timing,
+        )
+
+        # The actual requested city is authoritative. Legacy calls without
+        # arguments retain their old per-run pairing, but gain neither a
+        # reusable subject identity nor cache provenance from city labels.
+        city = arguments.get("city") if isinstance(arguments, dict) else None
+        subject_key = named_weather_subject_key(city)
+        if subject_key is None:
+            candidates = [key for key in self._pending if key[0] == run_id]
+            # Preserve the old failed-half settling behavior only when its
+            # missing subject cannot choose between two pending places.
+            key = candidates[0] if len(candidates) == 1 else (run_id, "")
+        else:
+            key = (run_id, subject_key)
+        slot = self._pending.setdefault(key, {"agent": agent, "display_name": display_name,
+            "run_id": run_id, "subject_key": key[1], "metadata": {}, "aliases": set()})
+        alias = canonical_weather_subject(city)
+        if alias is not None and len(alias) <= 120 and len(slot["aliases"]) < 8:
+            slot["aliases"].add(alias)
+        if (isinstance(metadata, dict) and set(metadata) == {"subject_key", "ts", "fresh_until", "reused"}
+                and subject_key is not None and metadata["subject_key"] == subject_key
+                and type(metadata["reused"]) is bool
+                and valid_weather_timing(metadata["ts"], metadata["fresh_until"]) is not None):
+            slot["metadata"][tool] = dict(metadata)
+        else:
+            slot["metadata"].pop(tool, None)
+        if isinstance(data, dict) and not data.get("error") and data.get("ok") is not False:
             slot[tool] = data
+            slot.pop(f"{tool}_failed", None)
         else:
             slot[f"{tool}_failed"] = True
+            slot.pop(tool, None)
 
         other = "get_weather_radar" if tool == "get_weather" else "get_weather"
         other_settled = other in slot or slot.get(f"{other}_failed")
         if not other_settled:
             return None  # still waiting on the pair
-        return self._finalize(self._pending.pop(run_id))
+        return self._finalize(self._pending.pop(key))
 
     def finalize(self, run_id: str) -> dict | None:
-        slot = self._pending.pop(run_id, None)
-        if slot is None:
+        key = next((key for key in self._pending if key[0] == run_id), None)
+        if key is None:
             return None
-        return self._finalize(slot)
+        return self._finalize(self._pending.pop(key))
+
+    def finalize_all(self, run_id: str) -> list[dict]:
+        """Flush every requested city at delegate completion, in call order."""
+        payloads = []
+        for key in [key for key in self._pending if key[0] == run_id]:
+            payload = self._finalize(self._pending.pop(key))
+            if payload is not None:
+                payloads.append(payload)
+        return payloads
 
     def _finalize(self, slot: dict[str, Any]) -> dict | None:
         weather = slot.get("get_weather")
         radar = slot.get("get_weather_radar")
         if weather is None and radar is None:
             return None
+        settled = [tool for tool in ("get_weather", "get_weather_radar") if slot.get(tool) is not None]
+        proven = [slot["metadata"].get(tool) for tool in settled]
+        if proven and all(isinstance(item, dict) and item["reused"] for item in proven):
+            # Native already arranged arrival and a run-deduplicated reference.
+            return None
+        source = {"weather": weather, "radar": radar}
+        if slot["aliases"]:
+            source["subject_aliases"] = sorted(slot["aliases"])
+        metadata = {"subject_key": slot["subject_key"]}
+        if proven and all(isinstance(item, dict) for item in proven):
+            metadata.update(ts=min(item["ts"] for item in proven),
+                            fresh_until=min(item["fresh_until"] for item in proven))
         return build_display_payload(
             slot.get("agent", ""), slot.get("display_name", ""),
-            "weather_report", {}, json.dumps({"weather": weather, "radar": radar}),
+            "weather_report", {}, json.dumps(source),
             run_id=slot.get("run_id"),
+            weather_metadata=metadata,
         )

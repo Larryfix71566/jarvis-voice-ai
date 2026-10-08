@@ -5,6 +5,7 @@ import Foundation
 public enum ConsoleAction: String, Codable, Sendable, CaseIterable {
     case inventory, help, viewSet = "view_set", resultSelect = "result_select"
     case resultClose = "result_close", resultPin = "result_pin", resultUnpin = "result_unpin"
+    case resultReopen = "result_reopen", weatherReuse = "weather_reuse"
     case resultNext = "result_next", resultPrevious = "result_previous", resultMode = "result_mode"
     case compareSet = "compare_set", compareEnd = "compare_end", compareSide = "compare_side"
     case contentScroll = "content_scroll", sourceSelect = "source_select", sourceOpen = "source_open"

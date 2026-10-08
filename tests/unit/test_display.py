@@ -1,6 +1,7 @@
 """Unit tests for jarvis/bot/display.py (display-panel payloads)."""
 
 import json
+import pytest
 
 from jarvis.bot.display import (
     DEFAULT_DISPLAY_SURFACE,
@@ -257,6 +258,94 @@ class TestWeatherReportMerger:
         flushed_a = m.finalize("run-A")
         assert flushed_a is not None
         assert "86°F" in flushed_a["body"]
+
+
+class TestWeatherReuseMerger:
+    def offer(self, merger, tool, city="Alpha", *, ts=0, fresh_until=900, reused=False,
+              verified=True, metadata_city=None):
+        from jarvis.bot.weather_reuse import named_weather_subject_key
+        raw = dict(TestGetWeather.DATA if tool == "get_weather" else TestGetWeatherRadar.DATA,
+                   city=f"Nearest provider place for {city}")
+        metadata = {"subject_key": named_weather_subject_key(metadata_city or city), "ts": ts,
+                    "fresh_until": fresh_until, "reused": reused} if verified else None
+        return merger.offer("run-1", "analyst", "Analyst", tool, json.dumps(raw),
+                            arguments={"city": city}, metadata=metadata)
+
+    @pytest.mark.parametrize("order", [("get_weather", "get_weather_radar"),
+                                      ("get_weather_radar", "get_weather")])
+    def test_mixed_cached_and_fetched_halves_keep_original_zero_and_earliest_expiry(self, order):
+        from jarvis.bot.display import WeatherReportMerger
+        merger = WeatherReportMerger()
+        first = self.offer(merger, order[0], ts=0, fresh_until=300, reused=True)
+        second = self.offer(merger, order[1], ts=100, fresh_until=1000)
+        assert first is None and second is not None
+        assert second["ts"] == 0 and second["fresh_until"] == 300
+        assert second["subject_key"] == "weather:named:alpha"
+        assert second["data_policy"] == "approved_external"
+        assert second["weather_source"]["subject_aliases"] == ["alpha"]
+        assert second["weather_source"]["radar"]["ts"] == TestGetWeatherRadar.DATA["ts"]
+        assert merger.finalize_all("run-1") == []
+
+    def test_all_cached_halves_and_lone_cached_half_do_not_replay_native_arrival(self):
+        from jarvis.bot.display import WeatherReportMerger
+        merger = WeatherReportMerger()
+        assert self.offer(merger, "get_weather", reused=True) is None
+        assert self.offer(merger, "get_weather_radar", reused=True) is None
+        assert merger.finalize_all("run-1") == []
+        assert self.offer(merger, "get_weather", reused=True) is None
+        assert merger.finalize_all("run-1") == []
+        assert merger._pending == {}
+
+    def test_same_run_different_requested_places_never_merge_and_all_are_flushed(self):
+        from jarvis.bot.display import WeatherReportMerger
+        merger = WeatherReportMerger()
+        assert self.offer(merger, "get_weather", "Alpha") is None
+        assert self.offer(merger, "get_weather_radar", "Atlanta") is None
+        flushed = merger.finalize_all("run-1")
+        assert [payload["subject_key"] for payload in flushed] == ["weather:named:alpha", "weather:named:atlanta"]
+        assert flushed[0]["weather_source"]["radar"] is None
+        assert flushed[1]["weather_source"]["weather"] is None
+        assert merger._pending == {}
+
+    def test_multiple_subjects_in_one_run_pair_only_matching_requested_city(self):
+        from jarvis.bot.display import WeatherReportMerger
+        merger = WeatherReportMerger()
+        assert self.offer(merger, "get_weather", "Alpha") is None
+        assert self.offer(merger, "get_weather", "Atlanta") is None
+        alpha = self.offer(merger, "get_weather_radar", "ALPHA")
+        assert alpha["subject_key"] == "weather:named:alpha"
+        assert alpha["weather_source"]["weather"]["city"].endswith("Alpha")
+        assert alpha["weather_source"]["radar"]["city"].endswith("ALPHA")
+        rest = merger.finalize_all("run-1")
+        assert len(rest) == 1 and rest[0]["subject_key"] == "weather:named:atlanta"
+
+    @pytest.mark.parametrize("kind", ["missing", "wrong_subject", "bad_time"])
+    def test_unverified_half_never_mints_cache_authority_from_its_display_city(self, kind):
+        from jarvis.bot.display import WeatherReportMerger
+        merger = WeatherReportMerger()
+        assert self.offer(merger, "get_weather") is None
+        options = {"verified": False} if kind == "missing" else (
+            {"metadata_city": "Atlanta"} if kind == "wrong_subject" else {"fresh_until": 901})
+        result = self.offer(merger, "get_weather_radar", **options)
+        assert result["subject_key"] == "weather:named:alpha"
+        assert not {"weather_source", "fresh_until", "data_policy"}.intersection(result)
+
+    def test_same_subject_tool_failure_keeps_valid_other_half_and_its_original_timing(self):
+        from jarvis.bot.display import WeatherReportMerger
+        merger = WeatherReportMerger()
+        self.offer(merger, "get_weather", ts=0, fresh_until=400)
+        result = merger.offer("run-1", "analyst", "Analyst", "get_weather_radar",
+                              '{"ok":false,"error":"unavailable"}', arguments={"city": "Alpha"})
+        assert result["ts"] == 0 and result["fresh_until"] == 400
+        assert result["weather_source"]["radar"] is None
+
+    def test_source_overflow_preserves_legacy_body_and_safe_key_without_cache(self):
+        raw = {"weather": {**TestGetWeather.DATA, "human": "x" * (16 * 1024)}, "radar": None}
+        result = build_display_payload("analyst", "Analyst", "weather_report", {}, json.dumps(raw),
+            weather_metadata={"subject_key": "weather:named:alpha", "ts": 0, "fresh_until": 900})
+        assert result["subject_key"] == "weather:named:alpha" and len(result["body"]) > 16 * 1024
+        assert "weather_source" not in result and "fresh_until" not in result
+        assert result["ts"] == 0 and result["data_policy"] == "approved_external"
 
 
 class TestAppTools:

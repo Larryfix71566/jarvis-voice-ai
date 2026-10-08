@@ -1110,8 +1110,55 @@ class SkillRegistry:
                       task_started_at: float | None = None) -> str | ToolResultEnvelope:
         source_arguments = arguments if source_arguments is None else source_arguments
         call_start = time.perf_counter()
+        weather_bridge = None
+        weather_subject_key = None
         try:
             contract = self._source_contract_for(tool_name, server, session)
+            if (contract is not None and server == "mcp-web"
+                    and tool_name in {"get_weather", "get_weather_radar"}):
+                from jarvis.bot.weather_reuse import current_weather_reuse, named_weather_subject_key
+
+                weather_bridge = current_weather_reuse.get()
+                weather_subject_key = named_weather_subject_key(source_arguments.get("city"))
+                if weather_bridge is not None and weather_subject_key is not None:
+                    private_input = (execution_scope is not None
+                                     and execution_scope.input_policy.level in {"confidential", "local_only"})
+                    if is_sensitive() or private_input:
+                        return self._finish_invocation(tool_name, server, session, source_arguments,
+                            '{"ok":false,"error":"weather_reuse_protected_turn"}', runlog,
+                            int((time.perf_counter() - call_start) * 1000), execution_scope,
+                            failure_category="weather_reuse_protected_turn")
+                    from mcp_servers.mcp_web.logic import _configured_units
+
+                    reuse = await weather_bridge.lookup(subject_key=weather_subject_key, tool=tool_name,
+                        days=source_arguments.get("days", 1) if tool_name == "get_weather" else 1,
+                        units=_configured_units(), run_id=get_run_id())
+                    # A native await may outlive this turn's privacy or the
+                    # verified MCP session. Neither cached bytes nor a new
+                    # fetch can be released against that changed authority.
+                    refusal = "protected_turn" if is_sensitive() or private_input else (
+                        "stale_selection" if self._source_contract_for(tool_name, server, session) is None
+                        else reuse.code if reuse.status == "refused" else None)
+                    if refusal is not None:
+                        category = "weather_reuse_" + refusal
+                        return self._finish_invocation(tool_name, server, session, source_arguments,
+                            json.dumps({"ok": False, "error": category}), runlog,
+                            int((time.perf_counter() - call_start) * 1000), execution_scope,
+                            failure_category=category)
+                    if reuse.status == "hit":
+                        cached = copy.deepcopy(reuse.source["weather" if tool_name == "get_weather" else "radar"])
+                        # Keep the named tool's requested forecast/echo shape
+                        # without mutating the native original or renewing a
+                        # provider observation/cache timestamp. A mixed new
+                        # result may conservatively retain fewer forecast days.
+                        if tool_name == "get_weather":
+                            cached["daily"] = cached["daily"][:source_arguments.get("days", 1)]
+                            cached["requested_city"] = source_arguments["city"]
+                        elif "requested_city" in cached:
+                            cached["requested_city"] = source_arguments["city"]
+                        return self._finish_invocation(tool_name, server, session, source_arguments,
+                            json.dumps(cached, ensure_ascii=False, separators=(",", ":"), allow_nan=False),
+                            runlog, int((time.perf_counter() - call_start) * 1000), execution_scope)
             workspace = (execution_scope is not None and contract is not None and contract.local_admin
                          and tool_name in _WORKSPACE_SOURCE_OPERATIONS.get(server, ()))
             advisory = execution_scope is not None and tool_name in _ADVISORY_SOURCE_OPERATIONS.get(server, ())
@@ -1199,6 +1246,10 @@ class SkillRegistry:
         # as a perfectly normal MCP response. classify_tool_result is the
         # single place that judgement is made; this call must never be
         # replaced with a bare ok=True.
+        if (weather_bridge is not None and weather_subject_key is not None
+                and classify_tool_result(tool_name, text_result).ok):
+            weather_bridge.record_dispatch(tool=tool_name, subject_key=weather_subject_key,
+                                           run_id=get_run_id(), ts=time.time())
         return self._finish_invocation(tool_name, server, session, source_arguments,
             text_result, runlog, latency_ms, execution_scope)
 

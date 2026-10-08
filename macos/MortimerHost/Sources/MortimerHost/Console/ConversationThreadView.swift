@@ -126,10 +126,12 @@ enum ConversationThread {
     enum Item: Identifiable, Equatable {
         case row(Row)
         case card(Card)
+        case cachedReference(CachedResultReference)
         var id: String {
             switch self {
             case .row(let row): return row.id
             case .card(let card): return "card-" + card.id.uuidString
+            case .cachedReference(let reference): return "cache-reference-" + reference.id.uuidString
             }
         }
     }
@@ -140,21 +142,23 @@ enum ConversationThread {
     /// tool's result arrived before the spoken reply. A card that arrived
     /// before any retained question leads the thread; one from the current
     /// turn ends it. Cards in one turn keep their arrival order.
-    static func items(rows: [Row], cards: [Card]) -> [Item] {
-        let ordered = cards.enumerated()
-            .sorted { ($0.element.time, $0.offset) < ($1.element.time, $1.offset) }
-            .map(\.element)
-        var slots = Array(repeating: [Card](), count: rows.count + 1)
-        for card in ordered {
-            let slot = rows.firstIndex { $0.isUser && $0.time > card.time } ?? rows.count
-            slots[slot].append(card)
+    static func items(rows: [Row], cards: [Card], references: [CachedResultReference] = []) -> [Item] {
+        let additions = cards.map { ($0.time, Item.card($0)) }
+            + references.map { ($0.time, Item.cachedReference($0)) }
+        let ordered = additions.enumerated().sorted {
+            ($0.element.0, $0.offset) < ($1.element.0, $1.offset)
+        }.map(\.element)
+        var slots = Array(repeating: [Item](), count: rows.count + 1)
+        for (time, item) in ordered {
+            let slot = rows.firstIndex { $0.isUser && $0.time > time } ?? rows.count
+            slots[slot].append(item)
         }
         var items: [Item] = []
         for (index, row) in rows.enumerated() {
-            items += slots[index].map(Item.card)
+            items += slots[index]
             items.append(.row(row))
         }
-        items += slots[rows.count].map(Item.card)
+        items += slots[rows.count]
         return items
     }
 
@@ -241,7 +245,8 @@ struct ConversationThreadView: View {
     var body: some View {
         let rows = ConversationThread.rows(conversation.entries)
         let items = ConversationThread.items(rows: rows,
-                                             cards: workspace.results.map(ConversationThread.card))
+                                             cards: workspace.results.map(ConversationThread.card),
+                                             references: conversation.cachedReferences)
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
                 ScrollView {
@@ -259,6 +264,20 @@ struct ConversationThreadView: View {
                                 case .card(let card):
                                     ConversationThreadCardView(card: card, coordinator: coordinator,
                                                                pinLimitNotice: $pinLimitNotice)
+                                case .cachedReference(let reference):
+                                    Button {
+                                        if let coordinator {
+                                            _ = coordinator.executePointer(.resultReopen,
+                                                target: reference.resultID.uuidString)
+                                        } else { workspace.select(reference.resultID) }
+                                    } label: {
+                                        Label(reference.text, systemImage: "arrow.uturn.backward")
+                                            .font(.system(size: 12)).foregroundStyle(AppTheme.textDim)
+                                            .padding(.vertical, 10)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(!workspace.containsResult(reference.resultID))
+                                    .accessibilityLabel(reference.text)
                                 }
                             }
                             .background {
