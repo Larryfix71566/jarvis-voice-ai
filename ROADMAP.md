@@ -203,22 +203,22 @@ This item is proposed, not ready for live acceptance. Future tests below apply a
 - [ ] **Claude / Codex · prerequisite review:** Reconcile the draft with current architecture, security/model-routing rules, actual native client and reserved migration `0035`; coordinate the existing plan edits before implementation.
 - [ ] **Larry · plan decisions:** Approve read-only scope, calendar visibility/backend, Secretary routing/isolation and documented residual risks, vault names, brief schedule and permitted content/logging. Supply selected account access through the established vault/OS flow; credentials are not entered in this roadmap.
 - [ ] **Claude / Codex · implementation and security evidence:** Deliver reviewed implementation and required suites; mail secrets reach only the intended child, reads do not mark mail read, injection fixtures cause zero post-mail tool calls, routing meets the existing ≥90% floor, and digest speech is grounded in the visible facts.
-- [ ] **Larry · future Mac checks:** Complete plan V1–V10 on the selected backend: secret isolation, EventKit/CalDAV calendar parity, unread preservation, agent/injection isolation, routing, requested and once-daily scheduled brief, grounding and all kill switches. Record actual scores and outcomes rather than assuming the draft's defaults are correct.
+- [ ] **Larry · future Mac checks:** Complete plan §R.12's Mac checks (the M rows, which replace V1–V10) on the selected backend: secret isolation, EventKit/CalDAV calendar parity, unread preservation, agent/injection isolation, routing, requested and once-daily scheduled brief, grounding and all kill switches. Record actual scores and outcomes rather than assuming the draft's defaults are correct.
 - [ ] **Larry / Claude · release:** Approve the tested artifact/configuration, record deployment and reversible rollback, and confirm the brief/card/timezone and failure behavior on the Mac. Sending mail or writing calendar events remains outside this plan.
 
-Source: [mail/calendar/brief plan §§8, 12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md). This is an approval/implementation dependency list, not a claim that the proposed feature exists.
+Source: [mail/calendar/brief plan §R.12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md). This is an approval/implementation dependency list, not a claim that the proposed feature exists.
 
 **Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
 
 - **Owner:** `claude`
-- **Status:** review: plan §R revision 2 answers Codex's 27 requested changes from its review of `0de8a2e`; waits on Codex's re-review and Larry's decisions D1–D9
+- **Status:** review: plan §R revision 3 answers Codex's 16 requested changes and five smaller corrections from its review of `5e37696`; waits on Codex's re-review and Larry's decisions D1–D9
 - **Implemented by:** not started (plan only)
 - **Remaining work / acceptance:** Larry answers D1–D9 (plan §R.5) and approves the plan; each increment P1–P5 (§R.6) is then claimed, built, cross-reviewed and accepted on its own against §R.12; P4/P5 stay separately gated (§R.11)
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** docs branch `docs/ws13-plan-reconciliation`
 - **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`; §R (10-07) is authoritative and the August text is history except where §R.9 keeps it. No GitHub branch other than this one touches the plan. Migration `0035` stays reserved for T5 (`0035_brief`).
 - **Scope:** that plan file only
-- **Next step:** codex: re-review plan §R revision 2 against your review of `0de8a2e`; larry: answer D1–D9 in §R.5; then the increment D1 picks is claimed first (recommended P1, the mail header source)
+- **Next step:** codex: re-review plan §R revision 3 against your review of `5e37696` (R.0a maps each item; the delivery transitions are R.10.7 and the mail resource bounds R.10.9 and R.10.12); larry: answer D1–D9 in §R.5; then the increment D1 picks is claimed first (recommended P1, the mail header source)
 - **Updated:** 10-07
 
 </details>

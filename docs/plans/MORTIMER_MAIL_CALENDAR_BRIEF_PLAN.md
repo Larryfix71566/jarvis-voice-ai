@@ -1,10 +1,10 @@
 # Mortimer — Mail, Calendar and the Daily Brief (read-only)
 
 **Status:** DRAFT. Written 2026-08-26 and reconciled with main `e7b099b` on
-2026-10-07 (§R, Claude). Revision 2 (same day) answers Codex's review of `0de8a2e`
-(R.0). §R is authoritative and waits on Larry's decisions D1–D9. The August text
-after §R is history: R.9 says which parts remain background, and R.10–R.12 govern
-wherever they differ. Implements
+2026-10-07 (§R, Claude). Revision 2 answers Codex's review of `0de8a2e` (R.0), and
+revision 3 answers its review of `5e37696` (R.0a). §R is authoritative and waits on
+Larry's decisions D1–D9. The August text after §R is history: R.9 says which parts
+remain background, and R.10–R.12 govern wherever they differ. Implements
 roadmap track **T5** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.5), tracked as
 WS-13. Read scopes only.
 
@@ -24,6 +24,70 @@ Nothing here is implemented, tested or accepted. No mailbox, calendar, provider 
 credential was touched. Approval works in two steps: first Larry answers D1–D9
 (R.5); then each increment in R.6 is claimed, built, cross-reviewed and accepted on
 its own. This section does not authorize implementation.
+
+### R.0a Revision 3 (2026-10-07, after Codex's review of `5e37696`)
+
+Codex reviewed revision 2 at `5e37696`, with main at `4cf452e`. It found that the
+architecture and most earlier corrections were resolved, and requested 16 more
+changes plus five smaller corrections. It named the delivery transitions and the mail
+resource guarantees as implementation blockers. It let items 13–16 (P4/P5) stay as
+prerequisites for those later claims.
+
+Claude re-checked each item, and all of them hold. These were confirmed here:
+- `WorkspaceStore.sendToDisplay()` admits results with `isProtectedLocal`
+  (`WorkspaceStore.swift:408–411`). `isProtectedLocal` has 44 uses in 13 source
+  files at `4cf452e`.
+- Copy, share and export serialize through `WorkspaceResultExport.text(result)`
+  (`ShareCoordinator.beginPreview`), and `scopedText` splits that text into sections.
+- An unordered `SELECT id FROM migrations` returns sorted order through the covering
+  index.
+- The pinned MCP client (`mcp==1.29.0`) sends no `notifications/cancelled` when a
+  call is abandoned, and neither does the registry (R.10.9).
+- `imaplib`'s `_command` clears only the `OK`, `NO` and `BAD` untagged responses,
+  and its `readline` reads up to `_MAXLINE + 1` bytes whatever the caller's budget
+  (CPython 3.11.15; R.10.12).
+- `wrap_socket` detaches the raw socket before the TLS handshake, so the watchdog
+  must hold the TLS socket. With the handshake deferred, a base-class shutdown ended
+  a stalled handshake and a dripped literal on time (R.10.9).
+
+Two separate Claude verification passes (subagents, not Codex) reviewed drafts of
+this revision. The first found 4 major and 13 minor problems, chiefly in R.10.7's
+revision, takeover and suppression rules. The second found 4 major and 12 minor
+ones: host transitions rolled back by the zero-row rule, window close touching
+terminal slots, a probe-answer race, the TLS handshake outside the watchdog, and
+gaps in budgets, gate lists and wording. A recheck of those fixes found one more
+major problem (a gate change that would have loosened image sharing) and six minor
+ones. Each was addressed in this revision. None of this replaces Codex's review.
+
+Main has since moved to `99993eb` (#199, a WS-05 claim). It changed only
+`ROADMAP.md`, another plan and a change-log entry, so every line reference here, made
+at `4cf452e`, still holds.
+
+D1–D9 remain unanswered.
+
+| Item | Resolution |
+|---|---|
+| 1 Ack races and same-session claims | R.10.7: claim tokens and guarded transitions; each revision is recorded before it is sent, so an ack racing the send completes it; an ack completes the slot even after a takeover claim; terminal states never change |
+| 2 Failure cards vs consumption; suppression | R.10.7: `brief_results`, one host-owned row per revision; consumption by outcome; suppression only for today's full or partial brief, fencing `open`, `claimed` and `emitted` slots |
+| 3 Attempt accounting | R.10.7: separate `claims` and `emissions` limits on every path; a probe, not a re-send, after a lost ack; persistence failure at claim, emit and ack |
+| 4 Surviving workers | R.10.9: one worker per account, and a cancellation latch |
+| 5 Aggregate mail bytes | R.10.12: enforced per-phase and per-account budgets, response-count and duplicate limits, cleared untagged responses |
+| 6 Zero matches and ordering | R.10.10: `unknown` when partial with no confirmed match; honest partial headlines |
+| 7 Calendar counts and byte size | R.10.14: filter and sort before truncation; visible and hidden totals; per-day counts; byte truncation |
+| 8 Idempotency after dismissal | R.10.7: the app's outcome-aware applied-result ledger, which also answers probes; announcement only after the app's ack of a full or partial revision, at most once per result across retries |
+| 9 D8 (c) below the controls | R.10.6: one shared predicate, including selection, system copy and the store boundary |
+| 10 Serialization for exports | R.10.16: a deterministic `brief` serializer in `WorkspaceResultExport` |
+| 11 Migration assertion order | R.12 S3-10 |
+| 12 Retention needs no session | R.10.3: a process-level maintenance task |
+| 13 P4 speech | R.11.6; S3-9 checked against D5 |
+| 14 P4 financial policy | R.11.7 |
+| 15 P5 sink guarantees | R.11.3 |
+| 16 P5 parts and references | R.11.5 |
+| `brief/hello` is negotiation | R.10.5: a server-owned predicate (native route, loopback or owner token, capability); browser test |
+| Calendar binding | R.10.2: binding from the pending request and transport; echoes optional; overlap validated |
+| S3-11 in P3's range | R.6 (now S3-1 to S3-14) |
+| D9 (b) classification | R.10.3, D9 |
+| Eligibility after a browser session | R.10.5: a brief-specific recipient registry |
 
 ### R.0 Revision 2 (2026-10-07, after Codex's review of `0de8a2e`)
 
@@ -218,10 +282,10 @@ The reconciled design therefore makes four changes:
 | Reminders | D4 level, source `reminders:local` (P3 contract; without it, confidential) | The host brief assembler |
 | Digest and deterministic brief text | strictest of the inputs | The protected card; never a model in P1–P3 |
 | Card (typed kind `brief`, R.10.16) | `data_policy` = digest level, set by the emitter | Only an eligible native recipient (R.10.5). When not `approved_external`, the existing native rule blocks copy, share, export and supporting-display transfer; D4 (b) is covered by R.10.6 and D8 |
-| Speech | D5 | A fixed sentence by default ("Your brief is on screen"). Counts and times only under a D5 (b) declassification; names, subjects or titles only under D4 (b) with D5 (c). Always `append_to_context=False` |
+| Speech | D5 | A fixed sentence by default ("Your brief is on screen", or for an all-failed request "I couldn't reach the brief's sources; the card has the details."), spoken only after the app applies the card (R.10.7). Counts and times only under a D5 (b) declassification; names, subjects or titles only under D4 (b) with D5 (c). Always `append_to_context=False` |
 | Supervisor tool result | fixed rule (R.10.3) | Always the fixed acknowledgement, returned before acquisition. No derived value in any option |
 | Logs and run log | fixed rule (R.10.3) | Content-free: event names, states, source-status codes and durations only. No counts, because `log_search` exposes bot logs to agents |
-| `brief_deliveries` (`0035_brief`, R.10.7) | D9 | Delivery bookkeeping and source-status codes. Under D9 (b) only, adds the typed `brief-counts`, classified at the digest level and readable only by the brief module. No `digest_json`, headers, titles or text |
+| `brief_slots`, `brief_results` (`0035_brief`, R.10.7) | D9 | Delivery bookkeeping and source-status codes. Under D9 (b) only, `brief_results` adds the typed `brief-counts`, with their classification kept in a `policy` column; they are readable only by the brief module, for a late announcement of the same result (R.10.7). No `digest_json`, headers, titles or text |
 | Notices, memory, KB digest, conversations | — | Nothing from the brief (A3, A5) |
 
 **Delivery.**
@@ -232,21 +296,23 @@ The reconciled design therefore makes four changes:
   per D5.
 - **Calendar questions.** "What's on Thursday" is the same tool with `day` set and
   `scope="calendar"`, which reads no mail (R.10.15). That is D2's recommended option.
-- **Scheduled.** A `BriefWatcher` in the bot, for the eligible live session only
+- **Scheduled.** A `BriefWatcher` in the bot, for the eligible recipient only
   (R.10.5). Its lifecycle is R.10.18. The time and catch-up rule come from D7.
-  Delivery is the durable claim/send/ack contract of R.10.7, which replaces the
-  August in-memory guard and the `brief_digests` row. The `brief_requests` queue,
+  Delivery is the durable claim, emit, acknowledge and probe contract of R.10.7,
+  which replaces the August in-memory guard and the `brief_digests` row. The `brief_requests` queue,
   and F9's backlog bound with it, are removed.
 
 **Model use.**
 - P1–P3: none.
 - P4: one call over the digest through workload `brief`, using M11's prompt and
   grounding check and the deterministic text as fallback. The output inherits the
-  digest's policy, so it goes on the card. It is spoken only under D4 =
-  `approved_external` with a D5 that allows it.
-- P5: the agent's workload is its name. The same privacy rule applies. Protected
-  output goes through `make_private_result_sink` (`pipeline.py:601`), as `base.py`
-  already requires for private routes.
+  digest's policy, so it goes on the card. P4's speech is built from the typed
+  projection D5 approves, never from the summary text, unless Larry gives a separate
+  permission for summary speech (R.11.6).
+- P5: the agent's workload is its name. The same privacy rule applies. Every
+  mail-derived answer goes to a local result sink that meets R.11.3's guarantees,
+  on every route. The existing `make_private_result_sink` (`pipeline.py:601`) does
+  not meet them as it stands.
 
 **Kill switches**, each read in exactly one place. Names are reserved in §3 when the
 increment is claimed. They are environment settings, so a change takes effect at the
@@ -341,13 +407,19 @@ answer. Record the choice in this plan when it is made.
   - Catch-up window: proposed 120 minutes.
   - When missed:
     - (a) nothing. *Recommended.*
-    - (b) a notice with no content.
-  - An on-request full brief for today:
+    - (b) a notice with no content, queued when the day's slot ends `abandoned` with
+      no revision ever applied (R.10.7).
+  - An on-request brief for today (scope `brief`, not calendar-only) that the app
+    applies with outcome `full` or `partial` (R.10.7):
     - (a) suppresses that day's scheduled brief. *Recommended.*
     - (b) is independent of it.
-  - Fixed defaults stated for approval: a brief with at least one source `ok` or
-    `partial` consumes the day once acked. An all-failed brief does not; it is retried within
-    the window, up to `BRIEF_MAX_ATTEMPTS` (R.10.7).
+  - Fixed defaults stated for approval: a brief with outcome `full` or `partial`
+    consumes the day once the app acknowledges applying it. That includes a brief
+    in which no source was available, since a retry could not change it. An
+    all-failed brief does not; it is retried within the window, no sooner than
+    `BRIEF_RETRY_DELAY_S` (proposed 600) after the last, up to
+    `BRIEF_MAX_EMISSIONS` (proposed 3) new contents and `BRIEF_MAX_CLAIMS`
+    (proposed 6) claims (R.10.7).
 - **D8 — Native presentation.**
   - Arrival: every brief arrives as a card with the WS-17 New notice and takes no
     focus. A requested brief may open only once WS-17 provides a turn identity, and
@@ -357,12 +429,16 @@ answer. Record the choice in this plan when it is made.
       blocked. *Recommended.*
     - (b) Under D4 (b), the four actions are allowed.
     - (c) Under D4 (b), a separate `display_actions: "none"` permission keeps them
-      blocked, enforced at all four sinks.
+      blocked. It is enforced by one shared predicate, below the visible controls
+      (R.10.6).
 - **D9 — Local storage of derived values** (new in revision 2; R.10.3).
-  - (a) `brief_deliveries` keeps delivery bookkeeping and source-status codes only.
-    *Recommended.*
-  - (b) It also keeps the typed `brief-counts`, classified at the digest level and
-    readable only by the brief module.
+  - (a) `brief_slots` and `brief_results` keep delivery bookkeeping and source-status
+    codes only. *Recommended.*
+  - (b) `brief_results` also keeps the typed `brief-counts`. Their classification is
+    kept, and they are read only by the brief module, so that an acknowledgement
+    arriving after the emitting job has ended (a probe answer) can still be announced
+    with counts under D5 (b). They are never reused or disclosed elsewhere (R.10.3).
+    Under D5 (a) it has no use.
   - Under either option: a retention period (proposed 30 days), and logs stay
     content-free.
 
@@ -414,30 +490,45 @@ in R.10 and the acceptance rows in R.12.
   - Files:
     - `jarvis/brief.py`: M10's assembly, revised by R.10, plus the deterministic
       renderer that builds the typed `brief` payload.
-    - `jarvis/bot/brief_tool.py` and `jarvis/bot/brief_watcher.py`.
+    - `jarvis/bot/brief_tool.py`, `jarvis/bot/brief_watcher.py` and
+      `jarvis/bot/brief_recipients.py` (R.10.5).
+    - The process-level maintenance task for retention and window close (R.10.3).
+    - The eligibility capture in `jarvis/bot/bot.py`: whether the session uses the
+      native route and a loopback peer (R.10.5).
     - `MIGRATION_0035_brief` in `jarvis/db.py` (human-only), plus `tests/unit/test_db.py`
       (S3-10).
     - The `mcp-reminders` source contract in `registry.py` (human-only; WS-05
       reviews it).
     - Under D5 (b) or D9 (b) only, the `brief-counts` code.
     - Tool registration in `pipeline.py`, outside WS-17's locked portions.
-    - The `brief/hello` and `brief/ack` handling on both client-message paths.
+    - The `brief/hello`, `brief/ack` and `brief/not_applied` handling on both
+      client-message paths, and the bot's `brief/probe` (R.10.7).
     - Inside WS-17's lock (R.13):
       - the `arrival` rule in `ConversationThreadView.swift`;
       - in-place replacement by `result_id` in `WorkspaceStore.swift` and
         `ResponseResultRouter.swift`;
-      - `brief/ack` in the result-acknowledgement portion of `pipeline.py`;
+      - `brief/ack` and `brief/not_applied` in the result-acknowledgement portion
+        of `pipeline.py`;
       - the typed `brief` kind in JarvisKit `DisplayPayload`, with its MortimerHost
-        renderer.
-    - Under D8 (c) only, the `display_actions` check in `ShareCoordinator.swift`,
-      `WorkspaceExportCoordinator.swift`, `SupportingDisplayCoordinator.swift` (WS-21)
-      and the copy action in `WorkspaceResultPane.swift`.
+        renderer;
+      - the applied-result ledger and its probe answers (R.10.7).
+    - The `brief` serializer in `WorkspaceResultExport` (R.10.16).
+    - Under D8 (c) only, the shared `DisplayActionPolicy` predicate (R.10.6). It
+      replaces every action gate among the 44 `isProtectedLocal` uses, in:
+      - `AppMessageRouter.swift`, `ConsoleActionCoordinator.swift` and
+        `SupportingDisplayCoordinator.swift` (WS-21);
+      - `ConsoleActionBar.swift` and `WorkspaceView.swift`;
+      - `DisplayContentView.swift`, `DisplayWindowStore.swift`,
+        `ShareCoordinator.swift`, `WorkspaceExportCoordinator.swift` and
+        `WorkspaceResultPane.swift`;
+      - `WorkspaceStore.swift` (`sendToDisplay()`);
+      - the brief renderer's text selection.
     - The tool description in `jarvis/prompts.py`.
     - The scorer and menu in `tests/evals/routing_eval.py`, and cases in
       `tests/evals/cases.yaml` (R.10.17).
-  - Acceptance: S3-1 to S3-10, M3-1 to M3-5.
+  - Acceptance: S3-1 to S3-14, M3-1 to M3-5.
 - **P4 — Model-written brief.** Optional. It needs D4 (b) or a private route, plus
-  R.11.1–R.11.2.
+  R.11.1, R.11.2, R.11.6 and R.11.7.
   - Workload `brief`, reserved in §3, following WS-05's execution rules (R.2 row 6).
   - Acceptance: per R.11.1, recorded at claim time.
 - **P5 — Mail question agent.** Optional. It needs D4 (b) or a private route, plus
@@ -549,8 +640,12 @@ knob in the implementing module. None is an answer to D1–D9.
   `reminders:local`.
 - **Calendar under D3 (a).** The only consumer of `calendar/result` is
   `CalendarSourceAdapter` in `jarvis/bot/device_calendar.py`. It:
-  1. accepts a result only for a request it issued itself, in the same session and
-     console generation, with a matching `request_id` and the host-owned interval;
+  1. accepts a result only for a request it issued itself. The binding comes from its
+     own pending-request record and from the transport the result arrived on: the
+     same session and console generation, the matching `request_id`, and the
+     host-owned interval. Echoed `session_id`/`generation` fields are optional, but
+     must match if present. Every returned event must overlap the requested
+     interval, or the whole result is rejected;
   2. validates the whole message against R.10.14 and rejects it entirely on any
      violation, including unknown keys;
   3. gives client-supplied labels no authority. The protocol defines no policy, source
@@ -577,8 +672,8 @@ Three separate permissions:
 | Path | Governed by | Contents |
 |---|---|---|
 | Supervisor tool result | fixed rule | Always the fixed acknowledgement, returned before acquisition starts (R.10.4). It never carries a derived value, under any D5 option. |
-| Speech | D5 | D5 (a): a fixed line only. D5 (b): adds the `brief-counts` allowlist below. D5 (c): adds names, subjects and titles, and needs D4 (b). |
-| Local storage | D9 | `brief_deliveries` (R.10.7) holds delivery bookkeeping and source-status codes. Under D9 (b) only, it adds the `brief-counts` fields, classified at the digest level and readable only by the brief module. |
+| Speech | D5 | D5 (a): a fixed line only (the success line, or the failure line for an all-failed request, R.10.7). D5 (b): adds the `brief-counts` allowlist below. D5 (c): adds names, subjects and titles, and needs D4 (b). |
+| Local storage | D9 | `brief_slots` and `brief_results` (R.10.7) hold delivery bookkeeping and source-status codes. Under D9 (b) only, `brief_results` adds the `brief-counts` fields with a `policy` column keeping their classification. They may be read only by the brief module, to build that result's announcement when its acknowledgement arrives after the emitting job has ended (R.10.7). They are never reused or disclosed anywhere else: not in tool results, logs, status or memory, and in speech only as D5 permits for that same result. |
 | Logs | fixed rule | Content-free: event names, delivery state, source-status codes, durations. |
 
 - **Why logs carry no values.** `log_search` exposes `logs/bot.launchd.log` to the
@@ -595,14 +690,21 @@ Three separate permissions:
   A fixed template renders it. Nothing else is released.
 - **Source-status codes.** `ok`, `partial`, `failed`, `disabled`, `not_authorized`,
   `not_configured`, `timeout`.
-- **Retention.** Rows older than `BRIEF_RETENTION_DAYS` (D9; proposed 30) are purged
-  at bot start and once a day by the watcher.
-- **Acceptance (S3-9).**
+- **Retention (revision 3).** Rows older than `BRIEF_RETENTION_DAYS` (D9; proposed 30)
+  are purged by a process-level maintenance task. It runs at bot start and every
+  hour, and does not depend on any session, recipient or acquisition. The same task
+  applies R.10.7's window-close rule; watcher ticks and claims also apply it lazily.
+- **Acceptance (S3-9, S3-14).**
   - Canary strings placed in the sender, subject, event title, location and reminder
-    text never appear in logs, `brief_deliveries`, notices, conversations, memory,
-    the KB digest, the tool result, the speech text or the LLM context.
-  - A schema test pins `brief_deliveries` to its enumerated columns.
-  - The retention purge removes expired rows under a test clock.
+    text never appear in logs, `brief_slots`, `brief_results`, notices,
+    conversations, memory, the KB digest, the tool result or the LLM context.
+  - In the speech text, canaries are checked against the chosen D5 option:
+    - none may appear under D5 (a) or (b);
+    - under D5 (c), only the sender, subject and title canaries may appear, while
+      location and reminder-text canaries never do.
+  - A schema test pins both tables to their enumerated columns.
+  - The retention purge removes expired rows under a test clock, including while the
+    bot runs with no eligible client connected.
   - The tool result is byte-identical for any two source contents under every D5
     option, and under D5 (a) so is the speech text (a property test). That shows no
     source-derived value reaches either external path beyond what D5 permits.
@@ -619,7 +721,8 @@ Three separate permissions:
 - **Foreground isolation.** The session's holder is never armed or cleared by brief
   work. The transcript observer's new-turn `clear()` reaches only the session's
   holder, so a new user turn cannot clear the brief's.
-- **On request.** The `daily_brief` handler returns a fixed acknowledgement and starts
+- **On request.** The `daily_brief` handler returns the fixed acknowledgement "Putting
+  your brief together." (R.10.7) and starts
   the brief job. The foreground turn receives no source content, so nothing arms it.
 - **Logging.** Brief logging uses its own content-free events (R.10.3).
 - **Acceptance (S3-1).**
@@ -629,30 +732,54 @@ Three separate permissions:
   - A new user turn during acquisition leaves the brief holder armed.
   - The session holder's state is unchanged by the brief.
 
-#### R.10.5 Only an eligible native recipient receives a protected brief (item 5)
+#### R.10.5 Only an eligible native recipient receives a protected brief (item 5; revision 3)
 
-- **Eligible recipient.** The process's current live session (`notices.set_live_session`,
-  `jarvis/notices.py:113`) whose client sent, on this connection,
-  `brief/hello {"version": 1, "capabilities": ["protected_display_v1"]}`. Only native
-  builds that enforce `data_policy` at every display sink send it. Calendar
-  capability is announced separately, in `calendar/hello` (R.10.14). The frozen
-  browser console and unknown clients send neither.
-- **No recipient, no acquisition.**
-  - On request: the fixed reply "The brief needs the Mortimer app.", with no source
-    read.
-  - Scheduled: no claim and no acquisition.
-- **Other sessions.** Only the live session can be a recipient.
-- **Final check before send.** Same session, same generation, still eligible.
-  Otherwise nothing is sent, and the row becomes `released`, so a later eligible
-  session can claim it (R.10.7).
-- **The emitter sets `data_policy` explicitly.** The generic builder in
-  `jarvis/bot/display.py` has no `data_policy` field.
-- **Acceptance (S3-2).**
-  - Native and eligible: delivered.
-  - Browser or unknown: no protected payload and zero source calls.
-  - A disconnect, or a new hello without the capability, during acquisition: the
-    delivery is abandoned.
-  - Swift: `data_policy` survives serialization and `DisplayPayload` decoding.
+**Eligibility is decided by the server.** `brief/hello`
+(`{"version": 1, "capabilities": ["protected_display_v1"]}`) is only the client
+negotiating a capability; it never establishes eligibility on its own. A session is
+eligible only when all three hold:
+
+1. **Native transport.** It came over the native WebSocket route (`/ws-client`,
+   `FastAPIWebsocketTransport`), never WebRTC (`/api/offer`). The bot records this
+   at connection time in `jarvis/bot/bot.py`, which already chooses the transport.
+2. **Local or authenticated peer.** Its peer is loopback. Once WS-04's local bearer
+   authentication is enabled, it must also present the owner's token.
+3. **Capability.** It sent `brief/hello` with `protected_display_v1`.
+
+**Residual.** Until WS-04 authentication is on, any local process that speaks the
+native protocol can satisfy all three. That is today's trust boundary (roadmap C2,
+localhost), stated rather than hidden.
+
+**Recipient registry.** Eligible sessions are kept in a brief-specific registry
+(`jarvis/bot/brief_recipients.py`):
+- a session joins when its eligible hello arrives. It leaves when it disconnects, or
+  when it sends a later `brief/hello` without `protected_display_v1` (a capability
+  withdrawal);
+- the recipient is the most recently eligible connected session;
+- `notices.set_live_session` is not used, so a newer browser session that replaces
+  the live-session pointer neither displaces nor becomes the recipient.
+
+**No recipient, no acquisition.**
+- On request: the fixed reply "The brief needs the Mortimer app." No source is read.
+- Scheduled: no claim and no acquisition.
+
+**Final check before emit.** After acquisition and before the emit transaction
+(R.10.7), the recipient must be the same session, in the same generation, and still
+in the registry. Otherwise nothing is sent, and the claim is released. A recipient
+that vanishes after the check is handled by R.10.7's probe.
+
+**The emitter sets `data_policy` explicitly.** The generic builder in
+`jarvis/bot/display.py` has no `data_policy` field.
+
+**Acceptance (S3-2).**
+- A native, local session that sends the capability is delivered to.
+- A browser connection over WebRTC that sends the capability string is not eligible,
+  receives no protected payload, and causes zero source calls.
+- An unknown client is not eligible either.
+- A newer browser session does not displace the eligible native recipient.
+- A disconnect, or a capability withdrawal, during acquisition: the slot is released
+  and nothing is sent.
+- Swift: `data_policy` survives serialization and `DisplayPayload` decoding.
 
 #### R.10.6 D4 (b) and D8 are coupled under the current native code (item 6)
 
@@ -663,103 +790,398 @@ Three separate permissions:
   - (a) D4 (a): protected, and all four actions blocked. This is the current
     behaviour.
   - (b) D4 (b) with the four actions enabled.
-  - (c) D4 (b) with a separate `display_actions: "none"` permission. Each of the four
-    sinks enforces it: `ShareCoordinator`, `WorkspaceExportCoordinator`,
-    `SupportingDisplayCoordinator`, and copy in `WorkspaceResultPane`.
-- **Acceptance.** The chosen combination is tested. For D8 (c): approved model
-  processing is allowed, and all four actions are blocked.
+  - (c) D4 (b) with a separate `display_actions: "none"` permission.
+- **One predicate below the controls (revision 3).** D8 (c) is enforced by one
+  shared predicate, `DisplayActionPolicy.allows(_ action, _ payload)`, for four
+  actions: copy (including text selection), share, export, and transfer to the
+  supporting display. It returns false when `payload.isProtectedLocal` is true, or
+  when the payload carries `display_actions: "none"` (R.10.8). A payload without that
+  field keeps today's behaviour.
+- **Every gate moves to it.** `isProtectedLocal` has 44 uses in 13 source files at
+  `4cf452e`. P3's manifest classifies each one, and every action gate is replaced by
+  the predicate. The gates confirmed by reading the code:
+  - supporting display:
+    - `AppMessageRouter.swift:282`;
+    - `DisplayWindowStore.swift:189, 257, 311–312, 345`;
+    - `SupportingDisplayCoordinator.swift:142` (transfer) and `:286` (the
+      inventory of listable results);
+    - `ConsoleActionCoordinator.swift:224`;
+    - `WorkspaceStore.swift:411`, in `sendToDisplay()`, which the voice and pointer
+      transfer paths reach directly;
+    - the display menus, `ConsoleActionBar.swift:437, 440, 444, 495` and
+      `WorkspaceView.swift:179, 183, 187`;
+  - copy, share and export:
+    - `ShareCoordinator.swift:37`; and `:56`, where image sharing requires
+      `dataPolicy == "approved_external"` directly. That comparison is stricter than
+      `!isProtectedLocal`, which is also true when `dataPolicy` is nil
+      (`AppMessage.swift:207`), so it is kept, and the predicate is required as
+      well. The source scan lists `:56` as a kept comparison;
+    - `WorkspaceExportCoordinator.swift:56, 64, 96`;
+    - `ConsoleActionCoordinator.swift:484–485` and `:491`, and `isProtectedResult`
+      (`:711`, used at `:504, 512, 524`);
+    - the buttons, `WorkspaceResultPane.swift:115, 121, 129, 136, 144`;
+    - `ConsoleActionBar.swift:354`, whose `isProtected` disables Copy, Share and
+      Export in the Actions menu (`:393, 403, 405`). It also gates the View picker;
+      that part stays a D4 rendering decision;
+    - `DisplayContentView.swift:54`, a mixed site. It gates the commands block,
+      whose button writes to the pasteboard (`:133`); that copy follows the
+      predicate. It also gates links and images, which stay D4 rendering
+      decisions;
+    - `WorkspaceResultPane.swift:34`, the "sharing and export disabled" label, which
+      must follow the predicate so it still shows under D8 (c);
+  - text selection, which is the path to Command-C and the context-menu Copy:
+    `DisplayContentView.swift:41` for the generic body, and the brief renderer, which
+    enables selection only when the predicate allows copy.
+- **What stays.** Rendering and context decisions that D4 governs keep
+  `isProtectedLocal`: for example its definition (`AppMessage.swift:206`), the
+  weather checks (`AppMessageRouter.swift:377`, `DisplayContentView.swift:28`), the
+  private summary (`ConversationThreadView.swift:103, 105`) and the supervisor
+  inventory filters (`WorkspaceStore.swift:130, 158`). Under D4 (b) that inventory
+  lists the brief, so its title is fixed host text and carries no source content.
+  P3's manifest lists every kept site.
+- **Comparison share.** `ConsoleActionCoordinator.swift:481–487` builds one text from
+  the active and comparison results. It is allowed only if the predicate allows
+  sharing for each result it includes.
 
-#### R.10.7 Durable, idempotent delivery (items 7, 25)
+  Blocking a visible button is not enough on its own.
+- **Acceptance (S3-11).** The chosen combination is tested. Under D8 (c), approved
+  model processing is allowed, and each of these is blocked:
+  - keyboard, context-menu and selection copy;
+  - direct store transfer, and the brief's absence from the supporting-display
+    inventory;
+  - voice transfer and pointer transfer;
+  - a comparison share in which either result is a D8 (c) brief;
+  - every visible control.
 
-The table records scheduled deliveries only. An on-request brief is ephemeral: it
-gets a fresh `result_id` per request and no row. Its one durable effect is D7's
-optional suppression of that day's scheduled brief.
+  A source-scan test fails if `isProtectedLocal`, or a direct comparison of
+  `dataPolicy`, appears anywhere except in the predicate and the kept sites P3's
+  manifest lists.
 
-**Table `brief_deliveries`** (migration `0035_brief`):
+#### R.10.7 Durable, idempotent delivery (items 7, 25; revision 3)
+
+Revision 3 separates four things:
+- the **scheduled slot**: the one brief a day the schedule owes;
+- the **result** emitted to the app. A result is one `result_id`. Each new
+  acquisition of content is a new `revision` of it;
+- the app's **acknowledgement** that it applied a given `(result_id, revision)`;
+- the **probe**: the bot asking whether a revision was applied, without sending new
+  content.
+
+Applying a card and consuming the slot are different events.
+
+**Tables** (migration `0035_brief`):
 
 ```sql
-CREATE TABLE IF NOT EXISTS brief_deliveries (
-  id INTEGER PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS brief_slots (
   user_id TEXT NOT NULL DEFAULT 'local',
-  delivery_date TEXT NOT NULL,              -- local YYYY-MM-DD of the scheduled slot
+  slot_date TEXT NOT NULL,                  -- local YYYY-MM-DD of the scheduled slot
   state TEXT NOT NULL CHECK (state IN
-    ('claimed','sent','acked','failed','released','abandoned','suppressed')),
-  result_id TEXT NOT NULL,                  -- UUID fixed at first claim; reused on every re-send
+    ('open','claimed','emitted','delivered','suppressed','abandoned','unconfirmed')),
+  version INTEGER NOT NULL DEFAULT 0,       -- +1 on every transition
+  claim_token TEXT,                         -- fresh random UUID per claim
   claim_session TEXT,
   claim_expires_at TEXT,
-  attempts INTEGER NOT NULL DEFAULT 0,
+  claims INTEGER NOT NULL DEFAULT 0,        -- claims taken, the first included
+  emissions INTEGER NOT NULL DEFAULT 0,     -- revisions emitted with new content
+  result_id TEXT,                           -- fixed at first claim
+  current_revision INTEGER NOT NULL DEFAULT 0,
+  awaiting_since TEXT,                      -- set on emit, and again after an unanswered probe
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, slot_date)
+);
+CREATE TABLE IF NOT EXISTS brief_results (
+  result_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('scheduled','requested')),
+  scope TEXT NOT NULL CHECK (scope IN ('brief','calendar')),
+  query_date TEXT NOT NULL,                 -- resolved by the host
+  request_local_date TEXT NOT NULL,         -- the host's local date when the request or claim was made
+  slot_date TEXT,                           -- scheduled only
+  recipient_session TEXT NOT NULL,          -- the session this revision was emitted to
+  probe_session TEXT,                       -- the session last probed for it
+  outcome TEXT NOT NULL CHECK (outcome IN ('full','partial','all_failed')),
   source_status TEXT NOT NULL DEFAULT '{}', -- JSON of R.10.3 codes only
-  created_at TEXT NOT NULL,
-  sent_at TEXT,
-  acked_at TEXT,
-  UNIQUE (user_id, delivery_date)
+  state TEXT NOT NULL CHECK (state IN ('emitted','applied','not_applied')),
+  emitted_at TEXT NOT NULL, applied_at TEXT, announced_at TEXT,
+  PRIMARY KEY (result_id, revision)
 );
 ```
 
-Under D9 (b), the `brief-counts` columns are added, and nothing else.
+- **Outcome.** A source is *available* unless it is `disabled`, `not_configured` or
+  `not_authorized`. Those three are shown on the card but do not count as failures.
+  `disabled` and `not_configured` cannot change before a restart. `not_authorized`
+  can change when Larry grants calendar access (R.10.14 re-checks it on every
+  request), but an automatic retry would not ask him, so it is treated the same.
+  - `full`: every available source returned `ok`.
+  - `partial`: at least one available source returned `ok` or `partial`; or no
+    source was available (nothing could be read, and a retry would not change that).
+  - `all_failed`: at least one source was available, and none returned `ok` or
+    `partial` (each was `failed` or `timeout`).
+- **Host-owned record.** `brief_results` holds a row for each emitted revision. Its
+  scope, dates, outcome and recipient are written by the host before emission;
+  nothing in an acknowledgement can change them.
+- **D9 (b).** Only under D9 (b) do the `brief-counts` columns join `brief_results`,
+  with a `policy` column keeping their classification (R.10.3). Their one use is the
+  late announcement below.
 
-**Claim.** One `BEGIN IMMEDIATE` transaction, attempted only inside the day's
-catch-up window (D7) and only for an eligible recipient (R.10.5). The claim
-succeeds when:
+**Guarded transitions.** Every slot update names its permitted predecessor states,
+and, for claimant transitions, its `claim_token`. Every transaction that reads and
+then writes these tables is `BEGIN IMMEDIATE`, with the connection's busy timeout
+(`jarvis/db.py` opens the database in WAL mode, `:930`, where a deferred
+read-then-write transaction can fail without waiting).
+- **Claimant transitions** (claim, emit, release, probe outcomes). If the slot update
+  changes zero rows, the whole transaction is rolled back, including any
+  `brief_results` insert, and the claimant stops.
+- **Host transitions** (acknowledgement, `not_applied`, suppression, window close).
+  The `brief_results` change commits on its own merits. The slot changes only if it
+  is in a permitted predecessor state; otherwise the slot is left as it is, and the
+  rest of the transaction still commits.
+- `delivered`, `suppressed` and `abandoned` are terminal. No transition leaves them.
+- `unconfirmed` is left only by an acknowledgement (below).
 
-| Current row | Claim action |
+**Claim.** One `BEGIN IMMEDIATE` transaction. It runs only before the day's window
+closes, only for an eligible recipient (R.10.5), and only if
+`claims < BRIEF_MAX_CLAIMS` (proposed 6). It moves the slot to `claimed`, sets a
+fresh `claim_token`, `claim_session` and
+`claim_expires_at = now + BRIEF_CLAIM_TTL_S` (proposed 300), and increments
+`claims`, the first claim included. Permitted from:
+
+| From | Condition |
 |---|---|
-| None | Insert `claimed`, with a new `result_id` and `claim_expires_at = now + BRIEF_CLAIM_TTL_S` (proposed 300). |
-| `claimed`, expired | Take it over with the same `result_id` and `attempts + 1`. |
-| `released` | Take it over with the same `result_id`. Attempts are unchanged, since nothing was sent. |
-| `failed`, `attempts < BRIEF_MAX_ATTEMPTS` (proposed 3) | Take it over with the same `result_id` and `attempts + 1`. |
-| `sent`, not acked, `sent_at` older than `BRIEF_ACK_TIMEOUT_S` (proposed 60), `attempts < BRIEF_MAX_ATTEMPTS` | Take it over to re-send with the same `result_id` and `attempts + 1`. |
+| no row | Inserts the slot with a new `result_id` and `current_revision = 0`. |
+| `open` | if the current revision was applied as `all_failed`, `BRIEF_RETRY_DELAY_S` (proposed 600) has passed since `awaiting_since` |
+| `claimed` | its claim has expired (a dead claimant) |
+| `emitted` | no acknowledgement for `BRIEF_ACK_TIMEOUT_S` (proposed 60) since `awaiting_since` |
 
-Otherwise it does not. That covers `acked`, `suppressed`, `abandoned`, a live claim,
-and the cases where attempts have run out.
+After claiming:
+- if the current revision's row is still `emitted`, the claimant probes first (below);
+- otherwise (no revision yet, or the current row is `applied` as `all_failed` or is
+  `not_applied`) it acquires, but only if `emissions < BRIEF_MAX_EMISSIONS`
+  (proposed 3). At that limit it moves the slot `claimed → abandoned` instead.
 
-A database error at any step means nothing is acquired or sent (fail closed), and a
-content-free log line is written. When the window closes, a row that is not `acked`
-or `suppressed` is set to `abandoned`.
+A probe claim is allowed at the emission limit, so the last revision can still be
+confirmed.
 
-**States.**
+**Acquire and emit.** The claimant acquires and assembles in its own context
+(R.10.4). It then runs R.10.5's final recipient check. If that fails, it releases
+the claim and sends nothing. Otherwise, in one transaction, it:
+- inserts `brief_results (result_id, current_revision + 1)` as `emitted`;
+- moves the slot `claimed → emitted`, guarded by its token, setting
+  `current_revision + 1`, `emissions + 1` and `awaiting_since`.
 
-| State | Set when | Proves / means |
-|---|---|---|
-| `sent` | After the transport send returns, by one `UPDATE` guarded by `claim_session` | Only that the bot handed the message to the transport |
-| `acked` | On `brief/ack {"version": 1, "result_id"}` from the native client | The app applied it. The day counts as delivered. |
-| `failed` | Every source failed (no `ok` or `partial` status) | Not consumed; retryable as above |
-| `released` | The final recipient check failed (R.10.5) | Nothing sent; claimable again |
-| `abandoned` | Attempts exhausted, or the window closed | Terminal |
-| `suppressed` | Under D7 (a), when an on-request full brief for today is acked | Terminal; counts as delivered |
+Only after that commits does it send, to the recipient it just checked. Nothing is
+written after the send, so an acknowledgement that arrives before the send call
+returns is simply accepted. If the transport send raises, or the recipient vanished
+after the check, the slot stays `emitted` and the probe resolves it. `emissions`
+is never decremented, so at most `BRIEF_MAX_EMISSIONS` contents are ever sent for a
+slot.
 
-A brief with at least one source `ok` or `partial` consumes the day once acked.
+**Release.** A claimant that loses its recipient, or is cancelled before emitting or
+while probing, moves the slot `claimed → open`, guarded by its token, in its
+`finally` block.
+- This covers a disconnect during acquisition (R.10.18).
+- `emissions` is unchanged, because nothing was sent.
+- `claims` is not refunded, on purpose. Each claim may already have read the
+  sources, so `BRIEF_MAX_CLAIMS` is what bounds source reads in a day when a
+  connection keeps dropping. A flapping connection can therefore use up the day's
+  claims. Larry can still ask for the brief, which needs no claim.
+- A claimant that dies without releasing is covered by its claim's expiry.
 
-**Idempotent client.** A brief payload whose `result_id` already exists replaces
-that result in place, under WS-17's identity rules (`WorkspaceStore`,
-`ResponseResultRouter`; see R.13), without a second New notice. So a re-send after a
-crash or a lost ack never duplicates a card.
+**Probe.** When the current revision's row is still `emitted` after the ack timeout,
+the claimant:
+1. records the current eligible recipient as that row's `probe_session`, in a
+   transaction guarded by its `claim_token`, before anything is sent. So an answer
+   can never arrive before its session is recorded, and a stale claimant cannot
+   overwrite it;
+2. sends `brief/probe {"version": 1, "result_id", "revision": current_revision}` to
+   that session;
+3. waits up to `BRIEF_PROBE_TIMEOUT_S` (proposed 10).
 
-**Crash cases.**
+The answer decides the next step:
 
-| Crash point | Outcome |
+| Answer | Next step |
 |---|---|
-| Before send | The claim expires, and the next eligible tick takes it over. |
-| After send, before `sent` is recorded | The claim expires, and the takeover re-sends the same `result_id`. |
-| After `sent`, before ack | The ack-timeout path re-sends the same `result_id`. |
+| `brief/ack` | Handled by the acknowledgement rule below; the claimant stops |
+| `brief/not_applied` | The app never applied it. The row becomes `not_applied`. The claimant acquires and emits a new revision if `emissions < BRIEF_MAX_EMISSIONS`; at the limit, the slot moves `claimed → abandoned`. |
+| No answer | If the row is still `emitted`, the slot moves `claimed → emitted`, guarded by the token, and `awaiting_since` is reset, so the next probe waits another ack timeout. It is retried within `claims`. If a late `not_applied` has already changed the row, the claimant acquires as above. |
 
-**Acceptance (S3-3).**
-- Two sessions sharing the database claim at once: exactly one claims.
-- A reconnect during acquisition: the takeover keeps the same `result_id`.
-- A recipient-check failure leaves the row `released`, and a later eligible session
-  delivers it.
-- An all-failed brief is retried, then `abandoned`.
-- Simulated crashes at each step give the outcomes above.
-- No ack ever arrives: bounded re-sends, then `abandoned`.
-- A database error at claim: no send.
-- Under D7 (a), an on-request brief for today suppresses the scheduled one.
+`brief/not_applied {"version": 1, "result_id", "revision"}` is accepted only from
+the row's `probe_session`, for the probed `(result_id, revision)`, while that row is
+still `emitted`. Anything else is ignored. It is a host transition: the row becomes
+`not_applied`, and a slot at that revision moves `emitted → open` (so the next claim
+acquires) or `unconfirmed → abandoned`. A `claimed` slot is left to its probing
+claimant. A probe never sends content. The app
+answers from its persistent ledger, so a new connection after a crash can answer for
+an earlier one.
+
+**Acknowledgement.** `brief/ack {"version": 1, "result_id", "revision"}` is accepted
+only if all three hold:
+- a row `(result_id, revision)` exists;
+- it is still `emitted`;
+- the ack comes from that row's `recipient_session` or `probe_session`.
+
+The row then becomes `applied`. For a scheduled result, in the same transaction:
+
+| Outcome | Slot becomes |
+|---|---|
+| `full` or `partial` | `delivered`, from `open`, `claimed`, `emitted` or `unconfirmed`. A takeover claimant then fails its next guarded update and stops. |
+| `all_failed` | At this revision: `open` from `emitted` or `claimed`, so a claimant then fails its next guarded update and stops, and the next claim acquires a new revision; `abandoned` from `unconfirmed`. Otherwise unchanged. |
+
+When the slot is in neither column's states (for example, already `delivered` or
+`suppressed`), the row still becomes `applied` and the slot is left as it is. An
+unknown, stale, repeated or wrong-session acknowledgement changes nothing.
+
+**On-request suppression (D7 (a)).** Applying a requested result fences that day's
+slot when all of these hold:
+- scope is `brief`;
+- outcome is `full` or `partial`, and at least one source returned `ok` or
+  `partial`. A brief in which no source was available does not suppress;
+- `query_date` equals `request_local_date`: the request asked about today, as it was
+  when the request was made.
+
+A request about Thursday never suppresses Thursday. Fencing moves that day's slot to
+`suppressed` from `open`, `claimed` or `emitted`, or inserts it as `suppressed`. A
+slot that is already terminal, or `unconfirmed` (past its window), is left as it is,
+and the requested row's acknowledgement still commits. After that:
+- a fenced claimant that has not yet committed its emit fails that guarded update,
+  and sends nothing;
+- a claimant that had already committed its emit may still send that one revision.
+  It, and any revision already in flight, shows if it arrives, and its ack marks it
+  `applied`, but the slot stays `suppressed`. No reopen, retry, probe or announcement
+  follows. Suppression cannot recall a card already on its way.
+
+**Window close.** Every watcher tick, every claim attempt, and the hourly
+process-maintenance task (R.10.3) apply this when the window has passed:
+- an `open`, `claimed` or `emitted` slot whose current revision's row is still
+  `emitted` becomes `unconfirmed`;
+- any other `open`, `claimed` or `emitted` slot becomes `abandoned`;
+- if the schedule owed a brief that day and no slot row exists (no eligible client
+  connected during the window), the row is inserted as `abandoned`;
+- terminal slots never change.
+
+A later valid full or partial acknowledgement still moves an `unconfirmed` slot to
+`delivered`. Under D7 (b), a slot that becomes `abandoned` with no revision ever
+applied queues the fixed missed-brief notice through the existing
+`notices.add_notice` (`jarvis/notices.py:37`). Notices ride on the next connection's
+greeting, browsers included (`jarvis/bot/pipeline.py:1661–1662`). That is
+acceptable only because the notice carries no content.
+
+**Persistence failures:**
+
+| When | Outcome |
+|---|---|
+| The claim fails | Nothing is acquired |
+| The emit transaction fails | Nothing is sent, and the acquired data is discarded |
+| A scheduled ack fails to record | The slot stays `emitted`, and the probe resolves it later |
+| A requested ack fails to record | It is retried within the busy timeout. If it still fails, the requested row stays `emitted`: nothing is announced and nothing is suppressed, so the scheduled brief may still arrive that day. Requested results are never probed. |
+
+**The app's ledger.** MortimerHost keeps a content-free ledger of
+`(result_id, revision, outcome, applied_at, dismissed)`, where `outcome` comes from
+the payload's `outcome` field (R.10.8). The app uses it only for these display rules;
+the host never trusts it back. The ledger holds at most 200 entries, each kept
+for `BRIEF_LEDGER_TTL_H` (proposed 48), in the app's local defaults so it survives a
+restart. For an incoming revision:
+
+| Incoming | App behaviour |
+|---|---|
+| Already applied | Re-ack only. No display change and no New notice. |
+| A new revision of a `result_id` whose card is still shown | Replace in place, then ack. A New notice appears only if the shown revision was `all_failed` and the new one is not. |
+| A new revision of a dismissed or evicted `result_id` | Recreate only if every applied revision was `all_failed` and the new one is not; otherwise just ack. |
+| An unknown `result_id` | Apply as a new card, then ack. |
+| A probe | Answer `brief/ack` if that `(result_id, revision)` is in the ledger, otherwise `brief/not_applied`. |
+
+**Announcement.** The spoken line (D5) is said only after the app's acknowledgement
+of the revision it describes:
+- at most once per `result_id`, across every retry and probe. A guarded update sets
+  `announced_at` on the row, provided no row of that `result_id` already has one,
+  before speaking. If it fails, nothing is spoken;
+- an `all_failed` scheduled revision is never announced; its card says which sources
+  failed, and it may be retried. An `all_failed` requested result gets one fixed,
+  content-free line instead, "I couldn't reach the brief's sources; the card has
+  the details.", so a spoken request is never left without an answer;
+- for a scheduled result, only while its window is open and its slot is not
+  `suppressed`;
+- for a requested result, only if the ack arrives within `BRIEF_ACK_TIMEOUT_S` of
+  emission.
+
+Otherwise the acknowledgement is recorded and nothing is spoken. The line is built
+from the emitting job's in-memory projection. That is kept until the line is spoken
+or dropped: at most `BRIEF_ACK_TIMEOUT_S` plus R.10.18's 120-second speech wait.
+After that (for example, an ack answering a later probe), the line is built from the
+stored counts under D9 (b), or is D5 (a)'s fixed line under D9 (a).
+
+The tool's immediate acknowledgement is "Putting your brief together." It never
+claims the card is on screen. Requested results are emitted once and are never
+re-sent or probed. If one is not acknowledged, Larry can simply ask again.
+
+**Acceptance (S3-3, S3-12).**
+- Transitions and races:
+  - an ack arriving after a takeover claim, which completes the slot and stops the
+    claimant;
+  - an expired claimant resuming;
+  - a transport send that raises;
+  - a stale release;
+  - a wrong-session ack, a repeated ack, and an unknown or replayed
+    `(result_id, revision)`;
+  - two sessions claiming at once;
+  - an ack that arrives before the send call returns;
+  - an ack for a requested brief when the slot is already `delivered` (the second
+    request of a day), which still commits as `applied`;
+  - a probe answer that arrives immediately, which is never rejected as
+    wrong-session;
+  - a `brief/not_applied` from the wrong session or for a stale revision, which is
+    ignored;
+  - window close never changes a `delivered`, `suppressed` or `abandoned` slot.
+- Limits:
+  - exactly `BRIEF_MAX_EMISSIONS` contents;
+  - repeated crashes before emit stop at `BRIEF_MAX_CLAIMS`;
+  - an expired claim at the limit is not retaken;
+  - a release does not consume an emission;
+  - a probe at the emission limit, answered `not_applied`, abandons the slot;
+  - after an all-failed revision, no claim before `BRIEF_RETRY_DELAY_S`;
+  - a brief whose sources are all `disabled`, `not_configured` or `not_authorized`
+    is `partial`, is not retried, and does not suppress;
+  - a `not_applied` that arrives after the probe timeout, and one after window
+    close, which leave the slot `open` or `abandoned`, never stuck;
+  - a day on which no eligible client connects, which ends `abandoned` (and, under
+    D7 (b), queues one notice).
+- Probe: answered `ack`, answered `not_applied`, and unanswered (the next probe
+  waits another ack timeout); a crash after an earlier revision, where the next
+  claimant probes before acquiring.
+- Outcomes and suppression:
+  - an all-failed card followed by a full retry, which replaces it or recreates it if
+    it was dismissed, and is the only one announced;
+  - a calendar-only ack does not suppress;
+  - an all-failed request does not suppress;
+  - a request about another day does not suppress;
+  - a request spanning midnight;
+  - suppression while a scheduled acquisition runs, and after a scheduled revision
+    was sent.
+- Window close: `abandoned` and `unconfirmed`, and a late ack after window close.
+- Persistence: failure at claim, at emit, and at ack.
+- App ledger:
+  - a card closed before a new revision arrives is not recreated, unless its applied
+    revisions were all all-failed and the new one is not;
+  - a history eviction;
+  - a lost ack;
+  - a duplicate while the card is pinned.
+- Speech:
+  - one announcement per result across retries and probes; none for an all-failed
+    scheduled revision, and the fixed failure line once for an all-failed request;
+  - none for a suppressed slot, or after the window or the ack timeout;
+  - no "on screen" without the app's acknowledgement;
+  - a probe-answered ack speaks the stored-count line under D9 (b) and the fixed
+    line under D9 (a).
 
 Sequential reconnect alone is not sufficient evidence.
 
 #### R.10.8 Arrival is bound to the request that asked (item 8)
 
-- **Payload fields.** `arrival: "requested" | "scheduled"`, a `result_id`, and, when
-  requested, a `brief_request_id`.
+- **Payload fields.** `arrival: "requested" | "scheduled"`, `result_id`, `revision`
+  and `outcome` (`full`, `partial` or `all_failed`, copied from the host's row for
+  the app's ledger, R.10.7). Under D8 (c) only, `display_actions: "none"`, set by
+  the emitter (R.10.6). The host's `brief_results` row binds the result to its request
+  (R.10.7). Nothing in the payload is trusted back.
 - **No turn identity exists yet.** Display payloads carry none. The only
   `user_turn_id` at `bd18033` is a fresh UUID on consent messages
   (`jarvis/bot/pipeline.py:1569`). Turn binding belongs to WS-17.
@@ -791,33 +1213,97 @@ Sequential reconnect alone is not sufficient evidence.
   - `MAIL_CALL_DEADLINE_S` (proposed 12.0) for the whole call. That leaves margin
     under the registry's 30-second `CALL_TIMEOUT` (`registry.py:58`).
   - The two accounts no longer run back to back or share time.
-- **Connect phase.** The watchdog can reach the socket only after `open()` sets
-  `self.sock`. Until then, TCP connect and the TLS handshake are bounded by the
-  constructor's `timeout = min(IMAP_CONNECT_TIMEOUT_S (5.0), remaining)`.
-  `socket.create_connection` applies that timeout to each resolved address in turn.
-  So the call does not rely on it: the call's main thread joins the workers with the
-  call deadline and returns at that deadline regardless. A worker still connecting
-  is a daemon thread; its account is reported `failed` (timeout), and it closes its
-  socket when its connect returns.
-- **Watchdog.** Once the socket exists, a per-account watchdog (`threading.Timer`)
-  runs `sock.shutdown(SHUT_RDWR)` and then `close()` at the account deadline. Every
-  blocking read unblocks with an error. That also bounds a slowly dripped literal,
-  which per-receive socket timeouts cannot. A local TLS test confirmed this unblocks a
-  stalled `CAPABILITY` and a dripped literal (Linux; macOS untested).
+- **Connect phase (revision 3).** Name resolution and the TCP connect, inside
+  `socket.create_connection`, cannot be reached by the watchdog. They are bounded
+  only by the constructor's `timeout = min(IMAP_CONNECT_TIMEOUT_S (5.0), remaining)`,
+  which `create_connection` applies to each resolved address in turn, and nothing
+  bounds the resolver. So the call does not rely on them: its main thread joins the
+  workers with the call deadline and returns at that deadline regardless. A worker
+  still connecting is a daemon thread; its account is reported `failed` (timeout),
+  and it closes its socket when its connect returns.
+- **The TLS handshake is under the watchdog.** `wrap_socket` detaches the raw
+  socket before it handshakes (`ssl.py`, `SSLSocket._create`), so a watchdog holding
+  the raw socket cannot reach the handshake; a test here showed the raw socket's
+  file descriptor is `-1` after wrapping. P1's `_create_socket()` override
+  therefore calls `wrap_socket(..., do_handshake_on_connect=False)`, registers the
+  TLS socket with the watchdog, checks the latch, and only then calls
+  `do_handshake()`.
+- **Watchdog.** A per-account watchdog (`threading.Timer`) fires at the account
+  deadline. It sets the latch, then shuts down the registered socket with the base
+  method, `socket.socket.shutdown(sock, SHUT_RDWR)`, which leaves the TLS object
+  alone. It never closes the socket; the worker closes its own, so no file
+  descriptor can be reused across the two account threads. Registration and firing
+  share one lock, and registration checks the latch, so a firing between steps is
+  never missed. Every blocking read then ends: with an error, or as end of file. The
+  `read` override treats a literal shorter than its announced size as an abort,
+  because after a shutdown the buffered reader returns what it has rather than
+  raising. That also bounds a slowly dripped literal (tested below) and a stalled
+  handshake (tested below), which per-receive socket timeouts cannot. A dripped
+  handshake is untested, but it is read through the same shut-down socket.
+- **Tested here** (CPython 3.11.15, Linux; macOS untested):
+  - a server that never answers the handshake: the base shutdown at 1.0 s ended
+    `do_handshake()` at 1.00 s, against a 30 s socket timeout;
+  - a verified TLS session dripping a literal one byte every 0.5 s, against a 2 s
+    socket timeout: the shutdown at 3.0 s ended the read at 3.00 s, with 5 of 4,096
+    bytes returned;
+  - revision 2's test of a stalled `CAPABILITY`.
 - **Per command.** Before each command, the socket timeout is set to
   `min(IMAP_OP_TIMEOUT_S (8.0), remaining)`. `LOGOUT` gets at most
   `min(1.0, remaining)`; after that the socket is closed without waiting.
 - **Partial results kept.** Results read before a deadline or a drop are kept. Each
   account reports R.10.3's source-status code: `ok`, `partial`, `failed`,
   `timeout`, `disabled` or `not_configured`.
-- **Cancellation.** Ending or cancelling the call fires every watchdog at once.
+- **Cancellation (corrected in revision 3).** The bot cannot cancel a running mail
+  call. The pinned MCP client (`mcp==1.29.0`, `requirements-lock.txt:98`) sends no
+  `notifications/cancelled` when its awaiting coroutine is cancelled: `send_request`
+  in `mcp/shared/session.py` only cleans up its own streams. The registry sends none
+  either (no `CancelledNotification` or `send_notification` in `jarvis/` or
+  `mcp_servers/`), and its `CALL_TIMEOUT` wait simply discards the result. So the
+  mail server's own in-process deadline, `MAIL_CALL_DEADLINE_S`, is what ends the
+  work: at that deadline every account's watchdog fires and its latch is set.
   Threads are joined with a one-second bound.
+- **Worker lifetime (revision 3).** A bounded wait does not bound a worker stuck in
+  DNS or connect, so:
+  - **Single flight.** There is at most one outstanding worker per account
+    (`MAX_WORKERS_PER_ACCOUNT = 1`). While an earlier worker for that account is
+    still alive, a new call does not start another. It reports that account as
+    `timeout`, with the fixed sentence "still waiting on a previous connection". So
+    an `mcp-mail` process holds at most one stuck worker per account.
+  - **Cancellation latch.** Each worker carries a cancellation latch, a
+    `threading.Event` set at its account deadline or the call deadline. P1's
+    `IMAP4_SSL` subclass checks it at each step of the connection that `imaplib`
+    makes (`IMAP4.__init__` calls `open()`, which calls `_create_socket()`, then
+    reads the greeting in `_connect()`):
+    1. in an `_create_socket()` override, before `socket.create_connection`, which
+       also resolves the name;
+    2. when that returns, before `wrap_socket`;
+    3. when the TLS socket is registered with the watchdog, before `do_handshake()`
+       (above);
+    4. in an `open()` override, after the base `open()` returns and before the
+       greeting is read;
+    5. before `LOGIN`, and before the worker publishes anything into the call's
+       result.
+
+    Nothing can interrupt the resolver inside `create_connection`. A worker whose
+    latch is set while it is there stays alive until that returns, and single
+    flight bounds how many such workers exist.
+  - **After the latch.** A worker whose latch is set closes its socket at once and
+    raises. It never reads the greeting, never logs in, and never publishes or
+    changes the returned results.
 - **Acceptance (S1-3).** Use a fake server for:
   - many slow operations, each under 8 s;
   - a slowly dripped literal;
   - a stalled `LOGOUT`;
   - a first account that exhausts its deadline;
-  - a connect that never completes.
+  - a connect that never completes;
+  - repeated calls against a resolver that never returns (worker count stays
+    bounded);
+  - the deadline reached during name resolution, during the TCP connect, during the
+    TLS handshake, and between `open()` and the greeting;
+  - late resolver completion.
+
+  There must be zero greetings read, zero `LOGIN` commands and zero publication
+  after the latch is set.
 
   The call returns within `MAIL_CALL_DEADLINE_S` plus one second, the other
   account's results are intact, and partial results are kept.
@@ -830,19 +1316,26 @@ Sequential reconnect alone is not sufficient evidence.
 - **Exact filter.** `UID FETCH <candidate UIDs> (INTERNALDATE)` in chunks of 200.
   Keep those with `INTERNALDATE >= window_start_utc`.
 - **Candidate cap.** `MAX_CANDIDATES = 1000`. Above it, only the 1,000 highest UIDs
-  are examined (UIDs are assigned in ascending order within a `UIDVALIDITY`), and
-  the count is a `lower_bound`.
+  are examined (UIDs are assigned in ascending order within a `UIDVALIDITY`). The
+  enumeration is then partial, so the count follows the table below: `lower_bound`
+  if at least one qualifying arrival was confirmed, otherwise `unknown`.
 - **Count result:**
 
   | State | When | Value |
   |---|---|---|
   | `exact` | Enumeration completed | the count |
-  | `lower_bound` | Enumeration was partial | at least this many |
-  | `unknown` | Enumeration failed | `null`, never 0 |
+  | `lower_bound` | Enumeration was partial, with at least one qualifying arrival confirmed | at least this many |
+  | `unknown` | Enumeration failed; or it was partial and no qualifying arrival was confirmed | `null`, never 0 |
 
   A count of zero appears only as an exact zero.
-- **Headlines.** The 25 newest per account by `INTERNALDATE`, merged to at most 50.
-  The August limits stay: lookback 1–168 hours and fields of 200 characters.
+- **Headlines.**
+  - When enumeration is complete: the 25 newest per account by `INTERNALDATE`,
+    merged to at most 50.
+  - When it is partial, or the header budget (R.10.12) ran out before every
+    headline was read: the newest by `INTERNALDATE` *among the candidates examined*,
+    marked `headlines_complete: false`. High UIDs are not assumed to be the newest
+    arrivals, because imports can give an older UID a newer `INTERNALDATE`.
+  - The August limits stay: lookback 1–168 hours and fields of 200 characters.
 - **Field names.**
   - `received_at` is `INTERNALDATE`, the server's arrival time.
   - The sender-supplied `Date` header is kept only as `header_date`, labelled
@@ -853,7 +1346,11 @@ Sequential reconnect alone is not sufficient evidence.
   - more than 25 and more than 1,000 mixed-date matches;
   - delayed mail with an old `Date`;
   - a future or missing `Date`;
-  - partial enumeration.
+  - partial enumeration;
+  - capped or interrupted enumeration with zero confirmed matches, which gives
+    `unknown`;
+  - a qualifying UID that was not examined;
+  - an older UID with a newer `INTERNALDATE`.
 
   Unknown and incomplete never read as zero.
 
@@ -883,8 +1380,43 @@ Sequential reconnect alone is not sufficient evidence.
   The `UID SEARCH` reply is a single line, and a lower cap would fail an inbox with
   about 8,000 candidates instead of reporting `lower_bound`. A reply over the limit
   marks that account `failed`, with count `unknown`.
-- **Aggregate bound,** per account: at most 1,000,000 bytes of `UID SEARCH` reply,
-  plus at most 1,000 short `INTERNALDATE` lines, plus 25 × 4 KiB of headers.
+- **Enforced budgets (revision 3).** Per-literal and per-line caps alone do not bound
+  the total. A server can repeat legal-size literals, send duplicate `FETCH`
+  responses, send unsolicited responses, or send large metadata lines.
+  - **Counting.** The connection subclass counts every received byte in `read` and
+    `readline` against the budget for the current phase, before buffering more.
+    Its `readline` override reads at most
+    `self.file.readline(min(_MAXLINE, remaining) + 1)`, where `remaining` is what is
+    left of the phase budget, and aborts if the line is longer than `remaining`.
+    `imaplib`'s own `readline` reads up to `_MAXLINE + 1` bytes whatever the budget.
+
+    | Phase | Budget (proposed) |
+    |---|---|
+    | Session: greeting, `CAPABILITY`, `LOGIN`, `EXAMINE`, `LOGOUT` | 16,384 bytes |
+    | `UID SEARCH` | 1,004,096 bytes: the one-line reply at `_MAXLINE`, plus its tagged completion |
+    | `INTERNALDATE` metadata | 131,072 bytes |
+    | Headers | 25 × (4,096 + 384) = 112,000 bytes: each literal, its 64-byte slack, and the response line around it |
+    | Whole account | 1,400,000 bytes, against a sum of 1,263,552 |
+
+    Every byte counts once, against the phase it arrives in and against the whole
+    account. Unsolicited `EXISTS`, `RECENT`, `EXPUNGE` and `FLAGS` lines count that
+    way too, and are also capped at 16,384 bytes per account in total. Below
+    `imaplib`, `makefile('rb')` reads ahead at most one buffer
+    (`io.DEFAULT_BUFFER_SIZE`, 8,192 bytes), and OpenSSL can hold the rest of one
+    decrypted TLS record (at most 16 KiB). So "before buffering more" holds to
+    within about 24 KiB.
+  - **Response limits.**
+    - Untagged `FETCH` responses per command: at most the number of UIDs requested.
+    - Responses for a UID already seen in the current command: the first wins, and
+      more than 8 such duplicates abort the account.
+    - Responses for UIDs that were not requested: ignored, and counted against the
+      budget.
+  - **Retention.** Before sending each command, the subclass clears the whole
+    `untagged_responses` dictionary. `imaplib`'s own `_command` clears only the
+    `OK`, `NO` and `BAD` entries. Nothing from an earlier command is ever read, and
+    retained bytes stay bounded too.
+  - **Exhaustion.** Exhausting any budget aborts that account with state `partial`.
+    Results already validated are kept.
 - **Parsing.**
   - `email.parser.BytesHeaderParser(policy=email.policy.default)` parses the at most
     4 KiB block.
@@ -896,6 +1428,12 @@ Sequential reconnect alone is not sufficient evidence.
   nothing about attachments.
 - **Acceptance (S1-5).**
   - Oversized, folded and duplicated headers, and truncated encodings, stay bounded.
+  - Repeated capped literals, duplicate metadata, oversized non-literal `FETCH`
+    lines, unsolicited replies, and an exhausted aggregate budget each stay bounded,
+    and already validated partial results are kept.
+  - A line longer than the phase's remaining budget is never read past that budget
+    plus one byte.
+  - Untagged responses left from one command are not seen by the next.
   - A literal over the cap aborts that account with state `partial` or `failed`.
   - No attachment value is fabricated.
 
@@ -921,9 +1459,11 @@ Sequential reconnect alone is not sufficient evidence.
     requested is ignored.
   - A requested UID with no data is skipped.
   - A `NO` on a chunk drops that chunk's data. No other UIDs are retried in its place.
-  - In each of these cases, the count becomes a `lower_bound` if the UID was a
-    counted candidate, and an `INTERNALDATE` chunk answered `NO` makes the count a
-    `lower_bound` too.
+  - In each of these cases, if the UID was a counted candidate, or an
+    `INTERNALDATE` chunk was answered `NO`, the count is no longer exact. It becomes
+    a `lower_bound` only when at least one arrival in the window was confirmed;
+    otherwise it is `unknown` (R.10.10). Zero is never reported from an incomplete
+    enumeration.
 - **Acceptance (S1-6).** Cover:
   - another client expunging between `UID SEARCH` and `UID FETCH`;
   - disappearing messages;
@@ -947,12 +1487,22 @@ whole message.
 - `calendar/request`, bot to client:
   - `version: 1`, `request_id` (UUID), `session_id`, `generation`
   - `start_utc`, `end_utc`, both ISO-8601 Z and host-owned, at most 15 days apart
+  - `timezone`: the host's IANA zone name (for example `America/New_York`). The
+    client computes every local date in it (`visible_by_day` keys, `start_date`,
+    `end_date_exclusive`, and the day an occurrence overlaps), not in the Mac's own
+    zone setting.
   - `max_events: 50`
 - `calendar/result`, client to bot:
   - `version: 1`, `request_id`, `ok`
+  - optional `session_id` and `generation` echoes. They are permitted keys, so their
+    presence is not an unknown key; if present they must match (R.10.2).
   - `error`: `null | "not_authorized" | "unavailable" | "too_many" | "internal"`
-  - `authorization`, `total_in_range` (int), `truncated` (bool)
-  - `events` (at most 50)
+  - `authorization`
+  - `visible_total` (int): visible occurrences in range, after hiding
+  - `visible_by_day` (`{"YYYY-MM-DD": int}`): visible occurrences per local day
+  - `hidden_cancelled`, `hidden_declined` (ints)
+  - `truncated` (bool)
+  - `events`: at most 50 visible occurrences, in start order
 - **event:**
 
   | Field | Value |
@@ -984,14 +1534,23 @@ whole message.
 
   | Event kind | Handling |
   |---|---|
-  | Cancelled | Hidden, and counted |
-  | Declined | Hidden, and counted |
+  | Cancelled | Hidden. Counted in `hidden_cancelled`, never in `visible_*` |
+  | Declined | Hidden. Counted in `hidden_declined`, never in `visible_*` |
   | Tentative | Shown and labelled |
   | Recurring | Expanded by EventKit occurrence queries, including exceptions (untested on Larry's data) |
   | Overlapping | Listed in start order |
   | Overnight timed | Appears on each local day it overlaps |
   | All-day | Normalised to `[start_date, end_date_exclusive)`; tests cover both inclusive- and exclusive-end inputs |
-  | More than 20 on a day | The card says "and N more", from `total_in_range` and `truncated` |
+  | More than 20 on a day | The card says "and N more", where N is that day's `visible_by_day` minus the events shown for it. Hidden events never add to N. |
+
+**Client-side order and size (revision 3).**
+- The client hides cancelled and declined occurrences, sorts the rest by start, and
+  only then truncates to 50. So hidden events never use the 50-event cap.
+- If the serialized result would exceed 65,536 bytes, the client drops events from
+  the end until it fits, and sets `truncated: true`. The counts still describe
+  every visible occurrence. Fifty events with maximum-length multibyte fields can
+  exceed the limit, so this rule is needed.
+- An overnight occurrence counts once in each day it overlaps, in `visible_by_day`.
 
 **Manifest:**
 
@@ -1001,8 +1560,9 @@ whole message.
   - A case in `AppMessageRouter.swift` (WS-17 scope; R.13).
   - The usage string in `scripts/bundle.sh`, which is human-only.
 - Bot: `jarvis/bot/device_calendar.py`, registered on both client-message paths:
-  the WebSocket `ClientMessageProcessor` and WebRTC `on_app_message`. A browser
-  never sends the hello, so it is never eligible.
+  the WebSocket `ClientMessageProcessor` and WebRTC `on_app_message`. A
+  `calendar/request` goes only to an eligible recipient (R.10.5). A WebRTC browser
+  session is never eligible, even if it sends `calendar/hello`.
 
 **Acceptance (S2-1, S2-3, M2-1, M2-2).** Cover:
 - malformed and oversized results;
@@ -1013,9 +1573,18 @@ whole message.
 - an overnight event;
 - cancelled and declined events;
 - more than 20 events on one day ("and N more");
+- hidden-only results;
+- 19 visible plus hidden events, which must show no "more";
+- 21 visible events, which shows "and 1 more";
+- more than 50 mixed events;
+- overnight occurrences counted per day;
+- `visible_by_day` keys computed in the request's `timezone` when the Mac's zone
+  setting differs, including across a DST change;
+- a result with matching echoes, with mismatched echoes (rejected), and with none;
+- maximum-length Unicode fields that force byte truncation;
 - a request that times out (no result within `CALENDAR_REQUEST_TIMEOUT_S`);
 - both client-message paths: the WebSocket path works, and the WebRTC browser path is
-  never eligible;
+  never eligible, even when it sends `calendar/hello`;
 - parity with Calendar.app on the Mac.
 
 **D3 (b) or (c).** If either is chosen, its full manifest, dependencies, credential
@@ -1048,9 +1617,9 @@ scope and acceptance are published in this plan before P2 is claimed.
 | `brief` | any other day | Calendar and reminders due that date. No mail: mail means new arrivals relative to now. |
 
 **Three distinct dates.** `query_date` is the day asked about. `generated_at` is the
-instant the brief was built. `delivery_date` belongs to scheduled delivery only.
-On-request queries never change scheduled delivery state, except where D7 makes an
-on-request full brief for today suppress the scheduled one.
+instant the brief was built. `slot_date` belongs to scheduled delivery only.
+On-request queries never change scheduled delivery state, except where D7 (a) makes
+an applied on-request brief for today suppress the scheduled one (R.10.7).
 
 **Acceptance (S3-5).** Cover:
 - today and explicit dates;
@@ -1069,11 +1638,30 @@ on-request full brief for today suppress the scheduled one.
   interpretation, at both `confidential` and `approved_external`. Source text never
   goes into the generic Markdown body.
 - **No links.** No URL is carried, so no source-derived link exists.
-- **Manifest.** JarvisKit `DisplayPayload` and a MortimerHost renderer; WS-17 agrees
-  at claim time (R.13).
-- **Acceptance (S3-6, Swift).** Subjects and titles containing Markdown links, images,
-  headings, emphasis, code fences, HTML and bare URLs render as their literal
-  characters under both levels.
+- **Serialization for permitted exports (revision 3).** Copy, share and export today
+  read the generic body through `WorkspaceResultExport.text(result)` (called from
+  `ShareCoordinator.beginPreview`). P3 extends that function with a deterministic
+  literal serializer for kind `brief`:
+  - sections in a fixed order: calendar, reminders, mail, problems;
+  - times, counts, "and N more" and the per-source status codes.
+
+  Export is whole-result only: no single section can be selected. Today
+  `WorkspaceResultExport.scopedText(result, scope:, ordinal:)`
+  (`Display/WorkspaceResultDetails.swift:50`) splits `text(result)` at blank lines
+  for `scope` `"section"` or `"paragraph"`, and the console share path calls it
+  (`ConsoleActionCoordinator.swift:495`). For kind `brief` it returns nil for any
+  scope but `"whole"`, so that request is answered `invalid`. Text selection on the
+  card follows the same `DisplayActionPolicy` (R.10.6).
+- **Manifest.** JarvisKit `DisplayPayload`, a MortimerHost renderer, and the
+  serializer in `WorkspaceResultExport`. WS-17 agrees at claim time (R.13).
+- **Acceptance (S3-6, S3-13, Swift).**
+  - Subjects and titles containing Markdown links, images, headings, emphasis, code
+    fences, HTML and bare URLs render as their literal characters under both levels.
+  - Under D8 (b), a complete copy, share and export of the serializer's output is
+    permitted.
+  - A console share of a brief with `scope: "section"` or `"paragraph"` is refused
+    as `invalid`, while `"whole"` returns the serializer's output.
+  - Under D8 (c), all of them are blocked.
 
 #### R.10.17 The routing gate checks the call, not the absence of delegation (item 17)
 
@@ -1095,16 +1683,22 @@ on-request full brief for today suppress the scheduled one.
 #### R.10.18 Watcher lifecycle and switches (item 18)
 
 - **Start.** The watcher starts once the pipeline is ready and an eligible recipient's
-  hello has arrived.
+  hello has arrived. It purges nothing; retention belongs to the process-level
+  maintenance task (R.10.3).
 - **Stop.** It stops in the session teardown `finally`, before the transport closes.
-- **Cancellation.** It cancels the brief task. That fires the mail watchdogs through
-  the call's cancellation or deadline, and cancels the calendar futures.
-- **Final check.** R.10.5's check runs immediately before send.
+- **Cancellation.** It cancels the brief task, which stops waiting on the mail call
+  and cancels the calendar futures. The claimant's `finally` releases its claim
+  (R.10.7). The mail work itself ends at the mail server's own deadline, because no
+  cancellation reaches it (R.10.9).
+- **Final check.** R.10.5's check runs after acquisition, immediately before the
+  emit transaction (R.10.7).
 - **Foreground speech.**
   - The card is sent when it is ready.
-  - The fixed spoken line waits until neither the bot nor the user is speaking, using
-    the existing speaking-state tracker. If 120 seconds pass first, the line is
-    dropped and the card stays.
+  - The spoken line waits for the app's acknowledgement (R.10.7), and then until
+    neither the bot nor the user is speaking, using the existing speaking-state
+    tracker. If 120 seconds pass first, the line is dropped and the card stays.
+  - The line is said at most once per `result_id`, and only within R.10.7's
+    announcement conditions.
 - **Switches** are environment settings read by the running process, so a change
   takes effect at the next bot restart. Tests set them in-process.
   - `JARVIS_BRIEF_ENABLED=false`: the tool replies "The brief is turned off.", makes
@@ -1115,7 +1709,9 @@ on-request full brief for today suppress the scheduled one.
 - **Acceptance (S3-8).**
   - Each switch, including an empty `JARVIS_BRIEF_TIME`, behaves as stated.
   - A disconnect mid-read leaves no pending watcher, brief or request task
-    (`asyncio.all_tasks()` check).
+    (`asyncio.all_tasks()` check), and the slot is released.
+  - Mail worker threads are not asyncio tasks, so that check cannot see them. R.10.9's
+    single flight and its tests bound them.
 
 ### R.11 Prerequisites before P4 or P5 can be approved (items 19–23)
 
@@ -1180,11 +1776,24 @@ checker.
 - **Why.** The existing private-result sink applies only to private routes
   (`jarvis/agents/base.py:858–882`).
 - **Speech.** What P5 may speak is a separate decision, made when P5 is claimed.
+- **Sink guarantees (revision 3).** The existing sink
+  (`make_private_result_sink`, `jarvis/bot/pipeline.py:601`) emits generic Markdown
+  over whichever transport is active. P5's sink must instead meet four conditions:
+  - it delivers only to an eligible recipient (R.10.5);
+  - it renders typed literal text (R.10.16);
+  - it carries the actual acquired policy;
+  - it obeys D8's display-action permission (R.10.6) on every route.
+
+  With no eligible sink, the agent refuses before acquiring any mail. P5's manifest
+  names the changes in the agent loader, `jarvis/agents/base.py`,
+  `jarvis/agents/delegate.py` and the run log that enforce this.
 - **Acceptance.**
   - Injected instructions never reach the Supervisor's context, notices or outbound
     arguments.
   - The P5 injection check rejects actions that only the mail authorised.
   - A follow-up read that Larry himself asks for still works.
+  - A browser or unknown client gets no mail-derived answer, and no mail is read for
+    it.
 
 #### R.11.4 Mail runs log no content, on any route (item 22)
 
@@ -1203,9 +1812,26 @@ checker.
 #### R.11.5 Body retrieval reads text parts only; financial protection still applies (item 23)
 
 - **Body fetch.** P5 reads a body with `UID FETCH (BODYSTRUCTURE)`, then
-  `BODY.PEEK[<part>]<0.4096>`, for the first `text/plain` part only, or the first
-  `text/html` part converted to text. No attachment part is fetched. M3's 16 KB
+  `BODY.PEEK[<part>]<0.4096>`, for the first permitted text leaf only. M3's 16 KB
   full-message prefix is withdrawn.
+- **What counts as a permitted text leaf (revision 3).** A `text/plain` leaf, or a
+  `text/html` leaf that is converted to text, where:
+  - neither the leaf nor any ancestor has `Content-Disposition: attachment`;
+  - it does not descend from an attached `message/rfc822`.
+
+  MIME type alone does not make a part permitted.
+- **Structure limits.** `BODYSTRUCTURE` parsing is bounded to a depth of 8, at most 64
+  parts and 16 KiB of structure, and a malformed structure means "no body".
+  Transfer decoding is bounded to the fetched 4 KiB.
+- **Message references (revision 3).** The identity hash in R.10.13 is one-way, so
+  `mail_read` cannot recover a message from it.
+  - `mail_headlines` instead issues each message an ephemeral host reference: 128
+    random bits.
+  - The `mcp-mail` process maps each reference, in memory, to
+    `(account, UIDVALIDITY, UID)`, for 30 minutes and at most 200 entries.
+  - `mail_read` refuses a forged, expired or cross-account reference. It refuses a
+    reference whose `UIDVALIDITY` no longer matches at `EXAMINE`, or whose message
+    has been expunged.
 - **Allowlist.** For P5 only, this extends R.10.13's command allowlist and S1-2 with
   `UID FETCH (BODYSTRUCTURE)` and `UID FETCH (BODY.PEEK[<part>]<0.4096>)`.
 - **Tool.** `mail_read(message_ref, max_chars=2000)`.
@@ -1217,8 +1843,39 @@ checker.
   There is no search.
 - **D4 (b) does not override stricter protections.** A message caught by the existing
   financial/sensitive detection still refuses external continuation.
-- **Acceptance.** Fixtures cover attachment-first and mixed multipart messages.
-  Ordinary permitted mail and financially protected mail each follow their own rule.
+- **Acceptance.**
+  - Fixtures cover attachment-first and mixed multipart messages, text attachments
+    ahead of the body, descendants of an attached message, and malformed or deep
+    structures.
+  - References that are forged, expired, cross-account, from a changed
+    `UIDVALIDITY` or for an expunged message are each refused.
+  - Ordinary permitted mail and financially protected mail each follow their own
+    rule.
+
+#### R.11.6 P4 speech is built from the approved projection (revision 3, item 13)
+
+- **The risk.** A grounded model summary can still contain fields D5 does not allow
+  in speech, such as reminder text or locations.
+- **The rule.** P4's speech is built only from the typed projection D5 approves.
+  Under D5 (c), that is the `brief-counts` plus sender names, subjects and event
+  titles. It is never built from the summary text.
+- **The summary.** It may appear on the card, labelled model-written (R.11.1), but it
+  never enters TTS unless Larry gives a separate, explicit permission for
+  full-summary speech.
+- **Acceptance.** A grounded summary containing reminder-text and location canaries
+  shows them on the card, and neither reaches the speech text.
+
+#### R.11.7 P4 applies the same financial protection as P5 (revision 3, item 14)
+
+- **Detection.** Before P4's model call, the existing financial/sensitive detection
+  runs over the assembled digest text, in the brief-owned holder (R.10.4). If it
+  arms, P4 makes no external call, and the deterministic text is used.
+- **Originating request.** For an on-request brief, the originating turn's sensitivity
+  is read as a snapshot, without mutating the foreground holder. If that turn was
+  armed, the P4 policy is the stricter of the two.
+- **Exceptions.** Any exception to this needs an explicit decision.
+- **Acceptance.** The same financial header, sent through P4 and through P5, with
+  routing on and off, is refused for external processing in all four runs.
 
 ### R.12 Acceptance matrix (replaces R.8 and August §8 V1–V10)
 
@@ -1230,51 +1887,58 @@ do not prove Mac, account or provider behaviour.
 |---|---|---|---|
 | S1-1 | P1 | TLS verification (R.10.1) | Untrusted, expired and wrong-host certificates fail before `LOGIN`; a valid one succeeds |
 | S1-2 | P1 | Commands and read-only (R.10.13) | Only the permitted commands are recorded; `EXAMINE`, `BODY.PEEK` and `UID` forms only |
-| S1-3 | P1 | Deadlines (R.10.9) | Every slow case returns within the bound, with partial results kept |
-| S1-4 | P1 | Count semantics and windows (R.10.10, R.10.11) | Exact, lower-bound and unknown states as specified; never a false zero. A 24-hour window spans 24 elapsed hours across both 2026 New York transitions |
-| S1-5 | P1 | Header bounds (R.10.12) | Byte, line and parse limits hold; no attachment claim |
-| S1-6 | P1 | Stable identity (R.10.13) | No substitution under expunge or renumbering |
+| S1-3 | P1 | Deadlines and workers (R.10.9) | Every slow case returns within the bound, with partial results kept. Worker count stays bounded against a resolver that never returns. The latch is checked at each connection step; zero greetings read, zero `LOGIN` commands and zero publication after it is set |
+| S1-4 | P1 | Count semantics and windows (R.10.10, R.10.11) | Exact, lower-bound and unknown states as specified, with partial enumeration and no confirmed match giving `unknown`; never a false zero. Headlines are honest when enumeration is partial. A 24-hour window spans 24 elapsed hours across both 2026 New York transitions |
+| S1-5 | P1 | Byte budgets (R.10.12) | The per-phase and per-account budgets (lines never read past the remaining budget), response-count and duplicate limits, untagged responses cleared before each command, and line and parse limits hold; partial results are kept; no attachment claim |
+| S1-6 | P1 | Stable identity (R.10.13) | No substitution under expunge or renumbering; an incomplete enumeration gives `lower_bound` only with a confirmed arrival, otherwise `unknown` |
 | S1-7 | P1 | Policy envelope (R.10.2) | `call_classified` only; the envelope carries the D4 level and `mail:<account>` |
 | S1-8 | P1 | Child environment, names only (item 26) | With synthetic sentinel values, `build_child_env` for every server puts the `MAIL_*` names in `mcp-mail`'s environment only. A set `JARVIS_MAIL_ENABLED` (an `optional_env` setting) reaches `mcp-mail` and no other server. `env_scoping_enabled()` is true under the default configuration (`registry.py:238–253` has the disabled branch). A missing credential gives that account `not_configured`, or under D6 (a) fails `check_skills`. No value is printed. |
 | S1-9 | P1 | Content-free logs (R.10.3) | Header canaries are absent from log output |
 | S2-1 | P2 | Calendar wire schema (R.10.14) | Malformed or oversized messages are rejected |
 | S2-2 | P2 | Adapter binding (R.10.2) | Forged, stale, mismatched and replaced-session results cannot lower policy or substitute content |
-| S2-3 | P2 | Event semantics (R.10.14) | Cancelled, declined, tentative, recurring, overlapping, overnight and all-day cases as specified |
+| S2-3 | P2 | Event semantics and counts (R.10.14) | Cancelled, declined, tentative, recurring, overlapping, overnight and all-day cases as specified. Hidden events never inflate "and N more" or use the cap. Byte truncation keeps the counts accurate. Local days are computed in the request's `timezone`; optional echoes are checked when present |
 | S2-4 | P2 | No write API | `EKEventStore` appears only in `DeviceCalendar.swift`, and that file contains no `save(`, `remove(`, `commit(` or `requestWriteOnlyAccessToEvents` (the wider Swift sources already use `save(`/`remove(` elsewhere) |
 | S3-1 | P3 | Sensitivity isolation (R.10.4) | As specified |
 | S3-2 | P3 | Eligible recipient (R.10.5) | As specified, including Swift decoding of `data_policy` |
-| S3-3 | P3 | Durable delivery (R.10.7) | Concurrency, crash, ack and database-failure cases as specified |
+| S3-3 | P3 | Durable delivery (R.10.7) | Claim tokens and guarded transitions; host transitions commit their row change even when the slot is left as it is; one host-owned row per revision, written before the send; races (including an ack after a takeover claim, and a probe answer that arrives at once), the probe and `not_applied` binding, the claim and emission limits, the retry delay, outcomes, today-only suppression, window close (`abandoned`, `unconfirmed`, terminal slots untouched) and persistence failures as listed |
 | S3-4 | P3 | Arrival (R.10.8) | Only the correctly owned answer opens; none before WS-17's binding |
 | S3-5 | P3 | Dates (R.10.11, R.10.15) | DST and date-resolution cases; calendar-only scope makes zero mail and reminder calls |
 | S3-6 | P3 | Inert rendering (R.10.16) | Literal under both privacy levels |
 | S3-7 | P3 | Routing scorer (R.10.17) | Wrong or no-op calls fail; the correct stubbed call passes |
 | S3-8 | P3 | Lifecycle and switches (R.10.18) | As specified; no leftover tasks |
-| S3-9 | P3 | Disclosure and storage (R.10.3) | The property test, canaries absent from every store, and retention; an integrated canary across speech, LLM context (`append_to_context=False`) and conversation storage |
+| S3-9 | P3 | Disclosure and storage, checked against the chosen D5 option (R.10.3) | The property test, canaries absent from every store, and retention; an integrated canary across speech, LLM context (`append_to_context=False`) and conversation storage |
 | S3-10 | P3 | Migration `0035_brief` (item 25) | See below |
-| S3-11 | P3 | Display actions (R.10.6) | The chosen D4/D8 combination is tested at all four sinks. Under D8 (c), approved model processing is allowed and all four actions are blocked |
+| S3-11 | P3 | Display actions (R.10.6) | The chosen D4/D8 combination is tested through the shared predicate. Under D8 (c), approved model processing is allowed, and keyboard, context-menu and selection copy, share (including image share), export, a comparison share including the brief, direct store transfer, the supporting-display inventory, voice transfer, pointer transfer and every visible control are blocked, and the protected label still shows. A source scan finds `isProtectedLocal` and direct `dataPolicy` comparisons only in the predicate and the listed kept sites |
+| S3-12 | P3 | App ledger and announcement (R.10.7) | Close-before-retry, history eviction, lost ack, duplicate-while-pinned and probe answers behave as specified; an all-failed card is replaced or recreated by a later full one; at most one announcement per result; none for an all-failed scheduled revision, and the fixed failure line once for an all-failed request; none when suppressed or late; nothing claims the card is on screen before the app acknowledges it |
+| S3-13 | P3 | Export serialization (R.10.16) | Under D8 (b), the deterministic serializer gives a complete whole-result copy, share and export, and a section or paragraph share of a brief is refused; under D8 (c), all are blocked |
+| S3-14 | P3 | Retention without a client (R.10.3) | A running bot with no eligible client crosses the retention boundary, and the rows are purged |
 | M1-1 | P1 | Environment on the Mac | A names-only preflight prints, for each MCP server, whether each `MAIL_*` name is forwarded (yes or no, never a value) and the effective `JARVIS_ENV_SCOPING_ENABLED`. Only `mcp-mail` says yes, and scoping is on |
 | M1-2 | P1 | Unread preserved (old V3) | A message noted as unread in each account's webmail is still unread after a headers read |
 | M1-3 | P1 | Accounts reachable | bellsouth.net with its secure mail key and Gmail with its app password each report `ok`, or a specific status code |
 | M2-1 | P2 | Permission | The Mortimer app raises the calendar prompt; denial and revocation are handled as specified |
 | M2-2 | P2 | Parity | One test week (recurring, all-day, overnight, and Google if O1 says it is there) matches Calendar.app |
 | M3-1 | P3 | Live routing | `RUN_LIVE=1` eval: aggregate ≥ 90 %, and the brief score recorded |
-| M3-2 | P3 | Brief on request | A card arrives (a card until WS-17's binding), with the fixed spoken line under D5 (a); its facts match the sources |
+| M3-2 | P3 | Brief on request | The tool says "Putting your brief together."; a card arrives (a card until WS-17's binding); the spoken line comes only after the app applies the card; its facts match the sources |
 | M3-3 | P3 | Brief on schedule | With the time set two minutes ahead and a restart, exactly one card arrives; a reconnect brings no second |
 | M3-4 | P3 | Switches | Each switch off, and an empty `JARVIS_BRIEF_TIME`, after a restart |
 | M3-5 | P3 | Browser console | A web-console session gets no brief and causes no source call |
 
-**S3-10 in full.** `tests/unit/test_db.py` checks the migration ids in two orders.
-Appending `0035_brief` after `0036` in `MIGRATIONS` separates them:
+**S3-10 in full (revision 3).** `SELECT id FROM migrations` without `ORDER BY` does
+not return insertion order. Claude reproduced the real table shape offline: with
+`0036` inserted before `0035`, the query returned `0035, 0036`, through SQLite's
+covering primary-key index. So:
 
-- **Application order.** `EXPECTED_MIGRATION_IDS` is compared with what
-  `run_migrations()` returns on a fresh database (`:75`, `:88`), and with
-  `SELECT id FROM migrations` read in insertion order (`:92`). Both are list order, so
-  `EXPECTED_MIGRATION_IDS` gains `0035_brief` last, after `0036`.
-- **Sorted order.** `:117` compares `SELECT id FROM migrations ORDER BY id`. It must
-  compare against `sorted(EXPECTED_MIGRATION_IDS)`, where `0035_brief` comes before
-  `0036_skill_step_check_receipts`.
-- **Upgrade lists** (`:110–115`, `:464–470`) gain `0035_brief` at the end.
-- **Tables.** `EXPECTED_TABLES` (`:18`, asserted at `:76`) gains `brief_deliveries`.
+- **Application order** is checked only against what `run_migrations()` returns: the
+  fresh-database runs (`:75`, `:88`) and the upgrade lists (`:110–115`, `:464–470`).
+  `EXPECTED_MIGRATION_IDS` (`:35`) keeps list order, with `0035_brief` last, so its
+  list order is no longer its sorted order.
+- **Stored ids** are compared in sorted order. The unordered query at `:91` gains
+  `ORDER BY id`, and its assertion (`:92`) and `:117`'s both compare against
+  `sorted(EXPECTED_MIGRATION_IDS)`. A test that intends insertion order says
+  `ORDER BY rowid`. The set comparison at `:516` needs no change.
+- **Tables.** `EXPECTED_TABLES` (`:18`, asserted at `:76`) gains `brief_slots` and
+  `brief_results`.
+- **Run it against the real table**, with `0035` appended after `0036`.
 
 Test each of these:
 - a fresh database;
@@ -1297,8 +1961,8 @@ are claimed. Old V4–V6 become P5's K4, injection and routing checks.
   - the arrival change in `ConversationThreadView.swift` (R.10.8);
   - in-place replacement by `result_id` in `Stores/WorkspaceStore.swift` and
     `App/ResponseResultRouter.swift` (R.10.7);
-  - `brief/ack` handling in the result-acknowledgement portion of
-    `jarvis/bot/pipeline.py` (R.10.7);
+  - `brief/ack` and `brief/not_applied` handling in the result-acknowledgement
+    portion of `jarvis/bot/pipeline.py` (R.10.7);
   - the typed `brief` kind (`DisplayPayload` and its renderer, R.10.16);
   - the `calendar/request` case in `AppMessageRouter.swift`.
 - **WS-21 (Claude; landed, Mac acceptance open)** owns `SupportingDisplayCoordinator.swift`.
