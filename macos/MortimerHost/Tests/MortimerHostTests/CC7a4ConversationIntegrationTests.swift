@@ -150,10 +150,13 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
     @discardableResult
     private func deliver(_ f: Fixture, _ fields: [String: Any]) async throws -> WorkspaceResult {
         let key = fields["subject_key"] as! String
-        let ts = fields["ts"] as! Double
+        let expected = try JSONDecoder().decode(DisplayPayload.self,
+            from: JSONSerialization.data(withJSONObject: fields))
         try f.transport.emit(["type": "display", "display": fields])
-        try await wait("retained display payload") { f.workspace.results.contains { $0.payload.subjectKey == key && $0.payload.ts == ts } }
-        let result = try XCTUnwrap(f.workspace.results.first { $0.payload.subjectKey == key })
+        // Source capability can change without changing aggregate fetch time.
+        // Await the complete decoded payload, not a previous equal timestamp.
+        try await wait("retained display payload") { f.workspace.results.contains { $0.payload == expected } }
+        let result = try XCTUnwrap(f.workspace.results.first { $0.payload == expected })
         try await wait("published weather identity/freshness") {
             f.transport.inventories.last?.revision == f.workspace.consoleRevision
                 && f.transport.inventories.last?.data["results"]?.arrayValue?.contains {
@@ -261,6 +264,9 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         XCTAssertEqual(f.workspace.results.count, 1); XCTAssertEqual(f.workspace.results[0].payload.ts, fetched)
         let originalReference = try XCTUnwrap(f.conversation.cachedReferences.first)
         XCTAssertTrue(originalReference.text.contains(Date(timeIntervalSince1970: fetched).formatted(date: .omitted, time: .shortened)))
+        // This manually supplies a newer complete-source refresh in the same
+        // run. It does not prove the aggregate clock advances on mixed cached
+        // weather/new radar; that minimum-clock case is checked separately.
         let newerFetch = Date().timeIntervalSince1970 - 125
         let refreshed = try await deliver(f, weather(aKey, city: "Folly Beach", ts: newerFetch,
             runID: "paired-reuse", body: "Genuinely refreshed public weather"))
@@ -272,6 +278,45 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         XCTAssertTrue(updatedReference.text.contains(Date(timeIntervalSince1970: newerFetch).formatted(date: .omitted, time: .shortened)))
         XCTAssertFalse(updatedReference.text.contains(Self.sourceCanary))
         XCTAssertEqual(f.workspace.results.count, 1); XCTAssertEqual(f.workspace.results[0].payload.ts, newerFetch)
+    }
+
+    func testMixedCachedWeatherAndFetchedRadarPreserveAggregateClockAndReference() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        let f = try await fixture(); defer { f.router.stop() }
+        let weatherFetch = Date().timeIntervalSince1970 - 250
+        var first = weather(aKey, city: "Folly Beach", ts: weatherFetch)
+        var weatherOnly = first["weather_source"] as! [String: Any]
+        weatherOnly.removeValue(forKey: "radar"); first["weather_source"] = weatherOnly
+        let a = try await deliver(f, first)
+        try await user(f, "Weather and radar again"); try await run(f, "mixed-radar-origin")
+        let weatherHit = try await reuse(f, key: aKey, runID: "mixed-radar-origin")
+        XCTAssertEqual(weatherHit.code, "cache_hit")
+        let originalReference = try XCTUnwrap(f.conversation.cachedReferences.first)
+        XCTAssertTrue(originalReference.text.hasPrefix("Reopened"))
+        let radarMiss = try await reuse(f, key: aKey, runID: "mixed-radar-origin", tool: "get_weather_radar")
+        XCTAssertEqual(radarMiss.code, "cache_incomplete")
+        XCTAssertEqual(f.conversation.cachedReferences.count, 1)
+
+        // Simulate the real merger's mixed-source result: the new radar half
+        // cannot renew the older cached weather half's aggregate provenance.
+        let radarFetch = Date().timeIntervalSince1970 - 5
+        var merged = weather(aKey, city: "Folly Beach", ts: weatherFetch,
+            runID: "mixed-radar-origin", body: "Cached weather with newly fetched radar")
+        var mixedSource = weatherOnly
+        mixedSource["radar"] = ["tiles": ["https://example.test/new-radar.png"], "ts": radarFetch]
+        merged["weather_source"] = mixedSource
+        merged["fresh_until"] = weatherFetch + 900
+        let refreshed = try await deliver(f, merged)
+        XCTAssertEqual(refreshed.id, a.id); XCTAssertEqual(f.workspace.results.count, 1)
+        XCTAssertEqual(refreshed.payload.ts, weatherFetch); XCTAssertEqual(refreshed.payload.freshUntil, weatherFetch + 900)
+        XCTAssertEqual(refreshed.payload.weatherSource?["weather"], a.payload.weatherSource?["weather"])
+        XCTAssertEqual(f.conversation.cachedReferences, [originalReference], "Unadvanced source clock is not an Updated event")
+        let radarHit = try await reuse(f, key: aKey, runID: "mixed-radar-origin", tool: "get_weather_radar")
+        XCTAssertEqual(radarHit.code, "cache_hit")
+        XCTAssertEqual(radarHit.data?["ts"], .number(weatherFetch)); XCTAssertEqual(radarHit.data?["fresh_until"], .number(weatherFetch + 900))
+        XCTAssertEqual(radarHit.data?["weather_source"]?["radar"]?["tiles"], .array([.string("https://example.test/new-radar.png")]))
+        XCTAssertEqual(f.conversation.cachedReferences, [originalReference])
+        XCTAssertEqual(f.workspace.results[0].id, a.id); XCTAssertEqual(f.transport.connectionAttempts, 0)
     }
 
     func testClosedWeatherCardCannotResurrectCacheAndOutputKeepsHistory() async throws {

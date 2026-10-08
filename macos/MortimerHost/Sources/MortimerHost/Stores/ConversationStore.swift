@@ -88,8 +88,9 @@ final class ConversationStore {
                                  runID: String?, now: Date, text: String, updating: Bool = false) {
         guard !cachedReferences.contains(where: { $0.id == requestID }) else { return }
         if let runID, let index = cachedReferences.firstIndex(where: { $0.runID == runID }) {
-            // A paired cached/fetched run keeps one line at its original
-            // position, updating that same result's final refresh outcome.
+            // A newer source refresh in the same run keeps one line at
+            // its original position. A mixed source retaining the older
+            // aggregate fetch time keeps its original cached reference.
             let existing = cachedReferences[index]
             guard updating, existing.resultID == result.id else { return }
             cachedReferences[index] = CachedResultReference(id: existing.id, resultID: existing.resultID,
