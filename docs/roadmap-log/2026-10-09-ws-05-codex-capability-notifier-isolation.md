@@ -2,7 +2,7 @@
 date: 2026-10-09
 system: codex
 rows: [WS-05]
-prs: [200, 198]
+prs: [201, 200, 198]
 ---
 
 Continue the existing #199 capability-fixture assignment on the same branch.

@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status:** LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and this follow-up (source `08c0635`, after-merge state). Approved a5b6f88→ce6cde8 passed WS-17’s offline twelve-check comparison; later CI exposed a parent-notifier race in the dry-child test. This test-only isolation repair passes 204 focused cases. Revised baseline review/approval, live model acceptance and rollout remain gated.
+**Status:** LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and PR #201 (source `08c0635`, after-merge state). Approved a5b6f88→ce6cde8 passed WS-17’s offline twelve-check comparison; later CI exposed a parent-notifier race in the dry-child test. This test-only isolation repair passes 204 focused cases. Revised baseline review/approval, live model acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -731,7 +731,7 @@ in 14.92s. Independent Codex static review approves this bounded fixture change,
 without approving a new baseline or executing the reported tests.
 
 [Exact receipt](../acceptance/model-use-enhancements/receipts/mar-capability-notifier-isolation-2026-10-09.json).
-Publish as a separate reviewable fixture PR. Larry’s new baseline/reference
+Published as separate reviewable [PR #201](https://github.com/Larryfix71566/jarvis-voice-ai/pull/201). Larry’s new baseline/reference
 approval remains required before another independent comparison. No new source
 was sent to Claude; narrow `065d500`/`748b1e5` authorization excludes this follow-up.
 The prior successful VM comparison and failed CI remain separate evidence.
