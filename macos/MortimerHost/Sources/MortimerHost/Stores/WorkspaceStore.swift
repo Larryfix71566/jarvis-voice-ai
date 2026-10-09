@@ -105,13 +105,6 @@ final class WorkspaceStore {
                                  unread: unreadIDs, active: activeID)
     }
 
-    /// The Recents number and card for each result that has one, keyed by
-    /// result. Shared by both inventory forms so voice numbers always
-    /// match the menu.
-    private var recentsByID: [UUID: WorkspaceRecents.Entry] {
-        Dictionary(uniqueKeysWithValues: recents.entries.map { ($0.id, $0) })
-    }
-
     /// Resolve a voice or pointer result reference: a result UUID, or
     /// (CC7a.3) a Recents number or subject. A UUID must name a result in
     /// the workspace; a number or subject resolves against Recents only.
@@ -127,26 +120,15 @@ final class WorkspaceStore {
     /// Snapshot consumed by the command-console router. IDs are stable for the
     /// session; the count is a conservative revision for inventory checks.
     var consoleInventory: [String: Any] {
-        let visibleResults = results.filter { !$0.payload.isProtectedLocal }
-        let visibleIDs = Set(visibleResults.map(\.id))
-        let recentsByID = recentsByID
-        return ["revision": inventoryRevision,
-         "mode": showsConversation ? "conversation" : (showsSkills ? "skills" : (showsMemoryGraph ? "memory" : (showsAtlas ? "atlas" : (showsWorkflows ? "workflows" : "results")))),
-         "active_result_id": activeID.flatMap { visibleIDs.contains($0) ? $0.uuidString : nil } as Any,
-         "focused_panel_id": NSNull(),
-         "results": visibleResults.enumerated().map { index, result in
-             ["id": result.id.uuidString,
-              "title": String((result.payload.title ?? "Result").prefix(120)),
-              "index": index,
-              "pinned": pinnedIDs.contains(result.id),
-              "number": recentsByID[result.id]?.number as Any,
-              "kind": recentsByID[result.id]?.card.kind ?? ConversationThread.card(result).kind,
-              "subject": String((recentsByID[result.id]?.card.subject ?? ConversationThread.card(result).subject).prefix(120)),
-              "unread": unreadIDs.contains(result.id),
-              "can_connections": MemoryGraphSource.imageURL(result.payload) != nil]
-         },
-         "comparison": comparisonID.flatMap { visibleIDs.contains($0) ? $0.uuidString : nil } as Any,
-         "atlas": ["available": true]]
+        // Keep this legacy Foundation shape, but derive its rows from the
+        // same projection as the requested/published Codable inventory.
+        guard let encoded = try? JSONEncoder().encode(consoleInventoryJSON),
+              let inventory = try? JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {
+            return [:]
+        }
+        let legacyFields: Set<String> = ["revision", "mode", "active_result_id",
+                                        "focused_panel_id", "results", "comparison", "atlas"]
+        return inventory.filter { legacyFields.contains($0.key) }
     }
 
     /// Codable form sent to the Supervisor for voice target resolution. This
@@ -161,13 +143,24 @@ final class WorkspaceStore {
         // past the Recents bound); `kind` and `subject` are the card's, so
         // "open number 3" and "the Folly Beach weather" resolve to the
         // same entry Larry sees.
-        let recentsByID = recentsByID
-        let resultValues: [JSONValue] = visibleResults.enumerated().map { index, result in
+        let listing = recents
+        let recentsByID = Dictionary(uniqueKeysWithValues: listing.entries.map { ($0.id, $0) })
+        let indexedVisibleByID = Dictionary(uniqueKeysWithValues: visibleResults.enumerated().map {
+            ($0.element.id, (index: $0.offset, result: $0.element))
+        })
+        // The wire ceiling is a projection only. Oldest-first prefixing can
+        // omit every currently numbered result when retained history grows.
+        // Keep the actual public menu order first, then the newest Older
+        // entries, without renumbering or changing any retained store state.
+        let projectedResults = (listing.entries + listing.olderEntries)
+            .compactMap { indexedVisibleByID[$0.id] }.prefix(100)
+        let resultValues: [JSONValue] = projectedResults.map { indexed in
+            let result = indexed.result
             let card = recentsByID[result.id]?.card ?? ConversationThread.card(result)
             return .object([
                 "id": .string(result.id.uuidString),
                 "title": .string(String((result.payload.title ?? "Result").prefix(120))),
-                "index": .number(Double(index)),
+                "index": .number(Double(indexed.index)),
                 "number": recentsByID[result.id]?.number.map { .number(Double($0)) } ?? .null,
                 "kind": .string(card.kind),
                 "subject": .string(String(card.subject.prefix(120))),
@@ -215,7 +208,8 @@ final class WorkspaceStore {
             "mode": .string(mode),
             "active_result_id": activeValue,
             "focused_panel_id": .null,
-            "results": .array(Array(resultValues.prefix(100))),
+            "results": .array(resultValues),
+            "results_omitted": .number(Double(max(0, visibleResults.count - resultValues.count))),
             "panels": .array(Array(panelValues.prefix(6))),
             "screens": .array(Array(screenValues.prefix(8))),
             "selection": selection,

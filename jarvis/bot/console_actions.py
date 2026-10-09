@@ -158,18 +158,25 @@ def _disclosed_inventory(data: dict, *, scope: str | None = None) -> tuple[dict,
         encoded = json.dumps(copied, separators=(",", ":"), ensure_ascii=True)
     except (ValueError, TypeError, OverflowError):
         return None
-    rows = copied.get("results")
-    if not isinstance(rows, list):
+    prior_omitted = copied.get("results_omitted", 0)
+    prior_fields = copied.get("omitted_fields", [])
+    if (type(prior_omitted) is not int or prior_omitted < 0
+            or not isinstance(prior_fields, list)
+            or any(not isinstance(field, str) for field in prior_fields)):
         return None
     if scope != "results" and len(encoded) <= 12000:
         return copied, encoded
+    rows = copied.get("results")
+    if not isinstance(rows, list):
+        return None
     if scope in _INVENTORY_SCOPE_FIELDS:
         requested_fields = _INVENTORY_SCOPE_FIELDS[scope]
         if not requested_fields.intersection(copied):
             return None  # This native client supplies no data for that scope.
         fields = requested_fields | {"revision"}
         copied = {key: value for key, value in copied.items() if key in fields} | {
-            "scope": scope, "omitted_fields": sorted(set(data) - fields),
+            "scope": scope, "omitted_fields": sorted(set(prior_fields) | (set(data) - fields - {
+                "scope", "omitted_fields", "results_omitted"})),
         }
         encoded = json.dumps(copied, separators=(",", ":"), ensure_ascii=True)
         return (copied, encoded) if len(encoded) <= 12000 else None
@@ -184,8 +191,9 @@ def _disclosed_inventory(data: dict, *, scope: str | None = None) -> tuple[dict,
     older = [row for row in projected if type(row.get("number")) is not int]
     copied = {key: value for key, value in copied.items() if key in fields} | {
         "scope": "results", "results": numbered,
-        "results_omitted": len(older),
-        "omitted_fields": sorted(set(data) - fields - {"results"}),
+        "results_omitted": prior_omitted + len(older),
+        "omitted_fields": sorted(set(prior_fields) | (set(data) - fields - {
+            "results", "scope", "omitted_fields", "results_omitted"})),
     }
     encoded = json.dumps(copied, separators=(",", ":"), ensure_ascii=True)
     # Never omit a numbered row: doing so would make subject ambiguity and

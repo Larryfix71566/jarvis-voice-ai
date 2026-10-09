@@ -89,9 +89,10 @@ from jarvis.bot.status_tool import build_system_status_tool
 from jarvis.bot.weather_tool import build_local_weather_tool
 from jarvis.bot.device_location import DeviceLocation, resolve_location, summarize_location
 from jarvis import ambient_weather
-from jarvis.bot.console_actions import build_console_action_tool
+from jarvis.bot.console_actions import build_console_action_tool, _disclosed_inventory
 from jarvis.bot.console_protocol import (
     ALLOWED_ACTIONS,
+    MAX_MESSAGE,
     validate_inventory,
     validate_ready,
 )
@@ -819,6 +820,14 @@ def build_pipeline(
     _, list_screens_handler = build_list_screens_tool()
 
     async def _send_ui_message(message: dict) -> None:
+        if message.get("type") == "console/request":
+            pending = console_waiters.get(message.get("request_id"))
+            if pending is not None:
+                # Request metadata lives only as long as this existing waiter;
+                # it never becomes another inventory or selection owner.
+                pending._mortimer_console_action = message.get("action")
+                args = message.get("args")
+                pending._mortimer_inventory_scope = args.get("scope") if isinstance(args, dict) else None
         await send_app_message(transport, message)
 
     _, ui_control_handler = build_ui_control_tool(_send_ui_message)
@@ -1955,8 +1964,28 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 if (uuid.UUID(str(msg.get("session_id"))) != uuid.UUID(runtime.session_id)
                         or uuid.UUID(str(msg.get("generation"))) != uuid.UUID(console_generation)):
                     return
-                if len(json.dumps(msg, ensure_ascii=True)) > 32 * 1024:
+                future = console_waiters.get(request_id)
+                if future is None or future.done():
                     return
+                # Use the shared protocol ceiling and actual compact UTF-8,
+                # not Python's spaced/ASCII-expanded debug spelling. An
+                # inventory may contain more native metadata than the voice
+                # disclosure needs; reduce only that code through the same
+                # bounded disclosure that the tool actually returns.
+                encoded = json.dumps(msg, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+                if len(encoded) > MAX_MESSAGE:
+                    expected_action = getattr(future, "_mortimer_console_action", None)
+                    if (msg.get("code") != "inventory" or not isinstance(msg.get("data"), dict)
+                            or expected_action not in (None, "inventory")):
+                        return
+                    disclosed = _disclosed_inventory(msg["data"],
+                        scope=getattr(future, "_mortimer_inventory_scope", None))
+                    if disclosed is None:
+                        return
+                    msg = {**msg, "data": disclosed[0]}
+                    encoded = json.dumps(msg, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+                    if len(encoded) > MAX_MESSAGE:
+                        return
             except (ValueError, TypeError, OverflowError):
                 return
             if (not isinstance(msg.get("status"), str)
@@ -2011,13 +2040,31 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 return
             if msg.get("type") == "console/inventory":
                 try:
+                    if type(msg.get("version")) is not int or msg["version"] != 1:
+                        raise ValueError("unsupported console inventory")
+                    if not isinstance(msg.get("data"), dict):
+                        raise ValueError("console inventory data must be an object")
+                    # Check the complete original envelope before projecting
+                    # labels: no unknown field, stale identity or invalid
+                    # revision may be hidden by reducing its data object.
+                    envelope = validate_inventory({**msg, "data": {}},
+                        session_id=runtime.session_id, generation=console_generation)
+                    encoded = json.dumps(msg, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+                    if len(encoded) > MAX_MESSAGE or len(repr(msg)) > MAX_MESSAGE:
+                        disclosed = _disclosed_inventory({**msg["data"], "revision": envelope["revision"]})
+                        if disclosed is None:
+                            raise ValueError("console inventory cannot be disclosed within its size limit")
+                        msg = {**msg, "data": disclosed[0]}
+                        encoded = json.dumps(msg, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+                    if len(encoded) > MAX_MESSAGE:
+                        raise ValueError("console inventory exceeds size limit")
                     snapshot = validate_inventory(msg, session_id=runtime.session_id,
                                                  generation=console_generation)
                     data = dict(snapshot["data"])
                     data["revision"] = snapshot["revision"]
                     console_session.update_inventory(data)
                     console_inventory_revision["value"] = snapshot["revision"]
-                except ValueError as exc:
+                except (ValueError, TypeError, OverflowError) as exc:
                     _log_console_validation_failure("inventory", exc)
                 return
             if msg.get("type") != "console/request":
