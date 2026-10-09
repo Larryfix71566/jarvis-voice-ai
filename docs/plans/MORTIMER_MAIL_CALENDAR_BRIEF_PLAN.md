@@ -1,9 +1,9 @@
 # Mortimer — Mail, Calendar and the Daily Brief (read-only)
 
 **Status:** DRAFT. Written 2026-08-26 and reconciled with main `e7b099b` on
-2026-10-07 (§R, Claude). Revision 2 answers Codex's review of `0de8a2e` (R.0), and
-revision 3 answers its review of `5e37696` (R.0a). §R is authoritative and waits on
-Larry's decisions D1–D9. The August text after §R is history: R.9 says which parts
+2026-10-07 (§R, Claude). Revision 2 answers Codex's review of `0de8a2e` (R.0),
+revision 3 its review of `5e37696` (R.0a), and revision 4 its review of `b3d7c0f`
+(R.0b). §R is authoritative and waits on Larry's decisions D1–D9. The August text after §R is history: R.9 says which parts
 remain background, and R.10–R.12 govern wherever they differ. Implements
 roadmap track **T5** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.5), tracked as
 WS-13. Read scopes only.
@@ -24,6 +24,32 @@ Nothing here is implemented, tested or accepted. No mailbox, calendar, provider 
 credential was touched. Approval works in two steps: first Larry answers D1–D9
 (R.5); then each increment in R.6 is claimed, built, cross-reviewed and accepted on
 its own. This section does not authorize implementation.
+
+### R.0b Revision 4 (2026-10-07, after Codex's review of `b3d7c0f`)
+
+Codex reviewed revision 3 at `b3d7c0f`, with main at `99993eb`. It found the earlier
+findings resolved and asked for seven amendments and two clarifications: four in
+P3's delivery (the result history, monotonic revisions, the claimable `open` states
+and speech), one in P1's source status, one in P2's dependency on the eligibility
+foundation, and one acceptance wording. Main has since moved to `51dcdee` (#197,
+WS-17's inventory correction); R.10.6 notes the two `WorkspaceStore.swift` lines it
+moved, and no other cited line changed. Its disposition: P1 is ready after the status
+correction, P2 once the eligibility dependency is assigned, and P3 after the ledger,
+reclaim and speech amendments. P4/P5 have no further blocker and stay separately
+gated. D1–D9 remain unanswered.
+
+| Item | Resolution |
+|---|---|
+| 1 Ledger eviction is not "never applied" | R.10.7: a result history keyed by `result_id`, with scheduled entries never evicted before they expire; probes answer `ack`, `not_applied` or `unknown`; an `unknown` from the installation the result went to means never received, because eviction cannot cause it inside the horizon and the history cannot be lost without the installation's `instance_id` |
+| App installation identity (added while answering 1) | R.10.5, R.10.7: `brief/hello` carries a persisted `instance_id`; rows record `recipient_instance`; `not_applied` and `unknown` are evidence only from that instance, an ack is accepted from any eligible session of it, and a probe goes to `recipient_session` while it is connected. A different installation's answers count as no answer, so a second build or a reinstall ends the day `unconfirmed` rather than duplicated |
+| 2 Monotonic revisions | R.10.7: the app keeps the greatest applied revision; an older revision is recorded as superseded, never applied, never recreates, never notifies and is not acknowledged |
+| 3 Claimable `open` states | R.10.7: the claim table lists every case by the current row's state: none, `not_applied`, `all_failed` after the retry delay, `emitted` through the probe path |
+| 4 Exhaustion is `partial` only with trustworthy results | R.10.12: a per-phase table; `failed` with count `unknown` before a trustworthy count or validated headlines exist; an exact zero is `ok`. R.10.7's outcome rests on it |
+| 5 One D5 (a) sentence | D5 (a), R.4, R.10.3, R.10.7: "Your brief arrived." for every outcome, once per result on its first acknowledged revision; never "on screen" |
+| 6 Eligibility before P2 | R.10.5, R.6: the transport capture, session registry and predicate are `jarvis/bot/eligible_sessions.py`, built in P2 with `calendar_events_v1`; P3 adds `protected_display_v1`; S2-5 |
+| 7 Announcement timeout | R.10.7: the ack-timeout limit applies to requested results; scheduled probe acknowledgements are governed by the window and suppression |
+| On-request binding | R.10.5: the asking session is the recipient and must itself be eligible; a browser request while a native session is connected is tested (S3-2, M3-5) |
+| Result-level history | R.10.7: revision and dismissal history live with the result, independent of per-revision entries |
 
 ### R.0a Revision 3 (2026-10-07, after Codex's review of `5e37696`)
 
@@ -74,7 +100,7 @@ D1–D9 remain unanswered.
 | 5 Aggregate mail bytes | R.10.12: enforced per-phase and per-account budgets, response-count and duplicate limits, cleared untagged responses |
 | 6 Zero matches and ordering | R.10.10: `unknown` when partial with no confirmed match; honest partial headlines |
 | 7 Calendar counts and byte size | R.10.14: filter and sort before truncation; visible and hidden totals; per-day counts; byte truncation |
-| 8 Idempotency after dismissal | R.10.7: the app's outcome-aware applied-result ledger, which also answers probes; announcement only after the app's ack of a full or partial revision, at most once per result across retries |
+| 8 Idempotency after dismissal | R.10.7: the app's outcome-aware applied-result ledger, which also answers probes; announcement only after the app's ack, at most once per result across retries. *Revision 4 replaced the ledger with a per-result history and made the announcement outcome-independent (R.0b).* |
 | 9 D8 (c) below the controls | R.10.6: one shared predicate, including selection, system copy and the store boundary |
 | 10 Serialization for exports | R.10.16: a deterministic `brief` serializer in `WorkspaceResultExport` |
 | 11 Migration assertion order | R.12 S3-10 |
@@ -87,7 +113,7 @@ D1–D9 remain unanswered.
 | Calendar binding | R.10.2: binding from the pending request and transport; echoes optional; overlap validated |
 | S3-11 in P3's range | R.6 (now S3-1 to S3-14) |
 | D9 (b) classification | R.10.3, D9 |
-| Eligibility after a browser session | R.10.5: a brief-specific recipient registry |
+| Eligibility after a browser session | R.10.5: a brief-specific recipient registry. *Revision 4 made it the shared `eligible_sessions.py`, built in P2 (R.0b).* |
 
 ### R.0 Revision 2 (2026-10-07, after Codex's review of `0de8a2e`)
 
@@ -282,7 +308,7 @@ The reconciled design therefore makes four changes:
 | Reminders | D4 level, source `reminders:local` (P3 contract; without it, confidential) | The host brief assembler |
 | Digest and deterministic brief text | strictest of the inputs | The protected card; never a model in P1–P3 |
 | Card (typed kind `brief`, R.10.16) | `data_policy` = digest level, set by the emitter | Only an eligible native recipient (R.10.5). When not `approved_external`, the existing native rule blocks copy, share, export and supporting-display transfer; D4 (b) is covered by R.10.6 and D8 |
-| Speech | D5 | A fixed sentence by default ("Your brief is on screen", or for an all-failed request "I couldn't reach the brief's sources; the card has the details."), spoken only after the app applies the card (R.10.7). Counts and times only under a D5 (b) declassification; names, subjects or titles only under D4 (b) with D5 (c). Always `append_to_context=False` |
+| Speech | D5 | One fixed sentence by default ("Your brief arrived.", whatever the outcome), spoken once per result after the app applies the card (R.10.7). Counts and times only under a D5 (b) declassification; names, subjects or titles only under D4 (b) with D5 (c). Always `append_to_context=False` |
 | Supervisor tool result | fixed rule (R.10.3) | Always the fixed acknowledgement, returned before acquisition. No derived value in any option |
 | Logs and run log | fixed rule (R.10.3) | Content-free: event names, states, source-status codes and durations only. No counts, because `log_search` exposes bot logs to agents |
 | `brief_slots`, `brief_results` (`0035_brief`, R.10.7) | D9 | Delivery bookkeeping and source-status codes. Under D9 (b) only, `brief_results` adds the typed `brief-counts`, with their classification kept in a `policy` column; they are readable only by the brief module, for a late announcement of the same result (R.10.7). No `digest_json`, headers, titles or text |
@@ -379,8 +405,10 @@ answer. Record the choice in this plan when it is made.
 - **D5 — What the spoken line may contain.** Speech goes to an external provider
   (A4). The Supervisor tool result is always the fixed acknowledgement, whichever
   option is chosen (R.10.3).
-  - (a) Nothing derived. A fixed sentence ("Your brief is on screen"); every fact
-    stays on the protected card. *Recommended under D4 (a).*
+  - (a) Nothing derived. One fixed sentence, "Your brief arrived.", for every
+    outcome, scheduled or requested, said once per result after the app applies the
+    card (R.10.7); every fact, including which sources failed, stays on the
+    protected card. *Recommended under D4 (a).*
   - (b) Declassify the typed `brief-counts` allowlist only (R.10.3). Numbers and clock
     times, never text. Larry's approval here is what makes it legitimate.
   - (c) Adds sender names, subjects and event titles. This needs D4 (b).
@@ -407,10 +435,12 @@ answer. Record the choice in this plan when it is made.
   - Catch-up window: proposed 120 minutes.
   - When missed:
     - (a) nothing. *Recommended.*
-    - (b) a notice with no content, queued when the day's slot ends `abandoned` with
+    - (b) a notice with no content ("Today's scheduled brief may not have
+      arrived."), queued when the day's slot ends `abandoned` or `unconfirmed` with
       no revision ever applied (R.10.7).
-  - An on-request brief for today (scope `brief`, not calendar-only) that the app
-    applies with outcome `full` or `partial` (R.10.7):
+  - An on-request brief for today (scope `brief`, not calendar-only) that read at
+    least one source and that the app applies with outcome `full` or `partial`
+    (R.10.7):
     - (a) suppresses that day's scheduled brief. *Recommended.*
     - (b) is independent of it.
   - Fixed defaults stated for approval: a brief with outcome `full` or `partial`
@@ -475,8 +505,13 @@ in R.10 and the acceptance rows in R.12.
     - `.env.example`.
   - Acceptance: S1-1 to S1-9, M1-1 to M1-3.
 - **P2 — Calendar source**, per D3. The manifest below is for D3 (a).
-  - Contracts: R.10.2 (calendar part) and R.10.14.
+  - Contracts: R.10.2 (calendar part), R.10.5 (the shared foundation) and R.10.14.
   - Files:
+    - The shared eligibility foundation (R.10.5; revision 4): the transport and
+      peer capture in `jarvis/bot/bot.py`, and `jarvis/bot/eligible_sessions.py`
+      (the session registry, capability negotiation and the predicate), with
+      `calendar_events_v1` as its first capability. P3 depends on this and adds
+      only `protected_display_v1`.
     - JarvisKit message types for `calendar/hello`, `calendar/request` and
       `calendar/result`.
     - MortimerHost `DeviceCalendar` and where it is constructed.
@@ -484,37 +519,39 @@ in R.10 and the acceptance rows in R.12.
     - The usage string in `bundle.sh` (human-only).
     - Bot side: `jarvis/bot/device_calendar.py` (`CalendarSourceAdapter`), registered
       on both client-message paths.
-  - Acceptance: S2-1 to S2-4, M2-1, M2-2.
-- **P3 — Deterministic brief and delivery.**
+  - Acceptance: S2-1 to S2-5, M2-1, M2-2. The integrated checks (S2-2, M2-2) run
+    through the production eligibility path, not a test stub.
+- **P3 — Deterministic brief and delivery.** Depends on P2's eligibility foundation.
   - Contracts: R.10.3–R.10.8 and R.10.15–R.10.18.
   - Files:
     - `jarvis/brief.py`: M10's assembly, revised by R.10, plus the deterministic
       renderer that builds the typed `brief` payload.
-    - `jarvis/bot/brief_tool.py`, `jarvis/bot/brief_watcher.py` and
-      `jarvis/bot/brief_recipients.py` (R.10.5).
+    - `jarvis/bot/brief_tool.py` and `jarvis/bot/brief_watcher.py`.
+    - The `protected_display_v1` capability and the `instance_id` capture in
+      `jarvis/bot/eligible_sessions.py`, and the `brief/hello` field in JarvisKit
+      (R.10.5).
     - The process-level maintenance task for retention and window close (R.10.3).
-    - The eligibility capture in `jarvis/bot/bot.py`: whether the session uses the
-      native route and a loopback peer (R.10.5).
     - `MIGRATION_0035_brief` in `jarvis/db.py` (human-only), plus `tests/unit/test_db.py`
       (S3-10).
     - The `mcp-reminders` source contract in `registry.py` (human-only; WS-05
       reviews it).
     - Under D5 (b) or D9 (b) only, the `brief-counts` code.
     - Tool registration in `pipeline.py`, outside WS-17's locked portions.
-    - The `brief/hello`, `brief/ack` and `brief/not_applied` handling on both
-      client-message paths, and the bot's `brief/probe` (R.10.7).
+    - The `brief/hello`, `brief/ack`, `brief/not_applied` and `brief/unknown`
+      handling on both client-message paths, and the bot's `brief/probe` (R.10.7).
     - Inside WS-17's lock (R.13):
       - the `arrival` rule in `ConversationThreadView.swift`;
       - in-place replacement by `result_id` in `WorkspaceStore.swift` and
         `ResponseResultRouter.swift`;
-      - `brief/ack` and `brief/not_applied` in the result-acknowledgement portion
-        of `pipeline.py`;
+      - `brief/ack`, `brief/not_applied` and `brief/unknown` in the
+        result-acknowledgement portion of `pipeline.py`;
       - the typed `brief` kind in JarvisKit `DisplayPayload`, with its MortimerHost
         renderer;
-      - the applied-result ledger and its probe answers (R.10.7).
+      - the result history and its probe answers (R.10.7).
     - The `brief` serializer in `WorkspaceResultExport` (R.10.16).
     - Under D8 (c) only, the shared `DisplayActionPolicy` predicate (R.10.6). It
-      replaces every action gate among the 44 `isProtectedLocal` uses, in:
+      replaces every action gate among the `isProtectedLocal` uses (44 at
+      `4cf452e`, 43 at `51dcdee`), in:
       - `AppMessageRouter.swift`, `ConsoleActionCoordinator.swift` and
         `SupportingDisplayCoordinator.swift` (WS-21);
       - `ConsoleActionBar.swift` and `WorkspaceView.swift`;
@@ -672,7 +709,7 @@ Three separate permissions:
 | Path | Governed by | Contents |
 |---|---|---|
 | Supervisor tool result | fixed rule | Always the fixed acknowledgement, returned before acquisition starts (R.10.4). It never carries a derived value, under any D5 option. |
-| Speech | D5 | D5 (a): a fixed line only (the success line, or the failure line for an all-failed request, R.10.7). D5 (b): adds the `brief-counts` allowlist below. D5 (c): adds names, subjects and titles, and needs D4 (b). |
+| Speech | D5 | D5 (a): one fixed line, the same for every outcome (R.10.7). D5 (b): adds the `brief-counts` allowlist below. D5 (c): adds names, subjects and titles, and needs D4 (b). |
 | Local storage | D9 | `brief_slots` and `brief_results` (R.10.7) hold delivery bookkeeping and source-status codes. Under D9 (b) only, `brief_results` adds the `brief-counts` fields with a `policy` column keeping their classification. They may be read only by the brief module, to build that result's announcement when its acknowledgement arrives after the emitting job has ended (R.10.7). They are never reused or disclosed anywhere else: not in tool results, logs, status or memory, and in speech only as D5 permits for that same result. |
 | Logs | fixed rule | Content-free: event names, delivery state, source-status codes, durations. |
 
@@ -689,7 +726,8 @@ Three separate permissions:
 
   A fixed template renders it. Nothing else is released.
 - **Source-status codes.** `ok`, `partial`, `failed`, `disabled`, `not_authorized`,
-  `not_configured`, `timeout`.
+  `not_configured`, `unavailable` (the bound app session does not offer the
+  source; revision 4), `timeout`.
 - **Retention (revision 3).** Rows older than `BRIEF_RETENTION_DAYS` (D9; proposed 30)
   are purged by a process-level maintenance task. It runs at bot start and every
   hour, and does not depend on any session, recipient or acquisition. The same task
@@ -706,8 +744,9 @@ Three separate permissions:
   - The retention purge removes expired rows under a test clock, including while the
     bot runs with no eligible client connected.
   - The tool result is byte-identical for any two source contents under every D5
-    option, and under D5 (a) so is the speech text (a property test). That shows no
-    source-derived value reaches either external path beyond what D5 permits.
+    option, and under D5 (a) so are the speech text and the number of times it is
+    spoken (a property test). That shows no source-derived value reaches either
+    external path beyond what D5 permits.
 
 #### R.10.4 Brief work has its own sensitivity, policy and logging context (item 4)
 
@@ -732,54 +771,97 @@ Three separate permissions:
   - A new user turn during acquisition leaves the brief holder armed.
   - The session holder's state is unchanged by the brief.
 
-#### R.10.5 Only an eligible native recipient receives a protected brief (item 5; revision 3)
+#### R.10.5 Only an eligible native recipient receives a protected brief (item 5; revisions 3 and 4)
 
-**Eligibility is decided by the server.** `brief/hello`
-(`{"version": 1, "capabilities": ["protected_display_v1"]}`) is only the client
-negotiating a capability; it never establishes eligibility on its own. A session is
-eligible only when all three hold:
+**Eligibility is decided by the server.** A hello message (`brief/hello`,
+`{"version": 1, "capabilities": ["protected_display_v1"], "instance_id": "<32 hex>"}`,
+or `calendar/hello`, R.10.14) is only the client negotiating a capability; it never establishes
+eligibility on its own. A session is eligible *for a capability* only when all three
+hold:
 
 1. **Native transport.** It came over the native WebSocket route (`/ws-client`,
    `FastAPIWebsocketTransport`), never WebRTC (`/api/offer`). The bot records this
    at connection time in `jarvis/bot/bot.py`, which already chooses the transport.
 2. **Local or authenticated peer.** Its peer is loopback. Once WS-04's local bearer
    authentication is enabled, it must also present the owner's token.
-3. **Capability.** It sent `brief/hello` with `protected_display_v1`.
+3. **Capability.** It negotiated that capability: `protected_display_v1` for a
+   brief, `calendar_events_v1` for a calendar request.
 
 **Residual.** Until WS-04 authentication is on, any local process that speaks the
 native protocol can satisfy all three. That is today's trust boundary (roadmap C2,
 localhost), stated rather than hidden.
 
-**Recipient registry.** Eligible sessions are kept in a brief-specific registry
-(`jarvis/bot/brief_recipients.py`):
-- a session joins when its eligible hello arrives. It leaves when it disconnects, or
-  when it sends a later `brief/hello` without `protected_display_v1` (a capability
-  withdrawal);
-- the recipient is the most recently eligible connected session;
+**Shared foundation, built in P2 (revision 4).** The transport identity capture in
+`bot.py`, the session registry and the predicate are one module,
+`jarvis/bot/eligible_sessions.py`, and P2 builds it, because calendar requests need
+it before any brief exists (R.6). P3 adds the `protected_display_v1` capability and
+the `instance_id` capture from `brief/hello` to it, and nothing else.
+
+**Session registry.** `eligible_sessions.py` keeps, per connected session, its
+transport, peer, console generation, app instance and negotiated capabilities:
+- each hello type governs its own capabilities: `brief/hello` sets
+  `protected_display_v1` and `calendar/hello` sets `calendar_events_v1`. A later
+  hello of the same type that omits its capability withdraws it; a hello of one type
+  never changes the other's capability;
+- `brief/hello` also carries `instance_id`, a 128-bit random value the app creates
+  on first launch and keeps in the same local defaults as its result history
+  (R.10.7). It identifies the app installation across reconnects and restarts. It
+  is evidence of identity inside today's C2 boundary, where any local
+  native-protocol process is already trusted; it is not a credential. A
+  `brief/hello` whose `instance_id` is missing or not 32 hex characters confers no
+  `protected_display_v1`;
+- a session leaves when it disconnects;
+- `eligible(session, capability)` is the predicate above;
+- `recipient(capability)` is the most recently connected session that is eligible
+  for that capability. It is used only for scheduled work;
 - `notices.set_live_session` is not used, so a newer browser session that replaces
-  the live-session pointer neither displaces nor becomes the recipient.
+  the live-session pointer neither displaces nor becomes a recipient.
+
+**One bound session per job (revision 4).** Every brief job binds one session when
+it starts, and every message of that job goes to it:
+- on request, the asking session: the session whose turn made the `daily_brief`
+  call. It must itself be eligible for `protected_display_v1`; the result is
+  delivered to it and to no other session. If it is not eligible (a browser, or an
+  unknown client), the tool replies "The brief needs the Mortimer app." and reads
+  no source, even while an eligible native session is connected;
+- scheduled, `recipient("protected_display_v1")` at claim time.
+
+The job's `calendar/request` (R.10.14) goes to that same bound session, and only if
+it is also eligible for `calendar_events_v1`; otherwise the calendar source reports
+`unavailable` for that job and nothing is sent. `recipient("calendar_events_v1")`
+is never consulted for a brief.
 
 **No recipient, no acquisition.**
-- On request: the fixed reply "The brief needs the Mortimer app." No source is read.
+- On request: the fixed reply above. No source is read.
 - Scheduled: no claim and no acquisition.
 
 **Final check before emit.** After acquisition and before the emit transaction
-(R.10.7), the recipient must be the same session, in the same generation, and still
-in the registry. Otherwise nothing is sent, and the claim is released. A recipient
-that vanishes after the check is handled by R.10.7's probe.
+(R.10.7), the bound session must be the same session, in the same generation, and
+still eligible for `protected_display_v1`. Otherwise nothing is sent, and the claim
+is released. A recipient that vanishes after the check is handled by R.10.7's probe.
 
 **The emitter sets `data_policy` explicitly.** The generic builder in
 `jarvis/bot/display.py` has no `data_policy` field.
 
-**Acceptance (S3-2).**
+**Acceptance (S2-5 for the foundation, S3-2 for the brief).**
 - A native, local session that sends the capability is delivered to.
 - A browser connection over WebRTC that sends the capability string is not eligible,
   receives no protected payload, and causes zero source calls.
+- A browser session asks for the brief while an eligible native session is
+  connected: the fixed reply, zero source calls, and nothing sent to the native
+  session.
+- A requested brief is delivered to the asking session, not to a more recently
+  connected eligible session.
 - An unknown client is not eligible either.
 - A newer browser session does not displace the eligible native recipient.
 - A disconnect, or a capability withdrawal, during acquisition: the slot is released
   and nothing is sent.
-- Swift: `data_policy` survives serialization and `DisplayPayload` decoding.
+- A `calendar/hello` without `calendar_events_v1` withdraws calendar eligibility and
+  leaves display eligibility in place, and the reverse.
+- A bound session without `calendar_events_v1`: the calendar source reports
+  `unavailable`, and no `calendar/request` goes to any other session.
+- Swift: `data_policy` survives serialization and `DisplayPayload` decoding;
+  `instance_id` is created once and survives a restart.
 
 #### R.10.6 D4 (b) and D8 are coupled under the current native code (item 6)
 
@@ -798,7 +880,9 @@ that vanishes after the check is handled by R.10.7's probe.
   when the payload carries `display_actions: "none"` (R.10.8). A payload without that
   field keeps today's behaviour.
 - **Every gate moves to it.** `isProtectedLocal` has 44 uses in 13 source files at
-  `4cf452e`. P3's manifest classifies each one, and every action gate is replaced by
+  `4cf452e`, and 43 at `51dcdee`, where #197 consolidated the two inventory filters
+  in `WorkspaceStore.swift` into one (`:140`) and moved `sendToDisplay()`'s gate to
+  `:405`; every other cited line is unchanged there. P3's manifest classifies each one, and every action gate is replaced by
   the predicate. The gates confirmed by reading the code:
   - supporting display:
     - `AppMessageRouter.swift:282`;
@@ -806,8 +890,8 @@ that vanishes after the check is handled by R.10.7's probe.
     - `SupportingDisplayCoordinator.swift:142` (transfer) and `:286` (the
       inventory of listable results);
     - `ConsoleActionCoordinator.swift:224`;
-    - `WorkspaceStore.swift:411`, in `sendToDisplay()`, which the voice and pointer
-      transfer paths reach directly;
+    - `WorkspaceStore.swift:411` (`:405` at `51dcdee`), in `sendToDisplay()`, which
+      the voice and pointer transfer paths reach directly;
     - the display menus, `ConsoleActionBar.swift:437, 440, 444, 495` and
       `WorkspaceView.swift:179, 183, 187`;
   - copy, share and export:
@@ -836,7 +920,8 @@ that vanishes after the check is handled by R.10.7's probe.
   `isProtectedLocal`: for example its definition (`AppMessage.swift:206`), the
   weather checks (`AppMessageRouter.swift:377`, `DisplayContentView.swift:28`), the
   private summary (`ConversationThreadView.swift:103, 105`) and the supervisor
-  inventory filters (`WorkspaceStore.swift:130, 158`). Under D4 (b) that inventory
+  inventory filter (`WorkspaceStore.swift:130, 158`; one filter at `:140` since
+  `51dcdee`). Under D4 (b) that inventory
   lists the brief, so its title is fixed host text and carries no source content.
   P3's manifest lists every kept site.
 - **Comparison share.** `ConsoleActionCoordinator.swift:481–487` builds one text from
@@ -857,7 +942,7 @@ that vanishes after the check is handled by R.10.7's probe.
   `dataPolicy`, appears anywhere except in the predicate and the kept sites P3's
   manifest lists.
 
-#### R.10.7 Durable, idempotent delivery (items 7, 25; revision 3)
+#### R.10.7 Durable, idempotent delivery (items 7, 25; revisions 3 and 4)
 
 Revision 3 separates four things:
 - the **scheduled slot**: the one brief a day the schedule owes;
@@ -898,6 +983,7 @@ CREATE TABLE IF NOT EXISTS brief_results (
   request_local_date TEXT NOT NULL,         -- the host's local date when the request or claim was made
   slot_date TEXT,                           -- scheduled only
   recipient_session TEXT NOT NULL,          -- the session this revision was emitted to
+  recipient_instance TEXT NOT NULL,         -- that session's app instance_id (R.10.5)
   probe_session TEXT,                       -- the session last probed for it
   outcome TEXT NOT NULL CHECK (outcome IN ('full','partial','all_failed')),
   source_status TEXT NOT NULL DEFAULT '{}', -- JSON of R.10.3 codes only
@@ -907,14 +993,17 @@ CREATE TABLE IF NOT EXISTS brief_results (
 );
 ```
 
-- **Outcome.** A source is *available* unless it is `disabled`, `not_configured` or
-  `not_authorized`. Those three are shown on the card but do not count as failures.
-  `disabled` and `not_configured` cannot change before a restart. `not_authorized`
-  can change when Larry grants calendar access (R.10.14 re-checks it on every
-  request), but an automatic retry would not ask him, so it is treated the same.
+- **Outcome.** A source is *available* unless it is `disabled`, `not_configured`,
+  `not_authorized` or `unavailable`. Those four are shown on the card but do not
+  count as failures. `disabled` and `not_configured` cannot change before a restart.
+  `not_authorized` can change when Larry grants calendar access (R.10.14 re-checks
+  it on every request), and `unavailable` when the app negotiates the source, but
+  an automatic retry would not cause either, so they are treated the same.
   - `full`: every available source returned `ok`.
   - `partial`: at least one available source returned `ok` or `partial`; or no
     source was available (nothing could be read, and a retry would not change that).
+    A mail account reports `partial` only when it preserved a trustworthy count or
+    validated headlines (R.10.12), so this outcome always rests on real content.
   - `all_failed`: at least one source was available, and none returned `ok` or
     `partial` (each was `failed` or `timeout`).
 - **Host-owned record.** `brief_results` holds a row for each emitted revision. Its
@@ -946,21 +1035,21 @@ fresh `claim_token`, `claim_session` and
 `claim_expires_at = now + BRIEF_CLAIM_TTL_S` (proposed 300), and increments
 `claims`, the first claim included. Permitted from:
 
-| From | Condition |
-|---|---|
-| no row | Inserts the slot with a new `result_id` and `current_revision = 0`. |
-| `open` | if the current revision was applied as `all_failed`, `BRIEF_RETRY_DELAY_S` (proposed 600) has passed since `awaiting_since` |
-| `claimed` | its claim has expired (a dead claimant) |
-| `emitted` | no acknowledgement for `BRIEF_ACK_TIMEOUT_S` (proposed 60) since `awaiting_since` |
+| From | Current revision's row | Condition | Then |
+|---|---|---|---|
+| no row | none | none | Inserts the slot with a new `result_id` and `current_revision = 0`; acquires |
+| `open` | none (a release before any emit) | none | acquires |
+| `open` | `not_applied` | none | acquires |
+| `open` | `applied` as `all_failed` | `BRIEF_RETRY_DELAY_S` (proposed 600) has passed since `awaiting_since` | acquires |
+| `open` | `emitted` (a release after a probe began) | `BRIEF_ACK_TIMEOUT_S` (proposed 60) has passed since `awaiting_since` | probes |
+| `claimed` | any | its claim has expired (a dead claimant) | probes if the row is `emitted`, otherwise acquires |
+| `emitted` | `emitted` | `BRIEF_ACK_TIMEOUT_S` has passed since `awaiting_since` | probes |
 
-After claiming:
-- if the current revision's row is still `emitted`, the claimant probes first (below);
-- otherwise (no revision yet, or the current row is `applied` as `all_failed` or is
-  `not_applied`) it acquires, but only if `emissions < BRIEF_MAX_EMISSIONS`
-  (proposed 3). At that limit it moves the slot `claimed → abandoned` instead.
-
-A probe claim is allowed at the emission limit, so the last revision can still be
-confirmed.
+No other combination is claimable: an `open` slot whose current row is `applied` as
+`full` or `partial` cannot exist, because that acknowledgement moved it to
+`delivered`. Acquiring needs `emissions < BRIEF_MAX_EMISSIONS` (proposed 3); at that
+limit the claimant moves the slot `claimed → abandoned` instead. A probe claim is
+allowed at the emission limit, so the last revision can still be confirmed.
 
 **Acquire and emit.** The claimant acquires and assembles in its own context
 (R.10.4). It then runs R.10.5's final recipient check. If that fails, it releases
@@ -980,6 +1069,9 @@ slot.
 while probing, moves the slot `claimed → open`, guarded by its token, in its
 `finally` block.
 - This covers a disconnect during acquisition (R.10.18).
+- If the current revision's row is still `emitted` (a release during a probe), the
+  same update resets `awaiting_since`, so the next probe claim waits another ack
+  timeout rather than following at once.
 - `emissions` is unchanged, because nothing was sent.
 - `claims` is not refunded, on purpose. Each claim may already have read the
   sources, so `BRIEF_MAX_CLAIMS` is what bounds source reads in a day when a
@@ -989,10 +1081,11 @@ while probing, moves the slot `claimed → open`, guarded by its token, in its
 
 **Probe.** When the current revision's row is still `emitted` after the ack timeout,
 the claimant:
-1. records the current eligible recipient as that row's `probe_session`, in a
-   transaction guarded by its `claim_token`, before anything is sent. So an answer
-   can never arrive before its session is recorded, and a stale claimant cannot
-   overwrite it;
+1. chooses the session to probe: the row's `recipient_session` if it is still
+   connected and eligible, otherwise the job's bound session (R.10.5). It records it
+   as the row's `probe_session`, in a transaction guarded by its `claim_token`,
+   before anything is sent. So an answer can never arrive before its session is
+   recorded, and a stale claimant cannot overwrite it;
 2. sends `brief/probe {"version": 1, "result_id", "revision": current_revision}` to
    that session;
 3. waits up to `BRIEF_PROBE_TIMEOUT_S` (proposed 10).
@@ -1002,23 +1095,34 @@ The answer decides the next step:
 | Answer | Next step |
 |---|---|
 | `brief/ack` | Handled by the acknowledgement rule below; the claimant stops |
-| `brief/not_applied` | The app never applied it. The row becomes `not_applied`. The claimant acquires and emits a new revision if `emissions < BRIEF_MAX_EMISSIONS`; at the limit, the slot moves `claimed → abandoned`. |
+| `brief/not_applied`, from the same app instance | The app knows the result and did not apply that revision. The row becomes `not_applied`. The claimant acquires and emits a new revision if `emissions < BRIEF_MAX_EMISSIONS`; at the limit, the slot moves `claimed → abandoned`. |
+| `brief/unknown`, from the same app instance | The app has no history for that `result_id` (revision 4). The answering session's `instance_id` equals the row's `recipient_instance`, so it is the installation the result was sent to, with the history that would hold it: scheduled histories are never evicted inside their recovery horizon (below), and the instance id lives in the same store as the history, so neither can be lost without the other. The result was therefore never received. The row becomes `not_applied`, the content-free log says `unknown`, and the claimant proceeds as for `not_applied`. |
+| `brief/not_applied` or `brief/unknown`, from another instance | Not evidence: a different installation (a second build with its own defaults, or a reinstall) cannot know what the first applied or dismissed. Treated as no answer. |
 | No answer | If the row is still `emitted`, the slot moves `claimed → emitted`, guarded by the token, and `awaiting_since` is reset, so the next probe waits another ack timeout. It is retried within `claims`. If a late `not_applied` has already changed the row, the claimant acquires as above. |
 
-`brief/not_applied {"version": 1, "result_id", "revision"}` is accepted only from
-the row's `probe_session`, for the probed `(result_id, revision)`, while that row is
-still `emitted`. Anything else is ignored. It is a host transition: the row becomes
-`not_applied`, and a slot at that revision moves `emitted → open` (so the next claim
-acquires) or `unconfirmed → abandoned`. A `claimed` slot is left to its probing
-claimant. A probe never sends content. The app
-answers from its persistent ledger, so a new connection after a crash can answer for
-an earlier one.
+`brief/not_applied` and `brief/unknown` (`{"version": 1, "result_id", "revision"}`)
+are accepted only from the row's `probe_session`, for the probed
+`(result_id, revision)`, while that row is still `emitted`, and only when that
+session's `instance_id` equals the row's `recipient_instance`. Anything else is
+ignored. Each accepted answer is a host
+transition: the row becomes `not_applied`, and a slot at that revision moves
+`emitted → open` (so the next claim acquires) or `unconfirmed → abandoned`. A
+`claimed` slot is left to its probing claimant.
+
+`brief/ack` is also accepted from any session that is eligible for
+`protected_display_v1` and whose `instance_id` equals the row's
+`recipient_instance`: the installation that applied a revision may acknowledge it
+after a reconnect. A probe never sends content. The app
+answers from its persistent result history, so a new connection after a crash can
+answer for an earlier one.
 
 **Acknowledgement.** `brief/ack {"version": 1, "result_id", "revision"}` is accepted
 only if all three hold:
 - a row `(result_id, revision)` exists;
 - it is still `emitted`;
-- the ack comes from that row's `recipient_session` or `probe_session`.
+- the ack comes from that row's `recipient_session` or `probe_session`, or from a
+  session eligible for `protected_display_v1` whose `instance_id` equals the row's
+  `recipient_instance`.
 
 The row then becomes `applied`. For a scheduled result, in the same transaction:
 
@@ -1060,10 +1164,11 @@ process-maintenance task (R.10.3) apply this when the window has passed:
 - terminal slots never change.
 
 A later valid full or partial acknowledgement still moves an `unconfirmed` slot to
-`delivered`. Under D7 (b), a slot that becomes `abandoned` with no revision ever
-applied queues the fixed missed-brief notice through the existing
-`notices.add_notice` (`jarvis/notices.py:37`). Notices ride on the next connection's
-greeting, browsers included (`jarvis/bot/pipeline.py:1661–1662`). That is
+`delivered`. Under D7 (b), a slot that becomes `abandoned` or `unconfirmed` with no
+revision ever applied queues the fixed notice "Today's scheduled brief may not have
+arrived." through the existing `notices.add_notice` (`jarvis/notices.py:37`). Notices ride on the next connection's
+greeting, browsers included (`jarvis/bot/pipeline.py:1661–1662` at `4cf452e`,
+`:1670–1671` at `51dcdee`). That is
 acceptable only because the notice carries no content.
 
 **Persistence failures:**
@@ -1075,44 +1180,109 @@ acceptable only because the notice carries no content.
 | A scheduled ack fails to record | The slot stays `emitted`, and the probe resolves it later |
 | A requested ack fails to record | It is retried within the busy timeout. If it still fails, the requested row stays `emitted`: nothing is announced and nothing is suppressed, so the scheduled brief may still arrive that day. Requested results are never probed. |
 
-**The app's ledger.** MortimerHost keeps a content-free ledger of
-`(result_id, revision, outcome, applied_at, dismissed)`, where `outcome` comes from
-the payload's `outcome` field (R.10.8). The app uses it only for these display rules;
-the host never trusts it back. The ledger holds at most 200 entries, each kept
-for `BRIEF_LEDGER_TTL_H` (proposed 48), in the app's local defaults so it survives a
-restart. For an incoming revision:
+**The app's result history (revision 4).** MortimerHost keeps a content-free
+history keyed by `result_id`, not by revision, in its local defaults so it survives a
+restart. Each entry holds:
+- `kind` (`scheduled` or `requested`) and `first_seen_at`;
+- `applied`: the set of revisions it applied, each with its `outcome` from the
+  payload (R.10.8). The app enforces no bound of its own on it: the host emits at
+  most `BRIEF_MAX_EMISSIONS` revisions per scheduled result and one per requested
+  result, and the app keeps every applied revision until the entry expires;
+- `highest_applied`: the greatest applied revision;
+- `superseded`: revisions received but not applied because a greater one already
+  was;
+- `dismissed`: whether the card was closed or evicted from the workspace.
 
-| Incoming | App behaviour |
+The app uses the history only for the rules below; the host never trusts it back.
+
+**Persist before acknowledging.** The app writes the history change to its local
+defaults, and that write returns, before it sends `brief/ack` (the app-side twin of
+the host's record-before-send rule). A crash between the write and the ack leaves a
+history that answers the next probe with `ack`; a crash before the write leaves
+nothing to acknowledge. There is no window in which an acknowledged revision is
+missing from the history.
+
+**Capacity and eviction.** At most `BRIEF_HISTORY_MAX` (proposed 200) entries. An
+entry expires `BRIEF_HISTORY_TTL_H` (proposed 48) after `first_seen_at`. Eviction
+order: expired entries first; then requested entries, oldest first. A scheduled
+entry is never evicted before it expires, so it survives any number of requested
+results. Its recovery horizon is its slot's window (D7, at most a few hours), far
+inside the 48-hour TTL, and the schedule makes at most one scheduled result a day,
+so unexpired scheduled entries cannot fill the history. Revision and dismissal
+history therefore live with the result, independently of how many revisions or
+other results arrive.
+
+**Incoming revisions apply monotonically.** For a revision `r` of result `R`:
+
+| Case | App behaviour |
 |---|---|
-| Already applied | Re-ack only. No display change and no New notice. |
-| A new revision of a `result_id` whose card is still shown | Replace in place, then ack. A New notice appears only if the shown revision was `all_failed` and the new one is not. |
-| A new revision of a dismissed or evicted `result_id` | Recreate only if every applied revision was `all_failed` and the new one is not; otherwise just ack. |
-| An unknown `result_id` | Apply as a new card, then ack. |
-| A probe | Answer `brief/ack` if that `(result_id, revision)` is in the ledger, otherwise `brief/not_applied`. |
+| `r` is in `R.applied` | Re-ack only. No display change and no New notice. |
+| `r < R.highest_applied` | Record `r` in `R.superseded`. No display change, no New notice, no recreation, and no `brief/ack`: the app acknowledges only what it applied. |
+| `r > R.highest_applied` and `R`'s card is still shown | Replace in place, then ack. A New notice appears only if the shown revision was `all_failed` and the new one is not. |
+| `r > R.highest_applied` and `R` is dismissed | Recreate the card only if every applied revision was `all_failed` and `r` is not; otherwise record `r` as applied and ack without recreating. |
+| `R` has no history | Apply as a new card, then ack. |
 
-**Announcement.** The spoken line (D5) is said only after the app's acknowledgement
-of the revision it describes:
-- at most once per `result_id`, across every retry and probe. A guarded update sets
-  `announced_at` on the row, provided no row of that `result_id` already has one,
-  before speaking. If it fails, nothing is spoken;
-- an `all_failed` scheduled revision is never announced; its card says which sources
-  failed, and it may be retried. An `all_failed` requested result gets one fixed,
-  content-free line instead, "I couldn't reach the brief's sources; the card has
-  the details.", so a spoken request is never left without an answer;
+Acknowledging without recreating is correct: the acknowledgement says the app
+applied the revision to its record, and the host's slot is then `delivered`, which
+is what a dismissed-but-delivered day should be.
+
+**Probe answers.** For `brief/probe {result_id, revision}`:
+
+| History | Answer |
+|---|---|
+| `revision` is in `R.applied` | `brief/ack` |
+| `R` exists, `revision` is not in `R.applied` | `brief/not_applied` |
+| no entry for `R` | `brief/unknown` |
+
+A dismissed card's applied revisions still answer `brief/ack`, so losing an
+acknowledgement never resurrects a dismissed card: the host records the ack and
+sends nothing new.
+
+**Residual: another installation.** A reinstall or a reset of the app's defaults
+loses the history and the `instance_id` together. A second build (a bundled app
+and a `swift run` build keep separate defaults) is another instance too. When the
+installation a revision went to is gone and a different one is bound, the probe's
+answer is not evidence, each probe claim ends as "no answer", and the day ends
+`unconfirmed` at window close, even if the first installation never showed the
+card (a send that raised). The host sends nothing new that day: not showing a brief
+is preferred to showing it twice or resurrecting a dismissed one. Under D7 (b) the
+notice above is queued.
+
+**One process per instance.** Two processes of one installation (`open -n`, or a
+crashed process still draining while its replacement connects) share the defaults
+store but not their memory. The app therefore answers every probe from a fresh read
+of the store, never from an in-memory copy, so a second process sees what the first
+persisted.
+
+**Announcement (revision 4).** The spoken line (D5) is said only after the app's
+acknowledgement of the revision it describes:
+- at most once per `result_id`, on the first acknowledged revision, whatever its
+  outcome. A guarded update sets `announced_at` on the row, provided no row of that
+  `result_id` already has one, before speaking. If it fails, nothing is spoken;
 - for a scheduled result, only while its window is open and its slot is not
-  `suppressed`;
-- for a requested result, only if the ack arrives within `BRIEF_ACK_TIMEOUT_S` of
-  emission.
+  `suppressed`. An acknowledgement that answers a probe inside the window is
+  announced like any other;
+- for a requested result, only if the acknowledgement arrives within
+  `BRIEF_ACK_TIMEOUT_S` of emission.
 
-Otherwise the acknowledgement is recorded and nothing is spoken. The line is built
-from the emitting job's in-memory projection. That is kept until the line is spoken
-or dropped: at most `BRIEF_ACK_TIMEOUT_S` plus R.10.18's 120-second speech wait.
-After that (for example, an ack answering a later probe), the line is built from the
-stored counts under D9 (b), or is D5 (a)'s fixed line under D9 (a).
+Otherwise the acknowledgement is recorded and nothing is spoken.
+
+Under D5 (a) the line is the same for every outcome, scheduled or requested: "Your
+brief arrived." It is true whenever it is said, because the app has acknowledged
+applying the card, and it stays true after the card is dismissed, evicted or the
+app restarts, which "on screen" would not. The number of times it is said does not
+depend on the sources either (once per result), so D5 (a)'s property test (R.10.3)
+holds for the text and for its count. Failure details stay on the card.
+
+Under D5 (b) or (c) the line is built from the emitting job's in-memory projection,
+which is kept until the line is spoken or dropped: at most `BRIEF_ACK_TIMEOUT_S`
+plus R.10.18's 120-second speech wait. After that (an acknowledgement answering a
+later probe), it is built from the stored counts under D9 (b), or is D5 (a)'s line
+under D9 (a).
 
 The tool's immediate acknowledgement is "Putting your brief together." It never
-claims the card is on screen. Requested results are emitted once and are never
-re-sent or probed. If one is not acknowledged, Larry can simply ask again.
+claims the card arrived. Requested results are emitted once and are never re-sent
+or probed. If one is not acknowledged, Larry can simply ask again.
 
 **Acceptance (S3-3, S3-12).**
 - Transitions and races:
@@ -1129,8 +1299,21 @@ re-sent or probed. If one is not acknowledged, Larry can simply ask again.
     request of a day), which still commits as `applied`;
   - a probe answer that arrives immediately, which is never rejected as
     wrong-session;
-  - a `brief/not_applied` from the wrong session or for a stale revision, which is
-    ignored;
+  - a `brief/not_applied` or `brief/unknown` from the wrong session or for a stale
+    revision, which is ignored; either from another app instance, which counts as
+    no answer; an ack after a reconnect from the same eligible instance, which is
+    accepted, and one from a WebRTC session presenting that id, which is not;
+  - a `brief/hello` with a missing or malformed `instance_id`, which confers no
+    display eligibility;
+  - two installations alternating (Y applies revision 1, X is bound, then Y again):
+    no revision is ever emitted to a second installation, and the day ends
+    `unconfirmed`;
+  - a probe sent to `recipient_session` while it is connected, and to the bound
+    session once it is not;
+  - the claim table's `open` rows: a first claim cancelled and released, then
+    reacquired at once; a probe claim released, then reclaimed only after the ack
+    timeout; a late `not_applied`, then an immediate claim; and the retry delay
+    kept after an all-failed revision;
   - window close never changes a `delivered`, `suppressed` or `abandoned` slot.
 - Limits:
   - exactly `BRIEF_MAX_EMISSIONS` contents;
@@ -1139,18 +1322,19 @@ re-sent or probed. If one is not acknowledged, Larry can simply ask again.
   - a release does not consume an emission;
   - a probe at the emission limit, answered `not_applied`, abandons the slot;
   - after an all-failed revision, no claim before `BRIEF_RETRY_DELAY_S`;
-  - a brief whose sources are all `disabled`, `not_configured` or `not_authorized`
-    is `partial`, is not retried, and does not suppress;
+  - a brief whose sources are all `disabled`, `not_configured`, `not_authorized` or
+    `unavailable` is `partial`, is not retried, and does not suppress;
   - a `not_applied` that arrives after the probe timeout, and one after window
     close, which leave the slot `open` or `abandoned`, never stuck;
-  - a day on which no eligible client connects, which ends `abandoned` (and, under
-    D7 (b), queues one notice).
-- Probe: answered `ack`, answered `not_applied`, and unanswered (the next probe
-  waits another ack timeout); a crash after an earlier revision, where the next
-  claimant probes before acquiring.
+  - a day on which no eligible client connects, which ends `abandoned`, and one
+    that ends `unconfirmed` with nothing applied (each, under D7 (b), queues one
+    notice).
+- Probe: answered `ack`, answered `not_applied`, answered `unknown`, and unanswered
+  (the next probe waits another ack timeout); a crash after an earlier revision,
+  where the next claimant probes before acquiring.
 - Outcomes and suppression:
   - an all-failed card followed by a full retry, which replaces it or recreates it if
-    it was dismissed, and is the only one announced;
+    it was dismissed, with no second announcement;
   - a calendar-only ack does not suppress;
   - an all-failed request does not suppress;
   - a request about another day does not suppress;
@@ -1159,17 +1343,38 @@ re-sent or probed. If one is not acknowledged, Larry can simply ask again.
     was sent.
 - Window close: `abandoned` and `unconfirmed`, and a late ack after window close.
 - Persistence: failure at claim, at emit, and at ack.
-- App ledger:
+- Result history (Swift):
   - a card closed before a new revision arrives is not recreated, unless its applied
     revisions were all all-failed and the new one is not;
-  - a history eviction;
+  - a scheduled card applied and dismissed, its acknowledgement lost, then more than
+    `BRIEF_HISTORY_MAX` requested results before the probe: the scheduled entry
+    survives, the probe answers `ack`, and the dismissal stays effective;
+  - eviction order: expired first, then requested oldest first, never an unexpired
+    scheduled entry;
   - a lost ack;
-  - a duplicate while the card is pinned.
+  - a duplicate while the card is pinned;
+  - monotonic revisions: revision 2 applied, then an unseen revision 1 arrives, for
+    every pairing of full, partial and all-failed outcomes and for shown, pinned and
+    dismissed cards. Revision 1 never replaces the card, never recreates it, never
+    produces a New notice, and is not acknowledged; a later probe for revision 1
+    answers `not_applied`;
+  - a probe for a result with no history answers `unknown`;
+  - the history survives an app restart, and the history write completes before the
+    ack is sent (a crash injected between them leaves a history that answers `ack`);
+  - a reinstall (new `instance_id`) answers `unknown`, and the host sends nothing
+    new;
+  - a second process of the same installation answers a probe from the store, not
+    from memory.
 - Speech:
-  - one announcement per result across retries and probes; none for an all-failed
-    scheduled revision, and the fixed failure line once for an all-failed request;
-  - none for a suppressed slot, or after the window or the ack timeout;
-  - no "on screen" without the app's acknowledgement;
+  - one announcement per result across retries and probes, on the first
+    acknowledged revision whatever its outcome;
+  - none for a suppressed slot or after the window; for a requested result, none
+    after the ack timeout; a scheduled probe acknowledgement inside the window is
+    announced;
+  - under D5 (a), a full, a partial and an all-failed result produce byte-identical
+    speech, once each;
+  - a lost acknowledgement, a dismissal, then a probe answered `ack`: the line
+    never claims the card is on screen;
   - a probe-answered ack speaks the stored-count line under D9 (b) and the fixed
     line under D9 (a).
 
@@ -1179,9 +1384,9 @@ Sequential reconnect alone is not sufficient evidence.
 
 - **Payload fields.** `arrival: "requested" | "scheduled"`, `result_id`, `revision`
   and `outcome` (`full`, `partial` or `all_failed`, copied from the host's row for
-  the app's ledger, R.10.7). Under D8 (c) only, `display_actions: "none"`, set by
-  the emitter (R.10.6). The host's `brief_results` row binds the result to its request
-  (R.10.7). Nothing in the payload is trusted back.
+  the app's result history, R.10.7). Under D8 (c) only, `display_actions: "none"`,
+  set by the emitter (R.10.6). The host's `brief_results` row binds the result to
+  its request (R.10.7). Nothing in the payload is trusted back.
 - **No turn identity exists yet.** Display payloads carry none. The only
   `user_turn_id` at `bd18033` is a fresh UUID on consent messages
   (`jarvis/bot/pipeline.py:1569`). Turn binding belongs to WS-17.
@@ -1252,7 +1457,8 @@ Sequential reconnect alone is not sufficient evidence.
   `min(1.0, remaining)`; after that the socket is closed without waiting.
 - **Partial results kept.** Results read before a deadline or a drop are kept. Each
   account reports R.10.3's source-status code: `ok`, `partial`, `failed`,
-  `timeout`, `disabled` or `not_configured`.
+  `timeout`, `disabled` or `not_configured`. Which one, after any abort, is decided
+  by R.10.12's abort table.
 - **Cancellation (corrected in revision 3).** The bot cannot cancel a running mail
   call. The pinned MCP client (`mcp==1.29.0`, `requirements-lock.txt:98`) sends no
   `notifications/cancelled` when its awaiting coroutine is cancelled: `send_request`
@@ -1392,12 +1598,14 @@ Sequential reconnect alone is not sufficient evidence.
 
     | Phase | Budget (proposed) |
     |---|---|
-    | Session: greeting, `CAPABILITY`, `LOGIN`, `EXAMINE`, `LOGOUT` | 16,384 bytes |
+    | Session: greeting, `CAPABILITY`, `LOGIN`, `EXAMINE` | 16,384 bytes |
     | `UID SEARCH` | 1,004,096 bytes: the one-line reply at `_MAXLINE`, plus its tagged completion |
     | `INTERNALDATE` metadata | 131,072 bytes |
     | Headers | 25 × (4,096 + 384) = 112,000 bytes: each literal, its 64-byte slack, and the response line around it |
     | Whole account | 1,400,000 bytes, against a sum of 1,263,552 |
 
+    `LOGOUT`'s reply is read for at most `min(1.0, remaining)` seconds (R.10.9) and
+    counts against the whole account only; nothing it contains changes a status.
     Every byte counts once, against the phase it arrives in and against the whole
     account. Unsolicited `EXISTS`, `RECENT`, `EXPUNGE` and `FLAGS` lines count that
     way too, and are also capped at 16,384 bytes per account in total. Below
@@ -1415,8 +1623,24 @@ Sequential reconnect alone is not sufficient evidence.
     `untagged_responses` dictionary. `imaplib`'s own `_command` clears only the
     `OK`, `NO` and `BAD` entries. Nothing from an earlier command is ever read, and
     retained bytes stay bounded too.
-  - **Exhaustion.** Exhausting any budget aborts that account with state `partial`.
-    Results already validated are kept.
+  - **Aborts (revision 4).** Exhausting any budget, a literal or line over its cap,
+    an account or call deadline, or the cancellation latch (R.10.9) aborts that
+    account. Results already validated are kept. The account's status then says
+    what was preserved, never a blanket `partial`:
+
+    | Where it stopped | Count (R.10.10) | Status |
+    |---|---|---|
+    | Session phase, or the `UID SEARCH` reply | `unknown` | `failed` |
+    | `INTERNALDATE` phase, no qualifying arrival confirmed | `unknown` | `failed` |
+    | `INTERNALDATE` phase, at least one confirmed | `lower_bound` | `partial` |
+    | Header phase | as the enumeration left it: `exact`, or `lower_bound` under the candidate cap | `partial`, with `headlines_complete: false` |
+
+    When the abort was a deadline or the latch, `failed` in this table is reported
+    as `timeout` instead, so the card can say so; `partial` stays `partial`. So
+    `partial` is reported only when a trustworthy count (`exact` or `lower_bound`)
+    or validated headlines were preserved; otherwise the account is `failed` or
+    `timeout` with count `unknown`. An exact zero from a completed enumeration is
+    validated information and reports `ok`.
 - **Parsing.**
   - `email.parser.BytesHeaderParser(policy=email.policy.default)` parses the at most
     4 KiB block.
@@ -1434,7 +1658,14 @@ Sequential reconnect alone is not sufficient evidence.
   - A line longer than the phase's remaining budget is never read past that budget
     plus one byte.
   - Untagged responses left from one command are not seen by the next.
-  - A literal over the cap aborts that account with state `partial` or `failed`.
+  - A literal over the cap aborts that account, with the status the exhaustion table
+    gives for that phase.
+  - Exhaustion before any source data (the greeting or `UID SEARCH`), during an
+    incomplete enumeration with and without a confirmed arrival, and after validated
+    results: each reports the table's status and count, and a scheduled brief whose
+    only mail account hit each case gets the outcome R.10.7 derives from it. The
+    same cases under a deadline report `timeout` or `partial`.
+  - A junk or oversized `LOGOUT` reply after validated results changes nothing.
   - No attachment value is fabricated.
 
 #### R.10.13 Stable read identity (item 13)
@@ -1479,7 +1710,8 @@ Sequential reconnect alone is not sufficient evidence.
 missing or different version, an unknown key, or any other violation rejects the
 whole message.
 
-- `calendar/hello`, client to bot, once per connection. It is the only place calendar
+- `calendar/hello`, client to bot, at least once per connection; a later one
+  replaces the capability it governs (R.10.5). It is the only place calendar
   capability is announced (R.10.5's `brief/hello` announces display capability only):
   - `version: 1`
   - `authorization`: `"full" | "denied" | "restricted" | "not_determined" | "write_only"`
@@ -1889,7 +2121,7 @@ do not prove Mac, account or provider behaviour.
 | S1-2 | P1 | Commands and read-only (R.10.13) | Only the permitted commands are recorded; `EXAMINE`, `BODY.PEEK` and `UID` forms only |
 | S1-3 | P1 | Deadlines and workers (R.10.9) | Every slow case returns within the bound, with partial results kept. Worker count stays bounded against a resolver that never returns. The latch is checked at each connection step; zero greetings read, zero `LOGIN` commands and zero publication after it is set |
 | S1-4 | P1 | Count semantics and windows (R.10.10, R.10.11) | Exact, lower-bound and unknown states as specified, with partial enumeration and no confirmed match giving `unknown`; never a false zero. Headlines are honest when enumeration is partial. A 24-hour window spans 24 elapsed hours across both 2026 New York transitions |
-| S1-5 | P1 | Byte budgets (R.10.12) | The per-phase and per-account budgets (lines never read past the remaining budget), response-count and duplicate limits, untagged responses cleared before each command, and line and parse limits hold; partial results are kept; no attachment claim |
+| S1-5 | P1 | Byte budgets (R.10.12) | The per-phase and per-account budgets (lines never read past the remaining budget), response-count and duplicate limits, untagged responses cleared before each command, and line and parse limits hold; partial results are kept; exhaustion reports `partial` only with a trustworthy count or validated headlines, otherwise `failed` with count `unknown`; no attachment claim |
 | S1-6 | P1 | Stable identity (R.10.13) | No substitution under expunge or renumbering; an incomplete enumeration gives `lower_bound` only with a confirmed arrival, otherwise `unknown` |
 | S1-7 | P1 | Policy envelope (R.10.2) | `call_classified` only; the envelope carries the D4 level and `mail:<account>` |
 | S1-8 | P1 | Child environment, names only (item 26) | With synthetic sentinel values, `build_child_env` for every server puts the `MAIL_*` names in `mcp-mail`'s environment only. A set `JARVIS_MAIL_ENABLED` (an `optional_env` setting) reaches `mcp-mail` and no other server. `env_scoping_enabled()` is true under the default configuration (`registry.py:238–253` has the disabled branch). A missing credential gives that account `not_configured`, or under D6 (a) fails `check_skills`. No value is printed. |
@@ -1898,9 +2130,10 @@ do not prove Mac, account or provider behaviour.
 | S2-2 | P2 | Adapter binding (R.10.2) | Forged, stale, mismatched and replaced-session results cannot lower policy or substitute content |
 | S2-3 | P2 | Event semantics and counts (R.10.14) | Cancelled, declined, tentative, recurring, overlapping, overnight and all-day cases as specified. Hidden events never inflate "and N more" or use the cap. Byte truncation keeps the counts accurate. Local days are computed in the request's `timezone`; optional echoes are checked when present |
 | S2-4 | P2 | No write API | `EKEventStore` appears only in `DeviceCalendar.swift`, and that file contains no `save(`, `remove(`, `commit(` or `requestWriteOnlyAccessToEvents` (the wider Swift sources already use `save(`/`remove(` elsewhere) |
+| S2-5 | P2 | Eligibility foundation (R.10.5) | `eligible_sessions.py`: transport and peer captured at connection; capabilities set and withdrawn per hello type, neither touching the other; a WebRTC browser session that sends `calendar/hello` is never eligible; `calendar/request` goes only to an eligible session; `recipient()` is the most recently connected eligible session; a newer browser session displaces nothing |
 | S3-1 | P3 | Sensitivity isolation (R.10.4) | As specified |
-| S3-2 | P3 | Eligible recipient (R.10.5) | As specified, including Swift decoding of `data_policy` |
-| S3-3 | P3 | Durable delivery (R.10.7) | Claim tokens and guarded transitions; host transitions commit their row change even when the slot is left as it is; one host-owned row per revision, written before the send; races (including an ack after a takeover claim, and a probe answer that arrives at once), the probe and `not_applied` binding, the claim and emission limits, the retry delay, outcomes, today-only suppression, window close (`abandoned`, `unconfirmed`, terminal slots untouched) and persistence failures as listed |
+| S3-2 | P3 | Eligible recipient (R.10.5) | As specified, including Swift decoding of `data_policy`; a requested brief goes to the asking session only; a browser request while an eligible native session is connected gets the fixed reply, zero source calls and nothing sent to the native session |
+| S3-3 | P3 | Durable delivery (R.10.7) | Claim tokens and guarded transitions; host transitions commit their row change even when the slot is left as it is; one host-owned row per revision, written before the send; races (including an ack after a takeover claim, and a probe answer that arrives at once), the probe and the `not_applied`/`unknown` binding, every claimable `open` case in the claim table, the claim and emission limits, the retry delay, outcomes, today-only suppression, window close (`abandoned`, `unconfirmed`, terminal slots untouched) and persistence failures as listed |
 | S3-4 | P3 | Arrival (R.10.8) | Only the correctly owned answer opens; none before WS-17's binding |
 | S3-5 | P3 | Dates (R.10.11, R.10.15) | DST and date-resolution cases; calendar-only scope makes zero mail and reminder calls |
 | S3-6 | P3 | Inert rendering (R.10.16) | Literal under both privacy levels |
@@ -1909,7 +2142,7 @@ do not prove Mac, account or provider behaviour.
 | S3-9 | P3 | Disclosure and storage, checked against the chosen D5 option (R.10.3) | The property test, canaries absent from every store, and retention; an integrated canary across speech, LLM context (`append_to_context=False`) and conversation storage |
 | S3-10 | P3 | Migration `0035_brief` (item 25) | See below |
 | S3-11 | P3 | Display actions (R.10.6) | The chosen D4/D8 combination is tested through the shared predicate. Under D8 (c), approved model processing is allowed, and keyboard, context-menu and selection copy, share (including image share), export, a comparison share including the brief, direct store transfer, the supporting-display inventory, voice transfer, pointer transfer and every visible control are blocked, and the protected label still shows. A source scan finds `isProtectedLocal` and direct `dataPolicy` comparisons only in the predicate and the listed kept sites |
-| S3-12 | P3 | App ledger and announcement (R.10.7) | Close-before-retry, history eviction, lost ack, duplicate-while-pinned and probe answers behave as specified; an all-failed card is replaced or recreated by a later full one; at most one announcement per result; none for an all-failed scheduled revision, and the fixed failure line once for an all-failed request; none when suppressed or late; nothing claims the card is on screen before the app acknowledges it |
+| S3-12 | P3 | Result history and announcement (R.10.7) | Close-before-retry, lost ack, duplicate-while-pinned and the three probe answers behave as specified; a dismissed scheduled card survives more than `BRIEF_HISTORY_MAX` requested results and its probe still answers `ack`; eviction order as specified; revisions apply monotonically (a late older revision never replaces, recreates, notifies or is acknowledged); the history survives a restart; an all-failed card is replaced or recreated by a later full one; at most one announcement per result, on its first acknowledged revision; none when suppressed or after the window, and for a requested result none after the ack timeout; under D5 (a) the speech is byte-identical across outcomes and never claims the card is on screen |
 | S3-13 | P3 | Export serialization (R.10.16) | Under D8 (b), the deterministic serializer gives a complete whole-result copy, share and export, and a section or paragraph share of a brief is refused; under D8 (c), all are blocked |
 | S3-14 | P3 | Retention without a client (R.10.3) | A running bot with no eligible client crosses the retention boundary, and the rows are purged |
 | M1-1 | P1 | Environment on the Mac | A names-only preflight prints, for each MCP server, whether each `MAIL_*` name is forwarded (yes or no, never a value) and the effective `JARVIS_ENV_SCOPING_ENABLED`. Only `mcp-mail` says yes, and scoping is on |
@@ -1918,10 +2151,10 @@ do not prove Mac, account or provider behaviour.
 | M2-1 | P2 | Permission | The Mortimer app raises the calendar prompt; denial and revocation are handled as specified |
 | M2-2 | P2 | Parity | One test week (recurring, all-day, overnight, and Google if O1 says it is there) matches Calendar.app |
 | M3-1 | P3 | Live routing | `RUN_LIVE=1` eval: aggregate ≥ 90 %, and the brief score recorded |
-| M3-2 | P3 | Brief on request | The tool says "Putting your brief together."; a card arrives (a card until WS-17's binding); the spoken line comes only after the app applies the card; its facts match the sources |
+| M3-2 | P3 | Brief on request | The tool says "Putting your brief together."; a card arrives in the session that asked (a card until WS-17's binding); the spoken line comes only after the app applies the card; the card's facts match the sources |
 | M3-3 | P3 | Brief on schedule | With the time set two minutes ahead and a restart, exactly one card arrives; a reconnect brings no second |
 | M3-4 | P3 | Switches | Each switch off, and an empty `JARVIS_BRIEF_TIME`, after a restart |
-| M3-5 | P3 | Browser console | A web-console session gets no brief and causes no source call |
+| M3-5 | P3 | Browser console | A web-console session gets no brief and causes no source call, including while the native app is connected |
 
 **S3-10 in full (revision 3).** `SELECT id FROM migrations` without `ORDER BY` does
 not return insertion order. Claude reproduced the real table shape offline: with
@@ -1961,8 +2194,8 @@ are claimed. Old V4–V6 become P5's K4, injection and routing checks.
   - the arrival change in `ConversationThreadView.swift` (R.10.8);
   - in-place replacement by `result_id` in `Stores/WorkspaceStore.swift` and
     `App/ResponseResultRouter.swift` (R.10.7);
-  - `brief/ack` and `brief/not_applied` handling in the result-acknowledgement
-    portion of `jarvis/bot/pipeline.py` (R.10.7);
+  - `brief/ack`, `brief/not_applied` and `brief/unknown` handling in the
+    result-acknowledgement portion of `jarvis/bot/pipeline.py` (R.10.7);
   - the typed `brief` kind (`DisplayPayload` and its renderer, R.10.16);
   - the `calendar/request` case in `AppMessageRouter.swift`.
 - **WS-21 (Claude; landed, Mac acceptance open)** owns `SupportingDisplayCoordinator.swift`.

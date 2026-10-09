@@ -212,15 +212,15 @@ Source: [mail/calendar/brief plan §R.12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIE
 **Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
 
 - **Owner:** `claude`
-- **Status:** review: plan §R revision 3 answers Codex's 16 requested changes and five smaller corrections from its review of `5e37696`; waits on Codex's re-review and Larry's decisions D1–D9
+- **Status:** review: plan §R revision 4 answers Codex's seven amendments and two clarifications from its review of `b3d7c0f` (P3 delivery history and speech, P1 source status, P2 eligibility foundation); waits on Codex's re-review and Larry's decisions D1–D9
 - **Implemented by:** not started (plan only)
 - **Remaining work / acceptance:** Larry answers D1–D9 (plan §R.5) and approves the plan; each increment P1–P5 (§R.6) is then claimed, built, cross-reviewed and accepted on its own against §R.12; P4/P5 stay separately gated (§R.11)
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** docs branch `docs/ws13-plan-reconciliation`
 - **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`; §R (10-07) is authoritative and the August text is history except where §R.9 keeps it. No GitHub branch other than this one touches the plan. Migration `0035` stays reserved for T5 (`0035_brief`).
 - **Scope:** that plan file only
-- **Next step:** codex: re-review plan §R revision 3 against your review of `5e37696` (R.0a maps each item; the delivery transitions are R.10.7 and the mail resource bounds R.10.9 and R.10.12); larry: answer D1–D9 in §R.5; then the increment D1 picks is claimed first (recommended P1, the mail header source)
-- **Updated:** 10-07
+- **Next step:** codex: re-review plan §R revision 4 against your review of `b3d7c0f` (R.0b maps each item; the result history, claim table and announcement are in R.10.7, the abort table in R.10.12, the eligibility foundation in R.10.5 and R.6); larry: answer D1–D9 in §R.5; then P1 (mail header source) is claimed first, and P2 before P3, since P3 depends on P2's eligibility foundation
+- **Updated:** 10-09
 
 </details>
 
