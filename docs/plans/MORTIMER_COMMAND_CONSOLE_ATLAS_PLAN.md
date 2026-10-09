@@ -1,9 +1,11 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
 **Status:** Baseline Command Console implementation is present; WS-17 CC7a
-closure is implemented on the Codex candidate and release acceptance remains
-open (2026-10-07). Exact source, current evidence and remaining gates are in
-the dated progress and [CC7a.4 receipt](../acceptance/command-console/CC7A4_REUSE_2026-10-07.md).
+closure is implemented on the Codex candidate. Separate exact-source Claude
+static reviews and the approved a5b6f88→ce6cde8 independent offline twelve-check
+comparison passed 2026-10-09; deployment and live acceptance remain open.
+Exact source, limitations, cleanup and remaining gates are in the dated progress
+and [10-09 receipt](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md).
 The following baseline describes the earlier 2026-09-18 implementation:
 core protocol, stores,
 Atlas composition, attachment bounds, approved inbound transfer state (including
@@ -1570,6 +1572,15 @@ implemented reuse, a test receipt, merge/deploy permission or live acceptance.
    same-key upsert remain usable. Preserve actual source-fetch `ts`, including
    explicit zero, and require finite `fresh_until <= ts + 900`. Replay does not
    replace a zero with now, extend expiry or claim a new fetch occurred.
+
+   **Compatibility clarification, 2026-10-09:** The existing `local_weather`
+   fetch attaches this optional bounded metadata even when the console bridge
+   is off. This augments the legacy display payload; it does not activate a
+   query, add a fetch or change the selected model/provider. Protected-turn
+   checks remain before location and after fetching. Missing explicit
+   `approved_external` policy cannot supply a native cache hit, so flag-off or
+   legacy policy is not treated as public approval. The 16 KiB source and
+   existing outer-wire budgets remain unchanged.
 3. **Freshness-aware query, canonical target.** Reserve shared console action
    `weather_reuse` with a canonical result UUID `target` taken from the observed
    native inventory. Closed typed `args`: `subject_key`; `tool` from
@@ -2028,3 +2039,38 @@ Complete frozen verification on `748b1e5`: JarvisKit **232 passed**, MortimerHos
 
 
 **Publication, 2026-10-07 (Codex):** [PR #198](https://github.com/Larryfix71566/jarvis-voice-ai/pull/198) publishes the completed reuse/retention/source-age increment on `codex/ws17-closure-20261007`; runtime/test source is `748b1e5`. Critical [PR #197](https://github.com/Larryfix71566/jarvis-voice-ai/pull/197) stays a separate frozen review snapshot at `352ec69` (code `065d500`). Both are draft, with required exact-source cross-review and release/live gates retained. A combined permission question now requests read-only Claude subscription reviews of these WS-17 source/test diffs and bounded follow-up fixes, replacing the earlier `fee4ac0`-only authorization. No new private source has been sent while that answer is pending.
+
+
+**Progress, 2026-10-09 (Codex, approved exact-source review and offline comparison):**
+Larry approved `a5b6f88` as the offline baseline and read-only Claude subscription
+reviews of exactly `065d500` (#197) and `748b1e5` (#198), excluding secrets,
+runtime logs and later source. Both separate static reviews completed through
+Claude Code 2.1.290 / claude-sonnet-5 without reported blocking defects. Neither
+was a joint integration review, formal GitHub approval or Claude-run test pass.
+Codex independently reconstructed patch hashes and checked all eight observations
+against surrounding source; no source repair was warranted. The flag-off additive
+weather metadata compatibility is clarified above. The earlier joint timeout
+returned no verdict and remains historical evidence; reported list costs do not
+prove billing/quota. #197 was already merged as `51dcdee` before these reviews.
+
+Integrated main `27fd356` as frozen candidate `ce6cde8`. Its 28 source/test deltas
+match the approved diffs; the two approved #200 fixture files/modes are identical
+on baseline and candidate. The unchanged installed offline Mortimer verifier
+passed all twelve exact ordered checks, with matching log hashes and source
+unchanged: baseline Python 6,257 / 11 skips /two subtests; candidate Python 6,366
+/ 11 skips /two subtests; candidate JarvisKit 232 and MortimerHost 551 /eight skips;
+baseline JarvisKit 226 and MortimerHost 512 /seven skips; zero failures. Candidate VM skips
+are two Screen Recording, three physical-display and three app-activation cases;
+the earlier frozen Mac capture passes remain separate evidence. Worker UID 502
+was actually measured. Image/profile/runner identities and sandbox settings/image
+record stayed unchanged; both owned VMs stopped and zero remain running. An
+independent read-only Codex receipt audit approved only this offline evidence.
+No tests, source-policy guards, profile checks or runner pins were waived.
+
+[Exact review, comparison and limitations](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md)
+retain the prior failed fee4ac0 baseline receipt, without rewriting it. #198
+remains draft/unmerged until WS-13 revision 4 lands and Larry separately approves
+release/merge/deployment. Production remains the roadmap receipt. UI2-22…25,
+physical supporting-display outcomes and dependent UI2-04/09/13 remain open;
+keep the temporary thread switch. This slice changes documentation/evidence only
+and sends no later source to Claude.

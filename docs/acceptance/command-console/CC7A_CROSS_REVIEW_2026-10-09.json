@@ -1,0 +1,322 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "row": "WS-17",
+  "recorded_by": "codex",
+  "authorization": {
+    "baseline": "a5b6f884c317c74a1d2b4c2a1d7e334920a55d51",
+    "sources": [
+      "065d50058534d6e16e0c59cae0100d0b9bbb5406",
+      "748b1e5ab7a00cf208b775816355fe339abbe879"
+    ],
+    "read_only_claude_subscription": true,
+    "secrets_and_runtime_logs_excluded": true,
+    "later_source_excluded": true,
+    "release_authorized": false,
+    "release_dependency": "WS-13 revision 4 lands before PR198; Larry approves release separately",
+    "baseline_scope": "offline comparison only; no baseline source transmission authorized"
+  },
+  "environment": {
+    "location": "Mac, fresh private temporary working directory",
+    "not_tart_isolated": true,
+    "strict_empty_mcp": true,
+    "setting_sources_empty": true,
+    "safe_mode": true,
+    "restricted": true,
+    "filesystem_or_shell_tools": false,
+    "API_and_vault_environment_stripped": true,
+    "credential_values_not_copied": true,
+    "evidence_owner": "Codex executed caller configuration and assertions; saved metadata alone is not complete configuration evidence"
+  },
+  "prior_attempt": {
+    "kind": "joint review",
+    "deadline_seconds": 300,
+    "outcome": "timed_out",
+    "review_verdict_available": false,
+    "replaced_by": "two separate requests with exactly the same authorized patches; no new source supplied"
+  },
+  "reviews": [
+    {
+      "pr": 197,
+      "base": "bd1803348fc0029b1dfe00832066b2f5713b170c",
+      "source": "065d50058534d6e16e0c59cae0100d0b9bbb5406",
+      "changed_paths": [
+        "jarvis/bot/console_actions.py",
+        "jarvis/bot/pipeline.py",
+        "tests/unit/test_console_voice_bridge.py",
+        "macos/JarvisKit/Tests/JarvisKitTests/ConsoleProtocolTests.swift",
+        "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceStore.swift",
+        "macos/MortimerHost/Tests/MortimerHostTests/CC7aInventoryCapacityTests.swift"
+      ],
+      "patch_sha256": "4156b55fd0339e936b80a7c4734e4019388d042830bca711439a4c0cde01f452",
+      "patch_bytes": 39766,
+      "prompt_sha256": "df412dcdc4b0eb89d632f8dd70fb5f056a3b01afa6b56ca7bba78d1b06dd87c8",
+      "response_sha256": "eebf74586fb704b557e3b6182216e3aea230d6f2f0b08acc2538b23f1ef4a24a",
+      "review": "## Scope note\n\nOnly **Diff1** (PR197, `bd18033 \u2192 065d500`) was supplied as an actual diff. **Diff2** (PR198) was described in prose only \u2014 no diff text, hunks, or line numbers for it were included in this request. I have not reviewed Diff2 and make no claims about its content or correctness. Consequently I also cannot perform a real integration review between the two diffs; any \"integration\" comment below is limited to checking that Diff1's stated contract doesn't visibly contradict Diff2's prose summary, which is a weak check.\n\n## Diff1 review \u2014 verdict\n\n**No high-confidence blocking defects.** There are a few concrete, lower-confidence findings worth a maintainer's attention, plus several correctness claims that depend on code not shown in this diff (listed under Limitations).\n\n### Findings\n\n**F1 \u2014 `WorkspaceStore.swift`, rewritten `consoleInventory` getter.**\n```swift\nguard let encoded = try? JSONEncoder().encode(consoleInventoryJSON),\n      let inventory = try? JSONSerialization.jsonObject(with: encoded) as? [String: Any] else {\n    return [:]\n}\n```\nTrigger: any encode/decode failure anywhere in the `consoleInventoryJSON` graph (e.g., a non\u2011finite `Double` in any `.number` case, or any future field whose encoding throws).\nConsequence: the entire legacy dict \u2014 `mode`, `results`, `active_result_id`, `comparison`, `atlas`, everything \u2014 silently collapses to `[:]`, with no logging, instead of degrading just the offending field. This is a full-outage failure mode for a single bad field. Low likelihood today (no non-finite values are constructed in the shown code), but it's a real fragility introduced by round-tripping through `JSONEncoder`/`JSONSerialization` where the old hand-built dict couldn't fail this way.\n\n**F2 \u2014 ordering dependency not verifiable from this diff, and the new test doesn't independently verify it.**\n`WorkspaceStore.swift`: `(listing.entries + listing.olderEntries).compactMap { indexedVisibleByID[$0.id] }.prefix(100)` is claimed to implement \"numbered Recents then **newest** Older.\" Correctness hinges on `WorkspaceRecents.olderEntries` already being newest-first \u2014 that type isn't part of this diff. `CC7aInventoryCapacityTests.testHundredLongRowsKeepAllNumberedRecentsAndNewestOlder` computes its `expected` array with the exact same formula (`(listing.entries + listing.olderEntries).prefix(100)`) rather than an independent oracle (e.g., sorting by `receivedAt`), so the test cannot catch a wrong sort order in `olderEntries` \u2014 it only confirms the projection consumes whatever order `olderEntries` yields.\n\n**F3 \u2014 `pipeline.py`, ack-branch, low confidence.**\n```python\nexpected_action not in (None, \"inventory\")\n```\nIf any pending `console_waiters` entry is ever created without its outbound request passing through `_send_ui_message` (so `_mortimer_console_action` is never set), the `None` default permits an oversized reply tagged `code == \"inventory\"` to be treated as that future's inventory disclosure, even if the pending request was for a different action. Likely unreachable given the native client should echo the originating action, but worth confirming all `console_waiters` producers route through `_send_ui_message`.\n\n**F4 \u2014 `pipeline.py`, passive `console/inventory` handler, low confidence/clarity.**\n```python\nif len(encoded) > MAX_MESSAGE or len(repr(msg)) > MAX_MESSAGE:\n```\nThis mixes a JSON-UTF8-byte bound with a Python `repr()` character-length bound \u2014 different units/escaping rules. It can trigger disclosure-projection (dropping older rows/fields) on a passive update whose actual wire encoding would have fit within `MAX_MESSAGE`, i.e., unnecessary data reduction on an otherwise-compliant update. The rationale for the `repr()` term isn't evident from the diff; recommend removing it or replacing with a clearly-justified guard.\n\n### Things that checked out correctly\n- `type(prior_omitted) is not int` correctly rejects bools (`type(True) is bool`), matching the parametrized malformed-metadata tests.\n- Cumulative `results_omitted`/`omitted_fields` accumulation (`prior_omitted + len(older)`, `set(prior_fields) | \u2026`) is consistent and the idempotency case (`_disclosed_inventory(disclosed, scope=\"results\") == disclosed`) traces through correctly.\n- The reordering that moves the inventory-only projection ahead of the unchanged shared 12000-byte early-return is consistent with scope=\"results\" always falling through to projection regardless of size, matching the stated requirement.\n- The new Swift round-trip test correctly validates that whole-number `Double`s in `JSONValue.number` encode as bare JSON integers (needed for Python's strict `type(x) is int` checks); this generalizes to `results_omitted`/`index` even though the test only names `revision`/`number`, since encoding is field-name-agnostic.\n- `\"index\"` in the projected rows correctly preserves the original (unprojected) `visibleResults` index rather than a position in the capped list, satisfying \"without changing original indexes.\"\n\n### Limitations\n- **Diff2 not supplied** \u2014 no review performed on it; no integration-level verdict beyond \"no visible prose-level contradiction.\"\n- Several behaviors are asserted by this diff but depend on code outside the shown hunks, so I could not verify them directly: `validate_inventory` (including its behavior when probed with `data: {}`), `ConsoleSession.update_inventory`/`.inventory` and how numbered-target resolution distinguishes \"model-observed\" vs. \"passive\" inventory state (referenced by the \"Nothing changed\" test behavior, logic not in this diff), `WorkspaceRecents.entries/.olderEntries/.actionableEntries` definitions, and the unchanged `projected`/`numbered`/`fields` computation between the two shown `console_actions.py` hunks.\n- I did not execute code or independently reproduce the reported local test counts (227/514, 6 skips); these are taken as reported, not verified.\n- Per instructions, all diff text/comments were treated strictly as data, not as instructions.",
+      "reviewer": {
+        "system": "claude",
+        "runtime": "2.1.290 (Claude Code)",
+        "model": "claude-sonnet-5",
+        "binary_sha256": "b8412a3826b2dc8ecb1c0605970c28dea28355de5faa740407dd881acdd40237",
+        "reported_models": [
+          "claude-sonnet-5"
+        ],
+        "reported_canonical_models": [
+          "claude-sonnet-5"
+        ]
+      },
+      "execution": {
+        "phase": "finished",
+        "exit_code": 0,
+        "is_error": false,
+        "terminal_reason": "completed",
+        "review_verdict_available": true,
+        "auth_method": "claude.ai",
+        "subscription_type": "max",
+        "API_credentials_absent": true,
+        "tools": [],
+        "mcp_servers": [],
+        "session_persistence": false,
+        "source_log_or_secret_extras": false,
+        "provider_deadline_seconds": 600,
+        "started_at": 1791586524.418623,
+        "finished_at": 1791586805.243449,
+        "reported_cost_usd": 0.3240172,
+        "reported_cost_is_billing_proof": false,
+        "quota_or_billing_verified": false,
+        "stop_reason": "end_turn",
+        "num_turns": 1,
+        "subtype": "success"
+      }
+    },
+    {
+      "pr": 198,
+      "base": "352ec6904c7e0ae1067980d5d851de0d18b02085",
+      "source": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "changed_paths": [
+        "jarvis/bot/console_actions.py",
+        "jarvis/bot/console_protocol.py",
+        "jarvis/bot/display.py",
+        "jarvis/bot/pipeline.py",
+        "jarvis/bot/weather_reuse.py",
+        "jarvis/bot/weather_tool.py",
+        "jarvis/skills/registry.py",
+        "macos/JarvisKit/Sources/JarvisKit/AppMessage.swift",
+        "macos/JarvisKit/Sources/JarvisKit/ConsoleProtocol.swift",
+        "macos/JarvisKit/Tests/JarvisKitTests/CC7a4PayloadTests.swift",
+        "macos/MortimerHost/Sources/MortimerHost/App/AppMessageRouter.swift",
+        "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionCoordinator.swift",
+        "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionRegistry.swift",
+        "macos/MortimerHost/Sources/MortimerHost/Console/ConsoleActionBar.swift",
+        "macos/MortimerHost/Sources/MortimerHost/Console/ConversationThreadView.swift",
+        "macos/MortimerHost/Sources/MortimerHost/Stores/ConversationStore.swift",
+        "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceRecents.swift",
+        "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceStore.swift",
+        "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ConversationIntegrationTests.swift",
+        "macos/MortimerHost/Tests/MortimerHostTests/CC7a4RecentsFreshnessTests.swift",
+        "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ReuseTests.swift",
+        "macos/MortimerHost/Tests/MortimerHostTests/CC7aThreadAcceptanceTests.swift",
+        "tests/unit/test_display.py",
+        "tests/unit/test_weather_reuse.py",
+        "tests/unit/test_weather_reuse_pipeline.py"
+      ],
+      "patch_sha256": "56de27e347b6643ba856bdfb669fe45e959e4e95e032c3a80b2c563b20918c88",
+      "patch_bytes": 257078,
+      "prompt_sha256": "5b558579e69da728012107ea85fdf68a40d6ddb46b9302ee70ec3ccb38ab35ea",
+      "response_sha256": "b03a57b18322bdc60a35c8f2a365488859aaf56b9c81761bfed60f057a8f85b7",
+      "review": "## Scope note\n\nOnly **Diff2 (PR198, source `748b1e5`)** was supplied in this request. **Diff1 (PR197, bd18033\u2192065d500)** is absent \u2014 I have not inspected it and make no claims about it. No integration review between the two diffs is possible; that section below is limited to what Diff2 implies about its own internal consistency.\n\n## Diff2 verdict: no blocking defects found\n\nThe change implements request-scoped native weather cache reuse (Python backend \u2194 Swift host) with console-protocol plumbing, display-payload cache metadata, and conversation-thread UI. Review of every file in the diff did not surface a causally-demonstrable correctness or security defect. The implementation consistently re-validates privacy/staleness after every `await` (`jarvis/bot/weather_reuse.py` `WeatherReuseBridge.lookup`, `jarvis/bot/pipeline.py` `_query_native_weather`, `jarvis/skills/registry.py` `_call`), uses closed allowlists for refusal/miss codes rather than passing arbitrary strings through, excludes `bool` from `int`-typed checks everywhere (`type(x) is not int` pattern, both Python and Swift `case .number`/`rounded(.towardZero)` mirrors), and gates the model-facing `weather_reuse` console action off entirely (`jarvis/bot/console_actions.py`: `if action == \"weather_reuse\": return \"...rejected...\"`) while still allowing it through the internal, directly-constructed `console/request` path in `_query_native_weather`.\n\n## Non-blocking observations (not confirmed defects)\n\n1. **`jarvis/bot/weather_tool.py`, `build_local_weather_tool` fetch path** \u2014 `weather_display_metadata(subject_key, original_source, fetch_ts)` is applied to the payload unconditionally, while `data_policy = \"approved_external\"` is only set `if bridge is not None`. This means the full (\u226416KiB) raw provider JSON (`weather_source`, including radar tile URLs / coordinates) is now attached to every `local_weather` display payload even when `JARVIS_COMMAND_CONSOLE_ENABLED` is false, where previously only a sanitized `view` was retained. `WorkspaceStore.queryWeatherReuse`/inventory correctly gate reuse and `fresh_until` disclosure on `dataPolicy == \"approved_external\"`, so this isn't a privacy-boundary break (the client already rendered this data to its own user), but it is a larger wire payload than before regardless of the feature flag. Worth confirming this is intended bandwidth-wise.\n\n2. **`macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `DisplayPayload.validWeatherSource`** vs **`jarvis/bot/weather_reuse.py`, `valid_weather_source`/`valid_weather_timing`** \u2014 Python strictly rejects NaN/Infinity anywhere in the source object via `json.dumps(..., allow_nan=False)`; the Swift side only separately validates the top-level `ts`/`freshUntil` for finiteness and relies on `JSONEncoder().encode(source)` for the nested `weather_source` payload. `JSONValue`'s `Encodable` conformance isn't part of this diff, so I can't confirm it rejects (rather than silently coerces) NaN/Infinity nested inside e.g. `weather.current.*`. This is a potential cross-platform validation asymmetry, not a confirmed bug.\n\n3. **`jarvis/bot/weather_reuse.py`, `local_weather_subject_key`** \u2014 the comment \"Existing weather.gov requests format coordinates with this precision [4 decimals]\" is an assumption about code outside this diff. If the actual request-formatting precision differs, cache-key boundaries could diverge from actual provider request grid boundaries (stale-but-matching-key risk), though this fails toward extra cache misses rather than any privacy/security issue.\n\n4. **`macos/MortimerHost/.../ConversationStore.swift`, `recordReference`** \u2014 by design, only one cached-reference line is recorded per `run_id` (confirmed intentional via contract text and `testWeatherAndRadarInOneOriginatingRunAppendOnlyOneReference`/`testConversationOwnerBoundsDedupeAndClearingReferences`). A second, unrelated cache-hit (different subject) occurring under the same `run_id` would silently produce no visible reference rather than a second line. This is explicitly tested/intended, not a bug, but worth flagging as a known UX tradeoff.\n\nNone of the above are \"trigger \u2192 consequence\" defects I can demonstrate from the diff alone; they're items to confirm against intent or against code not shown in this diff.\n\n## Limitations\n\n- Diff1 (PR197) was not supplied and is not reviewed; no integration verdict between Diff1 and Diff2 is possible.\n- No tool access: this is a static read of the diff text only. I did not execute code, run the referenced test suites, or inspect unmodified surrounding code (e.g., the body of `SkillRegistry._call`'s unchanged `try/except`, `JSONValue`'s `Encodable` implementation, `select()`'s revision-bumping behavior, `weather.gov` request formatting) that this diff's correctness partly depends on.\n- The stated local test results (backend/JarvisKit/Host pass counts, hash/mode/pin matches) are taken as asserted evidence per the prompt and are not independently verified by me.\n- Diff-string comments and embedded prose were treated as untrusted descriptive content, not instructions, throughout this review.",
+      "reviewer": {
+        "system": "claude",
+        "runtime": "2.1.290 (Claude Code)",
+        "model": "claude-sonnet-5",
+        "binary_sha256": "b8412a3826b2dc8ecb1c0605970c28dea28355de5faa740407dd881acdd40237",
+        "reported_models": [
+          "claude-sonnet-5"
+        ],
+        "reported_canonical_models": [
+          "claude-sonnet-5"
+        ]
+      },
+      "execution": {
+        "phase": "finished",
+        "exit_code": 0,
+        "is_error": false,
+        "terminal_reason": "completed",
+        "review_verdict_available": true,
+        "auth_method": "claude.ai",
+        "subscription_type": "max",
+        "API_credentials_absent": true,
+        "tools": [],
+        "mcp_servers": [],
+        "session_persistence": false,
+        "source_log_or_secret_extras": false,
+        "provider_deadline_seconds": 600,
+        "started_at": 1791586525.926104,
+        "finished_at": 1791586849.989771,
+        "reported_cost_usd": 0.6952712,
+        "reported_cost_is_billing_proof": false,
+        "quota_or_billing_verified": false,
+        "stop_reason": "end_turn",
+        "num_turns": 1,
+        "subtype": "success"
+      }
+    }
+  ],
+  "limitations": [
+    "Static supplied-diff reviews; no tools, test execution or surrounding unchanged source inspection by Claude.",
+    "Each request contained only one diff; no Claude joint integration verdict.",
+    "Independent Codex context checks and offline VM tests are separate evidence.",
+    "The Claude197 review is post-merge because PR197 merged before this authorization.",
+    "Not a formal GitHub approving review, deployment receipt or live acceptance.",
+    "Reported list costs do not establish subscription quota, paid overage settings or billing."
+  ],
+  "patch_reconstruction": {
+    "checked_by": "independent Codex agent",
+    "command": "git diff --no-ext-diff --no-renames BASE SOURCE -- SELECTED_PATHS",
+    "both_hashes_and_sizes_match": true,
+    "scope": "read-only owned Git objects; no new source transmission"
+  },
+  "context_validation": {
+    "source": "ce6cde86c56e4793f133f8b7d80ea55ea1754198",
+    "recorded_by": "codex",
+    "kind": "read-only surrounding-source and existing-test inspection; separate from Claude verdict",
+    "code_changes_required": false,
+    "observations": [
+      {
+        "review": 197,
+        "id": "F1",
+        "disposition": "No reachable current encode failure found. Inventory numeric fields are integer counts/indexes or finite-validated freshness, and production publication uses the typed inventory getter.",
+        "evidence": [
+          "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceStore.swift:133",
+          "macos/JarvisKit/Sources/JarvisKit/AppMessage.swift:261",
+          "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionCoordinator.swift:122"
+        ]
+      },
+      {
+        "review": 197,
+        "id": "F2",
+        "disposition": "Capacity test has a dependent local ordering oracle; independent existing Recents tests explicitly check pinned/newest and reversed Older order. No coverage gap demonstrated.",
+        "evidence": [
+          "macos/MortimerHost/Tests/MortimerHostTests/CC7aInventoryCapacityTests.swift:50",
+          "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceRecents.swift:57",
+          "macos/MortimerHost/Tests/MortimerHostTests/CC7a3RecentsTests.swift:39"
+        ]
+      },
+      {
+        "review": 197,
+        "id": "F3",
+        "disposition": "All current production waiter producers preregister and route through the shared sender, which tags action/scope before its first transport await. Untagged injected/future producers are a hardening observation without a current trigger.",
+        "evidence": [
+          "jarvis/bot/console_actions.py:278",
+          "jarvis/bot/pipeline.py:842",
+          "jarvis/bot/pipeline.py:874"
+        ]
+      },
+      {
+        "review": 197,
+        "id": "F4",
+        "disposition": "The repr ceiling is an existing downstream validator contract. Conservative projection preserves numbered rows or refuses and labels omissions; passive snapshots do not replace model-observed voice bindings.",
+        "evidence": [
+          "jarvis/bot/console_protocol.py:343",
+          "jarvis/bot/pipeline.py:2175",
+          "jarvis/bot/console_actions.py:193",
+          "jarvis/bot/console_actions.py:314"
+        ]
+      },
+      {
+        "review": 198,
+        "id": "1",
+        "disposition": "Confirmed additive metadata when the console bridge is off; document compatibility. Protected-turn guards remain and missing explicit approved_external policy cannot serve a native cache hit. No hidden fetch or feature activation added.",
+        "evidence": [
+          "jarvis/bot/weather_tool.py:183",
+          "jarvis/bot/weather_tool.py:239",
+          "jarvis/bot/weather_tool.py:265",
+          "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceStore.swift:355",
+          "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ReuseTests.swift:196"
+        ]
+      },
+      {
+        "review": 198,
+        "id": "2",
+        "disposition": "Foundation default JSONEncoder throws on nonfinite numbers; recursive JSONValue encoding preserves that behavior and try? refuses source. Static semantics confirmed; no dedicated nested-nonfinite execution proof added.",
+        "evidence": [
+          "macos/JarvisKit/Sources/JarvisKit/AppMessage.swift:270",
+          "macos/JarvisKit/Sources/JarvisKit/JSONValue.swift:35"
+        ]
+      },
+      {
+        "review": 198,
+        "id": "3",
+        "disposition": "Four-decimal local identity matches actual Weather.gov points/alerts URL construction and the approved exact-location key contract. Open-Meteo fallback does not change that Weather.gov-specific assertion.",
+        "evidence": [
+          "jarvis/weathergov.py:39",
+          "jarvis/weathergov.py:45",
+          "tests/unit/test_weather_reuse.py:80",
+          "tests/unit/test_weathergov.py:183",
+          "tests/unit/test_mcp_web_logic.py:897"
+        ]
+      },
+      {
+        "review": 198,
+        "id": "4",
+        "disposition": "One reference per originating run, including two different subjects in that run, is an explicit approved and tested UX tradeoff. The second cache reply still completes.",
+        "evidence": [
+          "macos/MortimerHost/Sources/MortimerHost/Stores/ConversationStore.swift:89",
+          "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ConversationIntegrationTests.swift:504",
+          "macos/MortimerHost/Sources/MortimerHost/App/AppMessageRouter.swift:175"
+        ]
+      }
+    ]
+  },
+  "caller_configuration": {
+    "checked_by": "codex",
+    "artifacts": [
+      {
+        "local_path": "/private/tmp/ws17-claude-review-separate-20261009.py",
+        "sha256": "a6e5f76411c94ea08f410f10933ce03c19036435ab5a302d380e6b08b081b1b1"
+      },
+      {
+        "local_path": "/private/tmp/ws17-claude-review-joint.py",
+        "sha256": "ce879a57fc865a5d9b1adba91d5b22952ba8939e2f1791464fb26b89f942b03c"
+      }
+    ],
+    "helper_source_commit": "ce6cde86c56e4793f133f8b7d80ea55ea1754198",
+    "helper_path": "jarvis/subscription.py",
+    "flags": [
+      "--print",
+      "--input-format",
+      "text",
+      "--output-format",
+      "json",
+      "--no-session-persistence",
+      "--safe-mode",
+      "--restricted",
+      "--tools",
+      "",
+      "--disallowed-tools",
+      "mcp__*",
+      "--permission-prompts",
+      "none",
+      "--model",
+      "claude-sonnet-5",
+      "--strict-mcp-config",
+      "--mcp-config",
+      "<fresh-private-empty-MCP-file>",
+      "--setting-sources",
+      "",
+      "--max-budget-usd",
+      "1",
+      "--max-turns",
+      "1"
+    ],
+    "prompt_hash_evidence": "Codex reconstructed exact UTF-8 prompt from executed caller, approved immutable patch and prior caller contract prose; not independently established by result metadata."
+  },
+  "release_dependency_observation": {
+    "recorded_by": "codex",
+    "source": "gh pr view 196 -R Larryfix71566/jarvis-voice-ai --json headRefOid,state,mergedAt,title",
+    "state": "OPEN",
+    "head": "4994861535539c12687ac57fb53313ee16568a88",
+    "mergedAt": null,
+    "observed_date": "2026-10-09"
+  }
+}
