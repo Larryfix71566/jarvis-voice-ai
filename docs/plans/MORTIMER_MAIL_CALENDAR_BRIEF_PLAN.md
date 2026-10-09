@@ -2,8 +2,9 @@
 
 **Status:** DRAFT. Written 2026-08-26 and reconciled with main `e7b099b` on
 2026-10-07 (§R, Claude). Revision 2 answers Codex's review of `0de8a2e` (R.0),
-revision 3 its review of `5e37696` (R.0a), and revision 4 its review of `b3d7c0f`
-(R.0b). §R is authoritative and waits on Larry's decisions D1–D9. The August text after §R is history: R.9 says which parts
+revision 3 its review of `5e37696` (R.0a), revision 4 its review of `b3d7c0f`
+(R.0b), and revision 5 its review of `4994861` (R.0c). §R is authoritative and
+waits on Larry's decisions D1–D9. The August text after §R is history: R.9 says which parts
 remain background, and R.10–R.12 govern wherever they differ. Implements
 roadmap track **T5** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.5), tracked as
 WS-13. Read scopes only.
@@ -25,7 +26,31 @@ credential was touched. Approval works in two steps: first Larry answers D1–D9
 (R.5); then each increment in R.6 is claimed, built, cross-reviewed and accepted on
 its own. This section does not authorize implementation.
 
-### R.0b Revision 4 (2026-10-07, after Codex's review of `b3d7c0f`)
+### R.0c Revision 5 (2026-10-09, after Codex's review of `4994861`)
+
+Codex reviewed revision 4 at `4994861`, with main at `27fd356`, and found all seven
+amendments addressed. One P3 blocker remained: the result history's storage
+contract. Revision 4 treated a returning `UserDefaults` write as durable, but Apple
+documents that a `UserDefaults` object "updates its in-memory version of that
+information right away, and writes the value to disk asynchronously", and
+`synchronize()` is deprecated as unnecessary (the `UserDefaults` class reference,
+read 2026-10-09). So an app that acknowledged a revision and exited before the
+asynchronous write reached disk would keep its `instance_id` (persisted earlier)
+and lose the revision, answer the probe `unknown`, and be delivered to again.
+Fresh reads also did not serialise two processes' read-modify-write.
+
+| Item | Resolution |
+|---|---|
+| Durable, atomic, serialised history | R.10.7, "The history store": a new `BriefHistoryStore.swift`, one file holding the `instance_id` and the history, written by temp file, `F_FULLFSYNC`, rename and directory sync, under an exclusive `flock` held across every read-modify-write; the `instance_id` is committed before the first `brief/hello`; a revision is committed, then shown, then acknowledged; on a persistence failure a scheduled revision is neither applied nor acknowledged, a requested one is shown without an ack, and a probe gets no answer. The directory-sync call is measured on the Mac (M3-6), not assumed; `Data.write(.atomic)` is not used because Foundation documents no sync for it |
+| Concurrent processes | the same lock serialises application, eviction and id creation across processes, and the store is one actor in process; probes are answered from a locked read of the file |
+| R.0b date | corrected to 2026-10-09, when it landed |
+| "Thursday" sentence | R.10.7: a request about a future Thursday never suppresses that future slot; on Thursday itself the date-resolution and suppression rules apply |
+
+Disposition carried from Codex: P1 and P2 are ready for Larry's decisions and
+claims; P3 is ready once this contract is corrected; P4/P5 have no further blocker
+and stay separately gated. Implementation and Mac acceptance remain pending.
+
+### R.0b Revision 4 (2026-10-09, after Codex's review of `b3d7c0f`)
 
 Codex reviewed revision 3 at `b3d7c0f`, with main at `99993eb`. It found the earlier
 findings resolved and asked for seven amendments and two clarifications: four in
@@ -41,7 +66,7 @@ gated. D1–D9 remain unanswered.
 | Item | Resolution |
 |---|---|
 | 1 Ledger eviction is not "never applied" | R.10.7: a result history keyed by `result_id`, with scheduled entries never evicted before they expire; probes answer `ack`, `not_applied` or `unknown`; an `unknown` from the installation the result went to means never received, because eviction cannot cause it inside the horizon and the history cannot be lost without the installation's `instance_id` |
-| App installation identity (added while answering 1) | R.10.5, R.10.7: `brief/hello` carries a persisted `instance_id`; rows record `recipient_instance`; `not_applied` and `unknown` are evidence only from that instance, an ack is accepted from any eligible session of it, and a probe goes to `recipient_session` while it is connected. A different installation's answers count as no answer, so a second build or a reinstall ends the day `unconfirmed` rather than duplicated |
+| App installation identity (added while answering 1) | R.10.5, R.10.7: `brief/hello` carries a persisted `instance_id` (revision 5 made that persistence durable); rows record `recipient_instance`; `not_applied` and `unknown` are evidence only from that instance, an ack is accepted from any eligible session of it, and a probe goes to `recipient_session` while it is connected. A different installation's answers count as no answer, so a second build or a reinstall ends the day `unconfirmed` rather than duplicated |
 | 2 Monotonic revisions | R.10.7: the app keeps the greatest applied revision; an older revision is recorded as superseded, never applied, never recreates, never notifies and is not acknowledged |
 | 3 Claimable `open` states | R.10.7: the claim table lists every case by the current row's state: none, `not_applied`, `all_failed` after the retry delay, `emitted` through the probe path |
 | 4 Exhaustion is `partial` only with trustworthy results | R.10.12: a per-phase table; `failed` with count `unknown` before a trustworthy count or validated headlines exist; an exact zero is `ok`. R.10.7's outcome rests on it |
@@ -527,6 +552,9 @@ in R.10 and the acceptance rows in R.12.
     - `jarvis/brief.py`: M10's assembly, revised by R.10, plus the deterministic
       renderer that builds the typed `brief` payload.
     - `jarvis/bot/brief_tool.py` and `jarvis/bot/brief_watcher.py`.
+    - `macos/MortimerHost/Sources/MortimerHost/Stores/BriefHistoryStore.swift`,
+      the durable, locked result history and `instance_id` store (R.10.7; a new
+      file outside WS-17's scope).
     - The `protected_display_v1` capability and the `instance_id` capture in
       `jarvis/bot/eligible_sessions.py`, and the `brief/hello` field in JarvisKit
       (R.10.5).
@@ -547,7 +575,8 @@ in R.10 and the acceptance rows in R.12.
         result-acknowledgement portion of `pipeline.py`;
       - the typed `brief` kind in JarvisKit `DisplayPayload`, with its MortimerHost
         renderer;
-      - the result history and its probe answers (R.10.7).
+      - the calls into the history store from `WorkspaceStore.swift` and
+        `ResponseResultRouter.swift`, and the probe answers (R.10.7).
     - The `brief` serializer in `WorkspaceResultExport` (R.10.16).
     - Under D8 (c) only, the shared `DisplayActionPolicy` predicate (R.10.6). It
       replaces every action gate among the `isProtectedLocal` uses (44 at
@@ -563,7 +592,7 @@ in R.10 and the acceptance rows in R.12.
     - The tool description in `jarvis/prompts.py`.
     - The scorer and menu in `tests/evals/routing_eval.py`, and cases in
       `tests/evals/cases.yaml` (R.10.17).
-  - Acceptance: S3-1 to S3-14, M3-1 to M3-5.
+  - Acceptance: S3-1 to S3-14, M3-1 to M3-6.
 - **P4 — Model-written brief.** Optional. It needs D4 (b) or a private route, plus
   R.11.1, R.11.2, R.11.6 and R.11.7.
   - Workload `brief`, reserved in §3, following WS-05's execution rules (R.2 row 6).
@@ -804,8 +833,8 @@ transport, peer, console generation, app instance and negotiated capabilities:
   hello of the same type that omits its capability withdraws it; a hello of one type
   never changes the other's capability;
 - `brief/hello` also carries `instance_id`, a 128-bit random value the app creates
-  on first launch and keeps in the same local defaults as its result history
-  (R.10.7). It identifies the app installation across reconnects and restarts. It
+  on first launch and keeps in the same durable store as its result history
+  (R.10.7). It is committed to disk before the first `brief/hello` carries it. It identifies the app installation across reconnects and restarts. It
   is evidence of identity inside today's C2 boundary, where any local
   native-protocol process is already trusted; it is not a credential. A
   `brief/hello` whose `instance_id` is missing or not 32 hex characters confers no
@@ -1097,7 +1126,7 @@ The answer decides the next step:
 | `brief/ack` | Handled by the acknowledgement rule below; the claimant stops |
 | `brief/not_applied`, from the same app instance | The app knows the result and did not apply that revision. The row becomes `not_applied`. The claimant acquires and emits a new revision if `emissions < BRIEF_MAX_EMISSIONS`; at the limit, the slot moves `claimed → abandoned`. |
 | `brief/unknown`, from the same app instance | The app has no history for that `result_id` (revision 4). The answering session's `instance_id` equals the row's `recipient_instance`, so it is the installation the result was sent to, with the history that would hold it: scheduled histories are never evicted inside their recovery horizon (below), and the instance id lives in the same store as the history, so neither can be lost without the other. The result was therefore never received. The row becomes `not_applied`, the content-free log says `unknown`, and the claimant proceeds as for `not_applied`. |
-| `brief/not_applied` or `brief/unknown`, from another instance | Not evidence: a different installation (a second build with its own defaults, or a reinstall) cannot know what the first applied or dismissed. Treated as no answer. |
+| `brief/not_applied` or `brief/unknown`, from another instance | Not evidence: a different installation (a second build with its own store, or a reinstall) cannot know what the first applied or dismissed. Treated as no answer. |
 | No answer | If the row is still `emitted`, the slot moves `claimed → emitted`, guarded by the token, and `awaiting_since` is reset, so the next probe waits another ack timeout. It is retried within `claims`. If a late `not_applied` has already changed the row, the claimant acquires as above. |
 
 `brief/not_applied` and `brief/unknown` (`{"version": 1, "result_id", "revision"}`)
@@ -1143,7 +1172,8 @@ slot when all of these hold:
 - `query_date` equals `request_local_date`: the request asked about today, as it was
   when the request was made.
 
-A request about Thursday never suppresses Thursday. Fencing moves that day's slot to
+A request about a future Thursday never suppresses that future slot; on Thursday
+itself, the date-resolution and suppression rules above apply. Fencing moves that day's slot to
 `suppressed` from `open`, `claimed` or `emitted`, or inserts it as `suppressed`. A
 slot that is already terminal, or `unconfirmed` (past its window), is left as it is,
 and the requested row's acknowledgement still commits. After that:
@@ -1181,8 +1211,8 @@ acceptable only because the notice carries no content.
 | A requested ack fails to record | It is retried within the busy timeout. If it still fails, the requested row stays `emitted`: nothing is announced and nothing is suppressed, so the scheduled brief may still arrive that day. Requested results are never probed. |
 
 **The app's result history (revision 4).** MortimerHost keeps a content-free
-history keyed by `result_id`, not by revision, in its local defaults so it survives a
-restart. Each entry holds:
+history keyed by `result_id`, not by revision, in the durable store below so it
+survives a restart. Each entry holds:
 - `kind` (`scheduled` or `requested`) and `first_seen_at`;
 - `applied`: the set of revisions it applied, each with its `outcome` from the
   payload (R.10.8). The app enforces no bound of its own on it: the host emits at
@@ -1195,12 +1225,80 @@ restart. Each entry holds:
 
 The app uses the history only for the rules below; the host never trusts it back.
 
-**Persist before acknowledging.** The app writes the history change to its local
-defaults, and that write returns, before it sends `brief/ack` (the app-side twin of
-the host's record-before-send rule). A crash between the write and the ack leaves a
-history that answers the next probe with `ack`; a crash before the write leaves
-nothing to acknowledge. There is no window in which an acknowledged revision is
-missing from the history.
+**The history store (revision 5).** `UserDefaults` is not the store: Apple
+documents that it writes to disk asynchronously and that `synchronize()` is
+deprecated, so a returning write proves nothing about a crash (R.0c). The history
+and the `instance_id` live together in one JSON file, `brief-history.json`, in
+`~/Library/Application Support/<identifier>/` (the app is not sandboxed, per
+`macos/MortimerHost/templates/MortimerHost.entitlements.template`), where
+`<identifier>` is the bundle identifier (`com.mortimer.host`, set by
+`bundle.sh`) or, by this plan's rule for a build with no bundle, the executable
+name. That rule is why two builds are two installations. The new file
+`macos/MortimerHost/Sources/MortimerHost/Stores/BriefHistoryStore.swift` is its
+only reader and writer, and is outside WS-17's scope (R.13); the calls into it
+from `WorkspaceStore.swift` and `ResponseResultRouter.swift` are inside it.
+- **Atomic and durable commit.** Every change is written as a whole new file: write
+  the temp file in the same directory, `fcntl(F_FULLFSYNC)` on it, rename it over
+  `brief-history.json`, then sync the directory. On macOS a plain `fsync` does not
+  guarantee the data reached the disk and `F_FULLFSYNC` does (`fcntl(2)`). Whether
+  `F_FULLFSYNC` is accepted on a directory descriptor is not documented; P3
+  measures it on the Mac (`open(dir, O_RDONLY)` then `fcntl(fd, F_FULLFSYNC)`,
+  M3-6). If it returns 0, the rename is as durable as the data. If it fails
+  (`ENOTSUP` or `EINVAL`), the directory gets `fsync(fd)` instead, which `fcntl(2)`
+  says does not guarantee persistence, and the plan records that the rename's
+  durability is then weaker than the file's: a power loss in that window could
+  leave the previous file, never a torn one. The change is committed only when the
+  rename and the directory sync have both returned. `Data.write(options: .atomic)`
+  is not used, because Foundation does not document any sync for it.
+- **Serialised across processes, and in process.** Every read-modify-write
+  (applying a revision, recording a superseded one, dismissal, eviction, and
+  creating the `instance_id`) holds an exclusive `flock` on `brief-history.lock` in
+  that directory from before its read until after its commit; probe answers hold
+  the shared lock while they read. `flock` is advisory and per open file
+  description, so two descriptors in one process also conflict: the store is one
+  actor, so a process never takes the lock against itself. Lock waits are
+  `LOCK_NB` polls bounded by `BRIEF_STORE_LOCK_WAIT_S` (proposed 2); a timeout is
+  a persistence failure. A second process of the same installation (`open -n`, or
+  a crashed process still draining while its replacement connects) therefore sees
+  the first's commit and cannot interleave with it: two processes applying
+  revisions 2 and 3 end with 3 applied, 2 applied or superseded by the monotonic
+  rule according to which committed first, and `highest_applied = 3`; two
+  processes starting with no file end with one `instance_id`.
+- **Commit, then display, then acknowledge.** A revision's history entry is
+  committed first; only then is the card shown and `brief/ack` sent (the app-side
+  twin of the host's record-before-send rule). A crash after the commit leaves a
+  history that answers the next probe with `ack`; a crash before it leaves nothing
+  applied and nothing acknowledged, and the probe answers `unknown` for a first
+  revision or `not_applied` for a later one, so the host re-emits. There is no
+  window in which an acknowledged revision is missing from the file. Residual: a
+  crash in the instant between the commit and the render leaves a revision
+  recorded as applied that was never seen; the host then treats the day as
+  delivered. That is the same outcome as a crash a moment after the render, since
+  the workspace is not persisted and every card is gone after a restart; in both
+  cases Larry asks again. The plan prefers this to the reverse order, which could
+  show a brief twice.
+- **The `instance_id`.** Under the exclusive lock, an absent file means a new
+  installation (first launch, or a deleted store): the app creates a new id and
+  commits it the same way, before the first `brief/hello`. A file that exists but
+  cannot be read or decoded, or lacks the id, is a persistence failure: the app
+  sends no hello (so it is not eligible) and no probe answer, logs a content-free
+  line, and retries the store with backoff. The app reads the id from the file
+  whenever it sends a hello and whenever it answers a probe; it never caches one.
+- **Persistence failure.** If the write, sync, rename or lock fails:
+  - a scheduled revision is neither applied nor acknowledged, a content-free log
+    line says so, and the host's probe re-emits within its limits; the next
+    attempt retries the store;
+  - a requested revision is shown but not acknowledged, since it is never re-sent
+    or probed: Larry sees the card, nothing is announced and nothing is
+    suppressed;
+  - a probe gets no answer at all. `brief/unknown` is sent only from a successful
+    locked read of a committed file that has no entry; a lock timeout, a missing
+    file or a decode failure answers nothing, and the host's "No answer" path
+    applies.
+
+  The app never acknowledges or answers from memory.
+- **Not shared.** The file holds no content: result ids, revisions, outcomes,
+  timestamps and flags only (R.10.3).
 
 **Capacity and eviction.** At most `BRIEF_HISTORY_MAX` (proposed 200) entries. An
 entry expires `BRIEF_HISTORY_TTL_H` (proposed 48) after `first_seen_at`. Eviction
@@ -1238,9 +1336,9 @@ A dismissed card's applied revisions still answer `brief/ack`, so losing an
 acknowledgement never resurrects a dismissed card: the host records the ack and
 sends nothing new.
 
-**Residual: another installation.** A reinstall or a reset of the app's defaults
-loses the history and the `instance_id` together. A second build (a bundled app
-and a `swift run` build keep separate defaults) is another instance too. When the
+**Residual: another installation.** A reinstall, or deleting the store's
+directory, loses the history and the `instance_id` together. A second build (a
+bundled app and a `swift run` build keep separate stores) is another instance too. When the
 installation a revision went to is gone and a different one is bound, the probe's
 answer is not evidence, each probe claim ends as "no answer", and the day ends
 `unconfirmed` at window close, even if the first installation never showed the
@@ -1248,11 +1346,11 @@ card (a send that raised). The host sends nothing new that day: not showing a br
 is preferred to showing it twice or resurrecting a dismissed one. Under D7 (b) the
 notice above is queued.
 
-**One process per instance.** Two processes of one installation (`open -n`, or a
-crashed process still draining while its replacement connects) share the defaults
-store but not their memory. The app therefore answers every probe from a fresh read
-of the store, never from an in-memory copy, so a second process sees what the first
-persisted.
+**Two processes of one installation** (`open -n`, or a crashed process still
+draining while its replacement connects) share the file but not their memory. The
+history store's lock serialises their writes, and every probe is answered from a
+locked read of the file, never from an in-memory copy, so a second process sees
+what the first committed (revision 5, above).
 
 **Announcement (revision 4).** The spoken line (D5) is said only after the app's
 acknowledgement of the revision it describes:
@@ -1268,9 +1366,10 @@ acknowledgement of the revision it describes:
 Otherwise the acknowledgement is recorded and nothing is spoken.
 
 Under D5 (a) the line is the same for every outcome, scheduled or requested: "Your
-brief arrived." It is true whenever it is said, because the app has acknowledged
-applying the card, and it stays true after the card is dismissed, evicted or the
-app restarts, which "on screen" would not. The number of times it is said does not
+brief arrived." It describes the acknowledgement: the app has committed the
+revision to its record and shown it (R.10.7's commit-then-display order, with its
+stated residual), and the line stays true after the card is dismissed, evicted or
+the app restarts, which "on screen" would not. The number of times it is said does not
 depend on the sources either (once per result), so D5 (a)'s property test (R.10.3)
 holds for the text and for its count. Failure details stay on the card.
 
@@ -1359,12 +1458,35 @@ or probed. If one is not acknowledged, Larry can simply ask again.
     produces a New notice, and is not acknowledged; a later probe for revision 1
     answers `not_applied`;
   - a probe for a result with no history answers `unknown`;
-  - the history survives an app restart, and the history write completes before the
-    ack is sent (a crash injected between them leaves a history that answers `ack`);
+  - the history survives an app restart, and the commit completes before the ack is
+    sent: a process killed (`SIGKILL`) at any point after `brief/ack` was sent
+    leaves a history that answers `ack` for every acknowledged scheduled revision;
+    one killed after the temp write but before the rename leaves nothing applied
+    and no ack sent, and the probe answers `unknown` (a first revision) or
+    `not_applied` (a later one). `SIGKILL` never loses the page cache, so these
+    cases prove ordering, not the syncs; M3-6 covers the syncs;
+  - an older `instance_id` survives a kill: the id is committed before the first
+    hello, so the host never holds an id the file lacks;
+  - two processes of one installation applying revisions 2 and 3 concurrently, in
+    either order: 3 is applied, 2 is applied or superseded according to which
+    committed first, `highest_applied` is 3, and only applied revisions were
+    acknowledged;
+  - concurrent eviction and application: no applied entry is lost and no unexpired
+    scheduled entry is evicted;
+  - two processes creating the `instance_id` at once: one id;
+  - a failed write, sync, rename or lock: a scheduled revision is neither applied
+    nor acknowledged and the next revision succeeds; a requested one is shown
+    without an ack and suppresses nothing; a probe during the failure gets no
+    answer, never `unknown`;
+  - a hello while the file is unreadable or lacks the id: no hello is sent; an
+    absent file creates and commits a new id first;
+  - a probe read taken while the same process holds the exclusive lock does not
+    block (the store is one actor);
+  - `brief-history.json` contains no source content;
   - a reinstall (new `instance_id`) answers `unknown`, and the host sends nothing
     new;
-  - a second process of the same installation answers a probe from the store, not
-    from memory.
+  - a second process of the same installation answers a probe from the locked
+    file, not from memory.
 - Speech:
   - one announcement per result across retries and probes, on the first
     acknowledged revision whatever its outcome;
@@ -2142,7 +2264,7 @@ do not prove Mac, account or provider behaviour.
 | S3-9 | P3 | Disclosure and storage, checked against the chosen D5 option (R.10.3) | The property test, canaries absent from every store, and retention; an integrated canary across speech, LLM context (`append_to_context=False`) and conversation storage |
 | S3-10 | P3 | Migration `0035_brief` (item 25) | See below |
 | S3-11 | P3 | Display actions (R.10.6) | The chosen D4/D8 combination is tested through the shared predicate. Under D8 (c), approved model processing is allowed, and keyboard, context-menu and selection copy, share (including image share), export, a comparison share including the brief, direct store transfer, the supporting-display inventory, voice transfer, pointer transfer and every visible control are blocked, and the protected label still shows. A source scan finds `isProtectedLocal` and direct `dataPolicy` comparisons only in the predicate and the listed kept sites |
-| S3-12 | P3 | Result history and announcement (R.10.7) | Close-before-retry, lost ack, duplicate-while-pinned and the three probe answers behave as specified; a dismissed scheduled card survives more than `BRIEF_HISTORY_MAX` requested results and its probe still answers `ack`; eviction order as specified; revisions apply monotonically (a late older revision never replaces, recreates, notifies or is acknowledged); the history survives a restart; an all-failed card is replaced or recreated by a later full one; at most one announcement per result, on its first acknowledged revision; none when suppressed or after the window, and for a requested result none after the ack timeout; under D5 (a) the speech is byte-identical across outcomes and never claims the card is on screen |
+| S3-12 | P3 | Result history and announcement (R.10.7) | Close-before-retry, lost ack, duplicate-while-pinned and the three probe answers behave as specified; a dismissed scheduled card survives more than `BRIEF_HISTORY_MAX` requested results and its probe still answers `ack`; eviction order as specified; revisions apply monotonically (a late older revision never replaces, recreates, notifies or is acknowledged); the history survives a restart and a `SIGKILL` at any point after an ack, is committed before every ack and before the first hello, and serialises concurrent processes (revisions, eviction, id creation); on a store failure a scheduled revision is neither applied nor acknowledged, a requested one is shown without an ack, a probe gets no answer and no hello is sent, while an absent file creates a new id; an all-failed card is replaced or recreated by a later full one; at most one announcement per result, on its first acknowledged revision; none when suppressed or after the window, and for a requested result none after the ack timeout; under D5 (a) the speech is byte-identical across outcomes and never claims the card is on screen |
 | S3-13 | P3 | Export serialization (R.10.16) | Under D8 (b), the deterministic serializer gives a complete whole-result copy, share and export, and a section or paragraph share of a brief is refused; under D8 (c), all are blocked |
 | S3-14 | P3 | Retention without a client (R.10.3) | A running bot with no eligible client crosses the retention boundary, and the rows are purged |
 | M1-1 | P1 | Environment on the Mac | A names-only preflight prints, for each MCP server, whether each `MAIL_*` name is forwarded (yes or no, never a value) and the effective `JARVIS_ENV_SCOPING_ENABLED`. Only `mcp-mail` says yes, and scoping is on |
@@ -2155,6 +2277,7 @@ do not prove Mac, account or provider behaviour.
 | M3-3 | P3 | Brief on schedule | With the time set two minutes ahead and a restart, exactly one card arrives; a reconnect brings no second |
 | M3-4 | P3 | Switches | Each switch off, and an empty `JARVIS_BRIEF_TIME`, after a restart |
 | M3-5 | P3 | Browser console | A web-console session gets no brief and causes no source call, including while the native app is connected |
+| M3-6 | P3 | History store syncs (R.10.7) | On the Mac, `fcntl(F_FULLFSYNC)` on a directory descriptor is measured and the result recorded; an `fs_usage -f filesys` trace of one commit shows the temp write, `F_FULLFSYNC`, the rename and the directory sync in that order, and no other sync; `brief-history.json` holds no content |
 
 **S3-10 in full (revision 3).** `SELECT id FROM migrations` without `ORDER BY` does
 not return insertion order. Claude reproduced the real table shape offline: with
