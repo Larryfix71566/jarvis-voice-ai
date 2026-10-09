@@ -2057,9 +2057,9 @@ Integrated main `27fd356` as frozen candidate `ce6cde8`. Its 28 source/test delt
 match the approved diffs; the two approved #200 fixture files/modes are identical
 on baseline and candidate. The unchanged installed offline Mortimer verifier
 passed all twelve exact ordered checks, with matching log hashes and source
-unchanged: baseline Python 6,257 / 11 skips /two subtests; candidate Python 6,366
-/ 11 skips /two subtests; candidate JarvisKit 232 and MortimerHost 551 /eight skips;
-baseline JarvisKit 226 and MortimerHost 512 /seven skips; zero failures. Candidate VM skips
+unchanged: baseline Python 6,257 / 11 skips / two subtests; candidate Python 6,366
+/ 11 skips / two subtests; candidate JarvisKit 232 and MortimerHost 551 / eight skips;
+baseline JarvisKit 226 and MortimerHost 512 / seven skips; zero failures. Candidate VM skips
 are two Screen Recording, three physical-display and three app-activation cases;
 the earlier frozen Mac capture passes remain separate evidence. Worker UID 502
 was actually measured. Image/profile/runner identities and sandbox settings/image
