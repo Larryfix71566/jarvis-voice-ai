@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status:** LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIR — foundation #177 (`c38d895`); test-only repair via PR #200 after main claim #199 (`99993eb`). Frozen `a5b6f88` passes the local full offline Python gate; independent VM comparison, live acceptance and rollout remain gated.
+**Status:** LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and this follow-up (source `08c0635`, after-merge state). Approved a5b6f88→ce6cde8 passed WS-17’s offline twelve-check comparison; later CI exposed a parent-notifier race in the dry-child test. This test-only isolation repair passes 204 focused cases. Revised baseline review/approval, live model acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -690,3 +690,49 @@ The existing local capability suite passed146 before edits. On an exact scratch 
 These are local test results, not an actual different-UID VM retest, provider/runtime acceptance or deployment. The original `b2e17b4`→`fee4ac0` failed comparison remains failed. Before repeating WS-17 verification, review and approve a corrected reference, integrate this repair into the frozen candidate, and use the unchanged all12 verifier. WS-17's required exact-source Claude review remains separate and pending; no new source was sent to Claude in this repair. All broader source/identity/account/activation decisions remain unchanged.
 
 Publication: draft [PR #200](https://github.com/Larryfix71566/jarvis-voice-ai/pull/200) contains the exact reviewed `a5b6f88` test source plus evidence/status only. It is not merged or deployed at publication; CI and corrected-reference approval remain open.
+
+
+### 2026-10-09 — Parent notifier interference in the dry-child fixture (Codex)
+
+Continuing Larry’s existing bounded assignment on the same claimed
+`codex/ws05-capability-fixture-20261007` branch, integrated main `27fd356`
+before edits. Larry approved `a5b6f88` for WS-17’s offline comparison and exact
+`065d500`/`748b1e5` Claude reviews. Both separate static reviews completed, and
+that comparison passed all twelve checks with actual UID 502 and clean owned-VM
+shutdown. [Frozen WS-17 evidence](https://github.com/Larryfix71566/jarvis-voice-ai/blob/287b96dde2804682dcf81d74af05d58d37c6fb47/docs/acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md)
+retains its source and limitations; it does not turn broader WS-05 live gates
+into passes.
+
+Final GitHub CI on WS-17 head `287b96d` failed only the new dry-child test:
+6,365 passed / 11 skips / two subtests, but the empty-directory assertion found
+unit.db and its SQLite companions. The parent autouse fixture owns unit.db;
+the actual child environment uses probe.db. Parent pytest logs show a notifier
+poll error, while child exit/exact dry JSON passed. A controlled actual
+ReminderNotifier.tick_once reproduced the original failure deterministically
+(1 failed in 2.22s). Missing reminders schema is an inference from the source;
+CI records only OperationalError.
+
+Frozen follow-up `08c06357267ef1348ec4b64dfdd12b26d4710a50` changes one test
+function only. A fresh factory-created sibling directory holds the child cwd
+and worker environment. The test forces an actual parent notifier poll under
+pytest-owned paths, with fake post=False and no thread or desktop notification,
+then keeps the complete original body as an unchanged suffix. Exact dry JSON,
+empty child directory, argv and five-second timeout remain. No child file is
+ignored; no runtime reader, source scanner/pin, fixture source/helper, protected
+baseline, profile check or timeout changed. All other 60 top-level function/class
+ASTs and file mode are unchanged.
+
+The same forced poll passes after isolation (1 in 1.66s). Injecting probe.db
+inside the actual child directory still fails the original empty-directory
+assertion (1 in 3.86s), proving that child writes remain detectable. The focused
+capability/development suite initially passed 203 and failed only the existing
+restricted socket-bind prerequisite; with local loopback allowed, all 204 pass
+in 14.92s. Independent Codex static review approves this bounded fixture change,
+without approving a new baseline or executing the reported tests.
+
+[Exact receipt](../acceptance/model-use-enhancements/receipts/mar-capability-notifier-isolation-2026-10-09.json).
+Publish as a separate reviewable fixture PR. Larry’s new baseline/reference
+approval remains required before another independent comparison. No new source
+was sent to Claude; narrow `065d500`/`748b1e5` authorization excludes this follow-up.
+The prior successful VM comparison and failed CI remain separate evidence.
+No production/model/account activation or live acceptance changed.
