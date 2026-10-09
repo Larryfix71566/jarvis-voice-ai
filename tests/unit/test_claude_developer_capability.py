@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import subprocess
 import sys
 import tempfile
 import time
@@ -20,6 +21,15 @@ from jarvis.model_execution import ModelExecutionRequest, ModelToolReference
 from jarvis.privacy_policy import DataPolicy, issue_tool_result, make_tool_execution_scope
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.storage_context import storage_scope
+from tests.unit.test_model_use_development_pilot import owned_pilot_source, bind_owned_pilot_source
+
+
+@pytest.fixture(autouse=True)
+def bind_owned_capability_source(owned_pilot_source, bind_owned_pilot_source, monkeypatch):
+    """Use the exact frozen worker-owned fixture in parent and fresh children."""
+    root = owned_pilot_source.root
+    monkeypatch.setattr(probe, 'ROOT', root)
+    monkeypatch.setattr(probe, '__file__', str(root / 'scripts/verify_claude_developer_capability.py'))
 
 
 @pytest.fixture(autouse=True)
@@ -44,6 +54,71 @@ def test_default_dry_run_never_discovers_or_infers(monkeypatch, capsys):
     result = json.loads(capsys.readouterr().out)
     assert result['mode'] == 'dry' and result['production_route_ready'] is False
     assert result['developer_accepted'] is False
+
+
+def test_capability_contract_binds_exact_owned_source(owned_pilot_source):
+    root = owned_pilot_source.root
+    assert probe.ROOT == probe.support().ROOT == root
+    assert Path(probe.__file__) == root / 'scripts/verify_claude_developer_capability.py'
+    contract = probe.frozen_contract('claude-opus', 'subscription')
+    assert contract['source']['root'] == str(root)
+    assert contract['source']['sha256'] == owned_pilot_source.fingerprints[probe.REFERENCE]
+    assert contract['source']['sha256'] == probe.digest(
+        (owned_pilot_source.original / probe.REFERENCE).read_bytes())
+    assert contract['runner_sha256'] == owned_pilot_source.fingerprints[
+        'scripts/verify_claude_developer_capability.py']
+    for name, digest in contract['config_sha256'].items():
+        assert digest == owned_pilot_source.fingerprints[name]
+    for name, digest in contract['declarations']['declaration_source_sha256'].items():
+        assert digest == owned_pilot_source.fingerprints[name]
+    for name, digest in contract['effective_config_sha256'].items():
+        relative = Path(name).resolve().relative_to(root)
+        assert digest == owned_pilot_source.fingerprints[relative.as_posix()]
+    for name in contract['config_environment'].values():
+        assert Path(name).resolve().is_relative_to(root)
+    assert contract['selection']['production_route_ready'] is False
+    assert contract['declarations']['developer_accepted'] is False
+
+
+def test_capability_contract_keeps_foreign_baseline_owner_refusal(owned_pilot_source, monkeypatch):
+    """Only original metadata is simulated; the successful copy's reads are real."""
+    support = probe.support()
+    installed_read, installed_uid, installed_lstat = support._read, os.getuid, Path.lstat
+    owned_agents = owned_pilot_source.root / 'config/agents.yaml'
+    original_agents = owned_pilot_source.original / 'config/agents.yaml'
+    observed = []
+    def metadata(path, *args, **kwargs):
+        info = installed_lstat(path, *args, **kwargs)
+        if path in (owned_agents, original_agents):
+            observed.append(path)
+        if path == original_agents:
+            fields = list(info)
+            fields[4] = os.getuid() + 1
+            return os.stat_result(fields)
+        return info
+    with monkeypatch.context() as check:
+        check.setattr(Path, 'lstat', metadata)
+        probe.frozen_contract('claude-opus', 'subscription')
+        assert owned_agents in observed and original_agents not in observed
+        check.setattr(support, 'ROOT', owned_pilot_source.original)
+        with pytest.raises(support.DevelopmentPilotUnavailable, match='host_file_unverified'):
+            probe.frozen_contract('claude-opus', 'subscription')
+        assert original_agents in observed
+        assert support._read is installed_read and os.getuid is installed_uid
+
+
+def test_actual_owned_capability_cli_remains_dry(owned_pilot_source, tmp_path):
+    contract = probe.frozen_contract('claude-opus', 'subscription')
+    runner = owned_pilot_source.root / 'scripts/verify_claude_developer_capability.py'
+    result = subprocess.run([sys.executable, str(runner)], cwd=tmp_path,
+        env=probe.worker_environment(tmp_path, contract), capture_output=True,
+        text=True, timeout=5, check=True)
+    assert json.loads(result.stdout) == {
+        'record_kind': 'native40_capability_dry_run', 'model': contract['selection']['model'],
+        'tools_under_test': True, 'production_route_ready': False,
+        'developer_accepted': False, 'mode': 'dry',
+    }
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_static_selection_retains_ordinary_missing_tools_refusal():
