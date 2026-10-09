@@ -2074,3 +2074,27 @@ release/merge/deployment. Production remains the roadmap receipt. UI2-22…25,
 physical supporting-display outcomes and dependent UI2-04/09/13 remain open;
 keep the temporary thread switch. This slice changes documentation/evidence only
 and sends no later source to Claude.
+
+
+**CI follow-up, 2026-10-09 (Codex, after evidence publication):** Final GitHub
+head `287b96d` failed only WS-05's dry-CLI test (6,365 passes / eleven skips /
+two subtests). The child exit and exact dry JSON passed; the parent notifier
+created unit.db in the shared no-write directory. A controlled actual parent
+poll reproduced the original failure. This is separate from the approved
+`a5b6f88`→`ce6cde8` offline comparison, which remains passed with all fixed
+identities/cleanup preserved.
+
+The bounded repair is separate [WS-05 PR #201](https://github.com/Larryfix71566/jarvis-voice-ai/pull/201),
+source `08c0635`, under Larry's existing capability-fixture assignment. The child
+gets a sibling scratch directory; actual parent polling is forced, and the
+complete previous body/assertions/argv/five-second timeout remain. Deliberately
+writing child probe.db still fails; 204 focused tests pass. Independent Codex
+static review approves only the fixture change. No WS-17 runtime source was
+changed and no later source was transmitted to Claude.
+
+Review/merge the fixture follow-up and separately approve any revised baseline
+before another independent comparison. The earlier narrow approval is exactly
+a5b6f88; it is not approval of `08c0635`. Do not erase the failed CI or substitute a
+lucky retry for the isolation repair. #198 stays draft: WS-13 revision 4,
+reviewed release/deployment and UI2-22…25 remain gates. Source-specific earlier
+reviews/VM/local-capture evidence retain their original scope.

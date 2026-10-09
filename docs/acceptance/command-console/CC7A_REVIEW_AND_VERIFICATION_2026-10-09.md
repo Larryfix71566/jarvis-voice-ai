@@ -128,3 +128,24 @@ reports. This receipt does not approve its plan or run
   UI2-04/09/13. WS-21 retains its separate physical-transfer acceptance.
 
 No live acceptance checkbox is closed by this receipt.
+
+
+## Final-head CI follow-up
+
+After publishing this evidence, GitHub validation on `287b96d` failed one
+WS-05 fixture test: 6,365 passes / eleven skips / two subtests. Parent
+`unit.db`/WAL files appeared in the no-write oracle, while the child is
+configured for `probe.db`; its exit and exact dry JSON had passed. A controlled
+actual parent notifier poll reproduced the failure. The exact approved offline
+comparison above remains passed; it is not a claim that this later CI was green.
+
+Separate [PR #201](https://github.com/Larryfix71566/jarvis-voice-ai/pull/201),
+source `08c0635`, isolates the child directory and forces that parent poll while
+retaining all original assertions/argv/timeout and strict source guards. It
+passes 204 focused cases; an injected child `probe.db` still fails the no-write
+assertion. It changes one WS-05 test only, not interface runtime source.
+
+Review/merge that follow-up and separately approve a revised reference before
+another comparison. No new baseline or later Claude source transmission is
+approved here. Preserve the passing VM and failed CI as separate records;
+#198 release, WS-13 ordering and live gates stay open.
