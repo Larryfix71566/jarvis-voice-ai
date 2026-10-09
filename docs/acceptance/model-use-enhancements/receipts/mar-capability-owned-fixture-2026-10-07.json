@@ -1,0 +1,100 @@
+{
+  "system": "codex",
+  "recorded_date": "2026-10-07",
+  "workstream": "WS-05",
+  "claim_pr": 199,
+  "claim_merge": "99993eb7274c0f700744f08df5c9922927942a9e",
+  "source_commit": "a5b6f884c317c74a1d2b4c2a1d7e334920a55d51",
+  "source_integrity": {
+    "baseline": "99993eb7274c0f700744f08df5c9922927942a9e",
+    "source_commit": "a5b6f884c317c74a1d2b4c2a1d7e334920a55d51",
+    "unchanged_capability_functions_classes": 57,
+    "all_existing_capability_test_bodies_unchanged": true,
+    "shared_helper_only_added_named_reference": true,
+    "all_production_and_guard_files_unchanged": true,
+    "source_files": {
+      "tests/unit/test_claude_developer_capability.py": "ef30c55666fe7859f35e97baef9db0a24bd189cf2c381cb69764f0d32aa80c8d",
+      "tests/unit/test_model_use_development_pilot.py": "eb42af0770206848084b2575e9350e3be4adaf9beeb454d26633caf519129b69"
+    }
+  },
+  "review": {
+    "reviewer": "independent Codex subagent",
+    "verdict": "approve bounded two-file fixture repair",
+    "new_regressions_passed": 3,
+    "seconds": 1.68,
+    "source_hashes_match": true,
+    "does_not_replace_WS17_Claude_cross_review": true
+  },
+  "logs": {
+    "local_before": {
+      "host_path": "/private/tmp/ws05-capability-before-local.log",
+      "sha256": "202b987e0caa73597bb960b950822b720ebab0b058495fad74c727203f353e27",
+      "summary": "146 passed in 7.02s"
+    },
+    "regressions_before": {
+      "host_path": "/private/tmp/ws05-capability-new-regressions-before.log",
+      "sha256": "48e8105a8dd97a6a879cea4a3d72b729709bc94e103018eb656a4e7172867575",
+      "summary": "2 failed, 1 passed in 3.86s"
+    },
+    "affected": {
+      "host_path": "/private/tmp/ws05-capability-fixture-affected.log",
+      "sha256": "55722190c6d68d43b1dee24d90c577e1f94bcd0652c9b85985a64b6fcc6078e2",
+      "summary": "293 passed in 55.66s"
+    },
+    "full_python": {
+      "host_path": "/private/tmp/ws05-capability-fixture-full-python.log",
+      "sha256": "c7d6d7403177949a88ed7d7db7f26c47159aebd6ccb693903089da2a5e3851d3",
+      "summary": "6461 passed, 7 skipped, 13 warnings, 2 subtests passed in 230.97s (0:03:50)"
+    }
+  },
+  "results": {
+    "pre_repair_local_capability_passed": 146,
+    "pre_repair_new_witnesses_failed": 2,
+    "pre_repair_guard_inverse_passed": 1,
+    "affected_passed": 293,
+    "full_offline_python_passed": 6461,
+    "full_offline_python_skipped": 7,
+    "full_offline_python_subtests_passed": 2,
+    "full_offline_python_warnings": 13,
+    "full_offline_python_seconds": 230.97,
+    "failed": 0
+  },
+  "unchanged_verifier": {
+    "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+    "runner": "67dfc621dae442649cac7977e2349b53bc0b0e193684e0d7ce4c95e6745e9188",
+    "checks": 12,
+    "names": [
+      "backend-imports",
+      "baseline-backend",
+      "backend",
+      "scripted-evals",
+      "latency",
+      "knowledge-base",
+      "baseline-knowledge-base",
+      "web",
+      "native-library",
+      "native-app",
+      "baseline-native-library",
+      "baseline-native-app"
+    ]
+  },
+  "reference": {
+    "path": "docs/REPO_MAP.md",
+    "bytes": 6214,
+    "sha256": "cb5b1b008553b3bc4716e826e6a75df681e5db08cf90583156b0779e1a2b2664",
+    "source_scanner_passed": true,
+    "reference_sent_to_provider": false
+  },
+  "limitations": {
+    "actual_VM_worker_retest_performed": false,
+    "new_baseline_reference_approved": false,
+    "baseline_snapshot_changed": false,
+    "prior_failed_comparison_superseded": false,
+    "WS17_accepted": false,
+    "provider_inference": false,
+    "production_changed": false,
+    "deployed": false
+  },
+  "next_step": "Review and approve a corrected baseline/reference, integrate the repair into the exact WS-17 candidate, then run the unchanged independent full12 comparison. Required exact-source Claude cross-review and live acceptance remain separate.",
+  "implementation_pr": 200
+}
