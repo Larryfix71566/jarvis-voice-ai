@@ -1,14 +1,15 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** WS-17 CC7a closure is implemented on the Codex candidate.
-Separate exact-source Claude static reviews completed 2026-10-09. After #201
-merged and Larry approved revised baseline `08c0635`, the unchanged independent
-verifier passed all twelve checks on immutable `59d57ea` (2026-10-10), with
-exact source/pins/log hashes and clean owned-VM shutdown. Five CI checks also
-passed on `59d57ea`. The earlier comparison and failed CI remain separate
-records. PR #198 stays draft pending WS-13 revision 4 and Larry's separate
-release/deployment approval; live UI2-22…25 remain open. See
-[10-10 comparison receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json)
+**Status:** WS-17 CC7a closure is landed in main through PR #198,
+merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
+as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
+files match the independently verified `59d57ea` exactly; source review,
+all twelve offline checks and five final-head #198 CI checks are recorded.
+This merge audit is not a new full-profile run. Production remains `bde22bb`;
+separate deployment authorization, exact-target DEPLOY-MAIN checks and
+live UI2-22…25 remain open. Keep the temporary thread switch. See
+[10-10 comparison receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json),
+[merged-source audit](../acceptance/command-console/CC7A_MERGED_SOURCE_AUDIT_2026-10-10.json)
 and [exact-source review](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md).
 The following baseline describes the earlier 2026-09-18 implementation:
 core protocol, stores,
@@ -2141,3 +2142,24 @@ failed CI or a claim of production deployment. WS-13 revision 4 must land
 before #198; Larry separately decides release/merge/deployment and exact-build
 UI2-22…25. Keep the temporary thread switch and dependent live gates open.
 No later source was sent to Claude and no production flag changed.
+
+
+**Merge checkpoint, 2026-10-10 (Codex):** Larry reported both merges.
+GitHub confirms #196 as `5c1eb1e62939451c4aca6f088a7f8d3c443b0eb4`, then
+#198 as `d5d3e7e8cb1f1184478203aacbfea38d30f3d450`; all five checks passed
+on #198 final head `dc5c34b`. Current main differs from tested `59d57ea`
+only in twelve roadmap/documentation paths. Every tracked runtime/test,
+configuration/dependency/runner/ownership blob and mode is identical, and
+all28 original source bindings remain exact. The prior actual offline receipt
+retains its own candidate identity; do not relabel it as a new main run.
+
+The WS-13 merge and #198 draft/landing holds are cleared. Production still
+reports `bde22bb`; no production action occurred. Deployment runs through
+human-only DEPLOY-MAIN, which checks the exact main target before rollback,
+installation and service switching. Separate deployment authorization and
+exact-build UI2-22…25 remain; no checkbox is closed by code landing.
+
+The current-main roadmap checker reports one other-owner error: WS-13 is
+claimed but its Where starts with the already merged docs branch. Claude
+must mark that branch historical and name the active P1 branch. This
+WS-17 follow-up reports the error without editing Claude's block.

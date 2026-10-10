@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "row": "WS-17",
+  "recorded_by": "codex",
+  "target_main": "d5d3e7e8cb1f1184478203aacbfea38d30f3d450",
+  "verified_candidate": "59d57ea3f7eb007a02a17f425accf186a38108c2",
+  "merges": {
+    "196": "5c1eb1e62939451c4aca6f088a7f8d3c443b0eb4",
+    "198": "d5d3e7e8cb1f1184478203aacbfea38d30f3d450"
+  },
+  "all_tracked_runtime_test_configuration_dependency_runner_and_ownership_file_blobs_and_modes_match": true,
+  "changed_documentation_paths": [
+    "ROADMAP.md",
+    "docs/acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json",
+    "docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md",
+    "docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md",
+    "docs/roadmap-log/2026-10-07-ws-13-claude-plan-reconciliation.md",
+    "docs/roadmap-log/2026-10-07-ws-13-claude-plan-revision-2.md",
+    "docs/roadmap-log/2026-10-07-ws-13-claude-plan-revision-3.md",
+    "docs/roadmap-log/2026-10-09-ws-13-claude-plan-revision-4.md",
+    "docs/roadmap-log/2026-10-09-ws-13-claude-plan-revision-5.md",
+    "docs/roadmap-log/2026-10-10-ws-13-claude-decisions-recorded.md",
+    "docs/roadmap-log/2026-10-10-ws-13-claude-p1-claim.md",
+    "docs/roadmap-log/2026-10-10-ws-17-codex-approved-reference-reverification.md"
+  ],
+  "new_runtime_verification_claim": false,
+  "prior_offline_receipt": "docs/acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json",
+  "release_boundary": "Larry reported both196 and198 merged. This confirms code landing; previous offline baseline approval is not itself production deployment authorization. No deployment occurred. Exact target must pass DEPLOY-MAIN phaseA before snapshot/install/switch.",
+  "production_observed": "bde22bb6425c6bf36a3e0d7cf53f2785c274190d",
+  "live_acceptance_closed": false,
+  "roadmap_checker_observation": "WS-13: claimed row Where names docs/ws13-plan-reconciliation, which is already merged via196. Claude must distinguish historical merged docs branch from active ws13/p1-mail-headers; other-owner row left unchanged."
+}
