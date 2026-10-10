@@ -195,32 +195,32 @@ Sources: [Command Console plan §7.2](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_
 </details>
 
 <details id="ws-13">
-<summary>WS-13 — T5 mail, calendar and brief: review the draft plan against current main · Claude (proposed)</summary>
+<summary>WS-13 — T5 mail, calendar and brief: draft reconciled with main, waiting on Larry's decisions · Claude (review)</summary>
 
 ### Approval and future acceptance checklist
 
 This item is proposed, not ready for live acceptance. Future tests below apply after the plan is approved and implemented.
 
 - [ ] **Claude / Codex · prerequisite review:** Reconcile the draft with current architecture, security/model-routing rules, actual native client and reserved migration `0035`; coordinate the existing plan edits before implementation.
-- [ ] **Larry · plan decisions:** Approve read-only scope, calendar visibility/backend, Secretary routing/isolation and documented residual risks, vault names, brief schedule and permitted content/logging. Supply selected account access through the established vault/OS flow; credentials are not entered in this roadmap.
+- [ ] **Larry · plan decisions:** Approve read-only scope, calendar visibility/backend, Secretary routing/isolation and documented residual risks, vault names, brief schedule and permitted content/logging. Supply selected account access through the established vault/OS flow; credentials are not entered in this roadmap. (Decisions D1–D9 recorded 10-10 in plan §R.5; account access still to be supplied.)
 - [ ] **Claude / Codex · implementation and security evidence:** Deliver reviewed implementation and required suites; mail secrets reach only the intended child, reads do not mark mail read, injection fixtures cause zero post-mail tool calls, routing meets the existing ≥90% floor, and digest speech is grounded in the visible facts.
-- [ ] **Larry · future Mac checks:** Complete plan V1–V10 on the selected backend: secret isolation, EventKit/CalDAV calendar parity, unread preservation, agent/injection isolation, routing, requested and once-daily scheduled brief, grounding and all kill switches. Record actual scores and outcomes rather than assuming the draft's defaults are correct.
+- [ ] **Larry · future Mac checks:** Complete plan §R.12's Mac checks (the M rows, which replace V1–V10) on the selected backend: secret isolation, EventKit/CalDAV calendar parity, unread preservation, agent/injection isolation, routing, requested and once-daily scheduled brief, grounding and all kill switches. Record actual scores and outcomes rather than assuming the draft's defaults are correct.
 - [ ] **Larry / Claude · release:** Approve the tested artifact/configuration, record deployment and reversible rollback, and confirm the brief/card/timezone and failure behavior on the Mac. Sending mail or writing calendar events remains outside this plan.
 
-Source: [mail/calendar/brief plan §§8, 12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md). This is an approval/implementation dependency list, not a claim that the proposed feature exists.
+Source: [mail/calendar/brief plan §R.12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md). This is an approval/implementation dependency list, not a claim that the proposed feature exists.
 
 **Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
 
 - **Owner:** `claude`
-- **Status:** proposed
-- **Implemented by:** not started
-- **Remaining work / acceptance:** Larry approves or revises the plan
+- **Status:** claimed: P1 (mail header source) cleared by Codex at `75f20bd` and claimed by Claude 10-10 on `ws13/p1-mail-headers`, built against fake-server fixtures (plan §R.6, §R.10.1, §R.10.9–R.10.13); plan §R revision 7 makes Codex's last P3 correction (R.10.7 failure rule); P2 and P3 are not yet claimed
+- **Implemented by:** P1: Claude (in progress, `ws13/p1-mail-headers`); P2–P5: not started
+- **Remaining work / acceptance:** P1: build, Codex cross-review, Larry's merge and M1-1 to M1-3 (M1-3 needs the AT&T secure mail key or the Gmail app password in the vault); then P2 (needs the Google account in macOS Internet Accounts for M2-2) and P3, each claimed on its own against §R.12; P4/P5 stay separately gated (§R.11)
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** docs branch when claimed
-- **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`. Codex edited this plan on 09-26, so coordinate with Codex before any edit. Migration `0035` stays reserved for T5.
-- **Scope:** that plan file only
-- **Next step:** Larry picks it; confirm with Codex that it has no pending edits to the plan
-- **Updated:** 10-02 (read-only: plan remains draft and no T5 code/claim found)
+- **Where:** docs branch `docs/ws13-plan-reconciliation` (plan, PR #196); P1 code branch `ws13/p1-mail-headers` (cut from main after #196 merges)
+- **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`; §R (10-07) is authoritative and the August text is history except where §R.9 keeps it. No GitHub branch other than this one touches the plan. Migration `0035` stays reserved for T5 (`0035_brief`).
+- **Scope:** the plan file; and for P1 (plan §R.6): new `mcp_servers/mcp_mail/` (`__init__.py`, `logic.py`, `server.py`, `skill.yaml`), the `mcp-mail` entry in `config/mcp_servers.yaml`, the `mcp-mail` source-contract entries only in `jarvis/skills/registry.py` (WS-05 reviews; §4 CX-21), `EXPECTED` in `tests/unit/test_requires_env_snapshot.py`, `ALL_SERVERS`/`TOTAL_TOOLS` in `tests/integration/test_registry.py`, `EXPECTED_TOOLS` in `tests/integration/test_mcp_servers.py`, new `tests/unit/test_mcp_mail*.py` with a fake IMAP server fixture, the names-only preflight script for M1-1, and `.env.example`. No agent, prompt, model, pipeline, Swift or migration change in P1
+- **Next step:** claude: build P1 on `ws13/p1-mail-headers` and open its PR for Codex's cross-review; larry: merge #196 (the plan) first so the claim is on main, then create the AT&T secure mail key and confirm Gmail 2-Step (D6), and add the Google account to macOS Internet Accounts with Calendars on (D3) before P2's M2-2; codex: cross-review the P1 PR, and WS-05 reviews the `mcp-mail` source contract (CX-21)
+- **Updated:** 10-10
 
 </details>
 
@@ -795,6 +795,8 @@ Renumbering completed in the main integration. Read-only production verification
 
 ---
 
+**Config keys reserved for WS-13 P1, 2026-10-10 (plan §R.5 D6, §R.10.18):** vault names `MAIL_ATT_USER`, `MAIL_ATT_SECURE_MAIL_KEY`, `MAIL_GMAIL_USER`, `MAIL_GMAIL_APP_PASSWORD` (declared in `mcp-mail`'s `optional_env`; values only via `python -m jarvis.vault set`), and `JARVIS_MAIL_ENABLED` (default true, read only by `mcp-mail`). Migration `0035` stays reserved for P3 (`0035_brief`); P1 adds no migration.
+
 **WS-05 creator source receipt reservation before implementation, 2026-10-06:** Protocol kind `mortimer.development-source.v1`; random per-call challenge and exact owner/session/request/developer-run/revision/job/tool/argument/content/source bindings. The admin signer keeps its Ed25519 private key only in process memory. A public trust anchor may be atomically published at `.source-authority/admin-ed25519-public.json` under the already configured `MORTIMER_SANDBOX_HOME`; it is public verification material, not a provider credential or persistent plaintext secret. Verify canonical host-owned directory/file modes, reject symlinks and stale/replaced authority, and never trust a public key supplied by result JSON. No new env/config key, port, DB migration, vault entry or service-token reuse is reserved. Authentication/source policy cannot be weakened by this receipt.
 
 
@@ -816,6 +818,7 @@ Open means not yet resolved. Each entry names who resolves it.
 
 | ID | Conflict | Resolves | State |
 |---|---|---|---|
+| CX-21 | WS-13 P1 adds the `mcp-mail` source contract to `jarvis/skills/registry.py`, which WS-05 (Codex, claimed) holds for source classification. WS-13 edits only the `mcp-mail` entries (classification and `EXTERNAL_TOOL_SERVERS`/source-operation sets), not `_invoke` or any existing entry; plan §R.13. | `codex` (WS-05): review those entries in the P1 PR | open: recorded at claim, 10-10 |
 | CX-20 | Larry explicitly reassigns remaining WS-17 from Claude to Codex on 10-07; WS-20 documentation #193 merged concurrently and edits narrow WS-17 state fields, and landed WS-21 shares console/inventory files. | `larry` (10-07): Codex owns remaining WS-17 implementation; `codex` preserves #173 and records this bounded coordination | resolved ownership/scope boundary: WS-17 owns its implementation/plan/evidence and current row; WS-20 retains operational summary/decision grouping and WS-20-specific logs; its landed #193 wording is reconciled to this newer assignment, with WS-17 owning its block/plan/receipts/logs; no edits to the other session’s branch. Preserve WS-21 transfer/screen behavior and its separate physical acceptance. Cross-review and release approvals remain required; no other row is reassigned |
 | CX-16 | WS-21 (supporting display transfer) edits the display-transfer, panel and screen parts of files in WS-17's scope: `console_protocol.py`, `ConsoleProtocol.swift`, `ConsoleActionRegistry.swift`, `ConsoleActionCoordinator.swift`, the `WorkspaceStore` inventory, and the display menu in `WorkspaceView.swift`. Both rows are Claude's; WS-17 has no open branch. | `larry` (10-03): new row WS-21; WS-17's CC7a.3 starts from main after WS-21 merges | resolved 10-06: PR #171 merged as `bde22bb` on 10-03; its live display acceptance remains open in WS-21 |
 | CX-11 | Historical T2 merge collision: (1) auth defaulted on; (2) internal callers and deployment health lacked service headers; (3) stale sidecar route inventory; (4) concurrent `mcp_selfedit` edits; (5) token setup remains CLI-only, while the native app already reads a Keychain token. Items (1)–(4) were resolved by dormant Addendum R1 and deployed. PR #149 added a second explicit remote-bind gate so local bearer auth need not expose a listener. | `codex`: choose and implement local-only token onboarding for (5); `larry` decides local activation and any remote bind separately | R1 deployed dormant; R2 bind guard merged as `a39136a` but not deployed in `39fc6f9`; onboarding method/provisioner and enabled-mode acceptance remain open |

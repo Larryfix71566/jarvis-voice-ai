@@ -1,0 +1,8 @@
+---
+date: 2026-10-07
+system: claude
+rows: [WS-13]
+prs: []
+---
+
+- 2026-10-07 (WS-13 plan reconciled with main): Claude (Cowork), docs only. Added §R to MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md: all eleven findings in Codex's 10-06 handoff re-checked at e7b099b and resolved, plus eight more (A1–A8): calendar invitations are attacker-authored; watcher speech enters the LLM context by default (pipecat 1.4 TTSSpeakFrame.append_to_context); spoken text reaches the TTS provider; a missed brief must not become a stored notice; AT&T documents imap.mail.att.net with a secure mail key; Gmail app passwords need 2-Step Verification; the brief's pipeline/native files are in WS-17's scope (Codex). Reconciled design: no agent holds mail with calendar, reminders or any outbound server; the brief is assembled and rendered in host code with no model, delivered as a protected card; nothing derived from mail, calendar or reminders reaches speech or the Supervisor unless Larry approves a named declassification (D5); model prose (P4) and a mail question agent (P5) wait on the privacy decision. A separate Claude verification pass checked about 75 claims in §R against the code and found seven issues, all fixed before handoff. Larry's decisions D1–D8 are in §R.5. Reported for WS-05's owner (A2): config/model_access.yaml sets librarian to confidential and systems to local_only, and jarvis/agents/base.py:771-773 returns FAILED for those workloads without a private route (pinned by tests/unit/test_subagent.py:990, routing disabled); production bde22bb carries both. Untested live: bot.launchd.log shows no librarian or systems delegation since 09-28. Nothing was implemented, and no mailbox, calendar, provider or credential was touched.

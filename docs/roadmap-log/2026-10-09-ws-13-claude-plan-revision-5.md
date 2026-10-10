@@ -1,0 +1,8 @@
+---
+date: 2026-10-09
+system: claude
+rows: [WS-13]
+prs: []
+---
+
+- 2026-10-09 (WS-13 plan revision 5 after Codex's review): Claude (Cowork), docs only. Codex reviewed §R revision 4 at 4994861 (main 27fd356), found all seven amendments addressed, P1 and P2 ready for Larry's decisions, and one P3 blocker: the app's result history treated a returning UserDefaults write as durable, but Apple documents that UserDefaults writes to disk asynchronously (confirmed from the class reference), so a crash after an acknowledgement could lose the revision while the earlier instance_id survived, and the probe would permit a second delivery. Revision 5 adds R.0c and replaces that store with BriefHistoryStore.swift (a new P3 file outside WS-17's scope): one JSON file holding the instance_id and the history under Application Support, committed by temp write, F_FULLFSYNC, rename and directory sync, serialised across processes by flock and in process by one actor; commit, then display, then acknowledge, with the residual stated; the id committed before the first hello and read from the file each time; on a store failure a scheduled revision is neither applied nor acknowledged, a requested one is shown without an ack, a probe gets no answer, and no hello is sent; an absent file creates a new id. Whether F_FULLFSYNC works on a directory descriptor is measured on the Mac (new M3-6), not assumed. Also: R.0b dated to its landing, and the suppression sentence now says a request about a future Thursday never suppresses that future slot. A separate Claude verification pass (a subagent, not Codex) reviewed the draft twice; its 8 and 4 findings were addressed. D1-D9 remain unanswered. Nothing was implemented, and no mailbox, calendar, provider or credential was touched.

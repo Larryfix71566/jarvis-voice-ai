@@ -1,0 +1,8 @@
+---
+date: 2026-10-07
+system: claude
+rows: [WS-13]
+prs: []
+---
+
+- 2026-10-07 (WS-13 plan revision 2 after Codex's review): Claude (Cowork), docs only. Codex reviewed §R at 0de8a2e (sources at e7b099b, main through bd18033) and requested 27 changes. Claude re-checked each against the code; all hold. Confirmed offline: CPython's IMAP4_SSL without ssl_context does not verify certificates or host names; 24 hours before noon 2026-11-01 New York is 25 elapsed hours; M11's checker accepts an unsourced name as the first capitalised token of a sentence; the routing scorer passes expect: none with no tool call. Revision 2 adds R.0 (item-by-item map), R.10 (binding P1-P3 contracts: verified TLS with an explicit TLS 1.2 minimum, host policy adapters, separate storage/logging/speech permissions, a brief-owned sensitivity context, eligible native recipient, durable claim/send/ack delivery, arrival as a card until WS-17 turn binding, bounded parallel mail reads with watchdogs, INTERNALDATE counts with exact/lower_bound/unknown, UTC windows, byte-bounded UID header fetches, the calendar wire contract, defined calendar questions, literal rendering, an exact-call routing scorer, lifecycle and switches), R.11 (P4/P5 prerequisites), R.12 (acceptance matrix replacing V1-V10) and R.13 (scope against bd18033); D2's unsafe options became architectural exceptions; D9 (local storage) is new; superseded August sections carry Historical or Background banners. A separate Claude verification pass found 15 issues in the first draft of revision 2, all fixed before handoff. D1-D9 remain unanswered. Nothing was implemented, and no mailbox, calendar, provider or credential was touched.
