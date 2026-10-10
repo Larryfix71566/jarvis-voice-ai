@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status:** LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and PR #201 (source `08c0635`, after-merge state). Approved a5b6f88→ce6cde8 passed WS-17’s offline twelve-check comparison; later CI exposed a parent-notifier race in the dry-child test. This test-only isolation repair passes 204 focused cases. Revised baseline review/approval, live model acceptance and rollout remain gated.
+**Status:** LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -736,3 +736,35 @@ approval remains required before another independent comparison. No new source
 was sent to Claude; narrow `065d500`/`748b1e5` authorization excludes this follow-up.
 The prior successful VM comparison and failed CI remain separate evidence.
 No production/model/account activation or live acceptance changed.
+
+
+### 2026-10-10 — Merged fixture repair and revised-reference approval (Codex)
+
+[PR #201](https://github.com/Larryfix71566/jarvis-voice-ai/pull/201) merged as
+`83d90e86780c726684a295557057741ab7266397` on 2026-10-10 at 18:51:24 EDT.
+Its source is `08c06357267ef1348ec4b64dfdd12b26d4710a50`; final head
+`de4381c9b4919fc7f6b203692b3ad8a10fcdc4cb` passed all five GitHub checks.
+The exact validate run records 6,280 unit passes, 11 skips and two passing
+subtests (400.11 seconds), plus 196 integration passes and four skips
+(159.04 seconds); eval, latency and frontend gates also passed.
+
+Larry explicitly approved `08c06357267ef1348ec4b64dfdd12b26d4710a50` for
+**offline WS-17 verification only** on 10-10. This closes this particular
+revised-reference approval prerequisite, not any model/runtime acceptance.
+It does not grant a new Claude payload, private-source transfer, provider call,
+release, deployment, account setting or production activation. The repaired
+reference remains immutable. Relative to its parent `27fd356`, the repair is
+one test function only; relative to old `a5b6f88`, the reference also includes
+already merged #197, whose six source/test paths match reviewed `065d500`
+exactly. No runtime change is introduced by #201.
+
+The WS-17 owner integrated main and froze candidate
+`59d57ea3f7eb007a02a17f425accf186a38108c2`; the unchanged twelve-check offline
+comparison against approved `08c0635` is **running at this record**, with no
+pass or cleanup result yet claimed. WS-17 owns the terminal receipt and its
+release/live UI gates. The original all-twelve-check `a5b6f88`→`ce6cde8` pass,
+subsequent failing CI and October 9 prerequisite snapshot remain unchanged
+in their receipts. [Notifier repair and dated follow-up](../acceptance/model-use-enhancements/receipts/mar-capability-notifier-isolation-2026-10-09.json).
+
+All broader source/identity/native-readiness/account/workload/rollout gates and
+acceptance flags retain their prior state; no deployment or live acceptance.
