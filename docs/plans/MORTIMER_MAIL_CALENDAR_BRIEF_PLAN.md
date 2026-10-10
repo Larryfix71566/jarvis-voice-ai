@@ -4,7 +4,8 @@
 2026-10-07 (§R, Claude). Revision 2 answers Codex's review of `0de8a2e` (R.0),
 revision 3 its review of `5e37696` (R.0a), revision 4 its review of `b3d7c0f`
 (R.0b), and revision 5 its review of `4994861` (R.0c). Revision 6 records Larry's
-decisions D1–D9 (R.0d, R.5). §R is authoritative. The August text after §R is
+decisions D1–D9 (R.0d, R.5); revision 7 records Codex's P1 clearance and its last
+P3 correction (R.0e). §R is authoritative. The August text after §R is
 history: R.9 says which parts remain background, and R.10–R.12 govern wherever they
 differ. Implements
 roadmap track **T5** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.5), tracked as
@@ -26,6 +27,25 @@ Nothing here is implemented, tested or accepted. No mailbox, calendar, provider 
 credential was touched. Approval works in two steps: first Larry answers D1–D9
 (R.5); then each increment in R.6 is claimed, built, cross-reviewed and accepted on
 its own. This section does not authorize implementation.
+
+### R.0e Revision 7 (2026-10-10, P1 cleared; the store's failure rule)
+
+Codex reviewed `75f20bd`, verified the recorded decisions, signed off the storage
+architecture of R.10.7 (durable file, locking, installation identity,
+acknowledgement ordering) and cleared **P1 for the normal claim-and-build process**,
+built against fake-server fixtures, with account credentials and the Google
+calendar setup prerequisites for live checks only. One P3 correction remains before
+P3 is claimed, and this revision makes it: R.10.7's persistence-failure rule now
+distinguishes a failure *before* the rename, where nothing was committed, from a
+directory-sync failure *after* it, where the new file is already in place and
+recovery confirms the recorded revision instead of re-emitting it. The matching
+acceptance bullet is split the same way.
+
+The WS-13 roadmap row claims P1 in the same change: branch `ws13/p1-mail-headers`,
+the P1 files from R.6 as its scope, and the four vault names plus
+`JARVIS_MAIL_ENABLED` reserved in §3. The `mcp-mail` source contract touches
+`jarvis/skills/registry.py`, which WS-05 holds; §4 records that WS-13 edits only
+the `mcp-mail` entries there and WS-05 reviews them (R.13).
 
 ### R.0d Revision 6 (2026-10-10, Larry's decisions D1–D9)
 
@@ -1334,10 +1354,24 @@ from `WorkspaceStore.swift` and `ResponseResultRouter.swift` are inside it.
   sends no hello (so it is not eligible) and no probe answer, logs a content-free
   line, and retries the store with backoff. The app reads the id from the file
   whenever it sends a hello and whenever it answers a probe; it never caches one.
-- **Persistence failure.** If the write, sync, rename or lock fails:
-  - a scheduled revision is neither applied nor acknowledged, a content-free log
-    line says so, and the host's probe re-emits within its limits; the next
-    attempt retries the store;
+- **Persistence failure (split in revision 7).** What the app does depends on
+  whether the rename had already returned, because the rename is the point at
+  which the new file becomes the file that any later read sees:
+  - **Before the rename** (lock timeout, temp write, or the temp file's
+    `F_FULLFSYNC` failed): nothing is committed. A scheduled revision is neither
+    applied nor acknowledged, a content-free log line says so, and the host's
+    probe re-emits within its limits; the next attempt retries the store.
+  - **After the rename** (the directory sync failed): the new file is in place,
+    and every read from now on, in this process or the next, returns the
+    recorded revision; only a power loss before the directory entry reaches the
+    disk could revert it. The app therefore confirms the recorded revision: it
+    retries the directory sync once, logs the weaker durability content-free,
+    and proceeds to display and acknowledge as for a successful commit. It never
+    re-emits or leaves a recorded revision unacknowledged, because a probe would
+    read that file and answer `ack` anyway. If the power is lost first, the
+    previous file comes back whole, the host's row is `applied`, the slot is
+    `delivered`, and nothing is re-sent: the same outcome as the commit-then-render
+    residual above.
   - a requested revision is shown but not acknowledged, since it is never re-sent
     or probed: Larry sees the card, nothing is announced and nothing is
     suppressed;
@@ -1524,10 +1558,14 @@ or probed. If one is not acknowledged, Larry can simply ask again.
   - concurrent eviction and application: no applied entry is lost and no unexpired
     scheduled entry is evicted;
   - two processes creating the `instance_id` at once: one id;
-  - a failed write, sync, rename or lock: a scheduled revision is neither applied
-    nor acknowledged and the next revision succeeds; a requested one is shown
-    without an ack and suppresses nothing; a probe during the failure gets no
-    answer, never `unknown`;
+  - a failure injected before the rename (lock timeout, temp write, or the temp
+    file's sync): a scheduled revision is neither applied nor acknowledged, the
+    file still holds the previous content, and the next revision succeeds; a
+    requested one is shown without an ack and suppresses nothing; a probe during
+    the failure gets no answer, never `unknown`;
+  - a failure injected at the directory sync after the rename: the revision is
+    displayed and acknowledged once, a probe answers `ack`, nothing is re-emitted,
+    and the content-free log records the weaker durability;
   - a hello while the file is unreadable or lacks the id: no hello is sent; an
     absent file creates and commits a new id first;
   - a probe read taken while the same process holds the exclusive lock does not
