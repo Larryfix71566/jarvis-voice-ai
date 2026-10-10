@@ -105,8 +105,75 @@
   },
   "limits": [
     "Test-only repair; no deployment, provider call or account/routing activation.",
-    "Prior a5b6f88\u2192ce6cde8 WS17 all12 pass remains exact-source evidence; final CI exposed this separate parent fixture race.",
+    "Prior a5b6f88→ce6cde8 WS17 all12 pass remains exact-source evidence; final CI exposed this separate parent fixture race.",
     "A revised baseline/reference needs separate review and approval before another independent comparison.",
     "Existing exact065d500/748b1e5 Claude reviews do not authorize transmitting this follow-up source."
-  ]
+  ],
+  "follow_up_2026_10_10": {
+    "date": "2026-10-10",
+    "recorded_by": "codex",
+    "original_snapshot_preserved": true,
+    "original_false_approval_and_comparison_fields_are_2026_10_09_snapshot": true,
+    "pr": 201,
+    "merge": "83d90e86780c726684a295557057741ab7266397",
+    "merged_at_utc": "2026-10-10T22:51:24Z",
+    "final_head": "de4381c9b4919fc7f6b203692b3ad8a10fcdc4cb",
+    "ci": {
+      "all_five_checks": "SUCCESS",
+      "validate_run": 38006318968,
+      "validate_job": 114075833503,
+      "unit": {
+        "passed": 6280,
+        "skipped": 11,
+        "subtests_passed": 2,
+        "failed": 0,
+        "seconds": 400.11
+      },
+      "integration": {
+        "passed": 196,
+        "skipped": 4,
+        "failed": 0,
+        "seconds": 159.04
+      },
+      "eval_latency_frontend": "passed",
+      "local_validate_log": "/private/tmp/ws05-pr201-de4381c-ci-20261009.log",
+      "local_validate_log_sha256": "9b86e70f0dcb80fdcd561f533c6a94933e5a2290b9752fcecaa8fd87f064ab12"
+    },
+    "baseline_approval": {
+      "approved": true,
+      "approver": "larry",
+      "baseline": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+      "scope": "Offline WS-17 verification only",
+      "human_reply": "approved proceed",
+      "excludes": [
+        "New Claude source transmission",
+        "Release or deployment",
+        "Provider call",
+        "Account or routing activation"
+      ]
+    },
+    "ws17_comparison": {
+      "owner": "WS-17",
+      "baseline": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+      "candidate": "59d57ea3f7eb007a02a17f425accf186a38108c2",
+      "status_at_record": "running",
+      "terminal_result_recorded": false,
+      "checks": "unchanged full twelve-check offline profile",
+      "note": "Terminal outcome belongs in WS-17; not a broader model/runtime or live acceptance pass"
+    },
+    "unchanged_boundaries": [
+      "Original diagnosis/reproduction/check records",
+      "Runtime/configuration/source readers/scanner/pins",
+      "Protected baseline identity",
+      "Verification profile/checks/timeouts",
+      "No later source sent to Claude",
+      "No production or account/routing activation",
+      "Broader acceptance flags remain false"
+    ],
+    "documentation_publication": {
+      "pr": 202,
+      "initial_documentation_commit": "63bf88d0db47cc80bfd0c707d387f9ffe6450138",
+      "runtime_changed": false
+    }
+  }
 }
