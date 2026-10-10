@@ -3,9 +3,10 @@
 **Status:** DRAFT. Written 2026-08-26 and reconciled with main `e7b099b` on
 2026-10-07 (§R, Claude). Revision 2 answers Codex's review of `0de8a2e` (R.0),
 revision 3 its review of `5e37696` (R.0a), revision 4 its review of `b3d7c0f`
-(R.0b), and revision 5 its review of `4994861` (R.0c). §R is authoritative and
-waits on Larry's decisions D1–D9. The August text after §R is history: R.9 says which parts
-remain background, and R.10–R.12 govern wherever they differ. Implements
+(R.0b), and revision 5 its review of `4994861` (R.0c). Revision 6 records Larry's
+decisions D1–D9 (R.0d, R.5). §R is authoritative. The August text after §R is
+history: R.9 says which parts remain background, and R.10–R.12 govern wherever they
+differ. Implements
 roadmap track **T5** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.5), tracked as
 WS-13. Read scopes only.
 
@@ -25,6 +26,29 @@ Nothing here is implemented, tested or accepted. No mailbox, calendar, provider 
 credential was touched. Approval works in two steps: first Larry answers D1–D9
 (R.5); then each increment in R.6 is claimed, built, cross-reviewed and accepted on
 its own. This section does not authorize implementation.
+
+### R.0d Revision 6 (2026-10-10, Larry's decisions D1–D9)
+
+Larry approved every recommendation in R.5 on 2026-10-10 and supplied the three
+facts the recommendations could not settle. Each decision now carries a
+**Decided** line in R.5; the options stay as the record of what was offered.
+
+| Decision | Choice | Detail Larry supplied |
+|---|---|---|
+| D1 | (a) P1–P3 now; P4/P5 later | Order P1, P2, P3 (P3 depends on P2, R.6) |
+| D2 | (a) no agent holds the calendar | |
+| D3 | (a) EventKit through the app | O1: the Google calendar is *not* visible in Calendar.app today. Larry wants Mortimer to have access to it, so the Google account must be added to macOS Internet Accounts with Calendars on before M2-2 (below). Until then EventKit sees iCloud and local calendars only |
+| D4 | (a) `confidential` | |
+| D5 | (a) "Your brief arrived." | |
+| D6 | (b) each account optional | Larry still has to create the AT&T secure mail key; Gmail's 2-Step status is unconfirmed. Both can stay `not_configured` while P1 is built and tested against fixtures |
+| D7 | 07:30 local, every day, 120-minute window; missed = (a) nothing; a request for today (a) suppresses; the stated retry defaults approved | |
+| D8 | (a) actions blocked under D4 (a) | |
+| D9 | (a) bookkeeping only | |
+
+Main moved to `83d90e8` (#201) while this revision was written. #201 fixed the
+flaky `test_actual_owned_capability_cli_remains_dry` that failed twice on this PR
+at `d82e43c` (the parent's notifier fixture created `unit.db` in the child's
+oracle directory); it changed no line this plan cites.
 
 ### R.0c Revision 5 (2026-10-09, after Codex's review of `4994861`)
 
@@ -376,13 +400,15 @@ next bot restart (R.10.18):
 ### R.5 Decisions for Larry
 
 Each decision gives options and Claude's recommendation. A recommendation is not an
-answer. Record the choice in this plan when it is made.
+answer. Larry recorded his choices on 2026-10-10 (revision 6); each decision's
+**Decided** line is the binding one.
 
 - **D1 — Scope and order.**
   - (a) P1–P3 now (mail headers, calendar, deterministic brief), with P4 and P5
     decided later. *Recommended.*
   - (b) P1–P5 as one programme.
   - (c) A calendar-and-reminders brief first (P2, then P3), with mail after.
+  - **Decided (2026-10-10): (a).** Claim order P1, then P2, then P3.
 - **D2 — Where calendar questions go.**
   - (a) No agent holds the calendar. Questions go through
     `daily_brief(day=…, scope="calendar")` (R.10.15). *Recommended.*
@@ -393,6 +419,7 @@ answer. Record the choice in this plan when it is made.
     human-only test.
   - Revision 1's other two options are no longer normal choices. They are listed
     under *Architectural exceptions* at the end of R.5.
+  - **Decided (2026-10-10): (a).**
 - **D3 — Calendar backend.** Before choosing, confirm O1: is the Google calendar
   visible in Calendar.app?
   - (a) The Mortimer app reads EventKit and answers a `calendar/request` on the
@@ -418,6 +445,15 @@ answer. Record the choice in this plan when it is made.
     - Calendars outside iCloud are reachable only if iCloud carries them.
   - Choosing (b) or (c) requires publishing that backend's full manifest and
     acceptance in this plan before P2 is claimed (R.10.14).
+  - **Decided (2026-10-10): (a).** O1 answered: the Google calendar is not visible
+    in Calendar.app today, and Larry wants Mortimer to have access to it. EventKit
+    reads only the calendars macOS itself has, so the prerequisite is a Mac
+    setting, not code: add the Google account under System Settings › Internet
+    Accounts with Calendars turned on, after which Calendar.app shows it and
+    EventKit sees it. [likely; untested on Larry's Mac] That is the route macOS
+    documents for Google calendars; M2-2 confirms it, and until it is done M2-2
+    covers iCloud and local calendars only. No Google credential enters Mortimer:
+    macOS holds the account.
 - **D4 — Privacy level for mail, calendar and reminder content in the brief.**
   - (a) `confidential`, the code's default. No model sees the content until a
     private route exists; the card is protected; speech is limited per D5; P4/P5
@@ -427,6 +463,7 @@ answer. Record the choice in this plan when it is made.
     Under today's native code it also enables copy, share, export and supporting-display
     transfer for the card (R.10.6), unless D8 (c) is chosen.
   - (c) `local_only`. As (a), and P4/P5 need a local model.
+  - **Decided (2026-10-10): (a).**
 - **D5 — What the spoken line may contain.** Speech goes to an external provider
   (A4). The Supervisor tool result is always the fixed acknowledgement, whichever
   option is chosen (R.10.3).
@@ -437,6 +474,7 @@ answer. Record the choice in this plan when it is made.
   - (b) Declassify the typed `brief-counts` allowlist only (R.10.3). Numbers and clock
     times, never text. Larry's approval here is what makes it legitimate.
   - (c) Adds sender names, subjects and event titles. This needs D4 (b).
+  - **Decided (2026-10-10): (a).**
 - **D6 — Accounts and vault names.**
   - bellsouth.net: `imap.mail.att.net:993`, logging in with an AT&T secure mail key.
   - Gmail: `imap.gmail.com:993`, logging in with an app password, which needs 2-Step
@@ -454,6 +492,11 @@ answer. Record the choice in this plan when it is made.
     - Either way the names are frozen in `test_requires_env_snapshot.py`, and no other
       server receives them.
   - Whether each account accepts these is a live check (M1-3).
+  - **Decided (2026-10-10): (b), each account optional.** Larry has yet to create
+    the AT&T secure mail key, and Gmail's 2-Step status is unconfirmed, so both
+    accounts may be `not_configured` when P1 lands; P1's source tests run against
+    fixtures, and M1-3 waits for whichever key exists. The host names and key
+    types above stand until M1-3 says otherwise.
 - **D7 — Schedule.**
   - Time: proposed 07:30 local (August M13).
   - Days: every day or weekdays.
@@ -475,6 +518,9 @@ answer. Record the choice in this plan when it is made.
     `BRIEF_RETRY_DELAY_S` (proposed 600) after the last, up to
     `BRIEF_MAX_EMISSIONS` (proposed 3) new contents and `BRIEF_MAX_CLAIMS`
     (proposed 6) claims (R.10.7).
+  - **Decided (2026-10-10):** 07:30 local, every day, a 120-minute catch-up
+    window; missed (a), nothing; an on-request brief for today (a) suppresses the
+    scheduled one; the fixed defaults above are approved.
 - **D8 — Native presentation.**
   - Arrival: every brief arrives as a card with the WS-17 New notice and takes no
     focus. A requested brief may open only once WS-17 provides a turn identity, and
@@ -486,6 +532,9 @@ answer. Record the choice in this plan when it is made.
     - (c) Under D4 (b), a separate `display_actions: "none"` permission keeps them
       blocked. It is enforced by one shared predicate, below the visible controls
       (R.10.6).
+  - **Decided (2026-10-10): (a).** With D4 (a), the four actions stay blocked by
+    the existing `isProtectedLocal` gates; the D8 (c) predicate work in R.10.6 is
+    not needed now and stays specified for a later D4 (b).
 - **D9 — Local storage of derived values** (new in revision 2; R.10.3).
   - (a) `brief_slots` and `brief_results` keep delivery bookkeeping and source-status
     codes only. *Recommended.*
@@ -496,6 +545,7 @@ answer. Record the choice in this plan when it is made.
     Under D5 (a) it has no use.
   - Under either option: a retention period (proposed 30 days), and logs stay
     content-free.
+  - **Decided (2026-10-10): (a).** Retention 30 days.
 
 **Architectural exceptions** (outside the normal approval path). Each would need a
 revised plan and a new review before it could be chosen:
@@ -2271,7 +2321,7 @@ do not prove Mac, account or provider behaviour.
 | M1-2 | P1 | Unread preserved (old V3) | A message noted as unread in each account's webmail is still unread after a headers read |
 | M1-3 | P1 | Accounts reachable | bellsouth.net with its secure mail key and Gmail with its app password each report `ok`, or a specific status code |
 | M2-1 | P2 | Permission | The Mortimer app raises the calendar prompt; denial and revocation are handled as specified |
-| M2-2 | P2 | Parity | One test week (recurring, all-day, overnight, and Google if O1 says it is there) matches Calendar.app |
+| M2-2 | P2 | Parity | One test week (recurring, all-day, overnight) matches Calendar.app; the Google calendar is included once the Google account is added to macOS Internet Accounts with Calendars on (D3), and until then the check records that it was not visible |
 | M3-1 | P3 | Live routing | `RUN_LIVE=1` eval: aggregate ≥ 90 %, and the brief score recorded |
 | M3-2 | P3 | Brief on request | The tool says "Putting your brief together."; a card arrives in the session that asked (a card until WS-17's binding); the spoken line comes only after the app applies the card; the card's facts match the sources |
 | M3-3 | P3 | Brief on schedule | With the time set two minutes ahead and a restart, exactly one card arrives; a reconnect brings no second |

@@ -202,7 +202,7 @@ Sources: [Command Console plan §7.2](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_
 This item is proposed, not ready for live acceptance. Future tests below apply after the plan is approved and implemented.
 
 - [ ] **Claude / Codex · prerequisite review:** Reconcile the draft with current architecture, security/model-routing rules, actual native client and reserved migration `0035`; coordinate the existing plan edits before implementation.
-- [ ] **Larry · plan decisions:** Approve read-only scope, calendar visibility/backend, Secretary routing/isolation and documented residual risks, vault names, brief schedule and permitted content/logging. Supply selected account access through the established vault/OS flow; credentials are not entered in this roadmap.
+- [ ] **Larry · plan decisions:** Approve read-only scope, calendar visibility/backend, Secretary routing/isolation and documented residual risks, vault names, brief schedule and permitted content/logging. Supply selected account access through the established vault/OS flow; credentials are not entered in this roadmap. (Decisions D1–D9 recorded 10-10 in plan §R.5; account access still to be supplied.)
 - [ ] **Claude / Codex · implementation and security evidence:** Deliver reviewed implementation and required suites; mail secrets reach only the intended child, reads do not mark mail read, injection fixtures cause zero post-mail tool calls, routing meets the existing ≥90% floor, and digest speech is grounded in the visible facts.
 - [ ] **Larry · future Mac checks:** Complete plan §R.12's Mac checks (the M rows, which replace V1–V10) on the selected backend: secret isolation, EventKit/CalDAV calendar parity, unread preservation, agent/injection isolation, routing, requested and once-daily scheduled brief, grounding and all kill switches. Record actual scores and outcomes rather than assuming the draft's defaults are correct.
 - [ ] **Larry / Claude · release:** Approve the tested artifact/configuration, record deployment and reversible rollback, and confirm the brief/card/timezone and failure behavior on the Mac. Sending mail or writing calendar events remains outside this plan.
@@ -212,15 +212,15 @@ Source: [mail/calendar/brief plan §R.12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIE
 **Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
 
 - **Owner:** `claude`
-- **Status:** review: plan §R revision 5 answers Codex's one remaining P3 blocker from its review of `4994861` (a durable, atomic, serialised result-history store in the app) and its two editorial corrections; Codex found P1 and P2 ready for Larry's decisions; waits on Codex's re-review of R.10.7 and Larry's decisions D1–D9
+- **Status:** review: plan §R revision 6 records Larry's decisions D1–D9 (every recommendation, 10-10: P1–P3 first, EventKit through the app, confidential, one fixed spoken line, optional accounts, 07:30 daily); revision 5's R.10.7 history store still waits on Codex's re-review, then P1 is claimed
 - **Implemented by:** not started (plan only)
 - **Remaining work / acceptance:** Larry answers D1–D9 (plan §R.5) and approves the plan; each increment P1–P5 (§R.6) is then claimed, built, cross-reviewed and accepted on its own against §R.12; P4/P5 stay separately gated (§R.11)
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** docs branch `docs/ws13-plan-reconciliation`
 - **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`; §R (10-07) is authoritative and the August text is history except where §R.9 keeps it. No GitHub branch other than this one touches the plan. Migration `0035` stays reserved for T5 (`0035_brief`).
 - **Scope:** that plan file only
-- **Next step:** codex: re-review plan §R revision 5 against your review of `4994861` (R.0c maps it; the history store is in R.10.7, with M3-6 for the Mac-measured syncs); larry: answer D1–D9 in §R.5; then P1 (mail header source) is claimed first, and P2 before P3, since P3 depends on P2's eligibility foundation
-- **Updated:** 10-09
+- **Next step:** codex: re-review revision 5's R.10.7 storage contract (unchanged by revision 6); larry: create the AT&T secure mail key and confirm Gmail 2-Step (D6), and add the Google account to macOS Internet Accounts with Calendars on (D3); claude: claim P1 (mail header source) on its own branch once Codex signs off, then P2, then P3
+- **Updated:** 10-10
 
 </details>
 
