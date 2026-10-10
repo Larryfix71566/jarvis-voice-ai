@@ -169,6 +169,11 @@
       "No later source sent to Claude",
       "No production or account/routing activation",
       "Broader acceptance flags remain false"
-    ]
+    ],
+    "documentation_publication": {
+      "pr": 202,
+      "initial_documentation_commit": "63bf88d0db47cc80bfd0c707d387f9ffe6450138",
+      "runtime_changed": false
+    }
   }
 }

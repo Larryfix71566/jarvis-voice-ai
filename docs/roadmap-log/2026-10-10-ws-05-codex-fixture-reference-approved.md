@@ -2,7 +2,7 @@
 date: 2026-10-10
 system: codex
 rows: [WS-05]
-prs: [201, 200, 198]
+prs: [202, 201, 200, 198]
 ---
 
 #201 merged as `83d90e86780c726684a295557057741ab7266397`; its final

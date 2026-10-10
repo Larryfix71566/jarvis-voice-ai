@@ -768,3 +768,5 @@ in their receipts. [Notifier repair and dated follow-up](../acceptance/model-use
 
 All broader source/identity/native-readiness/account/workload/rollout gates and
 acceptance flags retain their prior state; no deployment or live acceptance.
+
+Publication: documentation-only [PR #202](https://github.com/Larryfix71566/jarvis-voice-ai/pull/202) records this dated merged/CI/approval snapshot; it adds no runtime change or terminal WS-17 result.
