@@ -1,0 +1,776 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-10",
+  "row": "WS-17",
+  "recorded_by": "codex",
+  "outcome": "passed",
+  "baseline_git": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+  "candidate_git": "59d57ea3f7eb007a02a17f425accf186a38108c2",
+  "canonical_source_fingerprint_note": "Receipt baseline/candidate are canonical allowed-source content/mode fingerprints, not Git SHAs or raw archive hashes; the independent audit binds every actual path/mode/blob to these commits.",
+  "approval": "Larry explicitly approved revised08c baseline for offline WS-17 verification only, 2026-10-10. No new source transmission or production release.",
+  "host_record": {
+    "baseline_source": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+    "candidate_source": "59d57ea3f7eb007a02a17f425accf186a38108c2",
+    "clean_success_boundary": true,
+    "cleanup": [
+      {
+        "state": "stopped",
+        "task": "0623c63cbdb9"
+      },
+      {
+        "state": "stopped",
+        "task": "9583e0e6c2f1"
+      }
+    ],
+    "exact_all12_checks": true,
+    "exact_verification_identity": true,
+    "finished_at": 1791674704.300971,
+    "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+    "image_record_unchanged": true,
+    "ok": true,
+    "owned_tasks": [
+      {
+        "parent_task": null,
+        "purpose": "development",
+        "task": "9583e0e6c2f1"
+      },
+      {
+        "parent_task": "9583e0e6c2f1",
+        "purpose": "verification",
+        "task": "0623c63cbdb9"
+      }
+    ],
+    "phase": "passed",
+    "production_changed": false,
+    "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+    "publication_requested": false,
+    "receipt": {
+      "attempt": "4fa6cec3a9054064affab83203a186d7",
+      "baseline": "1cb637d1ad2667fb040715a9ba54f43b6216b1cf8b7c943d77649afc70e67711",
+      "candidate": "37e27ae8755f963085e8c0ee279e7fde09007cb1b68b9b4679750c8a620e2964",
+      "checks": [
+        {
+          "argv": [
+            "/Users/admin/mortimer/dependencies/python/bin/python",
+            "-c",
+            "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
+          ],
+          "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+          "name": "backend-imports",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 1.732
+        },
+        {
+          "argv": [
+            "/Users/admin/mortimer/dependencies/python/bin/python",
+            "-m",
+            "pytest",
+            "/Users/admin/mortimer/verification/tests/unit",
+            "-q"
+          ],
+          "log_sha256": "337bfb4a8c28f516f919a7e7e043e3af51b2da2963bd1a895ac69956367febc3",
+          "name": "baseline-backend",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 430.016
+        },
+        {
+          "argv": [
+            "/Users/admin/mortimer/dependencies/python/bin/python",
+            "-m",
+            "pytest",
+            "tests/unit",
+            "-q"
+          ],
+          "log_sha256": "6a973ef9812a50c574263e7437be5b665ae207b5301c925f129eadc44b4059d4",
+          "name": "backend",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 429.992
+        },
+        {
+          "argv": [
+            "/Users/admin/mortimer/dependencies/python/bin/python",
+            "-m",
+            "pytest",
+            "/Users/admin/mortimer/verification/tests/evals/sub_agent_evals.py",
+            "-q"
+          ],
+          "log_sha256": "b50b63a6ea5c35678117e984fff85ab464a3e38574bc6a6c66a3b5cd4a598756",
+          "name": "scripted-evals",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 1.414
+        },
+        {
+          "argv": [
+            "/Users/admin/mortimer/dependencies/python/bin/python",
+            "scripts/latency_probe.py",
+            "--budget",
+            "tests/fixtures/latency_sample.log"
+          ],
+          "log_sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a",
+          "name": "latency",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 0.086
+        },
+        {
+          "argv": [
+            "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+            "-m",
+            "pytest",
+            "services/mortimer-vault/tests",
+            "-q"
+          ],
+          "log_sha256": "9fa0cf112383d08ba6cf71555454022a1516a82dd99101eb834b59cedf77e2ee",
+          "name": "knowledge-base",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 3.301
+        },
+        {
+          "argv": [
+            "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+            "-m",
+            "pytest",
+            "/Users/admin/mortimer/verification/services/mortimer-vault/tests",
+            "-q"
+          ],
+          "log_sha256": "833ae2d9d9eaff57bb81dec674c4fcea4447f96566eb366331ead5809513c68a",
+          "name": "baseline-knowledge-base",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 4.441
+        },
+        {
+          "argv": [
+            "npm",
+            "--prefix",
+            "web",
+            "run",
+            "build"
+          ],
+          "log_sha256": "f4b7089c49450feeb96a294e3771ef988682cbfad06f15fd7e8ee6a829e49e7d",
+          "name": "web",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 31.348
+        },
+        {
+          "argv": [
+            "swift",
+            "test",
+            "--package-path",
+            "macos/JarvisKit"
+          ],
+          "log_sha256": "cc69eab79bc0a16f196c931547101188d07cecc86f96d34172587595b2a05363",
+          "name": "native-library",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 99.855
+        },
+        {
+          "argv": [
+            "swift",
+            "test",
+            "--package-path",
+            "macos/MortimerHost"
+          ],
+          "log_sha256": "49d8b72755d52ca36ec928c4b9da74c28b20d1b3afa505fa93eaf4f53428386c",
+          "name": "native-app",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 200.978
+        },
+        {
+          "argv": [
+            "swift",
+            "test",
+            "--package-path",
+            "/Users/admin/mortimer/verification/macos/JarvisKit"
+          ],
+          "log_sha256": "26c6fcee579497d4677581521340e80dc1b3c184bdb0b981138cffce5df38a0c",
+          "name": "baseline-native-library",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 23.108
+        },
+        {
+          "argv": [
+            "swift",
+            "test",
+            "--package-path",
+            "/Users/admin/mortimer/verification/macos/MortimerHost"
+          ],
+          "log_sha256": "b8154f47c4fa4d8cd0faa09acf4d5d84f0258f2586906eb6d30c816802e6c345",
+          "name": "baseline-native-app",
+          "passed": true,
+          "returncode": 0,
+          "seconds": 185.244
+        }
+      ],
+      "desktop_probe": {
+        "log_sha256": "adbe9a9199ac1cd291958992aa51394dbd50840d5c75fed5cd68600ea52742d9",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 28.395
+      },
+      "development_task": "9583e0e6c2f1",
+      "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+      "passed": true,
+      "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+      "runner": "67dfc621dae442649cac7977e2349b53bc0b0e193684e0d7ce4c95e6745e9188",
+      "source_commit": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+      "source_unchanged": true,
+      "status": "passed",
+      "verification_task": "0623c63cbdb9",
+      "version": 1
+    },
+    "reviewed_paths": [
+      "ROADMAP.md",
+      "docs/acceptance/command-console/CC7A4_LOCAL_VERIFICATION_2026-10-07.json",
+      "docs/acceptance/command-console/CC7A4_REUSE_2026-10-07.md",
+      "docs/acceptance/command-console/CC7A_CROSS_REVIEW_2026-10-09.json",
+      "docs/acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-09.json",
+      "docs/acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md",
+      "docs/acceptance/model-use-enhancements/receipts/mar-capability-notifier-isolation-2026-10-09.json",
+      "docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md",
+      "docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md",
+      "docs/roadmap-log/2026-10-07-ws-17-codex-weather-reuse.md",
+      "docs/roadmap-log/2026-10-09-ws-05-codex-capability-notifier-isolation.md",
+      "docs/roadmap-log/2026-10-09-ws-17-codex-approved-review-and-verification.md",
+      "docs/roadmap-log/2026-10-09-ws-17-codex-final-ci-fixture-blocker.md",
+      "docs/roadmap-log/2026-10-10-ws-17-codex-approved-reference-reverification.md",
+      "jarvis/bot/console_actions.py",
+      "jarvis/bot/console_protocol.py",
+      "jarvis/bot/display.py",
+      "jarvis/bot/pipeline.py",
+      "jarvis/bot/weather_reuse.py",
+      "jarvis/bot/weather_tool.py",
+      "jarvis/skills/registry.py",
+      "macos/JarvisKit/Sources/JarvisKit/AppMessage.swift",
+      "macos/JarvisKit/Sources/JarvisKit/ConsoleProtocol.swift",
+      "macos/JarvisKit/Tests/JarvisKitTests/CC7a4PayloadTests.swift",
+      "macos/MortimerHost/Sources/MortimerHost/App/AppMessageRouter.swift",
+      "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionCoordinator.swift",
+      "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionRegistry.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Console/ConsoleActionBar.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Console/ConversationThreadView.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/ConversationStore.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceRecents.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceStore.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ConversationIntegrationTests.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4RecentsFreshnessTests.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ReuseTests.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7aThreadAcceptanceTests.swift",
+      "tests/unit/test_display.py",
+      "tests/unit/test_weather_reuse.py",
+      "tests/unit/test_weather_reuse_pipeline.py"
+    ],
+    "runner": "67dfc621dae442649cac7977e2349b53bc0b0e193684e0d7ce4c95e6745e9188",
+    "running_vm_count_after": 0,
+    "settings_unchanged": true,
+    "started_at": 1791673054.087581
+  },
+  "attempt_receipt": {
+    "version": 1,
+    "attempt": "4fa6cec3a9054064affab83203a186d7",
+    "candidate": "37e27ae8755f963085e8c0ee279e7fde09007cb1b68b9b4679750c8a620e2964",
+    "baseline": "1cb637d1ad2667fb040715a9ba54f43b6216b1cf8b7c943d77649afc70e67711",
+    "source_commit": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+    "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+    "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+    "runner": "67dfc621dae442649cac7977e2349b53bc0b0e193684e0d7ce4c95e6745e9188",
+    "development_task": "9583e0e6c2f1",
+    "checks": [
+      {
+        "name": "backend-imports",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-c",
+          "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 1.732,
+        "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      },
+      {
+        "name": "baseline-backend",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/unit",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 430.016,
+        "log_sha256": "337bfb4a8c28f516f919a7e7e043e3af51b2da2963bd1a895ac69956367febc3"
+      },
+      {
+        "name": "backend",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "tests/unit",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 429.992,
+        "log_sha256": "6a973ef9812a50c574263e7437be5b665ae207b5301c925f129eadc44b4059d4"
+      },
+      {
+        "name": "scripted-evals",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/evals/sub_agent_evals.py",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 1.414,
+        "log_sha256": "b50b63a6ea5c35678117e984fff85ab464a3e38574bc6a6c66a3b5cd4a598756"
+      },
+      {
+        "name": "latency",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "scripts/latency_probe.py",
+          "--budget",
+          "tests/fixtures/latency_sample.log"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 0.086,
+        "log_sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a"
+      },
+      {
+        "name": "knowledge-base",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "services/mortimer-vault/tests",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 3.301,
+        "log_sha256": "9fa0cf112383d08ba6cf71555454022a1516a82dd99101eb834b59cedf77e2ee"
+      },
+      {
+        "name": "baseline-knowledge-base",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/services/mortimer-vault/tests",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 4.441,
+        "log_sha256": "833ae2d9d9eaff57bb81dec674c4fcea4447f96566eb366331ead5809513c68a"
+      },
+      {
+        "name": "web",
+        "argv": [
+          "npm",
+          "--prefix",
+          "web",
+          "run",
+          "build"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 31.348,
+        "log_sha256": "f4b7089c49450feeb96a294e3771ef988682cbfad06f15fd7e8ee6a829e49e7d"
+      },
+      {
+        "name": "native-library",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/JarvisKit"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 99.855,
+        "log_sha256": "cc69eab79bc0a16f196c931547101188d07cecc86f96d34172587595b2a05363"
+      },
+      {
+        "name": "native-app",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/MortimerHost"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 200.978,
+        "log_sha256": "49d8b72755d52ca36ec928c4b9da74c28b20d1b3afa505fa93eaf4f53428386c"
+      },
+      {
+        "name": "baseline-native-library",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/JarvisKit"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 23.108,
+        "log_sha256": "26c6fcee579497d4677581521340e80dc1b3c184bdb0b981138cffce5df38a0c"
+      },
+      {
+        "name": "baseline-native-app",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/MortimerHost"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 185.244,
+        "log_sha256": "b8154f47c4fa4d8cd0faa09acf4d5d84f0258f2586906eb6d30c816802e6c345"
+      }
+    ],
+    "passed": true,
+    "status": "passed",
+    "verification_task": "0623c63cbdb9",
+    "desktop_probe": {
+      "returncode": 0,
+      "passed": true,
+      "seconds": 28.395,
+      "log_sha256": "adbe9a9199ac1cd291958992aa51394dbd50840d5c75fed5cd68600ea52742d9"
+    },
+    "source_unchanged": true
+  },
+  "source_scope_review": {
+    "baseline": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+    "candidate": "59d57ea3f7eb007a02a17f425accf186a38108c2",
+    "integrated_main": "83d90e86780c726684a295557057741ab7266397",
+    "user_approval": "Larry: approved proceed, 2026-10-10; offline verification only",
+    "runtime_matches_exact_approved_source_commits": true,
+    "approved_source_bindings": {
+      "jarvis/bot/console_actions.py": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "jarvis/bot/pipeline.py": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "tests/unit/test_console_voice_bridge.py": "065d50058534d6e16e0c59cae0100d0b9bbb5406",
+      "macos/JarvisKit/Tests/JarvisKitTests/ConsoleProtocolTests.swift": "065d50058534d6e16e0c59cae0100d0b9bbb5406",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceStore.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7aInventoryCapacityTests.swift": "065d50058534d6e16e0c59cae0100d0b9bbb5406",
+      "jarvis/bot/console_protocol.py": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "jarvis/bot/display.py": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "jarvis/bot/weather_reuse.py": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "jarvis/bot/weather_tool.py": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "jarvis/skills/registry.py": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/JarvisKit/Sources/JarvisKit/AppMessage.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/JarvisKit/Sources/JarvisKit/ConsoleProtocol.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/JarvisKit/Tests/JarvisKitTests/CC7a4PayloadTests.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Sources/MortimerHost/App/AppMessageRouter.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionCoordinator.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionRegistry.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Sources/MortimerHost/Console/ConsoleActionBar.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Sources/MortimerHost/Console/ConversationThreadView.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/ConversationStore.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceRecents.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ConversationIntegrationTests.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4RecentsFreshnessTests.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ReuseTests.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7aThreadAcceptanceTests.swift": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "tests/unit/test_display.py": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "tests/unit/test_weather_reuse.py": "748b1e5ab7a00cf208b775816355fe339abbe879",
+      "tests/unit/test_weather_reuse_pipeline.py": "748b1e5ab7a00cf208b775816355fe339abbe879"
+    },
+    "fixture_files_and_modes_identical": true,
+    "exact_changed_paths": [
+      "ROADMAP.md",
+      "docs/acceptance/command-console/CC7A4_LOCAL_VERIFICATION_2026-10-07.json",
+      "docs/acceptance/command-console/CC7A4_REUSE_2026-10-07.md",
+      "docs/acceptance/command-console/CC7A_CROSS_REVIEW_2026-10-09.json",
+      "docs/acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-09.json",
+      "docs/acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md",
+      "docs/acceptance/model-use-enhancements/receipts/mar-capability-notifier-isolation-2026-10-09.json",
+      "docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md",
+      "docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md",
+      "docs/roadmap-log/2026-10-07-ws-17-codex-weather-reuse.md",
+      "docs/roadmap-log/2026-10-09-ws-05-codex-capability-notifier-isolation.md",
+      "docs/roadmap-log/2026-10-09-ws-17-codex-approved-review-and-verification.md",
+      "docs/roadmap-log/2026-10-09-ws-17-codex-final-ci-fixture-blocker.md",
+      "docs/roadmap-log/2026-10-10-ws-17-codex-approved-reference-reverification.md",
+      "jarvis/bot/console_actions.py",
+      "jarvis/bot/console_protocol.py",
+      "jarvis/bot/display.py",
+      "jarvis/bot/pipeline.py",
+      "jarvis/bot/weather_reuse.py",
+      "jarvis/bot/weather_tool.py",
+      "jarvis/skills/registry.py",
+      "macos/JarvisKit/Sources/JarvisKit/AppMessage.swift",
+      "macos/JarvisKit/Sources/JarvisKit/ConsoleProtocol.swift",
+      "macos/JarvisKit/Tests/JarvisKitTests/CC7a4PayloadTests.swift",
+      "macos/MortimerHost/Sources/MortimerHost/App/AppMessageRouter.swift",
+      "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionCoordinator.swift",
+      "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionRegistry.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Console/ConsoleActionBar.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Console/ConversationThreadView.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/ConversationStore.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceRecents.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceStore.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ConversationIntegrationTests.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4RecentsFreshnessTests.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ReuseTests.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7aThreadAcceptanceTests.swift",
+      "tests/unit/test_display.py",
+      "tests/unit/test_weather_reuse.py",
+      "tests/unit/test_weather_reuse_pipeline.py"
+    ],
+    "changed_source_paths": [
+      "jarvis/bot/console_actions.py",
+      "jarvis/bot/console_protocol.py",
+      "jarvis/bot/display.py",
+      "jarvis/bot/pipeline.py",
+      "jarvis/bot/weather_reuse.py",
+      "jarvis/bot/weather_tool.py",
+      "jarvis/skills/registry.py",
+      "macos/JarvisKit/Sources/JarvisKit/AppMessage.swift",
+      "macos/JarvisKit/Sources/JarvisKit/ConsoleProtocol.swift",
+      "macos/JarvisKit/Tests/JarvisKitTests/CC7a4PayloadTests.swift",
+      "macos/MortimerHost/Sources/MortimerHost/App/AppMessageRouter.swift",
+      "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionCoordinator.swift",
+      "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionRegistry.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Console/ConsoleActionBar.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Console/ConversationThreadView.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/ConversationStore.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceRecents.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceStore.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ConversationIntegrationTests.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4RecentsFreshnessTests.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ReuseTests.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/CC7aThreadAcceptanceTests.swift",
+      "tests/unit/test_display.py",
+      "tests/unit/test_weather_reuse.py",
+      "tests/unit/test_weather_reuse_pipeline.py"
+    ],
+    "reviewed_documentation_delta": [
+      "ROADMAP.md",
+      "docs/acceptance/command-console/CC7A4_LOCAL_VERIFICATION_2026-10-07.json",
+      "docs/acceptance/command-console/CC7A4_REUSE_2026-10-07.md",
+      "docs/acceptance/command-console/CC7A_CROSS_REVIEW_2026-10-09.json",
+      "docs/acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-09.json",
+      "docs/acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md",
+      "docs/acceptance/model-use-enhancements/receipts/mar-capability-notifier-isolation-2026-10-09.json",
+      "docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md",
+      "docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md",
+      "docs/roadmap-log/2026-10-07-ws-17-codex-weather-reuse.md",
+      "docs/roadmap-log/2026-10-09-ws-05-codex-capability-notifier-isolation.md",
+      "docs/roadmap-log/2026-10-09-ws-17-codex-approved-review-and-verification.md",
+      "docs/roadmap-log/2026-10-09-ws-17-codex-final-ci-fixture-blocker.md",
+      "docs/roadmap-log/2026-10-10-ws-17-codex-approved-reference-reverification.md"
+    ],
+    "no_runtime_runner_config_changes": true
+  },
+  "worker_identity": {
+    "passed": true,
+    "log_sha256_matches": true,
+    "raw": "identity=mortimer-dev:502 manager=Aqua manageruid=502 console=mortimer-dev\nwindow visible=true isVisible=true activeSpace=true appActive=true screens=1\ndesktop=visible keychain=unlocked\n\n"
+  },
+  "log_hashes": [
+    {
+      "check": "backend-imports",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "matches": true
+    },
+    {
+      "check": "baseline-backend",
+      "sha256": "337bfb4a8c28f516f919a7e7e043e3af51b2da2963bd1a895ac69956367febc3",
+      "matches": true
+    },
+    {
+      "check": "backend",
+      "sha256": "6a973ef9812a50c574263e7437be5b665ae207b5301c925f129eadc44b4059d4",
+      "matches": true
+    },
+    {
+      "check": "scripted-evals",
+      "sha256": "b50b63a6ea5c35678117e984fff85ab464a3e38574bc6a6c66a3b5cd4a598756",
+      "matches": true
+    },
+    {
+      "check": "latency",
+      "sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a",
+      "matches": true
+    },
+    {
+      "check": "knowledge-base",
+      "sha256": "9fa0cf112383d08ba6cf71555454022a1516a82dd99101eb834b59cedf77e2ee",
+      "matches": true
+    },
+    {
+      "check": "baseline-knowledge-base",
+      "sha256": "833ae2d9d9eaff57bb81dec674c4fcea4447f96566eb366331ead5809513c68a",
+      "matches": true
+    },
+    {
+      "check": "web",
+      "sha256": "f4b7089c49450feeb96a294e3771ef988682cbfad06f15fd7e8ee6a829e49e7d",
+      "matches": true
+    },
+    {
+      "check": "native-library",
+      "sha256": "cc69eab79bc0a16f196c931547101188d07cecc86f96d34172587595b2a05363",
+      "matches": true
+    },
+    {
+      "check": "native-app",
+      "sha256": "49d8b72755d52ca36ec928c4b9da74c28b20d1b3afa505fa93eaf4f53428386c",
+      "matches": true
+    },
+    {
+      "check": "baseline-native-library",
+      "sha256": "26c6fcee579497d4677581521340e80dc1b3c184bdb0b981138cffce5df38a0c",
+      "matches": true
+    },
+    {
+      "check": "baseline-native-app",
+      "sha256": "b8154f47c4fa4d8cd0faa09acf4d5d84f0258f2586906eb6d30c816802e6c345",
+      "matches": true
+    }
+  ],
+  "raw_receipt_sha256": "db818dfb9a60ca32ffa6174f76ea6559674d348e9deb21f13b7c3b05cda60926",
+  "host_record_sha256": "7b024020ae1e97dc92c6ac7d0928b5b6513de69837851ae4ee6815bacfb77810",
+  "caller_sha256": "b73126dfe21f1599d6b94bb679c839bd015101f1ba19ebe1898de32d43c1d390",
+  "suite_summaries": {
+    "baseline-backend": {
+      "passed": 6280,
+      "skipped": 11,
+      "subtests_passed": 2,
+      "failures": 0
+    },
+    "backend": {
+      "passed": 6366,
+      "skipped": 11,
+      "subtests_passed": 2,
+      "failures": 0
+    },
+    "native-library": {
+      "executed": 232,
+      "skipped": 0,
+      "failures": 0
+    },
+    "native-app": {
+      "executed": 551,
+      "skipped": 8,
+      "failures": 0
+    },
+    "baseline-native-library": {
+      "executed": 227,
+      "skipped": 0,
+      "failures": 0
+    },
+    "baseline-native-app": {
+      "executed": 514,
+      "skipped": 7,
+      "failures": 0
+    }
+  },
+  "native_prerequisite_skips": {
+    "native-app": [
+      "-[MortimerHostTests.CC7aThreadAcceptanceTests testActualThreadWindowCaptureDoesNotExposePrivateBodyExcerpt]",
+      "-[MortimerHostTests.ProtectedDisplayContentTests testProtectedContentInActualWindowCaptureMatchesBodyOnlyReference]",
+      "-[MortimerHostTests.ScreenPlacementTests testConnectedExternalDisplayIsExposedToPlacementTopology]",
+      "-[MortimerHostTests.SupportingDisplayAcceptanceTests testPointerSelectedResultSharesStageOnConnectedDisplays]",
+      "-[MortimerHostTests.SupportingDisplayAcceptanceTests testStreamedResponseRendersOnlyOnSupportingDisplayThenReturnsToMain]",
+      "-[MortimerHostTests.WindowVisibilityTests testActualWindowHideShowAndDetachUpdateVisibility]",
+      "-[MortimerHostTests.WindowVisibilityTests testReducedMotionKeepsVisibleWaveStatic]",
+      "-[MortimerHostTests.WindowVisibilityTests testWaveStopsSamplingWhileWindowHiddenAndResumes]"
+    ],
+    "baseline-native-app": [
+      "-[MortimerHostTests.ProtectedDisplayContentTests testProtectedContentInActualWindowCaptureMatchesBodyOnlyReference]",
+      "-[MortimerHostTests.ScreenPlacementTests testConnectedExternalDisplayIsExposedToPlacementTopology]",
+      "-[MortimerHostTests.SupportingDisplayAcceptanceTests testPointerSelectedResultSharesStageOnConnectedDisplays]",
+      "-[MortimerHostTests.SupportingDisplayAcceptanceTests testStreamedResponseRendersOnlyOnSupportingDisplayThenReturnsToMain]",
+      "-[MortimerHostTests.WindowVisibilityTests testActualWindowHideShowAndDetachUpdateVisibility]",
+      "-[MortimerHostTests.WindowVisibilityTests testReducedMotionKeepsVisibleWaveStatic]",
+      "-[MortimerHostTests.WindowVisibilityTests testWaveStopsSamplingWhileWindowHiddenAndResumes]"
+    ]
+  },
+  "limitations": [
+    "This is offline verification of08c\u219259d, not deployment or live acceptance.",
+    "Candidate native skips: two Screen Recording captures, three physical-display cases and three app-activation cases. Baseline has seven analogous skips without the added private-thread capture. These are unrun cases, not passes.",
+    "Earlier frozen748 Mac capture passes and a5\u2192ce6 offline pass retain their original scope; earlier failed CI is not erased.",
+    "PR198 remains draft pending WS13 revision4 and separate Larry release/deployment approval. UI2-22\u202625 and dependent live checks remain open."
+  ],
+  "independent_evidence_audit": {
+    "verdict": "passed",
+    "artifact_sha256": "fb85ccaa836d7a2074d301e7e98213d6233124f9f3f96640696132f44cdb3c2d",
+    "baseline": {
+      "commit": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+      "files": 1824,
+      "fingerprint": "1cb637d1ad2667fb040715a9ba54f43b6216b1cf8b7c943d77649afc70e67711",
+      "all_paths_modes_and_git_blob_oids_match": true
+    },
+    "candidate": {
+      "commit": "59d57ea3f7eb007a02a17f425accf186a38108c2",
+      "files": 1843,
+      "fingerprint": "37e27ae8755f963085e8c0ee279e7fde09007cb1b68b9b4679750c8a620e2964",
+      "all_paths_modes_and_git_blob_oids_match": true
+    },
+    "all_order_argv_status_and_log_hashes_match": true,
+    "states": [
+      {
+        "id": "9583e0e6c2f1",
+        "vm": "mortimer-9583e0e6c2f1",
+        "purpose": "development",
+        "parent_task": null,
+        "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+        "status": "stopped",
+        "network": "offline",
+        "worker": "mortimer-dev",
+        "source_commit": "08c06357267ef1348ec4b64dfdd12b26d4710a50"
+      },
+      {
+        "id": "0623c63cbdb9",
+        "vm": "mortimer-0623c63cbdb9",
+        "purpose": "verification",
+        "parent_task": "9583e0e6c2f1",
+        "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+        "status": "stopped",
+        "network": "offline",
+        "worker": "mortimer-dev",
+        "source_commit": "08c06357267ef1348ec4b64dfdd12b26d4710a50"
+      }
+    ],
+    "actual_running_vm_count": 0,
+    "host_cleanup_settings_image_invariants": true,
+    "desktop_probe_hash_matches": true
+  },
+  "candidate_ci": {
+    "head": "59d57ea3f7eb007a02a17f425accf186a38108c2",
+    "all_five_checks_passed": true,
+    "validate_run": 38093283054,
+    "validate_job": 114333919043,
+    "unit": {
+      "passed": 6366,
+      "skipped": 11,
+      "subtests_passed": 2
+    },
+    "integration": {
+      "passed": 196,
+      "skipped": 4
+    },
+    "scripted_evals_passed": 13,
+    "log_sha256": "f3b1a6282655b46bb14665c81ccde76b306402ab32f8b8f361a9f53c6666b817"
+  }
+}

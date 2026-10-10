@@ -1,14 +1,15 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
 **Status:** WS-17 CC7a closure is implemented on the Codex candidate.
-Separate exact-source Claude static reviews and the approved a5b6f88→ce6cde8
-independent offline twelve-check comparison passed 2026-10-09. The test-only
-WS-05 fixture repair #201 merged as `83d90e8`; Larry approved revised offline
-baseline `08c0635` on 2026-10-10. Its new integrated-candidate comparison is
-being prepared under the unchanged verifier. Deployment and live acceptance
-remain open. Original reviews, failed CI and comparison evidence retain their
-exact references in the dated progress and
-[10-09 receipt](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md).
+Separate exact-source Claude static reviews completed 2026-10-09. After #201
+merged and Larry approved revised baseline `08c0635`, the unchanged independent
+verifier passed all twelve checks on immutable `59d57ea` (2026-10-10), with
+exact source/pins/log hashes and clean owned-VM shutdown. Five CI checks also
+passed on `59d57ea`. The earlier comparison and failed CI remain separate
+records. PR #198 stays draft pending WS-13 revision 4 and Larry's separate
+release/deployment approval; live UI2-22…25 remain open. See
+[10-10 comparison receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json)
+and [exact-source review](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md).
 The following baseline describes the earlier 2026-09-18 implementation:
 core protocol, stores,
 Atlas composition, attachment bounds, approved inbound transfer state (including
@@ -2115,3 +2116,28 @@ unchanged. This approval sends no later source to Claude and authorizes no
 production release. The earlier a5b6f88→ce6cde8 pass and failed final-head CI
 remain separate records. Record the new actual result after completion;
 WS-13 revision 4, Larry's separate release approval and UI2-22…25 remain open.
+
+
+**Result, 2026-10-10 (Codex, approved-reference comparison):**
+The unchanged full-profile verifier completed all twelve ordered checks on
+`08c06357267ef1348ec4b64dfdd12b26d4710a50`→
+`59d57ea3f7eb007a02a17f425accf186a38108c2`. Actual baseline Python:
+6,280 passed / eleven skipped / two subtests; candidate: 6,366 / eleven /
+two. Baseline JarvisKit 227 and MortimerHost 514 / seven skips; candidate
+JarvisKit 232 and MortimerHost 551 / eight skips; zero failures. Candidate
+skips are two Screen Recording captures, three physical-display cases and
+three app-activation cases; these are unrun and confer no live acceptance.
+Desktop worker UID 502 / Aqua 502 / visible / unlocked was actually measured.
+Every check name/argv/return code/log hash, source path/mode/blob identity,
+image/profile/runner pin and independent receipt audit matched. Both owned
+VMs stopped; actual running count zero; settings/image record unchanged.
+The compare took 1,650 seconds. Five CI checks on the same candidate passed,
+including 6,366 unit tests, 196 integration tests and thirteen scripted evals.
+
+The approval and prior review source bindings are preserved in the
+[10-10 receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json).
+This is the updated offline release comparison, not an erasure of earlier
+failed CI or a claim of production deployment. WS-13 revision 4 must land
+before #198; Larry separately decides release/merge/deployment and exact-build
+UI2-22…25. Keep the temporary thread switch and dependent live gates open.
+No later source was sent to Claude and no production flag changed.
