@@ -107,7 +107,17 @@ def test_capability_contract_keeps_foreign_baseline_owner_refusal(owned_pilot_so
         assert support._read is installed_read and os.getuid is installed_uid
 
 
-def test_actual_owned_capability_cli_remains_dry(owned_pilot_source, tmp_path):
+def test_actual_owned_capability_cli_remains_dry(owned_pilot_source, tmp_path_factory):
+    # The parent's notifier may create its autouse fixture's unit.db during
+    # this test. Exercise that real poll, but keep the child's no-write oracle
+    # in a separate directory; no child artifacts are exempted from it.
+    parent_db = Path(os.environ['JARVIS_DB_PATH'])
+    tmp_path = tmp_path_factory.mktemp('capability-dry-child')
+    assert parent_db.is_relative_to(tmp_path_factory.getbasetemp())
+    assert parent_db.parent != tmp_path
+    from jarvis.admin.reminder_notifier import ReminderNotifier
+    ReminderNotifier(post=lambda _: False).tick_once()
+    assert parent_db.is_file()
     contract = probe.frozen_contract('claude-opus', 'subscription')
     runner = owned_pilot_source.root / 'scripts/verify_claude_developer_capability.py'
     result = subprocess.run([sys.executable, str(runner)], cwd=tmp_path,
