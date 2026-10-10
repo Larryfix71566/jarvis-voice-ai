@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-09",
+  "row": "WS-05",
+  "recorded_by": "codex",
+  "source": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+  "parent": "27fd356ea2869b8df08c0c5954ed86c58513a946",
+  "prior_approved_baseline": "a5b6f884c317c74a1d2b4c2a1d7e334920a55d51",
+  "new_baseline_approved": false,
+  "independent_comparison_started": false,
+  "source_sent_to_claude": false,
+  "scope": "Continuation of Larry-assigned bounded capability-fixture repair under claim199 on the same owner/Where branch. One test function only.",
+  "diagnosis": {
+    "ci_head": "287b96dde2804682dcf81d74af05d58d37c6fb47",
+    "ci_run": 38004446912,
+    "case": "test_actual_owned_capability_cli_remains_dry",
+    "parent_artifacts": [
+      "unit.db",
+      "unit.db-wal",
+      "unit.db-shm"
+    ],
+    "child_database": "probe.db",
+    "child_exit_and_exact_dry_json_passed": true,
+    "parent_notifier_log_captured": true,
+    "controlled_actual_parent_poll_failed_original_test": true,
+    "failure_after_parent_poll": "Empty-directory assertion sees unit.db; no child probe.db artifact",
+    "missing_reminders_table": "supported inference; CI only logs OperationalError, not SQLite error detail"
+  },
+  "repair": {
+    "path": "tests/unit/test_claude_developer_capability.py",
+    "function": "test_actual_owned_capability_cli_remains_dry",
+    "child_directory": "Fresh tmp_path_factory sibling, separate from parent autouse tmp_path",
+    "parent_poll": "Actual ReminderNotifier.tick_once with fake post=False; no thread started or desktop notification",
+    "new_assertions": "Parent database under pytest temporary base, outside child directory, actually exists after poll",
+    "prior_assertion_ASTs_preserved": true,
+    "other_top_level_function_or_class_ASTs_unchanged": 60,
+    "file_mode_unchanged": true,
+    "source_fixture_helper_unchanged": true,
+    "runtime_code_changed": false,
+    "source_readers_owner_link_mode_scanner_pins_changed": false,
+    "protected_baseline_changed": false,
+    "profile_checks_or_timeouts_changed": false,
+    "child_artifact_exemptions": []
+  },
+  "executed_checks": {
+    "original_forced_parent_poll": {
+      "failed": 1,
+      "seconds": 2.22,
+      "expected_causal_failure": true
+    },
+    "repaired_forced_parent_poll": {
+      "passed": 1,
+      "seconds": 1.66
+    },
+    "injected_child_probe_db": {
+      "failed": 1,
+      "seconds": 3.86,
+      "expected_oracle_failure": true,
+      "real_dry_child_ran": true
+    },
+    "focused_restricted": {
+      "passed": 203,
+      "failed": 1,
+      "seconds": 15.06,
+      "failure": "Existing loopback test PermissionError on socket bind"
+    },
+    "focused_host_prerequisites": {
+      "passed": 204,
+      "failed": 0,
+      "seconds": 14.92
+    }
+  },
+  "independent_codex_review": {
+    "kind": "static fixture review",
+    "verdict": "scoped approval; no blocking finding",
+    "scope": "All original body statements are unchanged suffix; asserts/argv/five-second timeout retained; no notifications/thread start, no runtime/reader/scanner changes",
+    "executed_tests": false,
+    "baseline_approval_inferred": false
+  },
+  "log_evidence": {
+    "ci_failure": {
+      "local_path": "/private/tmp/ws17-ci-287b96d-failed-20261009.log",
+      "sha256": "b22a50670ce18da4b7d40f205609df01ad947e17c92dbf933e69c71fde72ef66"
+    },
+    "parent_poll_before": {
+      "local_path": "/private/tmp/ws05-capability-parent-notifier-before-20261009.log",
+      "sha256": "f98d9dd2504d5c9b08ff5f7ed5bd178d816d4b81b423c7451fa6c3efe06c900c"
+    },
+    "parent_poll_after": {
+      "local_path": "/private/tmp/ws05-capability-parent-notifier-after-20261009.log",
+      "sha256": "e14a6292fe4346dd292bd6fdc0609de743f05184b6b9322a46f58b2459874476"
+    },
+    "child_artifact_negative": {
+      "local_path": "/private/tmp/ws05-capability-child-artifact-negative-20261009.log",
+      "sha256": "916f48b52defb8f83b415db046e06526e684128bac72fef42c2a93bfcde9c6dc"
+    },
+    "focused_restricted": {
+      "local_path": "/private/tmp/ws05-capability-notifier-focused-20261009.log",
+      "sha256": "cafe172ce8e415adbcd79c21aba7953a0a97adb84c8983c120f9597fc47e0f5e"
+    },
+    "focused_host": {
+      "local_path": "/private/tmp/ws05-capability-notifier-focused-host-20261009.log",
+      "sha256": "945593dfd493de602d81ad5bd7c341f405c507754595ec61cd711138525ae066"
+    }
+  },
+  "limits": [
+    "Test-only repair; no deployment, provider call or account/routing activation.",
+    "Prior a5b6f88\u2192ce6cde8 WS17 all12 pass remains exact-source evidence; final CI exposed this separate parent fixture race.",
+    "A revised baseline/reference needs separate review and approval before another independent comparison.",
+    "Existing exact065d500/748b1e5 Claude reviews do not authorize transmitting this follow-up source."
+  ]
+}
