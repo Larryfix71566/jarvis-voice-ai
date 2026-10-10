@@ -10,7 +10,7 @@ MAX_SUMMARY = 240
 MAX_MESSAGE = 32 * 1024
 ALLOWED_ACTIONS = frozenset({
     "inventory", "help", "view_set", "result_select", "result_close", "result_pin",
-    "result_unpin", "result_next", "result_previous", "result_mode", "compare_set",
+    "result_unpin", "result_reopen", "weather_reuse", "result_next", "result_previous", "result_mode", "compare_set",
     "compare_end", "compare_side", "content_scroll", "source_select", "source_open",
     "source_inspector", "image_select", "atlas_fit", "atlas_arrange", "atlas_zoom",
     "atlas_pan", "atlas_move", "group_create", "group_rename", "group_assign",
@@ -37,6 +37,7 @@ ALLOWED_ACTIONS = frozenset({
 # unreviewed field across the voice/native boundary.
 ACTION_ARG_FIELDS: dict[str, frozenset[str]] = {
     "inventory": frozenset({"scope", "cursor"}),
+    "weather_reuse": frozenset({"subject_key", "tool", "days", "units", "run_id", "ordinary_turn"}),
     "view_set": frozenset({"mode"}),
     "result_mode": frozenset({"mode"}),
     "compare_side": frozenset({"side"}),
@@ -92,7 +93,7 @@ ACTION_ARG_FIELDS: dict[str, frozenset[str]] = {
 # enum-like argument; legacy callers may still supply the latter in target
 # where the native coordinator explicitly supports that fallback.
 REQUIRED_TARGET_ACTIONS = frozenset({
-    "result_select", "result_close", "result_pin", "result_unpin", "result_mode",
+    "result_select", "result_close", "result_pin", "result_unpin", "result_reopen", "weather_reuse", "result_mode",
     "compare_set", "group_rename", "group_assign", "group_remove_card",
     "group_dissolve", "atlas_move", "graph_focus", "graph_select",
     "graph_select_edge", "graph_filter", "graph_group", "graph_path",
@@ -108,10 +109,11 @@ STRING_ARGUMENTS = frozenset({
     "scope", "cursor", "mode", "side", "panel", "direction", "source", "relation",
     "name", "group", "query", "kind", "screen_id", "key", "format", "question",
     "state", "category", "tab", "operation", "preview_id", "skill_id", "task_brief",
+    "subject_key", "tool", "units", "run_id",
 })
 NUMBER_ARGUMENTS = frozenset({"viewport", "points", "x", "y", "value"})
-BOOLEAN_ARGUMENTS = frozenset({"open", "visible", "collapsed", "enabled", "expanded", "confirmed"})
-INTEGER_ARGUMENTS = frozenset({"index", "ordinal", "row", "column", "size", "layout", "depth"})
+BOOLEAN_ARGUMENTS = frozenset({"open", "visible", "collapsed", "enabled", "expanded", "confirmed", "ordinary_turn"})
+INTEGER_ARGUMENTS = frozenset({"index", "ordinal", "row", "column", "size", "layout", "depth", "days"})
 
 
 def _uuid(value: Any, field: str) -> str:
@@ -189,6 +191,21 @@ def validate_request(message: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError("atlas_move row and column must be between 1 and 100")
     if action == "graph_search" and "query" in args and len(args["query"]) > 200:
         raise ValueError("graph_search query exceeds 200 characters")
+    if action in {"weather_reuse", "result_reopen"}:
+        _uuid(message.get("target"), "target")
+    if action == "weather_reuse":
+        if not isinstance(args.get("subject_key"), str) or not 1 <= len(args["subject_key"]) <= 200:
+            raise ValueError("weather_reuse requires a bounded subject_key")
+        if args.get("tool") not in {"local_weather", "get_weather", "get_weather_radar"}:
+            raise ValueError("weather_reuse requires a supported weather tool")
+        if type(args.get("days")) is not int or not 1 <= args["days"] <= 7:
+            raise ValueError("weather_reuse days must be between 1 and 7")
+        if args.get("units") not in {"metric", "imperial"}:
+            raise ValueError("weather_reuse requires configured units")
+        if args.get("ordinary_turn") is not True:
+            raise ValueError("weather_reuse requires host ordinary-turn eligibility")
+        if "run_id" in args and (not args["run_id"].strip() or len(args["run_id"]) > 120):
+            raise ValueError("weather_reuse run_id exceeds its identity limit")
     if action == "skills_search":
         if not isinstance(args.get("query"), str):
             raise ValueError("skills_search requires a query")

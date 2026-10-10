@@ -1,7 +1,17 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** SANDBOX IMPLEMENTATION COMPLETE; RELEASE ACCEPTANCE IN PROGRESS,
-2026-09-18. Core protocol, stores,
+**Status:** WS-17 CC7a closure is implemented on the Codex candidate.
+Separate exact-source Claude static reviews completed 2026-10-09. After #201
+merged and Larry approved revised baseline `08c0635`, the unchanged independent
+verifier passed all twelve checks on immutable `59d57ea` (2026-10-10), with
+exact source/pins/log hashes and clean owned-VM shutdown. Five CI checks also
+passed on `59d57ea`. The earlier comparison and failed CI remain separate
+records. PR #198 stays draft pending WS-13 revision 4 and Larry's separate
+release/deployment approval; live UI2-22…25 remain open. See
+[10-10 comparison receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json)
+and [exact-source review](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md).
+The following baseline describes the earlier 2026-09-18 implementation:
+core protocol, stores,
 Atlas composition, attachment bounds, approved inbound transfer state (including
 server-issued accept, one-chunk acknowledgement pacing, session-lifetime
 temporary-content memory latch and cancellation) and
@@ -1566,6 +1576,15 @@ implemented reuse, a test receipt, merge/deploy permission or live acceptance.
    same-key upsert remain usable. Preserve actual source-fetch `ts`, including
    explicit zero, and require finite `fresh_until <= ts + 900`. Replay does not
    replace a zero with now, extend expiry or claim a new fetch occurred.
+
+   **Compatibility clarification, 2026-10-09:** The existing `local_weather`
+   fetch attaches this optional bounded metadata even when the console bridge
+   is off. This augments the legacy display payload; it does not activate a
+   query, add a fetch or change the selected model/provider. Protected-turn
+   checks remain before location and after fetching. Missing explicit
+   `approved_external` policy cannot supply a native cache hit, so flag-off or
+   legacy policy is not treated as public approval. The 16 KiB source and
+   existing outer-wire budgets remain unchanged.
 3. **Freshness-aware query, canonical target.** Reserve shared console action
    `weather_reuse` with a canonical result UUID `target` taken from the observed
    native inventory. Closed typed `args`: `subject_key`; `tool` from
@@ -1938,3 +1957,187 @@ separate synthetic thread checks exposed a retention-position shift; its runtime
 repair and tests are a separate slice, excluded from this corrective commit/PR.
 No deployment, product acceptance, permission override or checker enforcement
 change is claimed. See the dated inventory-correction log.
+
+
+**CC7a.4 integration clarification, 2026-10-07 (Codex, before code):** Native
+`JarvisClient`/`AppMessageRouter` have no current-turn privacy classifier.
+Do not invent one or default an unknown native turn to ordinary. Reserve the
+host-only `weather_reuse.args.ordinary_turn` exact boolean. The existing
+backend protected-turn/source guard supplies this only through the internal
+query adapter, checking eligibility before and after awaiting the Mac. The
+model-facing console tool refuses this internal action. Native enforces a true
+attestation under its negotiated authenticated channel, canonical identity,
+revision, key/capability/freshness and explicitly `approved_external` cached
+policy; missing/false eligibility returns no source. This is the same backend
+classification authority, not a claim of independent native turn inference.
+
+Canonical named weather identity uses the complete original requested city,
+NFKC/casefold/trimmed collapsed whitespace, never fuzzy matching. Local identity
+uses only a newly resolved source/approximation and coordinates formatted to
+four decimal places, matching actual NWS URL precision; a location label is
+presentation only. No new spatial radius/jitter policy is inferred. Original
+host fetch times govern freshness; radar frame and provider observation times
+are not fetch times. Mixed cached/fetched halves use the minimum original
+fetch time and expiry. Pure cache hits are arranged by the native query and do
+not emit another display replay. Close/eviction retains no extra hidden cache;
+`result_reopen` targets only an actually retained workspace result. These
+clarifications preserve the sole native cache and existing retention/Output
+ownership; they add no config key, budget, provider route or activation.
+
+
+**Progress, 2026-10-07 (Codex, CC7a.4 implementation):** Core reuse is
+`6e218cd07977eb10d4fe93cddc7d9ce08bf17a3c`, with the final mixed-source
+regression at `47f9e05f70198df9d61602dc4b60e25e7ff3229e`. The existing
+native cache owns exact subject identity, original public source and expiry.
+The guarded host reads the actual inventory and queries its canonical UUID
+at that observed revision; this internal query never replaces the model's
+disclosed voice list. Named MCP weather interception remains request-scoped
+and preserves source guards/classified envelopes; local weather resolves a
+new device/IP fix before checking that exact identity. Missing/expired or
+incomplete cache may fetch; unsafe identities/privacy/ambiguity/timeouts
+refuse without a paid fallback. Fresh hits send no duplicate display replay;
+stale updates keep UUID, pins, compare/scroll/inspector and Output ownership.
+
+Both D2 reference cases are present: fresh reuse shows the original source
+clock and cached age; a genuinely newer complete-source refresh adds or
+updates one ordered reference under the same UUID per originating run.
+Same/older timestamps, failed/malformed/private source and missing public
+approval cannot claim an update. A mixed cached-weather/new-radar payload
+retains its minimum aggregate clock/expiry and original cached reference
+while making radar available; no fabricated freshness. References belong
+to retained ConversationStore history, including across reconnects, rather
+than a second cache/model transcript/persistent store.
+
+Full offline backend verification passed **6,567 tests / 7 skips / 2 subtests /
+zero failures** with explicit test-default noise/console flags and local
+socket/owned-child prerequisites. The earlier restricted run's 28 failures
+and four setups were traced and all 32 passed on prerequisite retry; the
+five flag cases arise from an unchanged installed-runner dotenv import,
+not the new reversible test fixtures. No tests or production configuration
+were changed to obtain this pass. Focused causal Python checks passed 326;
+JarvisKit payload/console checks passed 12; native cache/query checks passed
+17 and actual SDK/router/reference integration passed 10. The rendered
+reader/control/privacy set passed four cases with one explicit thread
+capture prerequisite skip. Independent Codex read-only reviews found no
+remaining blocking code defect; they do not replace required Claude review.
+
+The separate `adf2597` retention repair uses measured content coordinates
+to preserve a reader's retained row when variable-height old rows leave
+the 200-entry history; growing replies follow only at the bottom and
+New/Show keeps its authority. Final frozen native verification on `0a2ff94`
+passed JarvisKit 232 / zero failures and MortimerHost 546 / six existing
+hardware/activation skips / zero failures. All 1,829 source hashes/modes and
+pins still match. The actual thread SCK window capture passed its same-window
+full-pixel equality and card-removal/dimensions witnesses after replacing the
+overly strict AppKit prerequisite with exact SCK inventory evidence; the
+existing protected body-only capture also passed. Required
+cross-system exact-source review, clean independent VM comparison, release/
+deployment and UI2-22…25 remain open; keep the temporary thread switch.
+See [CC7a.4 local evidence](../acceptance/command-console/CC7A4_REUSE_2026-10-07.md)
+for executed scope and remaining gates. No new acceptance checkbox is closed.
+
+
+**Progress, 2026-10-07 (Codex, final source-age projection):** `748b1e5ab7a00cf208b775816355fe339abbe879` fixes the final Recents age gap. Card/arrival position and voice numbers remain tied to original receivedAt; only the transient menu/VoiceOver/choice age uses finite original payload.ts, including zero, with arrival fallback for missing/nonfinite source time. Safe exact integer conversion returns unknown for unrepresentable ages. The actual Store→listing→all three labels reproduced six failures before the repair; five new regressions and related Recents/reuse/router tests then passed (45 total).
+
+Complete frozen verification on `748b1e5`: JarvisKit **232 passed**, MortimerHost **551 executed / 6 existing hardware/activation skips / zero failures**, with actual protected-thread capture and existing protected body-only capture passed. Totals use XCTest's final execution summaries; one interleaved case line was absent from an earlier raw line count. All **1,830 tracked hashes/modes and pins** still match after verification. Backend source/tests are unchanged from the 6,567-pass offline run. Required Claude review, clean independent release comparison, reviewed merge/deployment and Larry UI2-22…25 remain open; this is implemented candidate source, not accepted production.
+
+
+**Publication, 2026-10-07 (Codex):** [PR #198](https://github.com/Larryfix71566/jarvis-voice-ai/pull/198) publishes the completed reuse/retention/source-age increment on `codex/ws17-closure-20261007`; runtime/test source is `748b1e5`. Critical [PR #197](https://github.com/Larryfix71566/jarvis-voice-ai/pull/197) stays a separate frozen review snapshot at `352ec69` (code `065d500`). Both are draft, with required exact-source cross-review and release/live gates retained. A combined permission question now requests read-only Claude subscription reviews of these WS-17 source/test diffs and bounded follow-up fixes, replacing the earlier `fee4ac0`-only authorization. No new private source has been sent while that answer is pending.
+
+
+**Progress, 2026-10-09 (Codex, approved exact-source review and offline comparison):**
+Larry approved `a5b6f88` as the offline baseline and read-only Claude subscription
+reviews of exactly `065d500` (#197) and `748b1e5` (#198), excluding secrets,
+runtime logs and later source. Both separate static reviews completed through
+Claude Code 2.1.290 / claude-sonnet-5 without reported blocking defects. Neither
+was a joint integration review, formal GitHub approval or Claude-run test pass.
+Codex independently reconstructed patch hashes and checked all eight observations
+against surrounding source; no source repair was warranted. The flag-off additive
+weather metadata compatibility is clarified above. The earlier joint timeout
+returned no verdict and remains historical evidence; reported list costs do not
+prove billing/quota. #197 was already merged as `51dcdee` before these reviews.
+
+Integrated main `27fd356` as frozen candidate `ce6cde8`. Its 28 source/test deltas
+match the approved diffs; the two approved #200 fixture files/modes are identical
+on baseline and candidate. The unchanged installed offline Mortimer verifier
+passed all twelve exact ordered checks, with matching log hashes and source
+unchanged: baseline Python 6,257 / 11 skips / two subtests; candidate Python 6,366
+/ 11 skips / two subtests; candidate JarvisKit 232 and MortimerHost 551 / eight skips;
+baseline JarvisKit 226 and MortimerHost 512 / seven skips; zero failures. Candidate VM skips
+are two Screen Recording, three physical-display and three app-activation cases;
+the earlier frozen Mac capture passes remain separate evidence. Worker UID 502
+was actually measured. Image/profile/runner identities and sandbox settings/image
+record stayed unchanged; both owned VMs stopped and zero remain running. An
+independent read-only Codex receipt audit approved only this offline evidence.
+No tests, source-policy guards, profile checks or runner pins were waived.
+
+[Exact review, comparison and limitations](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md)
+retain the prior failed fee4ac0 baseline receipt, without rewriting it. #198
+remains draft/unmerged until WS-13 revision 4 lands and Larry separately approves
+release/merge/deployment. Production remains the roadmap receipt. UI2-22…25,
+physical supporting-display outcomes and dependent UI2-04/09/13 remain open;
+keep the temporary thread switch. This slice changes documentation/evidence only
+and sends no later source to Claude.
+
+
+**CI follow-up, 2026-10-09 (Codex, after evidence publication):** Final GitHub
+head `287b96d` failed only WS-05's dry-CLI test (6,365 passes / eleven skips /
+two subtests). The child exit and exact dry JSON passed; the parent notifier
+created unit.db in the shared no-write directory. A controlled actual parent
+poll reproduced the original failure. This is separate from the approved
+`a5b6f88`→`ce6cde8` offline comparison, which remains passed with all fixed
+identities/cleanup preserved.
+
+The bounded repair is separate [WS-05 PR #201](https://github.com/Larryfix71566/jarvis-voice-ai/pull/201),
+source `08c0635`, under Larry's existing capability-fixture assignment. The child
+gets a sibling scratch directory; actual parent polling is forced, and the
+complete previous body/assertions/argv/five-second timeout remain. Deliberately
+writing child probe.db still fails; 204 focused tests pass. Independent Codex
+static review approves only the fixture change. No WS-17 runtime source was
+changed and no later source was transmitted to Claude.
+
+Review/merge the fixture follow-up and separately approve any revised baseline
+before another independent comparison. The earlier narrow approval is exactly
+a5b6f88; it is not approval of `08c0635`. Do not erase the failed CI or substitute a
+lucky retry for the isolation repair. #198 stays draft: WS-13 revision 4,
+reviewed release/deployment and UI2-22…25 remain gates. Source-specific earlier
+reviews/VM/local-capture evidence retain their original scope.
+
+
+**Progress, 2026-10-10 (Codex, revised reference explicitly approved):**
+PR #201 merged as `83d90e86780c726684a295557057741ab7266397` with all five
+GitHub checks green. Larry explicitly approved baseline
+`08c06357267ef1348ec4b64dfdd12b26d4710a50` for WS-17 offline verification only.
+Main is integrated before preparing a new immutable candidate. Both fixture
+files and modes must match the approved baseline; application source must
+still match exactly `065d500`/`748b1e5`. The full ordered twelve checks, image,
+profile, runner, worker/source/scanner guards and owned-task cleanup remain
+unchanged. This approval sends no later source to Claude and authorizes no
+production release. The earlier a5b6f88→ce6cde8 pass and failed final-head CI
+remain separate records. Record the new actual result after completion;
+WS-13 revision 4, Larry's separate release approval and UI2-22…25 remain open.
+
+
+**Result, 2026-10-10 (Codex, approved-reference comparison):**
+The unchanged full-profile verifier completed all twelve ordered checks on
+`08c06357267ef1348ec4b64dfdd12b26d4710a50`→
+`59d57ea3f7eb007a02a17f425accf186a38108c2`. Actual baseline Python:
+6,280 passed / eleven skipped / two subtests; candidate: 6,366 / eleven /
+two. Baseline JarvisKit 227 and MortimerHost 514 / seven skips; candidate
+JarvisKit 232 and MortimerHost 551 / eight skips; zero failures. Candidate
+skips are two Screen Recording captures, three physical-display cases and
+three app-activation cases; these are unrun and confer no live acceptance.
+Desktop worker UID 502 / Aqua 502 / visible / unlocked was actually measured.
+Every check name/argv/return code/log hash, source path/mode/blob identity,
+image/profile/runner pin and independent receipt audit matched. Both owned
+VMs stopped; actual running count zero; settings/image record unchanged.
+The compare took 1,650 seconds. Five CI checks on the same candidate passed,
+including 6,366 unit tests, 196 integration tests and thirteen scripted evals.
+
+The approval and prior review source bindings are preserved in the
+[10-10 receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json).
+This is the updated offline release comparison, not an erasure of earlier
+failed CI or a claim of production deployment. WS-13 revision 4 must land
+before #198; Larry separately decides release/merge/deployment and exact-build
+UI2-22…25. Keep the temporary thread switch and dependent live gates open.
+No later source was sent to Claude and no production flag changed.

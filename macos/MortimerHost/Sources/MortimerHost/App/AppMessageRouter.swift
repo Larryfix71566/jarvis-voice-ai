@@ -155,6 +155,28 @@ final class AppMessageRouter {
                         break
                     }
                     guard let consoleCoordinator else { break }
+                    if request.action == .weatherReuse {
+                        let runID = request.args["run_id"]?.stringValue
+                        let now = Date()
+                        let answers = ArrivalIntent.answersCurrentRequest(tool: request.args["tool"]?.stringValue,
+                            runID: runID,
+                            runStartedAt: runClock.startedAt(runID),
+                            lastUserTurnAt: conversation?.entries.last(where: { $0.role == "user" })
+                                .map { Date(timeIntervalSince1970: $0.createdAt) }, now: now)
+                        if let result = consoleCoordinator.executeWeatherReuse(request, now: now,
+                            answersCurrentRequest: answers) {
+                            if result.status == "ok", result.code == "cache_hit",
+                               let id = request.target.flatMap(UUID.init(uuidString:)),
+                               let retained = workspace?.results.first(where: { $0.id == id }),
+                               let fetchedAt = result.data?["ts"]?.doubleValue {
+                                conversation?.recordCachedResult(retained, fetchedAt: fetchedAt,
+                                    requestID: request.requestID, runID: runID, now: now)
+                            }
+                            client.send(.consoleResult(result))
+                            consoleCoordinator.publishInventory()
+                        }
+                        break
+                    }
                     if ConsoleActionCoordinator.isDisplayTransfer(request.action) {
                         // WS-21 D3: a display transfer is acknowledged only
                         // once the supporting display confirms it is showing
@@ -242,7 +264,20 @@ final class AppMessageRouter {
                           client.consoleGeneration == consent.generation else { break }
                     attachments?.presentConsent(consent)
                 case .display(let payload):
-                    let result = WorkspaceResult(payload: payload)
+                    let existingID = workspace?.reuseExistingIdentity(for: payload)
+                    let previous = existingID.flatMap { id in workspace?.results.first { $0.id == id } }
+                    let result = WorkspaceResult(payload: payload,
+                        id: existingID ?? UUID())
+                    // Record only an applied same-key update, after its
+                    // existing main/drawer/display ownership route settles.
+                    // First arrivals and rejected transfers add no update line.
+                    defer {
+                        if let previous,
+                           let retained = workspace?.results.first(where: { $0.id == previous.id }),
+                           retained.payload == payload {
+                            conversation?.recordUpdatedResult(retained, previousFetchedAt: previous.payload.ts)
+                        }
+                    }
                     // CC7a.2b (Larry 10-03; Codex review of #169): only a
                     // result that answers what Larry just asked may open on
                     // the conversation. See ArrivalIntent.
@@ -271,6 +306,7 @@ final class AppMessageRouter {
                         // conversation is on the stage (Larry, 10-03) and
                         // raises a "New" notice over anything else.
                         if workspace?.quietArrivals != true { workspace?.select(result.id) }
+                        consoleCoordinator?.publishInventory()
                         break
                     }
                     switch payload.surface {
@@ -281,6 +317,7 @@ final class AppMessageRouter {
                         // DisplayWindowStore.apply and any display handoff.
                         if payload.isProtectedLocal {
                             workspace?.receive(result, answersCurrentRequest: answers)
+                            consoleCoordinator?.publishInventory()
                             break
                         }
                         // An exact repeat is already represented by the same

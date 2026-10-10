@@ -19,6 +19,14 @@ struct WorkspaceResult: Identifiable, Equatable, Sendable {
     }
 }
 
+/// Query outcomes deliberately distinguish a fetchable cache miss from an
+/// unsafe identity/privacy failure. Only a hit carries retained public data.
+enum WeatherReuseReply: Equatable {
+    case hit(source: JSONValue, ts: Double, freshUntil: Double, revision: Int)
+    case miss(String)
+    case refused(String)
+}
+
 enum SupportingDisplayContent: Equatable {
     case result(UUID)
     case memoryGraph
@@ -157,7 +165,7 @@ final class WorkspaceStore {
         let resultValues: [JSONValue] = projectedResults.map { indexed in
             let result = indexed.result
             let card = recentsByID[result.id]?.card ?? ConversationThread.card(result)
-            return .object([
+            var fields: [String: JSONValue] = [
                 "id": .string(result.id.uuidString),
                 "title": .string(String((result.payload.title ?? "Result").prefix(120))),
                 "index": .number(Double(indexed.index)),
@@ -167,7 +175,17 @@ final class WorkspaceStore {
                 "unread": .bool(unreadIDs.contains(result.id)),
                 "pinned": .bool(pinnedIDs.contains(result.id)),
                 "can_connections": .bool(MemoryGraphSource.imageURL(result.payload) != nil),
-            ])
+            ]
+            // Candidate metadata is not authorization to reuse. The native
+            // query repeats policy, timing and capability checks. Never put
+            // source JSON, aliases or display bodies in the voice inventory.
+            if Self.isPublicWeatherIdentity(result.payload), let key = result.payload.subjectKey {
+                fields["subject_key"] = .string(key)
+                if result.payload.dataPolicy == "approved_external", let expiry = result.payload.freshUntil {
+                    fields["fresh_until"] = .number(expiry)
+                }
+            }
+            return .object(fields)
         }
         let panelValues: [JSONValue] = ConsolePanel.allCases.map { panel in
             .object([
@@ -235,7 +253,8 @@ final class WorkspaceStore {
     /// answers what Larry just asked and belongs on the main stage (see
     /// `ArrivalIntent`). Defaults to false, so an arrival nobody vouched
     /// for never opens by itself.
-    func receive(_ result: WorkspaceResult, answersCurrentRequest: Bool = false) {
+    @discardableResult
+    func receive(_ result: WorkspaceResult, answersCurrentRequest: Bool = false) -> UUID {
         receive(result, quietly: quietArrivals, answersCurrentRequest: answersCurrentRequest)
     }
 
@@ -249,8 +268,20 @@ final class WorkspaceStore {
     /// another result or view is shown, it joins unread and raises the
     /// "New" notice. If no result is active yet it becomes the active one
     /// without being shown. Off: the pre-CC7a behaviour.
-    func receive(_ result: WorkspaceResult, quietly: Bool, answersCurrentRequest: Bool = false) {
-        guard !results.contains(where: { $0.id == result.id }) else { return }
+    @discardableResult
+    func receive(_ result: WorkspaceResult, quietly: Bool, answersCurrentRequest: Bool = false) -> UUID {
+        if let id = reuseExistingIdentity(for: result.payload),
+           let index = results.firstIndex(where: { $0.id == id }) {
+            // Keep identity and all app-owned reader state, including the
+            // original card position/age. Invalid cache metadata may still
+            // replace a legacy weather body safely under its public key.
+            results[index] = WorkspaceResult(payload: result.payload, id: id,
+                                             receivedAt: results[index].receivedAt)
+            inventoryRevision += 1
+            arrangeWeatherArrival(id, answersCurrentRequest: answersCurrentRequest)
+            return id
+        }
+        guard !results.contains(where: { $0.id == result.id }) else { return result.id }
         results.append(result)
         inventoryRevision += 1
         if quietly {
@@ -263,7 +294,7 @@ final class WorkspaceStore {
                 if !showsConversation { arrivalNoticeID = result.id }
             }
             trimHistory()
-            return
+            return result.id
         }
         if !hasReceivedResult {
             activeID = result.id
@@ -279,6 +310,102 @@ final class WorkspaceStore {
         }
         hasReceivedResult = true
         trimHistory()
+        return result.id
+    }
+
+    /// The router uses this before creating display/thread references, so an
+    /// upsert cannot leave those references pointing at a discarded new UUID.
+    func reuseExistingIdentity(for payload: DisplayPayload) -> UUID? {
+        guard Self.isPublicWeatherIdentity(payload), let key = payload.subjectKey else { return nil }
+        let matches = results.filter {
+            Self.isPublicWeatherIdentity($0.payload) && $0.payload.subjectKey == key
+                // A fresh approved payload may upgrade a legacy identity;
+                // absent policy cannot downgrade an explicitly public one.
+                && ($0.payload.dataPolicy != "approved_external" || payload.dataPolicy == "approved_external")
+        }
+        return matches.count == 1 ? matches.first?.id : nil
+    }
+
+    private static func isPublicWeatherIdentity(_ payload: DisplayPayload) -> Bool {
+        guard !payload.isProtectedLocal, let key = payload.subjectKey,
+              key.hasPrefix("weather:"), !key.isEmpty, key.unicodeScalars.count <= 200 else { return false }
+        return payload.kind == "weather" || ["weather_report", "local_weather", "get_weather", "get_weather_radar"]
+            .contains(payload.tool ?? "")
+    }
+
+    /// Store-owned cache lookup. Neither inventory timestamps nor a replay
+    /// extend its TTL. Closed/evicted UUIDs are unsafe stale targets, not an
+    /// invitation to silently fetch another result.
+    func queryWeatherReuse(target: UUID, subjectKey: String, tool: String, days: Int,
+                           units: String, now: Date, ordinaryTurn: Bool,
+                           answersCurrentRequest: Bool = false) -> WeatherReuseReply {
+        guard ordinaryTurn else { return .refused("protected_turn") }
+        guard !subjectKey.isEmpty, subjectKey.unicodeScalars.count <= 200,
+              ["local_weather", "get_weather", "get_weather_radar"].contains(tool),
+              (1...7).contains(days), ["metric", "imperial"].contains(units),
+              now.timeIntervalSince1970.isFinite else { return .refused("invalid_request") }
+        guard let result = results.first(where: { $0.id == target }) else { return .refused("result_unavailable") }
+        guard !result.payload.isProtectedLocal else { return .refused("protected_result") }
+        guard Self.isPublicWeatherIdentity(result.payload), result.payload.subjectKey == subjectKey else {
+            return .refused("stale_selection")
+        }
+        guard results.filter({ Self.isPublicWeatherIdentity($0.payload) && $0.payload.subjectKey == subjectKey }).count == 1 else {
+            return .refused("ambiguous_result")
+        }
+        // Nil policy is legacy display permission, not a public-cache claim.
+        guard result.payload.dataPolicy == "approved_external" else { return .miss("cache_missing") }
+        guard let source = result.payload.weatherSource, let ts = result.payload.ts,
+              let expiry = result.payload.freshUntil, ts.isFinite, expiry.isFinite,
+              expiry >= ts, expiry <= ts + 900 else { return .miss("cache_missing") }
+        guard ts <= now.timeIntervalSince1970 else { return .refused("invalid_request") }
+        guard expiry > now.timeIntervalSince1970 else { return .miss("cache_expired") }
+        guard Self.weatherSourceIsComplete(source, tool: tool, days: days, units: units) else {
+            return .miss("cache_incomplete")
+        }
+        arrangeWeatherArrival(target, answersCurrentRequest: answersCurrentRequest)
+        return .hit(source: source, ts: ts, freshUntil: expiry, revision: inventoryRevision)
+    }
+
+    static func weatherSourceIsComplete(_ source: JSONValue, tool: String, days: Int, units: String) -> Bool {
+        if tool == "get_weather_radar" {
+            guard let radar = source["radar"]?.objectValue,
+                  !Self.weatherSourceHasError(radar["error"]), radar["ok"] != .bool(false),
+                  let tiles = radar["tiles"]?.arrayValue, !tiles.isEmpty else { return false }
+            return tiles.allSatisfy { $0.stringValue?.isEmpty == false }
+        }
+        guard let weather = source["weather"]?.objectValue,
+              !Self.weatherSourceHasError(weather["error"]), weather["ok"] != .bool(false),
+              weather["units"]?.stringValue == units,
+              let current = weather["current"]?.objectValue, !current.isEmpty,
+              let daily = weather["daily"]?.arrayValue, daily.count >= days else { return false }
+        return daily.prefix(days).allSatisfy { $0.objectValue != nil }
+    }
+
+    /// Match the original tool/bridge's JSON error truthiness; an empty
+    /// optional error field is not itself a reported provider failure.
+    private static func weatherSourceHasError(_ value: JSONValue?) -> Bool {
+        guard let value else { return false }
+        switch value {
+        case .null: return false
+        case .bool(let flag): return flag
+        case .number(let number): return number != 0
+        case .string(let text): return !text.isEmpty
+        case .array(let values): return !values.isEmpty
+        case .object(let fields): return !fields.isEmpty
+        }
+    }
+
+    private func arrangeWeatherArrival(_ id: UUID, answersCurrentRequest: Bool) {
+        hasReceivedResult = true
+        // A supporting display owns its sole renderer until the router's
+        // confirmed yield path releases it. Never open a duplicate here.
+        if showsConversation && answersCurrentRequest && supportingContent != .result(id) {
+            select(id)
+        } else {
+            unreadIDs.insert(id)
+            if !showsConversation { arrivalNoticeID = id }
+            inventoryRevision += 1
+        }
     }
 
     /// Streaming replaces the body under the same identity, preserving the

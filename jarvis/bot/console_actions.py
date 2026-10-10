@@ -46,7 +46,7 @@ CONSOLE_ACTION_SCHEMA = {
             "It returns only after the app confirms the content is showing on that "
             "screen; say it is there only when the result says so, and relay its "
             "reason when it fails. "
-            "result_select, result_close, result_pin, result_unpin and compare_set "
+            "result_select, result_reopen, result_close, result_pin, result_unpin and compare_set "
             "take a result id, or the Recents number or subject Larry said "
             "(\"3\", \"Folly Beach weather\"); the inventory's results list "
             "each number, kind and subject. When the result is needs_choice, "
@@ -54,7 +54,8 @@ CONSOLE_ACTION_SCHEMA = {
             "by number. For result commands, read inventory with args.scope='results' "
             "before using a number or subject, and pass "
             "that inventory's revision as inventory_revision. Numbers refer to that "
-            "observed list, never a newer list. compare_set also requires secondary_target."
+            "observed list, never a newer list. result_reopen shows an existing retained "
+            "result without fetching it again. compare_set also requires secondary_target."
         ),
         "parameters": {
             "type": "object",
@@ -73,7 +74,7 @@ CONSOLE_ACTION_SCHEMA = {
 
 
 _RESULT_REFERENCE_ACTIONS = frozenset({
-    "result_select", "result_close", "result_pin", "result_unpin", "compare_set",
+    "result_select", "result_close", "result_pin", "result_unpin", "result_reopen", "compare_set",
 })
 _INVENTORY_SCOPES = frozenset({
     "all", "results", "panels", "screens", "nodes", "sources", "groups", "attachments",
@@ -224,6 +225,8 @@ def build_console_action_tool(send: Callable[[dict], Any], *, session_id: str,
         action = arguments.get("action")
         if not isinstance(action, str):
             return "Console action rejected: action must be a string."
+        if action == "weather_reuse":
+            return "Console action rejected: weather reuse is an internal guarded weather operation. Use the weather tool."
         args = arguments.get("args", {})
         inventory_scope = args.get("scope") if isinstance(args, dict) else None
         if (action == "inventory" and inventory_scope not in (None, "")

@@ -171,6 +171,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         commands = nil; note = nil; expectOutput = nil; content = nil
         chars = nil; truncated = nil; dataPolicy = nil; opaqueRef = nil
         weather = nil
+        subjectKey = nil; freshUntil = nil; weatherSource = nil
     }
 
     public let kind: String?
@@ -203,6 +204,13 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
     /// Lenient: nil when absent, malformed or of an unknown schema, so the
     /// markdown body still renders.
     public let weather: WeatherCard?
+    /// CC7a.4: exact content identity and original fetch expiry. Invalid
+    /// cache metadata never prevents the existing display body rendering.
+    public let subjectKey: String?
+    public let freshUntil: Double?
+    /// Public source JSON retained only in the native in-memory workspace.
+    /// This is never part of the voice inventory or a persistent cache.
+    public let weatherSource: JSONValue?
     public var isProtectedLocal: Bool {
         guard let dataPolicy else { return false }
         return dataPolicy != "approved_external"
@@ -216,6 +224,8 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         case content, chars, truncated
         case dataPolicy = "data_policy", opaqueRef = "opaque_ref"
         case weather
+        case subjectKey = "subject_key", freshUntil = "fresh_until"
+        case weatherSource = "weather_source"
     }
 
     public init(from d: Decoder) throws {
@@ -244,6 +254,39 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         dataPolicy = try c.decodeIfPresent(String.self, forKey: .dataPolicy)
         opaqueRef = try c.decodeIfPresent(String.self, forKey: .opaqueRef)
         weather = (try? c.decodeIfPresent(WeatherCard.self, forKey: .weather)) ?? nil
+        let key = try? c.decodeIfPresent(String.self, forKey: .subjectKey)
+        subjectKey = key.flatMap { !$0.isEmpty && $0.unicodeScalars.count <= 200 ? $0 : nil }
+        let expiry = try? c.decodeIfPresent(Double.self, forKey: .freshUntil)
+        let source = try? c.decodeIfPresent(JSONValue.self, forKey: .weatherSource)
+        if subjectKey != nil, let ts, ts.isFinite, let expiry, expiry.isFinite,
+           expiry >= ts, expiry <= ts + 900,
+           let source, Self.validWeatherSource(source) {
+            freshUntil = expiry; weatherSource = source
+        } else {
+            freshUntil = nil; weatherSource = nil
+        }
+    }
+
+    private static func validWeatherSource(_ source: JSONValue) -> Bool {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+        guard case .object(let fields) = source,
+              Set(fields.keys).isSubset(of: ["weather", "radar", "place", "subject_aliases"]),
+              let encoded = try? encoder.encode(source), encoded.count <= 16 * 1024 else { return false }
+        for key in ["weather", "radar", "place"] {
+            if let value = fields[key], value != .null, value.objectValue == nil { return false }
+        }
+        if let aliases = fields["subject_aliases"] {
+            guard let values = aliases.arrayValue, values.count <= 8,
+                  values.allSatisfy({ value in
+                      guard let text = value.stringValue else { return false }
+                      let canonical = text.precomposedStringWithCompatibilityMapping
+                          .folding(options: [.caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+                          .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+                      return !text.isEmpty && text.unicodeScalars.count <= 120 && text == canonical
+                  }) else { return false }
+        }
+        return fields["weather"]?.objectValue != nil || fields["radar"]?.objectValue != nil
     }
 }
 

@@ -25,6 +25,9 @@ enum WorkspaceRecents {
         let number: Int?
         let section: Section
         let card: ConversationThread.Card
+        /// Source age is independent of arrival time, which keeps the card
+        /// and its Recents number in their original positions after refresh.
+        let freshnessDate: Date
         let isUnread: Bool
         let isActive: Bool
         var receivedAt: Date { card.time }
@@ -65,6 +68,7 @@ enum WorkspaceRecents {
                 var number: Int?
                 if !card.isPrivate { number = next; next += 1 }
                 entries.append(Entry(id: result.id, number: number, section: section, card: card,
+                                     freshnessDate: freshnessDate(for: result),
                                      isUnread: unread.contains(result.id),
                                      isActive: active == result.id))
             }
@@ -72,18 +76,29 @@ enum WorkspaceRecents {
         let olderEntries = unpinned.dropFirst(shown.count).map { result in
             Entry(id: result.id, number: nil, section: .older,
                   card: ConversationThread.card(result),
+                  freshnessDate: freshnessDate(for: result),
                   isUnread: unread.contains(result.id), isActive: active == result.id)
         }
         return Listing(entries: entries, olderEntries: olderEntries)
     }
 
+    private static func freshnessDate(for result: WorkspaceResult) -> Date {
+        guard let ts = result.payload.ts, ts.isFinite else { return result.receivedAt }
+        return Date(timeIntervalSince1970: ts)
+    }
+
     /// The "fresh" age: "now", "4m", "2h", "3d".
     static func age(of date: Date, now: Date = Date()) -> String {
-        let seconds = max(0, now.timeIntervalSince(date))
+        let elapsed = now.timeIntervalSince(date)
+        guard elapsed.isFinite else { return "unknown" }
+        let seconds = max(0, elapsed)
         if seconds < 60 { return "now" }
-        if seconds < 3_600 { return "\(Int(seconds / 60))m" }
-        if seconds < 86_400 { return "\(Int(seconds / 3_600))h" }
-        return "\(Int(seconds / 86_400))d"
+        let unit: (seconds: Double, suffix: String)
+        if seconds < 3_600 { unit = (60, "m") }
+        else if seconds < 86_400 { unit = (3_600, "h") }
+        else { unit = (86_400, "d") }
+        guard let count = Int(exactly: (seconds / unit.seconds).rounded(.down)) else { return "unknown" }
+        return "\(count)\(unit.suffix)"
     }
 
     enum Resolution: Equatable {
@@ -133,7 +148,7 @@ enum WorkspaceRecents {
     static func choices(_ entries: [Entry], now: Date = Date()) -> [ConsoleChoice] {
         entries.prefix(10).map { entry in
             ConsoleChoice(id: entry.id.uuidString,
-                          label: "\(entry.label) · \(age(of: entry.receivedAt, now: now))")
+                          label: "\(entry.label) · \(age(of: entry.freshnessDate, now: now))")
         }
     }
 

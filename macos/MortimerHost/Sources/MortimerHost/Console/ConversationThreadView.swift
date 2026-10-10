@@ -126,10 +126,12 @@ enum ConversationThread {
     enum Item: Identifiable, Equatable {
         case row(Row)
         case card(Card)
+        case cachedReference(CachedResultReference)
         var id: String {
             switch self {
             case .row(let row): return row.id
             case .card(let card): return "card-" + card.id.uuidString
+            case .cachedReference(let reference): return "cache-reference-" + reference.id.uuidString
             }
         }
     }
@@ -140,21 +142,23 @@ enum ConversationThread {
     /// tool's result arrived before the spoken reply. A card that arrived
     /// before any retained question leads the thread; one from the current
     /// turn ends it. Cards in one turn keep their arrival order.
-    static func items(rows: [Row], cards: [Card]) -> [Item] {
-        let ordered = cards.enumerated()
-            .sorted { ($0.element.time, $0.offset) < ($1.element.time, $1.offset) }
-            .map(\.element)
-        var slots = Array(repeating: [Card](), count: rows.count + 1)
-        for card in ordered {
-            let slot = rows.firstIndex { $0.isUser && $0.time > card.time } ?? rows.count
-            slots[slot].append(card)
+    static func items(rows: [Row], cards: [Card], references: [CachedResultReference] = []) -> [Item] {
+        let additions = cards.map { ($0.time, Item.card($0)) }
+            + references.map { ($0.time, Item.cachedReference($0)) }
+        let ordered = additions.enumerated().sorted {
+            ($0.element.0, $0.offset) < ($1.element.0, $1.offset)
+        }.map(\.element)
+        var slots = Array(repeating: [Item](), count: rows.count + 1)
+        for (time, item) in ordered {
+            let slot = rows.firstIndex { $0.isUser && $0.time > time } ?? rows.count
+            slots[slot].append(item)
         }
         var items: [Item] = []
         for (index, row) in rows.enumerated() {
-            items += slots[index].map(Item.card)
+            items += slots[index]
             items.append(.row(row))
         }
-        items += slots[rows.count].map(Item.card)
+        items += slots[rows.count]
         return items
     }
 
@@ -203,6 +207,20 @@ enum ConversationThread {
     }
 }
 
+private struct ThreadRowFrames: PreferenceKey {
+    static let defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, newer in newer })
+    }
+}
+
+private struct ThreadViewport: Equatable {
+    let offset: CGFloat
+    let height: CGFloat
+    let contentHeight: CGFloat
+    let atBottom: Bool
+}
+
 struct ConversationThreadView: View {
     /// Card actions go through the same dispatcher as voice and the console
     /// row. Nil (previews, tests) falls back to the store directly.
@@ -211,6 +229,12 @@ struct ConversationThreadView: View {
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(\.mortimerReduceMotion) private var reduceMotion
     @State private var follow = ConversationThread.Follow()
+    @Namespace private var contentSpace
+    @State private var readingPosition = ScrollPosition(idType: String.self)
+    @State private var previousRowFrames: [String: CGRect] = [:]
+    @State private var viewportOffset: CGFloat = 0
+    @State private var viewportHeight: CGFloat = 0
+    @State private var readerRestoreTarget: CGFloat?
     @State private var pinLimitNotice = false
     private static let endID = "conversation-thread-end"
 
@@ -221,7 +245,8 @@ struct ConversationThreadView: View {
     var body: some View {
         let rows = ConversationThread.rows(conversation.entries)
         let items = ConversationThread.items(rows: rows,
-                                             cards: workspace.results.map(ConversationThread.card))
+                                             cards: workspace.results.map(ConversationThread.card),
+                                             references: conversation.cachedReferences)
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
                 ScrollView {
@@ -232,12 +257,34 @@ struct ConversationThreadView: View {
                                 .padding(.top, 40)
                         }
                         ForEach(items) { item in
-                            switch item {
-                            case .row(let row):
-                                ConversationThreadRowView(row: row)
-                            case .card(let card):
-                                ConversationThreadCardView(card: card, coordinator: coordinator,
-                                                           pinLimitNotice: $pinLimitNotice)
+                            Group {
+                                switch item {
+                                case .row(let row):
+                                    ConversationThreadRowView(row: row)
+                                case .card(let card):
+                                    ConversationThreadCardView(card: card, coordinator: coordinator,
+                                                               pinLimitNotice: $pinLimitNotice)
+                                case .cachedReference(let reference):
+                                    Button {
+                                        if let coordinator {
+                                            _ = coordinator.executePointer(.resultReopen,
+                                                target: reference.resultID.uuidString)
+                                        } else { workspace.select(reference.resultID) }
+                                    } label: {
+                                        Label(reference.text, systemImage: "arrow.uturn.backward")
+                                            .font(.system(size: 12)).foregroundStyle(AppTheme.textDim)
+                                            .padding(.vertical, 10)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(!workspace.containsResult(reference.resultID))
+                                    .accessibilityLabel(reference.text)
+                                }
+                            }
+                            .background {
+                                GeometryReader { geometry in
+                                    Color.clear.preference(key: ThreadRowFrames.self,
+                                        value: [item.id: geometry.frame(in: .named(contentSpace))])
+                                }
                             }
                         }
                         Color.clear.frame(height: 1).id(Self.endID)
@@ -245,13 +292,43 @@ struct ConversationThreadView: View {
                     .padding(.horizontal, AdaptiveLayoutMetrics.workspacePadding)
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .coordinateSpace(name: contentSpace)
+                    .scrollTargetLayout()
                 }
-                .defaultScrollAnchor(.bottom)
-                .onScrollGeometryChange(for: Bool.self) { geometry in
-                    ConversationThread.isAtBottom(contentHeight: Double(geometry.contentSize.height),
-                                                  visibleMaxY: Double(geometry.visibleRect.maxY))
-                } action: { _, atBottom in
-                    follow.scrolled(atBottom: atBottom)
+                .scrollPosition($readingPosition)
+                // Bottom is the starting/alignment position. Once the reader
+                // scrolls up, content-size changes must not choose it for them.
+                .defaultScrollAnchor(.bottom, for: .initialOffset)
+                .defaultScrollAnchor(.bottom, for: .alignment)
+                .onScrollGeometryChange(for: ThreadViewport.self) { geometry in
+                    ThreadViewport(offset: geometry.contentOffset.y + geometry.contentInsets.top,
+                        height: geometry.visibleRect.height, contentHeight: geometry.contentSize.height,
+                        atBottom: ConversationThread.isAtBottom(
+                            contentHeight: Double(geometry.contentSize.height),
+                            visibleMaxY: Double(geometry.visibleRect.maxY)))
+                } action: { _, viewport in
+                    viewportOffset = viewport.offset
+                    viewportHeight = viewport.height
+                    if let target = readerRestoreTarget {
+                        // AppKit can briefly report its former bottom anchor
+                        // while applying a content-size change. That movement
+                        // is our restoration, not a reader choosing to follow.
+                        if abs(viewport.offset - target) <= 1 { readerRestoreTarget = nil }
+                    } else {
+                        follow.scrolled(atBottom: viewport.atBottom)
+                    }
+                }
+                .onScrollPhaseChange { _, phase in
+                    switch phase {
+                    case .tracking, .interacting, .decelerating:
+                        // A real user gesture takes precedence over an
+                        // in-flight restoration and starts a new reading point.
+                        readerRestoreTarget = nil
+                    default: break
+                    }
+                }
+                .onPreferenceChange(ThreadRowFrames.self) { frames in
+                    preserveRetainedReader(in: frames)
                 }
                 .onChange(of: items.map(\.id)) { old, new in
                     // A card that joins the end of the thread counts as a new
@@ -268,6 +345,7 @@ struct ConversationThreadView: View {
 
                 if follow.unseen > 0 {
                     Button {
+                        readerRestoreTarget = nil
                         follow.jumpedToEnd()
                         scrollToEnd(proxy)
                     } label: {
@@ -285,6 +363,31 @@ struct ConversationThreadView: View {
         .alert("Pin limit reached", isPresented: $pinLimitNotice) {
             Button("OK", role: .cancel) {}
         } message: { Text("Unpin a result before pinning another. Your existing pins are preserved.") }
+    }
+
+    private func preserveRetainedReader(in frames: [String: CGRect]) {
+        defer { previousRowFrames = frames }
+        let readingOffset = readerRestoreTarget ?? viewportOffset
+        // The transcript is bounded. Removing an older row can leave the
+        // content offset unchanged while moving the row actually being read.
+        // Preserve a retained visible identity at its measured pixel position,
+        // including partial rows and variable heights; never infer a row size.
+        if !follow.following, !previousRowFrames.isEmpty,
+           !Set(previousRowFrames.keys).subtracting(frames.keys).isEmpty,
+           let anchor = previousRowFrames
+            .filter({ frames[$0.key] != nil && $0.value.maxY > readingOffset
+                && $0.value.minY < readingOffset + viewportHeight })
+            .min(by: { $0.value.minY < $1.value.minY }),
+           let current = frames[anchor.key] {
+            let displacement = current.minY - anchor.value.minY
+            let target = max(0, readingOffset + displacement)
+            if displacement.isFinite && target.isFinite && abs(displacement) > 0.5 {
+                // Content-space frames do not move when scrolling. Cache
+                // this layout once, so restoration cannot feed itself back.
+                readerRestoreTarget = target
+                readingPosition.scrollTo(y: target)
+            }
+        }
     }
 
     private func scrollToEnd(_ proxy: ScrollViewProxy) {
