@@ -1,11 +1,14 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** Baseline Command Console implementation is present; WS-17 CC7a
-closure is implemented on the Codex candidate. Separate exact-source Claude
-static reviews and the approved a5b6f88→ce6cde8 independent offline twelve-check
-comparison passed 2026-10-09; deployment and live acceptance remain open.
-Exact source, limitations, cleanup and remaining gates are in the dated progress
-and [10-09 receipt](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md).
+**Status:** WS-17 CC7a closure is implemented on the Codex candidate.
+Separate exact-source Claude static reviews and the approved a5b6f88→ce6cde8
+independent offline twelve-check comparison passed 2026-10-09. The test-only
+WS-05 fixture repair #201 merged as `83d90e8`; Larry approved revised offline
+baseline `08c0635` on 2026-10-10. Its new integrated-candidate comparison is
+being prepared under the unchanged verifier. Deployment and live acceptance
+remain open. Original reviews, failed CI and comparison evidence retain their
+exact references in the dated progress and
+[10-09 receipt](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md).
 The following baseline describes the earlier 2026-09-18 implementation:
 core protocol, stores,
 Atlas composition, attachment bounds, approved inbound transfer state (including
@@ -2098,3 +2101,17 @@ a5b6f88; it is not approval of `08c0635`. Do not erase the failed CI or substitu
 lucky retry for the isolation repair. #198 stays draft: WS-13 revision 4,
 reviewed release/deployment and UI2-22…25 remain gates. Source-specific earlier
 reviews/VM/local-capture evidence retain their original scope.
+
+
+**Progress, 2026-10-10 (Codex, revised reference explicitly approved):**
+PR #201 merged as `83d90e86780c726684a295557057741ab7266397` with all five
+GitHub checks green. Larry explicitly approved baseline
+`08c06357267ef1348ec4b64dfdd12b26d4710a50` for WS-17 offline verification only.
+Main is integrated before preparing a new immutable candidate. Both fixture
+files and modes must match the approved baseline; application source must
+still match exactly `065d500`/`748b1e5`. The full ordered twelve checks, image,
+profile, runner, worker/source/scanner guards and owned-task cleanup remain
+unchanged. This approval sends no later source to Claude and authorizes no
+production release. The earlier a5b6f88→ce6cde8 pass and failed final-head CI
+remain separate records. Record the new actual result after completion;
+WS-13 revision 4, Larry's separate release approval and UI2-22…25 remain open.
