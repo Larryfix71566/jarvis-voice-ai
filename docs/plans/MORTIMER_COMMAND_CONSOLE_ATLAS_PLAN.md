@@ -5,9 +5,15 @@ merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
 all twelve offline checks and five final-head #198 CI checks are recorded.
-This merge audit is not a new full-profile run. Production remains `bde22bb`;
-separate deployment authorization, exact-target DEPLOY-MAIN checks and
-live UI2-22…25 remain open. Keep the temporary thread switch. See
+This merge audit is not a new full-profile run. Larry attempted DEPLOY-MAIN
+on `d5d3e7e` on 10-10; phase A stopped at the actual private-thread capture
+test before production changed. The test-only cursor-overlay repair is
+landed via follow-up PR #203 (after-merge state; source `d7a72a0`). Its full
+Mac suite passed 551 tests / six prerequisite skips / zero failures, with both
+actual capture tests executed. The unchanged twelve-check offline comparison
+is running against approved `08c0635`; record its result separately.
+Production remains `bde22bb`; exact-main DEPLOY-MAIN and live UI2-22…25
+remain open. Keep the temporary thread switch. See
 [10-10 comparison receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json),
 [merged-source audit](../acceptance/command-console/CC7A_MERGED_SOURCE_AUDIT_2026-10-10.json)
 and [exact-source review](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md).
@@ -2163,3 +2169,38 @@ The current-main roadmap checker reports one other-owner error: WS-13 is
 claimed but its Where starts with the already merged docs branch. Claude
 must mark that branch historical and name the active P1 branch. This
 WS-17 follow-up reports the error without editing Claude's block.
+
+
+**Deployment blocker and repair, 2026-10-11 (Codex):** Larry's DEPLOY-MAIN
+for `d5d3e7e` stopped in phase A on 10-10 at the private-thread full-pixel
+equality assertion; production remained `bde22bb`. Codex reproduced the
+unmodified failure. Repeated captures of an unchanged reference also differed
+(337,806 pixels). Disabling only ScreenCaptureKit's default pointer overlay
+made the unchanged and private-body-replacement pairs identical; removing
+the private card changed 153,638 pixels. Retained source `d7a72a0` adds
+`showsCursor = false` and its explanatory comment: three test-helper lines.
+Dimensions, full RGBA equality, nonblank witness, delays and prerequisite
+guards remain unchanged; application and legacy test code are unchanged.
+
+Three original-harness focused runs passed. A deliberate synthetic private-body
+leak, retaining the readiness label, failed the original pixel assertion; the
+runtime file was restored byte-for-byte. An earlier negative control without
+the readiness label failed readiness instead and is not counted as pixel proof.
+An independent Codex review verified the exact patch and restored runtime hash.
+
+The first full native run passed the repaired thread case but hit an independent
+SCK `-3811` startup error in the unchanged body-only capture. Moving that window
+and disabling opening animation did not fix it; no such repair was retained.
+On 10-11 the unchanged old case passed, then the full suite passed 551 tests
+with six prerequisite skips and zero failures. Both actual SCK captures ran
+and passed. Preserve the earlier failed run and distinguish its unproven
+environment cause from the established cursor-overlay comparison issue.
+
+[Capture repair receipt](../acceptance/command-console/CC7A_CAPTURE_FIX_2026-10-11.json)
+binds original failures, controlled measurements, the genuine privacy negative
+control, local full-suite result and source review. The immutable `d7a72a0`
+candidate is undergoing the same approved `08c0635` twelve-check comparison;
+all 27 unaffected source bindings, both frozen fixture blobs/modes and the
+original verifier/image/profile pins are unchanged. No later source was sent
+to Claude. Follow-up PR #203 must complete verification and CI before Larry
+merges and reruns normal DEPLOY-MAIN. This does not close live UI2-22…25.

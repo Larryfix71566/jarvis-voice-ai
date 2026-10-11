@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-11",
+  "row": "WS-17",
+  "recorded_by": "codex",
+  "candidate_source": "d7a72a01100470e022492c57b4513ba62b82372b",
+  "merged_main_before_repair": "d5d3e7e8cb1f1184478203aacbfea38d30f3d450",
+  "production_ref": "bde22bb6425c6bf36a3e0d7cf53f2785c274190d",
+  "production_changed": false,
+  "fix": {
+    "path": "macos/MortimerHost/Tests/MortimerHostTests/CC7aThreadAcceptanceTests.swift",
+    "added_lines": 3,
+    "removed_lines": 0,
+    "behavior": "SCStreamConfiguration.showsCursor=false excludes a moving OS overlay from full thread-content capture equality",
+    "application_runtime_changed": false,
+    "legacy_protected_capture_test_changed": false,
+    "assertions_and_existing_guards_and_delays_unchanged": true,
+    "new_skips_tolerance_crop_or_masks": false
+  },
+  "observed_cause": {
+    "unchanged_reference_with_default_cursor_changed_pixels": 337806,
+    "cursor_false_control_unchanged_reference_changed_pixels": 0,
+    "cursor_false_control_private_body_replacement_changed_pixels": 0,
+    "cursor_false_control_card_removal_changed_pixels": 153638,
+    "scope": "This isolates pointer-overlay-related nondeterminism in the test; it does not claim that SCK-3811 or OS-level scaling has a proven cause."
+  },
+  "privacy_negative_control": {
+    "original_sha256": "1177da1fecb78cebf5cba776d99dbd258931774c22b8ff43f53503994af677ca",
+    "mutation": "synthetic diagnostic only: private card retains readiness label and appends protected body",
+    "log": "/private/tmp/ws17-capture-private-leak-pixel-negative-20261010.log",
+    "returncode": 1,
+    "expected_assertion_failed": true,
+    "runtime_restored": true,
+    "restored_sha256": "1177da1fecb78cebf5cba776d99dbd258931774c22b8ff43f53503994af677ca"
+  },
+  "restored_runtime_sha256": "1177da1fecb78cebf5cba776d99dbd258931774c22b8ff43f53503994af677ca",
+  "native_verification": {
+    "tests": 551,
+    "failures": 0,
+    "skipped": 6,
+    "seconds": 131.663,
+    "thread_real_capture_passed": true,
+    "legacy_real_capture_passed": true,
+    "skip_groups": {
+      "physical_display": 3,
+      "app_activation": 3
+    }
+  },
+  "independent_review": {
+    "system": "codex",
+    "reviewer": "/root/ws17_capture_privacy_trace",
+    "result": "approved exact three-line test repair and pixel negative control; no retained runtime or assertion changes"
+  },
+  "source_preflight_review": {
+    "system": "codex",
+    "reviewer": "/root/ws17_merged_release_audit",
+    "result": "50 exact changed paths; 27 unchanged source bindings; frozen fixtures/modes and verifier pins exact"
+  },
+  "logs": [
+    {
+      "name": "Larry DEPLOY-MAIN on d5d3e7e",
+      "path": "/Users/larryfix/MortimerRollback/logs/deploy-main-20261010-195555.log",
+      "sha256": "ffb2f7c0b9690614ef32c0bcbe2a739540929b520816e805406ad874908d7647",
+      "outcome": "failed phase A at original private-thread pixel equality; production untouched"
+    },
+    {
+      "name": "Unmodified original thread test",
+      "path": "/private/tmp/ws17-capture-unmodified-20261010.log",
+      "sha256": "e4bb29fb06f422f10502207184a7d67a954bb45c494dfc651a297319850c4bd1",
+      "outcome": "same pixel assertion failure reproduced"
+    },
+    {
+      "name": "Repeated unchanged captures with pointer included",
+      "path": "/private/tmp/ws17-capture-diagnostics-20261010.log",
+      "sha256": "199246da9675bdc738c7b8929b7aa9a23c17d0d7d9d15cd337aed14cfd2d461a",
+      "outcome": "337806 differing pixels in repeated unchanged reference"
+    },
+    {
+      "name": "Cursor-only controlled diagnostic",
+      "path": "/private/tmp/ws17-capture-cursor-control-20261010.log",
+      "sha256": "4e0850967161978826772bcd6472a1e8e40257f293bb5b469aa38c2c5e215d1c",
+      "outcome": "unchanged and changed-private-body pairs identical; removing card changes153,638 pixels"
+    },
+    {
+      "name": "Corrected privacy pixel negative control",
+      "path": "/private/tmp/ws17-capture-private-leak-pixel-negative-20261010.log",
+      "sha256": "3b06e7c0d4f8402b0ac174e70ffdea6fcfdca5664d82993e73d242b4e91d6602",
+      "outcome": "intentionally exposed synthetic body fails original full-pixel assertion; runtime restored"
+    },
+    {
+      "name": "Earlier native full suite after cursor fix",
+      "path": "/private/tmp/ws17-capture-fixed-full-mortimerhost-20261010.log",
+      "sha256": "ce958130099767191a36a5affa0826e2122b175d44c5baba30d68aaef425bca8",
+      "outcome": "thread capture passed; older unchanged capture failed SCK-3811"
+    },
+    {
+      "name": "Earlier unchanged old capture focused run",
+      "path": "/private/tmp/ws17-existing-protected-capture-prerequisite-20261010.log",
+      "sha256": "61cfa2790997d3a8b43c67a5f6f77f3a3bda44076885f6b44517a6e8f6835a9a",
+      "outcome": "SCK-3811; distinct prerequisite failure"
+    },
+    {
+      "name": "No-animation diagnostic",
+      "path": "/private/tmp/ws17-existing-capture-no-animation-20261010.log",
+      "sha256": "1a0c4b685123c3e5b1d7da041e62785caf0f36e903b14a0e00617694074f4ef7",
+      "outcome": "SCK-3811 persisted; no animation repair retained"
+    },
+    {
+      "name": "Unchanged old capture on10-11",
+      "path": "/private/tmp/ws17-existing-protected-capture-unchanged-escalated-20261011.log",
+      "sha256": "8d965ca1225d9547035c45a4a35f18a1884387411ab963ee2ed31190aca35dc9",
+      "outcome": "passed actual capture, 5.160 seconds"
+    },
+    {
+      "name": "Full native MortimerHost suite on10-11",
+      "path": "/private/tmp/ws17-cursor-fixed-full-mortimerhost-20261011.log",
+      "sha256": "4e69a4b8375ba929ebef65ffbf30a014939e30adb04b4cf5a86f81e2dc9553e0",
+      "outcome": "551 tests; six prerequisite skips; zero failures; both actual capture tests passed"
+    },
+    {
+      "name": "Original harness with cursor-only fix trial1",
+      "path": "/private/tmp/ws17-capture-cursor-fixed-trial-1-20261010.log",
+      "sha256": "c9ed816385ff80c4ce729cd03b05227c9627888178726034dae3e1e8b2f134f9",
+      "outcome": "passed; no skip"
+    },
+    {
+      "name": "Original harness with cursor-only fix trial2",
+      "path": "/private/tmp/ws17-capture-cursor-fixed-trial-2-20261010.log",
+      "sha256": "2f1e34f35c5bdf23bad997db97e3533ad20d87dccd8fa8ed346b14f22c47a376",
+      "outcome": "passed; no skip"
+    },
+    {
+      "name": "Original harness with cursor-only fix trial3",
+      "path": "/private/tmp/ws17-capture-cursor-fixed-trial-3-20261010.log",
+      "sha256": "7d9f18129e6ccdeff6cb6fffb2d48711638baec5b89af339edcd9251fb5043a1",
+      "outcome": "passed; no skip"
+    }
+  ],
+  "offline_verification": {
+    "status": "running",
+    "baseline": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+    "host_record": "/private/tmp/ws17-cursor-fix-full-profile-host-20261011.json",
+    "caller": "/private/tmp/ws17-full-profile-verify-20261010.py",
+    "caller_sha256": "b73126dfe21f1599d6b94bb679c839bd015101f1ba19ebe1898de32d43c1d390",
+    "preflight_review_sha256": "68da6e9d4cf6a1a14374150a18b3ff93d9bf5748d6c32c36354f20794013c9bb"
+  },
+  "release_status": "PR #203 follow-up; exact-main DEPLOY-MAIN and live UI2-22\u202625 remain open; do not bypass the gate"
+}
