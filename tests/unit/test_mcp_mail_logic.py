@@ -198,6 +198,92 @@ def test_command_gate_refuses_everything_else(servers, certs):
     assert b"STORE" not in b"".join(srv.raw_commands)
 
 
+def _registered(watchdog: logic.Watchdog):
+    with watchdog._lock:
+        return watchdog._sock
+
+
+def test_handshake_failure_releases_the_watchdog_before_closing(servers, certs, tmp_path):
+    """Codex review of #204, item 4: no close path leaves a closed descriptor
+    registered with the watchdog."""
+    bad = make_certs(tmp_path, ca_subject="other")
+    srv = servers(mailbox(), certs_=bad)
+    latch = threading.Event()
+    watchdog = logic.Watchdog(latch)
+    seen = {}
+    original_release = watchdog.release
+
+    def release_then_record():
+        with watchdog._lock:
+            sock = watchdog._sock
+        seen.setdefault("fileno_at_release", sock.fileno() if sock is not None else None)
+        original_release()
+
+    watchdog.release = release_then_record
+    with pytest.raises(ssl.SSLError):
+        logic.BoundedIMAP("localhost", srv.port, ssl_context=logic.build_ssl_context(cafile=certs.ca_file),
+                          timeout=3, latch=latch, watchdog=watchdog, deadline=time.monotonic() + 5)
+    assert seen["fileno_at_release"] not in (None, -1)   # released while still open
+    assert _registered(watchdog) is None
+
+
+def test_constructor_abort_and_logout_release_before_imaplib_closes(servers, certs):
+    # constructor abort: a session-phase budget overrun inside imaplib's __init__
+    srv = servers(mailbox(), Faults(unsolicited_lines=2000, unsolicited_line_bytes=32))
+    latch = threading.Event()
+    watchdog = logic.Watchdog(latch)
+    holder: list = []
+    with pytest.raises(logic.Abort):
+        logic.BoundedIMAP("localhost", srv.port, ssl_context=logic.build_ssl_context(cafile=certs.ca_file),
+                          timeout=3, latch=latch, watchdog=watchdog, deadline=time.monotonic() + 5,
+                          holder=holder)
+    assert _registered(watchdog) is None
+    assert holder[0].sock.fileno() == -1          # imaplib's shutdown() ran through the override
+    # LOGOUT: imaplib's logout() calls shutdown(); registration is gone before the close
+    srv2 = servers(mailbox(1))
+    latch2 = threading.Event()
+    watchdog2 = logic.Watchdog(latch2)
+    conn = logic.BoundedIMAP("localhost", srv2.port, ssl_context=logic.build_ssl_context(cafile=certs.ca_file),
+                             timeout=3, latch=latch2, watchdog=watchdog2, deadline=time.monotonic() + 5)
+    conn.login("u", "p")
+    assert _registered(watchdog2) is conn.sock
+    conn.logout()
+    assert _registered(watchdog2) is None
+    assert conn.sock.fileno() == -1
+    watchdog2.fire()                               # firing after the close touches nothing
+    conn.close_socket()                            # idempotent
+
+
+def test_logout_concurrent_with_the_watchdog_never_shuts_a_closed_descriptor(servers, certs, monkeypatch):
+    """The firing holds the watchdog lock across shutdown(); release() takes the
+    same lock first, so whichever wins, the base shutdown only ever sees the
+    registered, still-open socket."""
+    shut = []
+    real_shutdown = socket.socket.shutdown
+
+    def recording_shutdown(sock, how):
+        shut.append(sock.fileno())
+        return real_shutdown(sock, how)
+
+    monkeypatch.setattr(logic.socket.socket, "shutdown", recording_shutdown)
+    for _ in range(20):
+        srv = servers(mailbox(1))
+        latch = threading.Event()
+        watchdog = logic.Watchdog(latch)
+        conn = logic.BoundedIMAP("localhost", srv.port, ssl_context=logic.build_ssl_context(cafile=certs.ca_file),
+                                 timeout=3, latch=latch, watchdog=watchdog, deadline=time.monotonic() + 5)
+        conn.login("u", "p")
+        t = threading.Thread(target=watchdog.fire)
+        t.start()
+        try:
+            conn.logout()
+        except Exception:  # noqa: BLE001 — a firing mid-LOGOUT is an expected abort
+            pass
+        t.join()
+        conn.close_socket()
+    assert -1 not in shut                          # never the base shutdown on a closed fd
+
+
 def test_message_identity_is_stable_and_scoped():
     a = logic._message_identity("att", "1700000001", 42)
     assert re.fullmatch(r"[0-9a-f]{32}", a)
@@ -354,6 +440,33 @@ def test_account_deadline_before_call_deadline_keeps_partial_results(servers, ce
     assert acct["headlines_complete"] is False
     assert acct["returned_count"] == 4
     assert all(m["fields_unavailable"] for m in out["messages"])
+
+
+def test_two_stuck_resolvers_share_one_cleanup_second(servers, certs, monkeypatch):
+    """Codex review of #204, item 3: the call returns within the call deadline
+    plus ONE second however many workers are stuck, not one second each."""
+    srv = servers(mailbox(1))
+    release = threading.Event()
+    real = socket.create_connection
+
+    def hung_connect(address, timeout=None, **kw):
+        release.wait(10)
+        return real(address, timeout, **kw)
+
+    monkeypatch.setattr(logic.socket, "create_connection", hung_connect)
+    flights = logic._SingleFlight()
+    t0 = time.monotonic()
+    out = call({"att": srv, "gmail": srv}, certs, flights=flights, call_deadline_s=0.2,
+               account_deadline_s=0.2)
+    elapsed = time.monotonic() - t0
+    assert elapsed < 0.2 + logic.WORKER_JOIN_S + 0.3, elapsed
+    assert {a["status"] for a in out["accounts"]} == {"timeout"}
+    assert {a["error"] for a in out["accounts"]} == {"deadline"}
+    release.set()
+    deadline = time.monotonic() + 3
+    while (flights.live_count("att") or flights.live_count("gmail")) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert flights.live_count("att") == 0 and flights.live_count("gmail") == 0
 
 
 def test_single_flight_against_a_resolver_that_never_returns(servers, certs, monkeypatch):
@@ -720,6 +833,83 @@ def test_expunge_between_search_and_fetch_is_a_lower_bound_without_substitution(
     assert sorted(h.uid for h in result.headlines) == [1, 3, 5]
     assert {h.subject for h in result.headlines} == {"subject 1", "subject 3", "subject 5"}
     assert result.headlines_complete is False
+
+
+@pytest.mark.parametrize("vanished,expected_count", [({3}, ("lower_bound", 4)),
+                                                     ({1, 2, 3, 4, 5}, ("unknown", None))])
+def test_a_message_vanishing_between_the_two_fetch_phases_is_removed(servers, certs, vanished, expected_count):
+    """Codex review of #204, item 1: confirmed by INTERNALDATE, gone by the
+    header FETCH. Never a blank headline in a 'complete' result; the count
+    is downgraded per R.10.13."""
+    srv = servers(mailbox(5), Faults(drop_header_uids=vanished))
+    result, _ = read(srv, certs)
+    assert result.status == (logic.STATUS_PARTIAL if expected_count[1] else logic.STATUS_FAILED)
+    assert (result.count_state, result.count_value) == expected_count
+    assert result.headlines_complete is False
+    assert result.enumeration_complete is False
+    assert {h.uid for h in result.headlines} == {1, 2, 3, 4, 5} - vanished
+    assert not any(h.fields_unavailable for h in result.headlines)
+
+
+def test_a_selected_message_beyond_the_headline_cap_bounds_the_count(servers, certs):
+    # 30 confirmed, 25 selected; all 25 vanish: the 5 unselected still bound the count
+    srv = servers([Msg(uid=i, arrived=NOW - dt.timedelta(minutes=i)) for i in range(1, 31)],
+                  Faults(drop_header_uids=set(range(1, 26))))
+    result, _ = read(srv, certs)
+    assert result.status == logic.STATUS_PARTIAL
+    assert (result.count_state, result.count_value) == ("lower_bound", 5)
+    assert result.headlines == []
+
+
+def test_unparseable_headers_on_a_present_message_keep_the_count(servers, certs):
+    srv = servers([Msg(uid=1, arrived=NOW, extra_headers="\xff\xfe\r\n"),
+                   Msg(uid=2, arrived=NOW)])
+    result, _ = read(srv, certs)
+    assert result.status == logic.STATUS_OK
+    assert (result.count_state, result.count_value) == ("exact", 2)
+    assert result.headlines_complete is True
+    assert len(result.headlines) == 2         # present, parse failure never drops it
+
+
+@pytest.mark.parametrize("lines", [[b"* SEARCH garbage"], [b"* SEARCH 1 2 x"], [b"* SEARCH 0"],
+                                   [b"* SEARCH 4294967296"], [b"* SEARCH 1 -2"]])
+def test_malformed_search_data_is_failed_unknown(servers, certs, lines):
+    """Codex review of #204, item 2: a nondigit or out-of-range token is
+    never dropped into an understated exact count."""
+    srv = servers(mailbox(3), Faults(search_lines=lines))
+    result, _ = read(srv, certs)
+    assert result.status == logic.STATUS_FAILED
+    assert result.abort_reason == "search_malformed"
+    assert (result.count_state, result.count_value) == ("unknown", None)
+    assert "UID FETCH" not in srv.commands
+
+
+def test_a_genuinely_empty_search_is_an_exact_zero(servers, certs):
+    srv = servers(mailbox(3), Faults(search_lines=[b"* SEARCH"]))
+    result, _ = read(srv, certs)
+    assert result.status == logic.STATUS_OK
+    assert (result.count_state, result.count_value) == ("exact", 0)
+
+
+@pytest.mark.parametrize("text", [b"0", b"4294967296", b"abc", b"-1", b""])
+def test_uidvalidity_outside_nz_number_is_rejected(servers, certs, text):
+    srv = servers(mailbox(1), Faults(uidvalidity_text=text))
+    result, _ = read(srv, certs)
+    assert result.status == logic.STATUS_FAILED
+    assert result.abort_reason == "no_uidvalidity"
+
+
+def test_server_bye_during_login_is_not_a_rejection(servers, certs):
+    """Codex review of #204, P3: IMAP4.abort (BYE, dropped connection) is
+    distinct from an authentication NO."""
+    srv = servers(mailbox(1), Faults(bye_on_login=True))
+    result, _ = read(srv, certs)
+    assert result.status == logic.STATUS_FAILED
+    assert result.abort_reason == "server_abort"
+    assert result.abort_detail is not None and result.abort_detail.startswith("abort:")
+    rejected = servers(mailbox(1), Faults(reject_login=True))
+    result2, _ = read(rejected, certs)
+    assert result2.abort_reason == "login_rejected"
 
 
 def test_expunge_of_every_candidate_is_unknown(servers, certs):

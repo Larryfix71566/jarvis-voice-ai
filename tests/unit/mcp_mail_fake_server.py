@@ -149,6 +149,9 @@ class Faults:
     header_fetch_delay_s: float = 0.0
     close_after_search: bool = False
     search_lines: list[bytes] | None = None   # replaces the `* SEARCH ...` line(s) verbatim
+    bye_on_login: bool = False                # `* BYE` then close, instead of a LOGIN reply
+    drop_header_uids: set[int] = field(default_factory=set)   # vanished before the header FETCH
+    uidvalidity_text: bytes | None = None     # verbatim UIDVALIDITY code value
     literal_before_uid: bool = False          # header FETCH item order: BODY[...] first, UID last
 
 
@@ -264,6 +267,9 @@ class FakeIMAPServer:
         elif cmd == b"LOGIN":
             with self._lock:
                 self.logins += 1
+            if f.bye_on_login:
+                self._send(sock, b"* BYE server shutting down\r\n")
+                return False
             if f.reject_login:
                 self._send(sock, tag + b" NO [AUTHENTICATIONFAILED] Invalid credentials\r\n")
             else:
@@ -271,7 +277,9 @@ class FakeIMAPServer:
         elif cmd == b"EXAMINE":
             out = [b"* " + str(len(self.mailbox)).encode() + b" EXISTS", b"* 0 RECENT",
                    b"* FLAGS (\\Seen \\Answered)"]
-            if not f.omit_uidvalidity:
+            if f.uidvalidity_text is not None:
+                out.append(b"* OK [UIDVALIDITY " + f.uidvalidity_text + b"] UIDs valid")
+            elif not f.omit_uidvalidity:
                 out.append(b"* OK [UIDVALIDITY " + str(self.uidvalidity).encode() + b"] UIDs valid")
             out.append(b"* OK [UIDNEXT " + str(max(self.mailbox, default=0) + 1).encode() + b"] Predicted")
             out.append(tag + b" OK [READ-ONLY] EXAMINE completed")
@@ -324,6 +332,8 @@ class FakeIMAPServer:
         for seq, uid in enumerate(targets, start=1):
             msg = self.mailbox.get(uid)
             if msg is None or uid in f.drop_metadata_uids:
+                continue
+            if header_fetch and uid in f.drop_header_uids:
                 continue
             seqnum = seq * 7 if f.renumber_sequence else seq
             head = (b"* " + str(seqnum).encode() + b" FETCH (UID " + str(uid).encode()

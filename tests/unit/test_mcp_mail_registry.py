@@ -233,17 +233,48 @@ def test_manifest_declares_exactly_the_five_names_as_optional():
     assert entry["args"] == ["-m", "mcp_servers.mcp_mail.server"]
 
 
-def test_no_mail_value_appears_in_the_preflight_output(monkeypatch, capsys):
+def _preflight(extra_env: dict) -> "subprocess.CompletedProcess":
     import subprocess
     import sys
 
     env = dict(os.environ)
+    env.pop(registry_module.ENV_SCOPING_ENABLED_ENV, None)
     env.update({name: f"SENTINEL-{name}" for name in MAIL_NAMES})
     env["JARVIS_VAULT_ENABLED"] = "false"
-    proc = subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "check_mail_env.py")],
+    env.update(extra_env)
+    return subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "check_mail_env.py")],
                           env=env, capture_output=True, text=True, timeout=60, cwd=str(REPO_ROOT))
+
+
+def test_preflight_matrix_shows_mail_names_reach_only_mcp_mail(monkeypatch):
+    """M1-1 (Codex review of #204, item 5): one row per name, one column per
+    configured server, plus the effective scoping flag; never a value."""
+    proc = _preflight({})
     assert proc.returncode == 0, proc.stderr
     assert "SENTINEL-" not in proc.stdout + proc.stderr
+    out = proc.stdout
+    assert "JARVIS_ENV_SCOPING_ENABLED (effective): on" in out
+    servers = [e["name"] for e in _server_entries()]
+    header = next(line for line in out.splitlines() if line.startswith("name"))
+    for server in servers:
+        assert server in header
+    columns = header.split()[2:]                       # after "name" and "set"
+    assert columns == servers
     for name in MAIL_NAMES:
-        assert name in proc.stdout
-    assert "would be read" in proc.stdout
+        row = next(line for line in out.splitlines() if line.startswith(name + " "))
+        cells = row.split()[2:]
+        assert len(cells) == len(servers)
+        assert {s for s, cell in zip(servers, cells) if cell == "yes"} == {"mcp-mail"}, row
+    assert "M1-1: PASS" in out
+    assert "would be read" in out
+
+
+def test_preflight_reports_disabled_scoping_as_a_failure():
+    proc = _preflight({registry_module.ENV_SCOPING_ENABLED_ENV: "false"})
+    assert proc.returncode == 0
+    assert "SENTINEL-" not in proc.stdout + proc.stderr
+    assert "JARVIS_ENV_SCOPING_ENABLED (effective): OFF" in proc.stdout
+    assert "M1-1: FAIL" in proc.stdout
+    # with scoping off every child inherits the names: the matrix says so
+    row = next(line for line in proc.stdout.splitlines() if line.startswith("MAIL_ATT_USER "))
+    assert set(row.split()[2:]) == {"yes"}

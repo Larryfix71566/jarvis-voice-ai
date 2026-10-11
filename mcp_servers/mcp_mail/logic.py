@@ -323,6 +323,7 @@ class BoundedIMAP(imaplib.IMAP4_SSL):
             self._watchdog.register(tls)                         # step 3
             tls.do_handshake()
         except BaseException:
+            self._watchdog.release()        # never close a registered descriptor
             tls.close()
             raise
         return tls
@@ -335,18 +336,29 @@ class BoundedIMAP(imaplib.IMAP4_SSL):
             self.close_socket()
             raise
 
-    def close_socket(self) -> None:
+    def shutdown(self) -> None:
+        """imaplib's own close path (constructor failure, LOGOUT) and ours.
+        The watchdog registration is released BEFORE the descriptor closes,
+        under the watchdog's lock, so a firing can never reach a descriptor
+        the OS may already have reused (§R.10.9)."""
         self._watchdog.release()
         try:
             if getattr(self, "file", None) is not None:
                 self.file.close()
         except OSError:
             pass
-        try:
-            if getattr(self, "sock", None) is not None:
-                self.sock.close()
-        except OSError:
-            pass
+        sock = getattr(self, "sock", None)
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+    close_socket = shutdown
 
     # -- byte accounting (§R.10.12) ----------------------------------------
 
@@ -463,6 +475,11 @@ class AccountResult:
 
 
 _UID_RE = re.compile(rb"\bUID (\d+)\b")
+_NZ_NUMBER_MAX = 2 ** 32 - 1        # RFC 3501 §9 nz-number: 1 .. 4,294,967,295
+
+
+def _valid_nz_number(token: bytes) -> bool:
+    return token.isdigit() and 1 <= int(token) <= _NZ_NUMBER_MAX
 _INTERNALDATE_RE = re.compile(rb'INTERNALDATE "([^"]+)"')
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
@@ -594,6 +611,8 @@ def _read_account(account: Account, *, credentials: tuple[str, str],
         user, password = credentials
         try:
             typ, _ = conn.login(user, password)
+        except imaplib.IMAP4.abort:
+            raise               # BYE or a dropped connection: the outer handler names it
         except imaplib.IMAP4.error:
             typ = "NO"          # imaplib raises on a NO/BAD LOGIN reply
         if typ != "OK":
@@ -606,7 +625,7 @@ def _read_account(account: Account, *, credentials: tuple[str, str],
             raise Abort("examine_rejected")
         uidvalidity = None
         for value in conn.untagged_responses.get("UIDVALIDITY", []) or []:
-            if isinstance(value, bytes) and value.strip().isdigit():
+            if isinstance(value, bytes) and _valid_nz_number(value.strip()):
                 uidvalidity = value.strip().decode("ascii")
         if uidvalidity is None:
             raise Abort("no_uidvalidity")
@@ -621,7 +640,10 @@ def _read_account(account: Account, *, credentials: tuple[str, str],
         lines = [d for d in (data or []) if isinstance(d, bytes)]
         if not lines:
             raise Abort("search_rejected")    # a tagged OK with no `* SEARCH` line is not a zero
-        uids = sorted({int(token) for token in b" ".join(lines).split() if token.isdigit()})
+        tokens = b" ".join(lines).split()
+        if not all(_valid_nz_number(token) for token in tokens):
+            raise Abort("search_malformed")   # one bad token: the enumeration is not trusted
+        uids = sorted({int(token) for token in tokens})   # an empty list is a real zero
         partial = False
         if len(uids) > MAX_CANDIDATES:
             uids = uids[-MAX_CANDIDATES:]
@@ -670,12 +692,27 @@ def _read_account(account: Account, *, credentials: tuple[str, str],
             if typ != "OK":
                 raise Abort("fetch_rejected")
             bound, _ = _bind_by_uid(_fetch_items(data), requested)
+            present: list[Headline] = []
             for headline in newest:
                 entry = bound.get(headline.uid)
-                literal = entry[1] if entry else None
-                sender, subject, header_date, unavailable = _parse_headers(literal)
+                if entry is None:
+                    continue        # no data: it vanished since the INTERNALDATE pass (§R.10.13)
+                sender, subject, header_date, unavailable = _parse_headers(entry[1])
                 headline.sender, headline.subject = sender, subject
                 headline.header_date, headline.fields_unavailable = header_date, unavailable
+                present.append(headline)
+            if len(present) < len(newest):
+                # The count is no longer exact: the vanished candidates were
+                # counted. Confirmed arrivals still present bound it from below.
+                vanished = {h.uid for h in newest} - {h.uid for h in present}
+                still_confirmed = [h for h in confirmed if h.uid not in vanished]
+                result.headlines = present
+                result.enumeration_complete = False
+                result.headlines_complete = False
+                if still_confirmed:
+                    result.count_state, result.count_value = "lower_bound", len(still_confirmed)
+                else:
+                    result.count_state, result.count_value = "unknown", None
         result.status = STATUS_OK if result.enumeration_complete else STATUS_PARTIAL
         if result.count_state == "unknown":
             result.status = STATUS_FAILED
@@ -692,8 +729,14 @@ def _read_account(account: Account, *, credentials: tuple[str, str],
     except Abort as abort:
         _status_for_abort(result, abort)
     except (imaplib.IMAP4.error, ssl.SSLError, OSError, ValueError) as exc:
-        reason = "tls" if isinstance(exc, ssl.SSLError) else (
-            "protocol" if isinstance(exc, (imaplib.IMAP4.error, ValueError)) else "network")
+        if isinstance(exc, ssl.SSLError):
+            reason = "tls"
+        elif isinstance(exc, imaplib.IMAP4.abort):
+            reason = "server_abort"          # BYE, or the server dropped the connection
+        elif isinstance(exc, (imaplib.IMAP4.error, ValueError)):
+            reason = "protocol"
+        else:
+            reason = "network"
         # Once the latch is set, whatever error the shut-down socket raised
         # (EOF on Linux, an OSError on macOS) has one cause: the deadline. A
         # per-operation socket timeout is a deadline of its own (§R.10.9), and
@@ -865,9 +908,10 @@ def mail_headlines(window_hours: int = DEFAULT_WINDOW_HOURS, account: str = "all
     for acct, thread, watchdog in workers:
         if thread.is_alive():
             watchdog.fire()
+    cleanup_deadline = time.monotonic() + WORKER_JOIN_S     # shared, not per worker
     for acct, thread, watchdog in workers:
         if thread.is_alive():
-            thread.join(WORKER_JOIN_S)
+            thread.join(max(0.0, cleanup_deadline - time.monotonic()))
         watchdog.cancel()
     with results_lock:
         call_open = False
