@@ -1,14 +1,23 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** WS-17 CC7a closure is implemented on the Codex candidate.
-Separate exact-source Claude static reviews completed 2026-10-09. After #201
-merged and Larry approved revised baseline `08c0635`, the unchanged independent
-verifier passed all twelve checks on immutable `59d57ea` (2026-10-10), with
-exact source/pins/log hashes and clean owned-VM shutdown. Five CI checks also
-passed on `59d57ea`. The earlier comparison and failed CI remain separate
-records. PR #198 stays draft pending WS-13 revision 4 and Larry's separate
-release/deployment approval; live UI2-22…25 remain open. See
-[10-10 comparison receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json)
+**Status:** WS-17 CC7a closure is landed in main through PR #198,
+merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
+as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
+files match the independently verified `59d57ea` exactly; source review,
+all twelve offline checks and five final-head #198 CI checks are recorded.
+This merge audit is not a new full-profile run. Larry attempted DEPLOY-MAIN
+on `d5d3e7e` on 10-10; phase A stopped at the actual private-thread capture
+test before production changed. The test-only cursor-overlay repair is
+landed via follow-up PR #203 (after-merge state; source `d7a72a0`). Its full
+Mac suite passed 551 tests / six prerequisite skips / zero failures, with both
+actual capture tests executed. The unchanged twelve-check offline comparison
+passed against approved `08c0635`, with exact source/log/pin identities and
+clean shutdown. All five source-head CI checks passed on `3e557c8`; the
+final evidence-only publication retains the normal CI merge gate.
+Production remains `bde22bb`; exact-main DEPLOY-MAIN and live UI2-22…25
+remain open. Keep the temporary thread switch. See
+[10-10 comparison receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json),
+[merged-source audit](../acceptance/command-console/CC7A_MERGED_SOURCE_AUDIT_2026-10-10.json)
 and [exact-source review](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md).
 The following baseline describes the earlier 2026-09-18 implementation:
 core protocol, stores,
@@ -2141,3 +2150,87 @@ failed CI or a claim of production deployment. WS-13 revision 4 must land
 before #198; Larry separately decides release/merge/deployment and exact-build
 UI2-22…25. Keep the temporary thread switch and dependent live gates open.
 No later source was sent to Claude and no production flag changed.
+
+
+**Merge checkpoint, 2026-10-10 (Codex):** Larry reported both merges.
+GitHub confirms #196 as `5c1eb1e62939451c4aca6f088a7f8d3c443b0eb4`, then
+#198 as `d5d3e7e8cb1f1184478203aacbfea38d30f3d450`; all five checks passed
+on #198 final head `dc5c34b`. Current main differs from tested `59d57ea`
+only in twelve roadmap/documentation paths. Every tracked runtime/test,
+configuration/dependency/runner/ownership blob and mode is identical, and
+all28 original source bindings remain exact. The prior actual offline receipt
+retains its own candidate identity; do not relabel it as a new main run.
+
+The WS-13 merge and #198 draft/landing holds are cleared. Production still
+reports `bde22bb`; no production action occurred. Deployment runs through
+human-only DEPLOY-MAIN, which checks the exact main target before rollback,
+installation and service switching. Separate deployment authorization and
+exact-build UI2-22…25 remain; no checkbox is closed by code landing.
+
+The current-main roadmap checker reports one other-owner error: WS-13 is
+claimed but its Where starts with the already merged docs branch. Claude
+must mark that branch historical and name the active P1 branch. This
+WS-17 follow-up reports the error without editing Claude's block.
+
+
+**Deployment blocker and repair, 2026-10-11 (Codex):** Larry's DEPLOY-MAIN
+for `d5d3e7e` stopped in phase A on 10-10 at the private-thread full-pixel
+equality assertion; production remained `bde22bb`. Codex reproduced the
+unmodified failure. Repeated captures of an unchanged reference also differed
+(337,806 pixels). Disabling only ScreenCaptureKit's default pointer overlay
+made the unchanged and private-body-replacement pairs identical; removing
+the private card changed 153,638 pixels. Retained source `d7a72a0` adds
+`showsCursor = false` and its explanatory comment: three test-helper lines.
+Dimensions, full RGBA equality, nonblank witness, delays and prerequisite
+guards remain unchanged; application and legacy test code are unchanged.
+
+Three original-harness focused runs passed. A deliberate synthetic private-body
+leak, retaining the readiness label, failed the original pixel assertion; the
+runtime file was restored byte-for-byte. An earlier negative control without
+the readiness label failed readiness instead and is not counted as pixel proof.
+An independent Codex review verified the exact patch and restored runtime hash.
+
+The first full native run passed the repaired thread case but hit an independent
+SCK `-3811` startup error in the unchanged body-only capture. Moving that window
+and disabling opening animation did not fix it; no such repair was retained.
+On 10-11 the unchanged old case passed, then the full suite passed 551 tests
+with six prerequisite skips and zero failures. Both actual SCK captures ran
+and passed. Preserve the earlier failed run and distinguish its unproven
+environment cause from the established cursor-overlay comparison issue.
+
+[Capture repair receipt](../acceptance/command-console/CC7A_CAPTURE_FIX_2026-10-11.json)
+binds original failures, controlled measurements, the genuine privacy negative
+control, local full-suite result and source review. The immutable `d7a72a0`
+candidate is undergoing the same approved `08c0635` twelve-check comparison;
+all 27 unaffected source bindings, both frozen fixture blobs/modes and the
+original verifier/image/profile pins are unchanged. No later source was sent
+to Claude. Follow-up PR #203 must complete verification and CI before Larry
+merges and reruns normal DEPLOY-MAIN. This does not close live UI2-22…25.
+
+
+**Verification result, 2026-10-11 (Codex):** The unchanged Mortimer verifier
+completed all twelve original checks on approved `08c0635` → immutable
+`d7a72a0` in 1,634.9 seconds. Baseline Python: 6,280 passes / eleven skips /
+two subtests; candidate: 6,366 / eleven / two. Baseline JarvisKit 227 and
+MortimerHost 514 / seven skips; candidate JarvisKit 232 and MortimerHost
+551 / eight skips; zero failures. The VM's two screen-capture skips, three
+physical-display skips and three app-activation skips remain unrun there;
+the real Mac's separate 551-test pass includes both actual SCK captures.
+
+The actual-artifact audit bound every canonical path/mode/Git blob to the
+immutable references: baseline 1,824 files, candidate 1,853. All twelve check
+names, argv, statuses and log hashes matched the unchanged profile. The
+candidate fingerprint is `71b2f98a5c3c07b36d38167402e27694e6b1489a926fdecfdf5d3db1529ea353`.
+The worker's UID 502 / attached visible Aqua desktop / unlocked Keychain
+was measured. Both owned VMs stopped; running count zero; sandbox settings,
+image record, verifier and profile pins unchanged. No production change
+or new provider/source transmission occurred.
+
+All five GitHub checks on source head `3e557c8` passed, including 6,366 unit
+passes, 196 integration passes and thirteen eval passes. Final publication
+changes evidence/own-status documents only; runtime and repaired test source
+remain exactly `d7a72a0`, with the normal final CI gate preserved. An independent
+Codex reviewer verified the actual terminal receipt and source/cleanup audit. Larry
+reviews/merges PR #203, reruns normal DEPLOY-MAIN against exact main, then
+completes live UI2-22…25. The failed 10-10 deployment and older SCK-startup
+failure remain historical evidence; this pass does not erase them.

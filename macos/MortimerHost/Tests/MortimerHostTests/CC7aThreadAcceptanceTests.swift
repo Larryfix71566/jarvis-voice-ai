@@ -424,6 +424,9 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
         let config = SCStreamConfiguration()
         config.width = max(1, Int(window.frame.width * window.backingScaleFactor))
         config.height = max(1, Int(window.frame.height * window.backingScaleFactor))
+        // The moving OS pointer is not rendered thread content. Its overlay
+        // can change SCK's captured pixels independently of the private body.
+        config.showsCursor = false
         let image: CGImage
         do {
             image = try await SCScreenshotManager.captureImage(contentFilter: SCContentFilter(desktopIndependentWindow: target), configuration: config)
