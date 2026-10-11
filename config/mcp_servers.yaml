@@ -97,3 +97,11 @@ servers:
     command: python
     args: ["-m", "mcp_servers.mcp_status.server"]
     env: {}
+  # mcp-mail: read-only IMAP headlines for the daily brief (WS-13 P1, plan §R).
+  # No agent holds it (D2); the brief module calls it through
+  # registry.call_classified. Credentials reach the child only through
+  # skill.yaml's optional_env (K2); nothing is declared here.
+  - name: mcp-mail
+    command: python
+    args: ["-m", "mcp_servers.mcp_mail.server"]
+    env: {}

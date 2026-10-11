@@ -59,6 +59,14 @@ EXPECTED = {
     # Status spec T2.6: a thin sidecar client; JARVIS_ADMIN_URL is in
     # BASE_ENV_KEYS, and no secret ever reaches this child.
     "mcp-status":    ([], [], {}),
+    # WS-13 P1 (MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md §R.6, §R.10.2): the
+    # four vault names reserved in ROADMAP.md §3 plus the kill switch. All
+    # optional: an unset pair makes that account `not_configured`, never a
+    # refused start. Values never appear in a result, a log line or a
+    # tool description; server.py reads them through os.environ only.
+    "mcp-mail":      ([], ["MAIL_ATT_USER", "MAIL_ATT_SECURE_MAIL_KEY",
+                           "MAIL_GMAIL_USER", "MAIL_GMAIL_APP_PASSWORD",
+                           "JARVIS_MAIL_ENABLED"], {}),
 }
 
 
