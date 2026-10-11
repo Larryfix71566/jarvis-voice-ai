@@ -2230,7 +2230,7 @@ All five GitHub checks on source head `3e557c8` passed, including 6,366 unit
 passes, 196 integration passes and thirteen eval passes. Final publication
 changes evidence/own-status documents only; runtime and repaired test source
 remain exactly `d7a72a0`, with the normal final CI gate preserved. An independent
-Codex reviewer checks the terminal receipt and source/cleanup audit. Larry
+Codex reviewer verified the actual terminal receipt and source/cleanup audit. Larry
 reviews/merges PR #203, reruns normal DEPLOY-MAIN against exact main, then
 completes live UI2-22…25. The failed 10-10 deployment and older SCK-startup
 failure remain historical evidence; this pass does not erase them.

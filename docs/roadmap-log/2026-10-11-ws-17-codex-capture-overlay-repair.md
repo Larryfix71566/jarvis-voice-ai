@@ -22,3 +22,12 @@ source unchanged. PR #203 waits on that result and CI before merge/deployment.
 Current-main's existing WS-13 ownership checker error remains reported in the
 10-10 handoff; this slice does not edit Claude's row. See the capture receipt
 and dated progress in the existing Command Console plan. No live gate closed.
+
+Terminal result: the unchanged approved `08c0635` → `d7a72a0` comparison
+passed all twelve checks in 1,634.9 seconds. The exact-artifact audit passed
+path/mode/blob, log hash, image/profile/runner, desktop and cleanup checks;
+both owned VMs stopped, zero running, settings/image record unchanged. An
+independent Codex reviewer verified the actual terminal artifacts. Source-head
+CI `3e557c8` passed all five checks. Final evidence-only publication preserves
+the normal CI merge gate. Larry reviews/merges #203 and reruns DEPLOY-MAIN;
+production and exact-build live gates remain open.
