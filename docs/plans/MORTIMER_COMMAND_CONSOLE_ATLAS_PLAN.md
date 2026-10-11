@@ -11,7 +11,9 @@ test before production changed. The test-only cursor-overlay repair is
 landed via follow-up PR #203 (after-merge state; source `d7a72a0`). Its full
 Mac suite passed 551 tests / six prerequisite skips / zero failures, with both
 actual capture tests executed. The unchanged twelve-check offline comparison
-is running against approved `08c0635`; record its result separately.
+passed against approved `08c0635`, with exact source/log/pin identities and
+clean shutdown. All five source-head CI checks passed on `3e557c8`; the
+final evidence-only publication retains the normal CI merge gate.
 Production remains `bde22bb`; exact-main DEPLOY-MAIN and live UI2-22…25
 remain open. Keep the temporary thread switch. See
 [10-10 comparison receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json),
@@ -2204,3 +2206,31 @@ all 27 unaffected source bindings, both frozen fixture blobs/modes and the
 original verifier/image/profile pins are unchanged. No later source was sent
 to Claude. Follow-up PR #203 must complete verification and CI before Larry
 merges and reruns normal DEPLOY-MAIN. This does not close live UI2-22…25.
+
+
+**Verification result, 2026-10-11 (Codex):** The unchanged Mortimer verifier
+completed all twelve original checks on approved `08c0635` → immutable
+`d7a72a0` in 1,634.9 seconds. Baseline Python: 6,280 passes / eleven skips /
+two subtests; candidate: 6,366 / eleven / two. Baseline JarvisKit 227 and
+MortimerHost 514 / seven skips; candidate JarvisKit 232 and MortimerHost
+551 / eight skips; zero failures. The VM's two screen-capture skips, three
+physical-display skips and three app-activation skips remain unrun there;
+the real Mac's separate 551-test pass includes both actual SCK captures.
+
+The actual-artifact audit bound every canonical path/mode/Git blob to the
+immutable references: baseline 1,824 files, candidate 1,853. All twelve check
+names, argv, statuses and log hashes matched the unchanged profile. The
+candidate fingerprint is `71b2f98a5c3c07b36d38167402e27694e6b1489a926fdecfdf5d3db1529ea353`.
+The worker's UID 502 / attached visible Aqua desktop / unlocked Keychain
+was measured. Both owned VMs stopped; running count zero; sandbox settings,
+image record, verifier and profile pins unchanged. No production change
+or new provider/source transmission occurred.
+
+All five GitHub checks on source head `3e557c8` passed, including 6,366 unit
+passes, 196 integration passes and thirteen eval passes. Final publication
+changes evidence/own-status documents only; runtime and repaired test source
+remain exactly `d7a72a0`, with the normal final CI gate preserved. An independent
+Codex reviewer checks the terminal receipt and source/cleanup audit. Larry
+reviews/merges PR #203, reruns normal DEPLOY-MAIN against exact main, then
+completes live UI2-22…25. The failed 10-10 deployment and older SCK-startup
+failure remain historical evidence; this pass does not erase them.
