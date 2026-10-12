@@ -735,14 +735,39 @@ def test_rejected_login_and_missing_uidvalidity(servers, certs):
     assert "UID SEARCH" not in srv2.commands
 
 
-def test_header_fetch_rejected_keeps_count_and_marks_fields_unavailable(servers, certs):
+def test_header_fetch_rejected_drops_the_chunk_and_downgrades_the_count(servers, certs):
+    """Codex re-review of #204: a tagged NO on the header FETCH drops that
+    chunk's data (§R.10.13). Three arrivals, all in the chunk: unknown."""
     srv = servers(mailbox(3), Faults(no_on_header_fetch=True))
+    result, _ = read(srv, certs)
+    assert result.status == logic.STATUS_FAILED
+    assert result.abort_reason == "fetch_rejected"
+    assert (result.count_state, result.count_value) == ("unknown", None)
+    assert result.headlines == []
+    assert result.headlines_complete is False
+    assert result.commands[-1] == "LOGOUT"       # not an abort: the session still closes cleanly
+
+
+def test_header_fetch_rejected_with_arrivals_outside_the_chunk_is_a_lower_bound(servers, certs):
+    # 30 arrivals, 25 in the rejected chunk: the other 5 still bound the count
+    srv = servers([Msg(uid=i, arrived=NOW - dt.timedelta(minutes=i)) for i in range(1, 31)],
+                  Faults(no_on_header_fetch=True))
     result, _ = read(srv, certs)
     assert result.status == logic.STATUS_PARTIAL
     assert result.abort_reason == "fetch_rejected"
+    assert (result.count_state, result.count_value) == ("lower_bound", 5)
+    assert result.headlines == []
+
+
+def test_resource_exhaustion_in_the_headers_phase_keeps_the_count(servers, certs):
+    """Distinct from a tagged NO: a budget abort mid-FETCH keeps what the
+    enumeration established (abort table, §R.10.12); fields are unavailable."""
+    srv = servers(mailbox(3), Faults(literal_size_override=logic.LITERAL_MAX_BYTES + 1))
+    result, _ = read(srv, certs)
+    assert result.status == logic.STATUS_PARTIAL
+    assert result.abort_reason == "literal_cap"
     assert (result.count_state, result.count_value) == ("exact", 3)
     assert len(result.headlines) == 3 and all(h.fields_unavailable for h in result.headlines)
-    assert result.headlines_complete is False
 
 
 def test_malformed_headers_never_raise(servers, certs):

@@ -690,8 +690,23 @@ def _read_account(account: Account, *, credentials: tuple[str, str],
             item = f"(INTERNALDATE BODY.PEEK[HEADER.FIELDS ({HEADER_FIELDS})]<0.{HEADER_FETCH_BYTES}>)"
             typ, data = conn.uid("FETCH", ",".join(str(h.uid) for h in newest), item)
             if typ != "OK":
-                raise Abort("fetch_rejected")
-            bound, _ = _bind_by_uid(_fetch_items(data), requested)
+                # A tagged NO drops the chunk's data and nothing is retried
+                # (§R.10.13): these candidates are no longer confirmed, so
+                # the count is bounded by the confirmed arrivals outside the
+                # chunk, or unknown. Distinct from a budget or deadline abort
+                # in this phase, which keeps the count the enumeration gave.
+                rejected = {h.uid for h in newest}
+                still_confirmed = [h for h in confirmed if h.uid not in rejected]
+                result.headlines = []
+                result.enumeration_complete = False
+                result.headlines_complete = False
+                if still_confirmed:
+                    result.count_state, result.count_value = "lower_bound", len(still_confirmed)
+                else:
+                    result.count_state, result.count_value = "unknown", None
+                result.abort_reason = "fetch_rejected"
+                data = None
+            bound, _ = _bind_by_uid(_fetch_items(data), requested) if typ == "OK" else ({}, False)
             present: list[Headline] = []
             for headline in newest:
                 entry = bound.get(headline.uid)
@@ -701,7 +716,7 @@ def _read_account(account: Account, *, credentials: tuple[str, str],
                 headline.sender, headline.subject = sender, subject
                 headline.header_date, headline.fields_unavailable = header_date, unavailable
                 present.append(headline)
-            if len(present) < len(newest):
+            if typ == "OK" and len(present) < len(newest):
                 # The count is no longer exact: the vanished candidates were
                 # counted. Confirmed arrivals still present bound it from below.
                 vanished = {h.uid for h in newest} - {h.uid for h in present}
@@ -716,9 +731,9 @@ def _read_account(account: Account, *, credentials: tuple[str, str],
         result.status = STATUS_OK if result.enumeration_complete else STATUS_PARTIAL
         if result.count_state == "unknown":
             result.status = STATUS_FAILED
-            result.abort_reason = "no_arrival_confirmed"
+            result.abort_reason = result.abort_reason or "no_arrival_confirmed"
         elif not result.enumeration_complete:
-            result.abort_reason = "enumeration_incomplete"
+            result.abort_reason = result.abort_reason or "enumeration_incomplete"
 
         # -- logout (§R.10.9): bounded, and nothing it contains matters ----
         conn.phase = result.phase = "logout"
