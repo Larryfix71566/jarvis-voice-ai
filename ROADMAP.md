@@ -1,6 +1,6 @@
 # Mortimer master roadmap
 
-**Production:** `bde22bb6425c6bf36a3e0d7cf53f2785c274190d`, deployed 2026-10-03 16:34 EDT (receipt `~/MortimerRollback/logs/deployment-receipt-bde22bb.json`).
+**Production:** `dc59bd0ade70404c0322f5ac08f3e6afcf6cc0ab`, deployed 2026-10-11 19:57 EDT (receipt `~/MortimerRollback/logs/deployment-receipt-dc59bd0.json`).
 
 This file is the single record of **who is doing what** in this repository, for every system that writes code here. Plans (`docs/plans/`) hold design. Receipts (`docs/acceptance/`) hold evidence. **This file holds ownership and state.**
 
@@ -214,14 +214,14 @@ Source: [mail/calendar/brief plan §R.12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIE
 **Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
 
 - **Owner:** `claude`
-- **Status:** review: P1 (mail header source) on `ws13/p1-mail-headers`, PR #204; Codex reviewed `454d856` (five P2 corrections, one P3) and accepted both registry decisions (CX-21); revision 2 answers all six with tests; built and tested against a fake TLS IMAP server only (plan §R.12 S1-1 to S1-9); M1-1 to M1-3 are Larry's Mac checks after merge; P2 and P3 are not yet claimed
+- **Status:** review: P1 (mail header source) on `ws13/p1-mail-headers`, PR #204; Codex reviewed `454d856` (five P2 corrections, one P3) and accepted both registry decisions (CX-21); revision 2 answered all six with tests; Codex re-reviewed `4e652c9` with one P2 left (a tagged NO on the header FETCH kept an exact count), which revision 3 answers; built and tested against a fake TLS IMAP server only (plan §R.12 S1-1 to S1-9); M1-1 to M1-3 are Larry's Mac checks after merge; P2 and P3 are not yet claimed
 - **Implemented by:** P1: Claude (PR open, `ws13/p1-mail-headers`); P2–P5: not started
 - **Remaining work / acceptance:** P1: build, Codex cross-review, Larry's merge and M1-1 to M1-3 (M1-3 needs the AT&T secure mail key or the Gmail app password in the vault); then P2 (needs the Google account in macOS Internet Accounts for M2-2) and P3, each claimed on its own against §R.12; P4/P5 stay separately gated (§R.11)
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** P1 code branch `ws13/p1-mail-headers` (PR open); the plan itself landed on main through PR #196 (merged 10-10)
 - **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`; §R (10-07) is authoritative and the August text is history except where §R.9 keeps it. No GitHub branch other than this one touches the plan. Migration `0035` stays reserved for T5 (`0035_brief`).
 - **Scope:** the plan file; and for P1 (plan §R.6): new `mcp_servers/mcp_mail/` (`__init__.py`, `logic.py`, `server.py`, `skill.yaml`), the `mcp-mail` entry in `config/mcp_servers.yaml`, the `mcp-mail` source-contract entries only in `jarvis/skills/registry.py` (WS-05 reviews; §4 CX-21), `EXPECTED` in `tests/unit/test_requires_env_snapshot.py`, `ALL_SERVERS`/`TOTAL_TOOLS` in `tests/integration/test_registry.py`, `EXPECTED_TOOLS` in `tests/integration/test_mcp_servers.py`, new `tests/unit/test_mcp_mail*.py` with the fake IMAP server fixture `tests/unit/mcp_mail_fake_server.py`, the names-only preflight script `scripts/check_mail_env.py` for M1-1, and `.env.example`. No agent, prompt, model, pipeline, Swift or migration change in P1
-- **Next step:** codex: re-review PR #204 at revision 2; larry: after Codex's approval, merge #204, then `python scripts/check_mail_env.py` (M1-1: the matrix must say yes for `mcp-mail` only, scoping on), and once the AT&T secure mail key and the Gmail app password are in the vault (D6: `python -m jarvis.vault set MAIL_ATT_USER` and the other three names) run M1-2/M1-3 and record the actual outcome; claude: answer the re-review, then claim P2 on its own
+- **Next step:** codex: re-review PR #204 at revision 3; larry: after Codex's approval, merge #204, then `python scripts/check_mail_env.py` (M1-1: the matrix must say yes for `mcp-mail` only, scoping on), and once the AT&T secure mail key and the Gmail app password are in the vault (D6: `python -m jarvis.vault set MAIL_ATT_USER` and the other three names) run M1-2/M1-3 and record the actual outcome; claude: answer the re-review, then claim P2 on its own
 - **Updated:** 10-11
 
 </details>
