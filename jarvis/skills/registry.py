@@ -117,9 +117,33 @@ _ADVISORY_SOURCE_OPERATIONS = {
 }
 ADVISORY_SOURCE_TOOLS = frozenset().union(*_ADVISORY_SOURCE_OPERATIONS.values())
 _ADVISORY_STARTS = frozenset({'plan_start', 'research_compare_start'})
+#: WS-13 P1 (plan §R.10.2, §R.10.3): host-classified CONFIDENTIAL sources.
+#: Their results are issued confidential with a named source scope rather
+#: than the generic "unclassified" envelope, so the brief module can tell a
+#: mail result from any other confidential result. Reviewed by WS-05 (CX-21).
+_CONFIDENTIAL_SOURCE_OPERATIONS = {
+    "mcp-mail": frozenset({"mail_headlines"}),
+}
+#: The source scope is derived from the REQUEST (host-owned arguments), never
+#: from the child's content: `mail:<account>` for one account, the known
+#: account keys joined with "/" for "all" (R.10.2). An argument naming no
+#: known account yields "mail:unknown"; the tool itself answers
+#: `unknown_account` for it.
+_MAIL_ACCOUNT_KEYS = ("att", "gmail")
+
+
+def _confidential_source_scope(server: str, arguments: dict) -> str:
+    if server == "mcp-mail":
+        account = str((arguments or {}).get("account", "all") or "all")
+        if account == "all":
+            return "mail:" + "/".join(_MAIL_ACCOUNT_KEYS)
+        return "mail:" + (account if account in _MAIL_ACCOUNT_KEYS else "unknown")
+    return f"confidential-operation:{server}"
+
 _PINNED_SOURCE_MODULES = {
     server: f"mcp_servers.{server.replace('-', '_')}.server"
-    for server in (*_PUBLIC_SOURCE_OPERATIONS, "mcp-repo", *_WORKSPACE_SOURCE_OPERATIONS)
+    for server in (*_PUBLIC_SOURCE_OPERATIONS, "mcp-repo", *_WORKSPACE_SOURCE_OPERATIONS,
+                   *_CONFIDENTIAL_SOURCE_OPERATIONS)
 }
 
 
@@ -665,6 +689,20 @@ class SkillRegistry:
                         'host-generated-development-refusal')
             except (ValueError, TypeError):
                 pass
+        if (envelope is None and contract is not None
+                and tool_name in _CONFIDENTIAL_SOURCE_OPERATIONS.get(server, ())):
+            # WS-13 P1: a confidential source with a named scope. The level
+            # never rises above confidential here, whatever the content says;
+            # the input floor is still applied by issue_tool_result.
+            try:
+                envelope = issue_tool_result(
+                    execution_scope, content,
+                    DataPolicy("confidential", "verified-host-confidential-source"),
+                    _confidential_source_scope(server, arguments), (),
+                )
+            except ValueError:
+                envelope = unclassified_tool_result(execution_scope,
+                    '{"ok":false,"error":"invalid_tool_result_content"}')
         if envelope is None and contract is not None:
             source_scope = f"public-operation:{server}:{tool_name}"
             refs: tuple[str, ...] = ()

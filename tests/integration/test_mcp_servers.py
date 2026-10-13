@@ -48,6 +48,9 @@ EXPECTED_TOOLS = {
         "log_search", "status_catalog", "status_subscription", "github_prs",
         "github_pr_checks",
     },
+    # WS-13 P1: one read-only tool; with no credentials forwarded every
+    # account answers `not_configured` and nothing is connected to.
+    "mcp_servers.mcp_mail.server": {"mail_headlines"},
 }
 
 
@@ -178,6 +181,23 @@ async def test_mcp_status_server():
     )
     assert tools == EXPECTED_TOOLS["mcp_servers.mcp_status.server"]
     assert payload == {"ok": False, "error": "the admin sidecar is not reachable."}
+
+
+async def test_mcp_mail_server():
+    """WS-13 P1 over the real stdio round trip: exactly one tool, and with
+    none of the four vault names in the child's environment every account
+    is `not_configured` — no socket is opened, no message is returned."""
+    env = {name: "" for name in ("MAIL_ATT_USER", "MAIL_ATT_SECURE_MAIL_KEY",
+                                 "MAIL_GMAIL_USER", "MAIL_GMAIL_APP_PASSWORD")}
+    tools, payload = await _call(
+        "mcp_servers.mcp_mail.server", "mail_headlines", {"window_hours": 24},
+        extra_env=env,
+    )
+    assert tools == EXPECTED_TOOLS["mcp_servers.mcp_mail.server"]
+    assert payload["ok"] is True
+    assert payload["messages"] == []
+    assert {a["status"] for a in payload["accounts"]} == {"not_configured"}
+    assert {a["key"] for a in payload["accounts"]} == {"att", "gmail"}
 
 
 async def test_mcp_repo_server_read(tmp_path):

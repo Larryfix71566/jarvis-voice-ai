@@ -1,0 +1,19 @@
+# Skill manifest (upgrade plan §3.1). WS-13 P1: read-only IMAP headlines.
+name: mcp-mail
+version: 0.1.0
+class: standard
+tools: [mail_headlines]
+# Credentials are optional per account (plan §R.5 D6 (b)): an account whose
+# names are unset reports not_configured and the other account still works.
+# Values come from the vault (python -m jarvis.vault set NAME), never from
+# this file, the roadmap or a prompt.
+requires_env: []
+optional_env:
+  - MAIL_ATT_USER
+  - MAIL_ATT_SECURE_MAIL_KEY
+  - MAIL_GMAIL_USER
+  - MAIL_GMAIL_APP_PASSWORD
+  - JARVIS_MAIL_ENABLED
+requires_keychain: []
+scopes: []
+test: "python3 -m pytest tests/unit/test_mcp_mail_logic.py -q"
