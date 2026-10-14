@@ -278,3 +278,59 @@ def test_preflight_reports_disabled_scoping_as_a_failure():
     # with scoping off every child inherits the names: the matrix says so
     row = next(line for line in proc.stdout.splitlines() if line.startswith("MAIL_ATT_USER "))
     assert set(row.split()[2:]) == {"yes"}
+
+
+def _preflight_main(monkeypatch, tmp_path, argv, *, dotenv_text=None, env=None):
+    """Run the preflight in-process against a temporary repo root, so its
+    .env handling is tested without touching the real one."""
+    import importlib.util
+    import shutil
+
+    root = tmp_path / "repo"
+    (root / "config").mkdir(parents=True)
+    shutil.copy(REPO_ROOT / "config" / "mcp_servers.yaml", root / "config" / "mcp_servers.yaml")
+    if dotenv_text is not None:
+        (root / ".env").write_text(dotenv_text)
+    spec = importlib.util.spec_from_file_location("check_mail_env_under_test",
+                                                  REPO_ROOT / "scripts" / "check_mail_env.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, "ROOT", root)
+    monkeypatch.setenv("JARVIS_VAULT_ENABLED", "false")
+    monkeypatch.delenv(registry_module.ENV_SCOPING_ENABLED_ENV, raising=False)
+    for name in MAIL_NAMES + ("JARVIS_MAIL_ENABLED",):
+        monkeypatch.delenv(name, raising=False)
+    for key, value in (env or {}).items():
+        monkeypatch.setenv(key, value)
+    module.main(argv)
+
+
+def test_preflight_with_no_mail_name_set_is_not_a_pass(monkeypatch, tmp_path, capsys):
+    """Larry's merged-build run (10-13) printed PASS with nothing set: a check
+    with nothing to observe must say NOT TESTED."""
+    _preflight_main(monkeypatch, tmp_path, [])
+    out = capsys.readouterr().out
+    assert "M1-1: NOT TESTED" in out and "M1-1: PASS" not in out
+
+
+def test_preflight_sentinel_mode_passes_and_prints_no_value(monkeypatch, tmp_path, capsys):
+    _preflight_main(monkeypatch, tmp_path, ["--sentinel"])
+    out = capsys.readouterr()
+    assert "M1-1: PASS" in out.out
+    assert "preflight-sentinel" not in out.out + out.err
+    for name in MAIL_NAMES:
+        row = next(line for line in out.out.splitlines() if line.startswith(name + " "))
+        assert row.split()[1] == "yes" and row.split()[-1] == "yes"     # set, and mcp-mail is last
+        assert row.split()[2:-1] == ["no"] * (len(row.split()) - 3)
+
+
+def test_preflight_applies_dotenv_like_the_run_scripts(monkeypatch, tmp_path, capsys):
+    """The run scripts `set -a; . ./.env`: a scoping switch in .env is the one
+    the bot gets, so the preflight must see it too, even over the shell."""
+    _preflight_main(monkeypatch, tmp_path, ["--sentinel"],
+                    dotenv_text="# comment\nJARVIS_ENV_SCOPING_ENABLED=false\n",
+                    env={registry_module.ENV_SCOPING_ENABLED_ENV: "true"})
+    out = capsys.readouterr().out
+    assert "environment: .env applied" in out
+    assert "JARVIS_ENV_SCOPING_ENABLED (effective): OFF" in out
+    assert "M1-1: FAIL - env scoping is off" in out
