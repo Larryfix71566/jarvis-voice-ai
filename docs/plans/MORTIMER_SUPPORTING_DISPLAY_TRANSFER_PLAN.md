@@ -1,6 +1,6 @@
 # Supporting display transfer: one validated, confirmed route
 
-**Status:** PR #171; Codex requested changes on `43f3d5b` (2026-10-03, four defects), repaired on `ws21/display-transfer`, awaiting Codex's re-review; Mac acceptance open. Approved scope: Larry, 2026-10-03, new row WS-21; Claude implements, Codex reviews before merge.
+**Status:** implemented; PR #171 merged as `bde22bb` and deployed in `bde22bb` (2026-10-03 16:34 EDT); Mac external-display acceptance (§5) open. Approved scope: Larry, 2026-10-03, new row WS-21; Claude implements, Codex reviews before merge.
 **Row:** `ROADMAP.md` WS-21.
 **Baseline:** `origin/main` `63aaeef` (deployed 2026-10-03).
 
@@ -250,3 +250,7 @@ result actions by number and subject), which stays in WS-17.
   presented while a transport result was on the stage. Repaired as D1, D3, D5 and D6
   now describe. Codex's audit tests and probes are archived and their regression
   twins added (§4).
+- 2026-10-03: Larry merged PR #171 (repair `bb9cf35`) as `bde22bb` and deployed it at 16:34 EDT; the
+  deployment ran MortimerHost 483 tests (3 skipped, 0 failures), JarvisKit 226 and Python 4,989
+  passed / 7 skipped. A Codex re-review of `bb9cf35` is not recorded in the repository. The §5
+  Mac checks remain.
