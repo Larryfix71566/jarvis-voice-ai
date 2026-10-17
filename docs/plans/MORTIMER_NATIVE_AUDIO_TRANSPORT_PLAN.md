@@ -564,3 +564,16 @@ from the codebase — it is the T2 transport.
 ## Progress 2026-09-30 (WS-18, Claude)
 
 An AirPods to Mac speaker switch mid-answer crashed the app: D3's rebuild ran and the engine reported running, but Voice Processing then faulted its downlink and no output IO cycle came; the next `AVAudioPlayerNode.play()` raised `player did not see an IO cycle` after 5 s. `AudioEngineIO` now starts the player only when the output node's render time is seen to advance (`OutputIOWatch`, checked every 100 ms on the engine queue), rebuilds an output that shows no IO for 1.5 s (3 tries, then `onFailure`), and calls `play()` through `JKCatchObjCException` (new `JarvisKitObjC` target) so a refusal drops the queued speech and rebuilds. Rollback: `JARVIS_AUDIO_OUTPUT_WATCH` false.
+
+
+### 2026-10-17 — WS-18 physical output-switch acceptance
+
+Larry completed AirPods → Mac speakers → AirPods during speech on installed
+`575cc7b770b621b5c8049097ef63e93618ba3016`, reporting both directions working,
+continued connection and no noticeable silence or only brief gaps. Codex
+observed the same app PID 21674 and output-flow logs after reconfiguration.
+The [campaign receipt](../acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md)
+records the artifact hash, timestamps and limitations. WS-18's bounded switch
+criterion passes. This evidence does not close the separate §3.3 AirPods echo
+configurations, earbud-removal, wake/device or combined-load obligations.
+Claude remains implementation owner; no audio source or configuration changed.

@@ -58,25 +58,49 @@ not fully met.
 
 ## 3. Live voice and response routing
 
-Connect the candidate and confirm `READY VOICE`. Speak one request that returns
-text and one that returns a research/display result. Verify:
+**CC7a reconciliation, 2026-10-17:** use the current conversation-first
+requirements below. The September 18 evidence predates CC7a and cannot prove
+these changed behaviors. An ordinary spoken answer belongs in the full
+conversation thread; it must not create a result card or tab. The earlier
+instruction to put every full answer in a card and leave only brief captions
+is superseded by the approved WS-17 design.
 
-- the user and Mortimer meters respond independently and honestly;
-- the full Mortimer answer appears in one results card;
-- streamed/tool subturns update that card instead of creating cards/windows;
-- the supporting display owns the full answer when open;
-- the conversation surface retains only brief captions;
-- closing the supporting display returns the same answer to the main results area.
+Connect the identified installed candidate and confirm `READY VOICE`. Keep
+background audio quiet and mute between controlled prompts. Record the actual
+input/output devices; a connected label is not proof of speech or playout.
+Verify the user and Mortimer activity channels respond independently and
+truthfully; the device-switch check alone does not establish that full matrix.
 
-Record the request timestamp, result ID, visible tile count, and any audio
-startup/reconnect error. A `READY VOICE` label alone is not a spoken-response
-pass; output speech and both measured channels must be observed.
+1. **UI2-22:** five spoken turns, one answer longer than 160 characters. Both
+   speakers' full words stay ordered in one thread. Check protected-turn rules,
+   scroll/reading state, and a new ordinary answer while a result is open.
+2. **UI2-23:** request weather/research/image results. From Conversation, the
+   just-requested result opens; a late/background completion stays a card.
+   While reading another result, arrival preserves focus and gives a notice.
+   Verify Open/Back, compare/pin, and that closing a card preserves its Output
+   record. Supporting-display cases need the corresponding topology.
+3. **UI2-24:** one console row and no result tab strip. Exercise Recents
+   select/close/pin/unpin/reopen through voice and pointer. Ambiguous/stale
+   selections must clarify/refuse rather than change the wrong result.
+4. **UI2-25:** original weather → Atlanta → original produces two identities.
+   A fresh request reuses the original (15-minute window) without a second
+   fetch; a stale request refreshes that same identity. Record inventory and
+   fetch evidence, not just matching titles.
+5. **WS-18/shared audio:** AirPods → Mac speakers → AirPods during speech.
+   Record each direction, audible gap/speed, app survival, connection continuity
+   and `audio output flowing` diagnostics after rebuild. This does not alone
+   close the separate echo, wake, denial, interruption or performance gates.
 
-Status (reconciled 2026-09-22 against main `88b206f`): `READY VOICE` and the
-live close-and-return path are recorded in
-`command-console/receipts/candidate-live-response-display-2026-09-18.md`.
-No spoken request or response has been recorded, so this section remains
-open.
+For each case record timestamp, source/artifact identity, observed result IDs
+and count where applicable, operator report and direct UI/log evidence. Use
+synthetic or public-content prompts. Do not mark a parent requirement passed
+from a subset, and do not use model-generated claims as evidence of success.
+An unavailable display, provider prerequisite or required decision remains open.
+
+Historical September 18 receipt:
+`command-console/receipts/candidate-live-response-display-2026-09-18.md`
+records READY VOICE and the old close-and-return path, without a recorded
+spoken request/response. It is retained with that scope.
 
 ## 4. Sharing and accessibility
 
