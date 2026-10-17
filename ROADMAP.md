@@ -25,6 +25,15 @@ it. Missing prerequisite code or activation decisions stay with their existing
 owners and require an explicit decision; this priority grants no new build,
 provider, credential, activation, merge, or deployment authority.
 
+**PR cleanup, 2026-10-17:** Larry requested review and cleanup of the open
+PR backlog. Codex reconciles #172/#174 in `codex/pr-backlog-cleanup-20261017`:
+retain current roadmap facts and every acceptance gate, preserve Claude's
+missing historical logs and WS-21 plan correction, and close the old PRs as
+superseded after the replacement is published. Their branches are retained.
+#205 remains a separate Claude-owned mail-preflight review; no deployment or
+acceptance is implied by PR cleanup. See the
+[cleanup record](docs/roadmap-log/2026-10-17-ws-20-codex-pr-cleanup.md).
+
 The following dated operational summary remains historical navigation; this
 acceptance-first instruction controls sequencing. Detailed row ownership and
 acceptance criteria remain authoritative. Claude's #205 and #172/#174 changes
@@ -265,6 +274,15 @@ Larry reviews it and participates in the identified-candidate console session,
 then audio/display checks when equipment is available. Unbuilt prerequisite
 and activation decisions remain explicit; WS-22 stays parked.
 
+
+**Additional cleanup authorization — Larry, 2026-10-17:** Codex owns the
+bounded PR-backlog reconciliation on `codex/pr-backlog-cleanup-20261017`:
+this additive roadmap note, the WS-21 plan/header and historical logs already
+proposed by Claude in #174, and dated WS-20 progress/log. This supersedes the
+earlier instruction to leave #172/#174 pending, without reassigning Claude's
+code or acceptance work. The replacement preserves newer main and all gates;
+#205 is reviewed independently at its exact head. No implementation or release
+is authorized here.
 
 ### Acceptance checklist — remaining
 

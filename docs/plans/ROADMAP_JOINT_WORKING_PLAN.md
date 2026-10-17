@@ -185,3 +185,15 @@ ready preparation/human checks, and blocked prerequisites. No product checkbox
 is changed. Preserve #205's production/WS-13 corrections and #172/#174's owner
 updates; do not duplicate those edits. Existing prerequisite code/activation
 and any permitted known-limitation acceptance need their explicit decisions.
+
+
+### 2026-10-17 — Open PR cleanup (Codex; Larry requested)
+
+Reconciled stale documentation PRs #172/#174 onto main `1338fc7`, preserving
+current roadmap facts, acceptance-first sequencing, and all existing gates.
+Recovered Claude's two historical log entries verbatim and the outstanding
+WS-21 implementation/deployment plan correction from #174. The corrected
+plan still leaves Mac acceptance open. Published one replacement documentation
+PR before closing superseded #172/#174; keep their branches and attribution.
+Mail-preflight #205 remains a separate exact-head review, not folded into this
+change. See the [cleanup record](../roadmap-log/2026-10-17-ws-20-codex-pr-cleanup.md).
