@@ -169,3 +169,19 @@ Claim #192 merged as `e74f3af52a77e9651b0127d91da7bf6bba31b3fb` after five green
 Reused #174's narrow WS-21 merged/deployed fields and WS-11 deployment reference rather than inventing a second correction; #172/#174 conflict integration and the supporting-display plan update stay Claude-owned. Corrected WS-17's stale new-branch/WS-21 dependency wording to the existing #173 repair/review handoff. #191 merged separately as `b6f09f4` during claim CI; its lifecycle prefixes, completed documentation gate and exact-build voice/review receipts are preserved and linked. Bounded public text/routing subchecks need no redundant rerun solely for documentation. Full UI2-22…25, external display, enabled authentication/model/memory and release acceptance remain open.
 
 Validation: roadmap structural/warn-only checks, diff whitespace, policy checks and preservation/source-link audits; all owners/scopes, gate entries, production identity, protected sections and existing receipts retained. A just-created implementation branch initially equaled its claimed main base, so the session-start checker mechanically called that empty branch “already merged”; the after-merge documentation state removes that transient own-row finding. No checker change or suppression. This substantive PR remains a draft for Larry; no product feature, provider workload, credential, activation or deployment change.
+
+
+### 2026-10-17 — Acceptance first; future workflow parked (Codex)
+
+Larry explicitly requested saving the model-independent investigation workflow
+as a document and placing it at the end of the roadmap, with all existing
+acceptance gates closed before new development. Added parked WS-22 and its
+canonical plan; even isolated-core development is deferred. This is a bounded
+documentation addition to WS-20, not a new implementation or acceptance grant.
+
+The [dated triage](../roadmap-log/2026-10-17-ws-20-codex-acceptance-first.md)
+records the refreshed source, installed-build evidence, pending Claude PRs,
+ready preparation/human checks, and blocked prerequisites. No product checkbox
+is changed. Preserve #205's production/WS-13 corrections and #172/#174's owner
+updates; do not duplicate those edits. Existing prerequisite code/activation
+and any permitted known-limitation acceptance need their explicit decisions.

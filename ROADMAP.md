@@ -8,6 +8,28 @@ This file is the single record of **who is doing what** in this repository, for 
 
 ---
 
+## Acceptance-first priority — Larry, 2026-10-17
+
+Close the existing roadmap acceptance gates before starting any new development.
+The evidence-based investigation/development workflow is documented as
+[WS-22](#ws-22) at the end of this roadmap and remains **parked**. Its former
+parallel-start recommendation is superseded; even isolated core development
+waits for acceptance closure and a fresh implementation dispatch.
+
+Begin with the [dated acceptance triage](docs/roadmap-log/2026-10-17-ws-20-codex-acceptance-first.md):
+confirm the installed/running candidate, map valid existing receipts, then run
+non-conflicting console/display/audio checks with the required operator.
+A blocked, skipped, untested, or deferred gate is not a pass. Where an existing
+plan permits written known-limitation acceptance, Larry must explicitly record
+it. Missing prerequisite code or activation decisions stay with their existing
+owners and require an explicit decision; this priority grants no new build,
+provider, credential, activation, merge, or deployment authority.
+
+The following dated operational summary remains historical navigation; this
+acceptance-first instruction controls sequencing. Detailed row ownership and
+acceptance criteria remain authoritative. Claude's #205 and #172/#174 changes
+are not duplicated or reassigned by this update.
+
 ## Operational summary — 2026-10-07
 
 Read this summary with the linked §2 blocks: implementation, deployment and acceptance are separate states. This is a navigation layer in the shared source, not a second tracker or an overall completion score. Production identity remains the receipt above.
@@ -230,6 +252,19 @@ Source: [mail/calendar/brief plan §R.12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIE
 
 <details id="ws-20">
 <summary>WS-20 — Roadmap joint working: catch-up and drift prevention · Claude + Codex</summary>
+
+**Bounded documentation authorization — Larry, 2026-10-17:** Codex owns this
+acceptance-first documentation/triage slice on `codex/acceptance-first-20261017`:
+the priority banner, this additive note, the final parked WS-22 entry, its
+canonical plan, dated progress in the existing joint-working plan, and the
+[acceptance triage](docs/roadmap-log/2026-10-17-ws-20-codex-acceptance-first.md).
+No implementation, activation, deployment, or product acceptance is granted.
+Existing fields below retain their historical scope; Claude's #205/#172/#174
+corrections remain with their owner. Next: Codex publishes this documentation;
+Larry reviews it and participates in the identified-candidate console session,
+then audio/display checks when equipment is available. Unbuilt prerequisite
+and activation decisions remain explicit; WS-22 stays parked.
+
 
 ### Acceptance checklist — remaining
 
@@ -1048,3 +1083,22 @@ acceptance remains in §2 even when a feature’s code has landed.
 
 Earlier completed plans: [implemented plans](docs/plans/implemented/) and
 [archive map](docs/archive/README.md).
+
+
+## 9. New development — deferred until existing acceptance closes
+
+<details id="ws-22">
+<summary>WS-22 — Evidence-based investigation and development workflow · parked</summary>
+
+- **Owner:** `codex` for documentation only; implementation owner unassigned
+- **Status:** parked: canonical implementation plan saved at Larry's request on 2026-10-17; no implementation is authorized
+- **Implemented by:** not implemented; Codex documented the design and handoff contract
+- **Remaining work / acceptance:** Close all pre-existing roadmap acceptance gates under their owning plans before a fresh implementation claim. Then implement R1–R10 and AT-01–AT-18 in the linked plan; separate core, coordinated integration, and live pilot. No skipped/blocked gate counts as acceptance and no new-development scope is granted by this entry.
+- **Model version:** not recorded; the implementation contract is model-independent and capability-gated
+- **Where:** documentation on `codex/acceptance-first-20261017`, via this PR; no implementation branch
+- **Plan:** `docs/plans/MORTIMER_EVIDENCE_WORKFLOW_IMPLEMENTATION_PLAN.md`
+- **Scope:** parked design only. Future proposed package `jarvis/investigation/`, focused tests and coordinated adapters into existing services require a fresh claim; these paths are not locked or authorized for implementation now. No migration/configuration/protocol identifier is reserved.
+- **Next step:** larry: complete existing acceptance and then explicitly dispatch an owner/branch/scope; codex or assigned implementer: refresh main, dependencies and reservations before any code. Until then retain this plan as deferred development.
+- **Updated:** 10-17 (Larry: acceptance before new development; previous parallel-start proposal superseded)
+
+</details>
