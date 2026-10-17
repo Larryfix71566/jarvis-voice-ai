@@ -54,16 +54,21 @@ def _servers() -> list[dict]:
 
 
 # Variables the shell itself sets while running the loader; not configuration.
+# They are kept as this process had them, so a .env cannot "unset" them and
+# the replacement below never touches the interpreter's own bookkeeping.
 _SHELL_OWN = {"_", "SHLVL", "PWD", "OLDPWD"}
 
 
 def _startup_env(env_file: Path) -> tuple[bool, str]:
-    """Apply `env_file` exactly as scripts/run_bot.sh does, by running the same
-    shell commands and reading back the resulting environment (NUL-separated,
-    never printed). Returns (established, note)."""
+    """REPLACE this process's environment with the one scripts/run_bot.sh
+    would give the bot: run the same shell commands and read the resulting
+    environment back (NUL-separated, never printed). Names the shell added
+    appear, names it changed change, and names it removed (an `unset` in
+    .env) are gone, exactly as at startup. Returns (established, note)."""
     import shutil
     import subprocess
 
+    env_file = Path(os.path.abspath(env_file))     # before any cwd change below
     if not env_file.exists():
         return False, f".env not found at {env_file} (the bot cannot start without one)"
     bash = shutil.which("bash")
@@ -83,14 +88,20 @@ def _startup_env(env_file: Path) -> tuple[bool, str]:
     if proc.returncode != 0:
         return False, (f"the startup shell fails on this .env (exit {proc.returncode}); "
                        "the bot would not start with it")
+    snapshot: dict[str, str] = {}
     for item in proc.stdout.split(b"\0"):
         key, sep, value = item.partition(b"=")
         if not sep or not key:
             continue
-        name = key.decode("utf-8", "surrogateescape")
-        if name in _SHELL_OWN:
-            continue
-        os.environ[name] = value.decode("utf-8", "surrogateescape")
+        snapshot[key.decode("utf-8", "surrogateescape")] = value.decode("utf-8", "surrogateescape")
+    kept = {name: os.environ[name] for name in _SHELL_OWN if name in os.environ}
+    for name in list(os.environ):
+        if name not in _SHELL_OWN:
+            del os.environ[name]
+    for name, value in snapshot.items():
+        if name not in _SHELL_OWN:
+            os.environ[name] = value
+    os.environ.update(kept)
     return True, f".env loaded by the startup shell ({env_file})"
 
 
