@@ -221,3 +221,19 @@ The final handoff includes exact commits/spec/patch identities, requirement cove
 ## Progress
 
 - **2026-10-17 — Codex:** Preserved the chat design and parallel-development boundaries as this canonical deferred plan. Larry's acceptance-first decision overrides the earlier parallel-start recommendation. WS-22 is documentation-only and parked; no runtime work or acceptance is claimed.
+
+
+## 2026-10-17 — Consolidated roadmap dependency reconciliation
+
+Larry added the consolidated enhancement intake to ROADMAP.md. Item 7 maps to
+this existing WS-22 plan; it does not start implementation. WS-24 is the proposed
+shared durable-task foundation and must be reconciled with this plan’s lifecycle,
+lease, attempt, cancellation and recovery requirements before either implements
+shared state. Reuse one authoritative task record and existing run/result/outbox
+identities; evidence/specification records may extend it, not compete with it.
+WS-23’s verification role is read-only and cannot repair code, weaken tests,
+waive criteria or approve release. Roadmap intake item 8 applies to every increment.
+All original R/AT requirements and the acceptance-first activation prerequisite
+remain intact. Fresh-model handoff must retain uncertainty, provenance, authority
+and evidence invalidation on changed inputs. No schema, migration, tool access,
+model route, activation or release is chosen by this intake.

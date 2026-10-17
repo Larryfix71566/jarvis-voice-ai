@@ -74,6 +74,89 @@ Sources: [merged campaign receipt](docs/acceptance/command-console/receipts/acce
 [unmerged final receipt at exact #209 head](https://github.com/Larryfix71566/jarvis-voice-ai/blob/37b290d049fe4a79ab0830b0282401c3a3090d56/docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md),
 and the [dated reconciliation](docs/roadmap-log/2026-10-17-ws-20-codex-current-status-refresh.md).
 
+## Consolidated enhancement intake — Larry, 2026-10-17
+
+This records all eight requested additions as planning inputs, not permission to
+implement, activate, contact anyone, or release. Codex owns this documentation
+slice on `codex/roadmap-status-20261017` (PR #211); new implementation owners,
+branches and scope must be dispatched before code. Existing acceptance-first
+priority remains in force. The next plans must build on the existing host,
+SQLite, run logs, result identities and durable notification/outbox pathways.
+
+1. **Baseline and existing acceptance — existing rows, no duplicate project.**
+   Under WS-20 coordination and each current owner, record source commit,
+   installed artifact/build/hash, running backend and relevant configuration
+   separately. Inventory the actual daily report's mail, calendar, reminders
+   and generated-summary behavior before defining gaps. Larry reports mail in
+   the daily report as existing: preserve it and validate its actual deployed
+   path; source-only P1 status does not establish the whole report's behavior.
+   Correct stale documentation. Resolve known WS-17 Recents/reuse, WS-13
+   preflight and host OCR verification blockers under their owners. Preserve
+   accepted evidence; unavailable hardware, skips and unresolved prerequisites
+   stay blocked or untested. **Pass condition:** each applicable requirement
+   has tested-build evidence or an explicit blocker; implementation, automated
+   verification, deployment and live acceptance remain separate.
+2. **Acceptance Verifier — [WS-23](#ws-23).** Extend Systems with a bounded
+   verification role, starting with a repeatable checklist using existing tools.
+   Any new automated profile follows current acceptance; no new general reviewer.
+3. **Durable task ownership and restart recovery — [WS-24](#ws-24).** Highest-value
+   new foundation. Reconcile existing task/run/job identities before choosing
+   the authoritative task record; do not build a competing scheduler or store.
+4. **Commitment review — [WS-25](#ws-25).** Extend Scheduler and Librarian using
+   WS-24; interpretation belongs to models, authority and durable timing to host code.
+5. **Interactive Mail Reader — existing [WS-13](#ws-13) P5.** Preserve existing
+   daily-report mail. First probe the latest eligible deployed build for
+   interactive questions and implement only missing behavior: finding the
+   message about an appointment, identifying requested actions, and tracing a
+   report item to its supporting message. Require correct sender/thread/source
+   attribution, bounded retrieval and explicit incomplete-result disclosure.
+   Use only mail-reading tools; replies, mail mutation, calendar writes and
+   general computer control are separate scopes. Existing private-route,
+   protected-result and logging prerequisites still apply. Mail instructions
+   are data, never permission. Optional model-written brief prose remains P4,
+   separate from P5; calendar/report additions require a verified baseline gap.
+   **Acceptance:** correct message and attribution; incomplete results disclosed;
+   hostile mail cannot grant authority; private content cannot enter ordinary
+   logs or unapproved outputs; current daily reporting remains intact without
+   duplicate report items. Claude retains WS-13 and its canonical plan; this
+   intake grants no P5 claim or model-route enablement.
+6. **Relevant changes → useful follow-through — [WS-26](#ws-26).** Extend existing
+   reminders/watchers/notifications through WS-24, initially only bounded cases.
+7. **Evidence-backed investigation and handoff — existing [WS-22](#ws-22).**
+   Preserve goals, requirements, evidence, decisions, contradictions, unknowns
+   and next action; distinguish observations, inferences and unsupported claims.
+   An eligible replacement model must resume accurately without rebuilding the
+   conversation. Bind completion to verification and exact source/build identity;
+   changed inputs invalidate affected conclusions. Read-only investigation
+   never grants edit/publication authority. **Acceptance:** fresh-model resume,
+   unknown unsupported claims, stale-evidence invalidation and a verification
+   trace for every claimed requirement. Use its existing canonical plan, with
+   WS-24 as the shared lifecycle dependency, rather than creating a second plan.
+8. **Shared safeguards and rollout — apply to every increment.** Reuse task,
+   run, result and notification identities. Host software enforces permissions,
+   approval scope, privacy, ownership and budgets outside the model. Preserve
+   voice responsiveness, transcript continuity, reading focus and stable result
+   references through interruption/recovery. Select models by workload and
+   privacy eligibility; changing models cannot replace persistence or proof.
+   Before coding, specify owner, dependencies, schema reuse/change, reserved
+   migration if needed, feature gate, rollback and acceptance tests. Keep
+   operational diagnostics sufficient to investigate failures without sensitive
+   payload logging. Each rollout separately records implementation, automated
+   verification, deployment and live acceptance; none waives existing gates.
+
+**Sequence:** baseline/current acceptance → WS-24 durable recovery → WS-25
+commitments → missing WS-13 P5 capabilities and verified connector gaps → WS-26
+follow-through → WS-22 investigation/handoffs. Apply the WS-23 checklist and
+shared safeguards throughout. WS-23 automated-profile implementation remains a
+later claimed increment. New development remains parked until the existing
+acceptance priority and explicit dispatch permit it.
+
+References: [architecture](docs/ARCHITECTURE.md),
+[mail/calendar/brief canonical design](docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md),
+[evidence-workflow canonical design](docs/plans/MORTIMER_EVIDENCE_WORKFLOW_IMPLEMENTATION_PLAN.md),
+[merged acceptance receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md)
+and [pending final evidence #209](https://github.com/Larryfix71566/jarvis-voice-ai/pull/209).
+
 <details>
 <summary>Historical navigation — October 7 (superseded handoffs; retained for context)</summary>
 
@@ -744,6 +827,134 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 
 </details>
 
+
+### Proposed enhancements — parked behind current acceptance
+
+<details id="ws-23">
+<summary>WS-23 — Acceptance Verifier within Systems · Proposed</summary>
+
+**Workstream:** Extend Systems with a verification role, starting from a repeatable checklist and existing diagnostics. Reuse Council review and independent VM checks; keep live-Mac and physical evidence separate. It observes and evaluates criteria; it is not a repair agent or release authority.
+
+### Requirements and dependencies
+
+- Checklist-first adoption during current acceptance; a new automated profile waits for completed acceptance, explicit implementation dispatch and existing access/privacy prerequisites.
+- Read only admitted build identity, approved diagnostics, test outcomes and receipts; bind each observation to an explicit criterion and tested build. Return passed, failed, blocked or untested, with supporting evidence.
+- No code edits, weakened tests, waived criteria or release authorization. A successful tool call cannot establish feature success.
+
+### Acceptance checklist — future increment
+
+- [ ] Detect a seeded feature failure and return failed with the matching criterion/evidence.
+- [ ] Reject a stale receipt and a receipt for the wrong build as current proof.
+- [ ] Mark missing physical hardware blocked or untested; do not infer a pass from VM/CI success.
+- [ ] Demonstrate that verification cannot repair code, change criteria or authorize a release.
+
+- **Owner:** `codex` for roadmap intake only; implementation owner unassigned
+- **Status:** parked: proposed by Larry 2026-10-17; no implementation or activation authorized
+- **Implemented by:** Not implemented by this intake; reuse of existing components must be established in the implementation plan
+- **Remaining work / acceptance:** Existing acceptance first, then owner/branch/scope dispatch and a bounded implementation plan satisfying the requirements and unchecked cases above; shared safeguards in intake item 8 apply
+- **Model version:** not selected; choose eligible models by workload/privacy during planning
+- **Where:** documentation on `codex/roadmap-status-20261017` (PR #211); no implementation branch
+- **Plan:** This roadmap intake records requirements; a dedicated canonical implementation plan for this new row is required before its code claim
+- **Scope:** Documentation only in this intake. Future code paths, existing-state reuse, schema/migration reservations, feature gate and rollback must be reviewed before claim; no new service, tool grants or migration number reserved here
+- **Next step:** larry: finish current acceptance and dispatch implementation ownership when ready; assigned planner: map existing components and prepare the bounded design, tests and rollback before code
+- **Updated:** 10-17 (consolidated enhancement intake; unimplemented and unaccepted)
+
+</details>
+
+<details id="ws-24">
+<summary>WS-24 — Durable task ownership and restart recovery · Proposed</summary>
+
+**Workstream:** Extend existing SQLite, run logging and durable notification paths with one authoritative overall-task lifecycle. A task is distinct from its individual agent runs, attempts and retries. This is the highest-priority new foundation after current acceptance.
+
+### Requirements and dependencies
+
+- Inventory existing task/job/run/outbox records and reconcile WS-22 lifecycle requirements before selecting schema changes; one authoritative task identity, not parallel task stores.
+- Persist goal, source request, owner, completion/stopping condition, next check, dependencies, blocker, approval scope, attempts and latest evidence. Persist checkpoints and future checks rather than relying on session-local timers.
+- Exclusive claims and stale-worker fencing; duplicate-action prevention; bounded retries; explicit cancellation. On restart reconcile unfinished/in-flight actions and resume only still-authorized work. An uncertain consequential action must be reconciled before retry, not blindly replayed.
+- Deliver saved results through the existing durable notification path even without an active conversation. Preserve stable result/notification identities and delivery deduplication.
+
+### Acceptance checklist — future increment
+
+- [ ] Restart before execution: retain request, owner, dependencies and authorization; schedule one eligible attempt.
+- [ ] Restart during execution: reconcile in-flight state and prevent stale or duplicate workers from repeating a consequential action.
+- [ ] Restart after result persistence but before delivery: recover and deliver the saved result once at the user-visible level through stable-ID deduplication.
+- [ ] Cancelled tasks remain cancelled; two workers cannot execute the same attempt. Expired/revoked approval prevents resume; retry exhaustion stops explicitly.
+
+- **Owner:** `codex` for roadmap intake only; implementation owner unassigned
+- **Status:** parked: proposed by Larry 2026-10-17; no implementation or activation authorized
+- **Implemented by:** Not implemented by this intake; reuse of existing components must be established in the implementation plan
+- **Remaining work / acceptance:** Existing acceptance first, then owner/branch/scope dispatch and a bounded implementation plan satisfying the requirements and unchecked cases above; shared safeguards in intake item 8 apply
+- **Model version:** not selected; choose eligible models by workload/privacy during planning
+- **Where:** documentation on `codex/roadmap-status-20261017` (PR #211); no implementation branch
+- **Plan:** This roadmap intake records requirements; a dedicated canonical implementation plan for this new row is required before its code claim
+- **Scope:** Documentation only in this intake. Future code paths, existing-state reuse, schema/migration reservations, feature gate and rollback must be reviewed before claim; no new service, tool grants or migration number reserved here
+- **Next step:** larry: finish current acceptance and dispatch implementation ownership when ready; assigned planner: map existing components and prepare the bounded design, tests and rollback before code
+- **Updated:** 10-17 (consolidated enhancement intake; unimplemented and unaccepted)
+
+</details>
+
+<details id="ws-25">
+<summary>WS-25 — Commitment review with Scheduler and Librarian · Proposed</summary>
+
+**Workstream:** Extend the existing Scheduler and Librarian roles; no new coordinator. Interpret commitments using models, while host code owns durable state, timing and approval enforcement.
+
+### Requirements and dependencies
+
+- Depends on WS-24 durable tasks and each source’s access/privacy prerequisites.
+- Identify agreed tasks, dates, dependencies, blockers and people awaiting an outcome; link each commitment to its source evidence and authoritative task.
+- Distinguish explicit user commitments from tentative plans, assistant suggestions, third-party requests and inferred priorities. Reconcile correction, completion and cancellation across conversations.
+- Prepare useful next steps and reminders without making new commitments or autonomously sending external messages.
+
+### Acceptance checklist — future increment
+
+- [ ] Repeated discussion produces one linked commitment, not duplicate tasks/reminders.
+- [ ] A quoted email or third-party request does not become user authorization.
+- [ ] A corrected date supersedes its predecessor with provenance; cancelled/completed tasks stop generating reminders.
+
+- **Owner:** `codex` for roadmap intake only; implementation owner unassigned
+- **Status:** parked: proposed by Larry 2026-10-17; no implementation or activation authorized
+- **Implemented by:** Not implemented by this intake; reuse of existing components must be established in the implementation plan
+- **Remaining work / acceptance:** Existing acceptance first, then owner/branch/scope dispatch and a bounded implementation plan satisfying the requirements and unchecked cases above; shared safeguards in intake item 8 apply
+- **Model version:** not selected; choose eligible models by workload/privacy during planning
+- **Where:** documentation on `codex/roadmap-status-20261017` (PR #211); no implementation branch
+- **Plan:** This roadmap intake records requirements; a dedicated canonical implementation plan for this new row is required before its code claim
+- **Scope:** Documentation only in this intake. Future code paths, existing-state reuse, schema/migration reservations, feature gate and rollback must be reviewed before claim; no new service, tool grants or migration number reserved here
+- **Next step:** larry: finish current acceptance and dispatch implementation ownership when ready; assigned planner: map existing components and prepare the bounded design, tests and rollback before code
+- **Updated:** 10-17 (consolidated enhancement intake; unimplemented and unaccepted)
+
+</details>
+
+<details id="ws-26">
+<summary>WS-26 — Relevant events and useful follow-through · Proposed</summary>
+
+**Workstream:** Extend existing reminders, watchers and notifications using the durable task system. Begin with a requested build completing, a tracked deadline changing, or a blocker being resolved.
+
+### Requirements and dependencies
+
+- Depends on WS-24 plus each source’s existing access/privacy authorization; commitment-related events also reuse WS-25.
+- Feed source changes and task-state changes into the same task lifecycle. Use events where supported and bounded polling otherwise. Preserve source identity, deduplicate, and recover after downtime.
+- Add freshness/relevance criteria, quiet-time and suppression controls. Keep sensitive details out of generic notices; direct the user to an authorized protected view.
+
+### Acceptance checklist — future increment
+
+- [ ] Duplicate or reordered events produce one useful user-visible update without repeated action.
+- [ ] Reconnect/downtime recovery restores pending results without losing requests or bypassing cancellation/approval.
+- [ ] Irrelevant/stale events do not interrupt the user; quiet-time and suppression controls hold.
+- [ ] Generic notifications contain no sensitive payload and resolve only to an authorized protected result.
+
+- **Owner:** `codex` for roadmap intake only; implementation owner unassigned
+- **Status:** parked: proposed by Larry 2026-10-17; no implementation or activation authorized
+- **Implemented by:** Not implemented by this intake; reuse of existing components must be established in the implementation plan
+- **Remaining work / acceptance:** Existing acceptance first, then owner/branch/scope dispatch and a bounded implementation plan satisfying the requirements and unchecked cases above; shared safeguards in intake item 8 apply
+- **Model version:** not selected; choose eligible models by workload/privacy during planning
+- **Where:** documentation on `codex/roadmap-status-20261017` (PR #211); no implementation branch
+- **Plan:** This roadmap intake records requirements; a dedicated canonical implementation plan for this new row is required before its code claim
+- **Scope:** Documentation only in this intake. Future code paths, existing-state reuse, schema/migration reservations, feature gate and rollback must be reviewed before claim; no new service, tool grants or migration number reserved here
+- **Next step:** larry: finish current acceptance and dispatch implementation ownership when ready; assigned planner: map existing components and prepare the bounded design, tests and rollback before code
+- **Updated:** 10-17 (consolidated enhancement intake; unimplemented and unaccepted)
+
+</details>
+
 ### Completed: accepted product work and closed documentation reviews
 
 Accepted product workstreams and closed documentation reviews are listed below; implementation milestones also appear in §6.
@@ -1176,6 +1387,8 @@ Earlier completed plans: [implemented plans](docs/plans/implemented/) and
 
 <details id="ws-22">
 <summary>WS-22 — Evidence-based investigation and development workflow · parked</summary>
+
+**Dependency reconciliation, 10-17:** Intake item 7 reuses this plan. WS-24 must supply the shared task/run/attempt lifecycle; reconcile existing §5–6 schemas and recovery rules before code so this workflow does not create competing durable task authority. WS-23 supplies verification-role boundaries; item 8 safeguards apply. Existing acceptance-first prerequisite remains unchanged.
 
 - **Owner:** `codex` for documentation only; implementation owner unassigned
 - **Status:** parked: canonical implementation plan saved at Larry's request on 2026-10-17; no implementation is authorized

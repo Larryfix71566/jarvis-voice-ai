@@ -232,3 +232,16 @@ mail preflight, external hardware and other prerequisites remain open. Detailed
 receipts and every checkbox are preserved. See the
 [status reconciliation](../roadmap-log/2026-10-17-ws-20-codex-current-status-refresh.md).
 No implementation, gate waiver, merge or deployment is included.
+
+
+### 2026-10-17 — Consolidated enhancement intake (Codex)
+
+At Larry’s request, map all eight supplied items into the shared roadmap.
+Baseline/acceptance stays with existing owners; Mail Reader stays WS-13 P5
+(separate from P4 prose); evidence/handoff stays WS-22. Add proposed, parked
+WS-23 verification within Systems, WS-24 durable tasks, WS-25 Scheduler/Librarian
+commitments and WS-26 event follow-through, with dependencies and acceptance
+checklists. Preserve daily-report behavior as a baseline inventory requirement,
+not an unsupported claim about complete deployed capability. Reconcile WS-22’s
+future lifecycle with WS-24 so it cannot become a competing task authority.
+No implementation is claimed or started; no existing acceptance box changes.
