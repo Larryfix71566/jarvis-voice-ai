@@ -576,4 +576,4 @@ The [campaign receipt](../acceptance/command-console/receipts/acceptance-campaig
 records the artifact hash, timestamps and limitations. WS-18's bounded switch
 criterion passes. This evidence does not close the separate §3.3 AirPods echo
 configurations, earbud-removal, wake/device or combined-load obligations.
-Claude remains implementation owner; no audio source or configuration changed.
+Claude remains implementation owner; no audio source or feature flag changed.

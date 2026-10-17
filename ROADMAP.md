@@ -268,6 +268,8 @@ Source: [mail/calendar/brief plan §R.12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIE
 **Acceptance campaign authorization — Larry, 2026-10-17:** Codex runs the
 existing automated and live acceptance checks on
 `codex/acceptance-campaign-20261017`; Larry supplies human/hardware actions.
+Initial evidence merged via #208 (`f363444`); final results use
+`codex/acceptance-campaign-results-20261017` under the same bounded scope.
 The source baseline is `9f9bc71c26c82c832121be118346abaa1b4f89a4` (all PRs
 merged); the installed candidate remains `575cc7b`. This bounded claim covers
 test execution, evidence receipts, this note, the existing WS-20 plan/log,
@@ -591,7 +593,7 @@ Sources: [voice-workflows plan Progress, §5 and §12](docs/plans/MORTIMER_VOICE
 <summary>WS-09 — Command Console and Atlas acceptance · Larry acceptance</summary>
 
 
-**Current evidence, 2026-10-17:** [Campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) identifies installed `575cc7b`, records the passed WS-18 switch and bounded five-turn conversation evidence, and reconciles the shared runbook to CC7a. Parent acceptance remains open; other physical/configuration/coverage cases are not inferred.
+**Current evidence, 2026-10-17:** [Campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) identifies installed `575cc7b`, records the passed WS-18 switch and bounded five-turn conversation evidence, and reconciles the shared runbook to CC7a. All twelve independent checks passed on `9f9bc71`, but the final physical-Mac suite has two repeatable Vision OCR errors and Recents/reuse live failures remain. Parent acceptance remains open; other physical/configuration/coverage cases are not inferred.
 
 ### Acceptance checklist — remaining
 
@@ -669,7 +671,7 @@ Sources: [memory plan B5/B7/B9](docs/plans/MORTIMER_MEMORY_AUTOCONSOLIDATION_PLA
 <summary>WS-11 — Adaptive interface C8 acceptance · Larry acceptance</summary>
 
 
-**Current evidence, 2026-10-17:** [Campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) identifies installed `575cc7b`, records the passed WS-18 switch and bounded five-turn conversation evidence, and reconciles the shared runbook to CC7a. Parent acceptance remains open; other physical/configuration/coverage cases are not inferred.
+**Current evidence, 2026-10-17:** [Campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) identifies installed `575cc7b`, records the passed WS-18 switch and bounded five-turn conversation evidence, and reconciles the shared runbook to CC7a. All twelve independent checks passed on `9f9bc71`, but the final physical-Mac suite has two repeatable Vision OCR errors and Recents/reuse live failures remain. Parent acceptance remains open; other physical/configuration/coverage cases are not inferred.
 
 ### Acceptance checklist — remaining
 
@@ -722,7 +724,7 @@ Source: [native-audio plan, WS-18 progress](docs/plans/MORTIMER_NATIVE_AUDIO_TRA
 - **Where:** main (PR #144, `c2f0f49`)
 - **Plan:** `docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` (progress entry 2026-09-30)
 - **Scope:** `macos/JarvisKit/Sources/JarvisKit/AudioEngineIO.swift`, `macos/JarvisKit/Sources/JarvisKitObjC/`, `macos/JarvisKit/Package.swift` (new ObjC target), `JarvisFlags.outputIOWatchEnabled` in `JarvisConfig.swift`, `AudioEngineIOTests.swift`
-- **Next step:** codex: publish Larry’s exact-build acceptance evidence; larry/acceptance owners: continue the separate echo, wake/device and combined-load checks. The existing rollback flag remains available.
+- **Next step:** codex: preserve the published exact-artifact receipt; larry/acceptance owners: continue the separate echo, wake/device and combined-load checks. The existing rollback flag remains available.
 - **Updated:** 10-17 (Larry physical acceptance; Codex evidence recording; implementation owner/scope unchanged)
 
 </details>

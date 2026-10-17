@@ -218,3 +218,14 @@ closed gates. Runtime source remains unchanged. Full host Python: 6,688 passed,
 15 skipped, five failures; four wiring failures also reproduce in the separate
 integration suite. Independent verification and remaining bounded live checks
 are recorded in the campaign receipt; no test threshold is relaxed.
+
+Final testing follow-up on `codex/acceptance-campaign-results-20261017`:
+initial evidence #208 merged as `f363444` while verification ran. All twelve
+independent checks on exact `9f9bc71` passed with unchanged source and validated
+log/profile/runner identities; both owned VMs stopped. Disabling automatic
+dotenv discovery eliminated the five configuration-contaminated host Python
+failures. The remaining 5 ms deadline case passed quietly and in both VM unit
+runs. The final host native suite passed the performance benchmark but failed
+two Vision OCR calls; both failed again in the focused retry, leaving physical
+Mac verification open. Recents/reuse and mail-preflight findings also remain.
+No runtime, test, production configuration or activation changes were made.
