@@ -358,7 +358,7 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
-- **Owner:** `codex` (active bounded operational-roadmap documentation claim); `claude` retains existing B4/plan and WS-13/17 implementation/review ownership unless Larry separately reassigns it
+- **Owner:** `codex` (bounded roadmap documentation); `claude` retains B4 and WS-13 ownership. Remaining WS-17 implementation belongs to Codex under Larry’s 10-07 assignment (CX-20); historical Claude attribution is preserved.
 - **Status:** landed foundation and documentation: B1–B4, 72-entry migration, ten-PR observation and #191 are complete. #207 reconciled and replaced closed #172/#174; #206 acceptance-first priority and #208 initial campaign evidence merged. Open #209 contains final evidence, with green CI; strict checker enforcement and remaining Phase A/B live-evidence closure stay open. This status refresh adds no product acceptance.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
 - **Remaining work / acceptance:** Review/publish final evidence #209; acceptance owners resolve and retest their remaining gates. Larry decides whether the checker becomes blocking after the warning period. #172/#174 cleanup and #173 implementation handoffs are complete, not pending work.
