@@ -197,3 +197,24 @@ plan still leaves Mac acceptance open. Published one replacement documentation
 PR before closing superseded #172/#174; keep their branches and attribution.
 Mail-preflight #205 remains a separate exact-head review, not folded into this
 change. See the [cleanup record](../roadmap-log/2026-10-17-ws-20-codex-pr-cleanup.md).
+
+
+### 2026-10-17 — Existing acceptance campaign (Codex)
+
+Larry requested execution of all existing acceptance testing and offered human
+intervention. Branch: `codex/acceptance-campaign-20261017`; frozen automated
+source: `9f9bc71c26c82c832121be118346abaa1b4f89a4`. Installed live candidate:
+`575cc7b770b621b5c8049097ef63e93618ba3016`. Test and record only; no feature
+implementation, activation, production edit or deployment. AirPods available;
+external display unavailable. Record results in the dated campaign receipt
+and existing acceptance lists without converting subset passes into parent
+sign-off. WS-22 remains parked.
+
+Progress: Larry accepted the exact WS-18 switch criterion on installed
+`575cc7b` (both directions, short/imperceptible gaps, survival and output-flow
+logs). Current weather testing finds stale Recents, incomplete voice selection and
+missing fresh-result reopening/reference behavior. Those are blockers, not
+closed gates. Runtime source remains unchanged. Full host Python: 6,688 passed,
+15 skipped, five failures; four wiring failures also reproduce in the separate
+integration suite. Independent verification and remaining bounded live checks
+are recorded in the campaign receipt; no test threshold is relaxed.

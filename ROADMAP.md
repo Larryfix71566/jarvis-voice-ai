@@ -200,6 +200,8 @@ Claude’s work or enable any runtime feature.
 
 The earlier one-row and card-operation subparts keep their recorded passes. Current live checks and future implementation gates are separate below.
 
+**Current live evidence, 2026-10-17:** installed `575cc7b` contains the merged CC7a runtime. The [acceptance campaign](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) records bounded conversation/arrival passes but fails UI2-24 (stale Recents omits Atlanta; voice “open result number one” shows Atlanta but asks which result instead of completing selection) and UI2-25 (fresh weather repeat neither reopens nor adds the reference line). Results are not lost; direct card opening works. Keep dependent closure open. Historical deployment/next-step text below describes the October 11 handoff; the October 13 deployment is verified in this current receipt. Next: codex diagnoses these current failures in an explicitly scoped repair slice, then cross-review and Larry’s normal release/retest. No repair is made by this evidence-only campaign.
+
 - [ ] **Larry · current five-turn conversation:** On the identified deployed build, both speakers' full text remains ordered, including an answer >160 characters. Ordinary speech creates no result/tab; reading a result keeps focus while the thread updates; protected-content rules hold. This is release-readiness “UI2-22 — conversation thread.”
 - [ ] **Larry · current arrival-routing recheck:** Weather just asked for from Conversation opens; weather requested while reading another result shows New without jumping; a late background result stays a card. A web result with the supporting display open leaves conversation on main and appears on that display. This is the changed CC7a.2b part of release-readiness “UI2-23 — inline cards.”
 - [ ] **Codex / cross-reviewer / Larry · CC7a.3 implementation prerequisite:** PR #173 merged as `bd18033`; corrective #197 merged as `51dcdee` (source `065d500`). Separate exact-source Claude static review and both recorded offline comparisons passed; #198 is merged, with deployment/live acceptance still open. Preserve UUID targets, open/pinned/Output history, numbered pinned-first inventory, unread/updated markers and truthful ambiguity/stale-target resolution; the WS-21 merge dependency is already satisfied.
@@ -261,6 +263,20 @@ Source: [mail/calendar/brief plan §R.12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIE
 
 <details id="ws-20">
 <summary>WS-20 — Roadmap joint working: catch-up and drift prevention · Claude + Codex</summary>
+
+
+**Acceptance campaign authorization — Larry, 2026-10-17:** Codex runs the
+existing automated and live acceptance checks on
+`codex/acceptance-campaign-20261017`; Larry supplies human/hardware actions.
+The source baseline is `9f9bc71c26c82c832121be118346abaa1b4f89a4` (all PRs
+merged); the installed candidate remains `575cc7b`. This bounded claim covers
+test execution, evidence receipts, this note, the existing WS-20 plan/log,
+the reconciled shared acceptance runbook, current evidence in Codex-owned WS-17 and Larry-owned WS-09/11,
+and Larry’s observed WS-18 acceptance record. Preserve implementation owners;
+failures are findings, not authority to change their code. AirPods are
+available; external-display cases remain untested. No new development,
+activation or deployment is authorized. Codex records exact outcomes before
+closing any matching subcheck; parent gates remain open until fully evidenced.
 
 **Bounded documentation authorization — Larry, 2026-10-17:** Codex owns this
 acceptance-first documentation/triage slice on `codex/acceptance-first-20261017`:
@@ -376,29 +392,7 @@ Sources: [model-use plan §§11, 14–15](docs/plans/MORTIMER_MODEL_USE_ENHANCEM
 
 </details>
 
-<details id="ws-18">
-<summary>WS-18 — Native audio: survive an output switch during speech · Claude</summary>
 
-### Acceptance checklist — remaining
-
-- [ ] **Larry · live AirPods switch:** On a build containing #144 or later, switch AirPods → Mac speaker and Mac speaker → AirPods while Mortimer is mid-answer. In both directions the app stays alive, any voice gap is short, and the log shows `audio output flowing` after each rebuild. Record build, date and both outcomes. Requires AirPods; the previously deferred check is not assumed passed.
-
-Source: [native-audio plan, WS-18 progress](docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md). The documented rollback flag is available; it is not an additional mandated live test.
-
-**Workstream:** Larry, 09-30: Mortimer crashed at 18:09:08 after switching from AirPods to the Mac speaker mid-answer. Log: the engine rebuilt (`audio engine rebuilt after configuration change`), Voice Processing then reported `failed to run downlink DSP (state fault)`, and `AVAudioPlayerNode.play()` raised `player did not see an IO cycle` five seconds later (uncaught Objective-C exception, SIGABRT).
-
-- **Owner:** `claude`
-- **Status:** landed in PR #144 (`c2f0f49`) and deployed in `7c4637e` on 10-02; physical acceptance open (Larry deferred the AirPods check, 10-02)
-- **Implemented by:** Claude (Cowork)
-- **Remaining work / acceptance:** Larry switches AirPods to Mac speaker and back while Mortimer is mid-answer, both directions: the app stays up, with at most a short gap in his voice; the log shows `audio output flowing` after each rebuild.
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** main (PR #144, `c2f0f49`)
-- **Plan:** `docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` (progress entry 2026-09-30)
-- **Scope:** `macos/JarvisKit/Sources/JarvisKit/AudioEngineIO.swift`, `macos/JarvisKit/Sources/JarvisKitObjC/`, `macos/JarvisKit/Package.swift` (new ObjC target), `JarvisFlags.outputIOWatchEnabled` in `JarvisConfig.swift`, `AudioEngineIOTests.swift`
-- **Next step:** larry: when convenient, switch AirPods to the Mac speaker and back while Mortimer is mid-answer; the app stays up and the log shows `audio output flowing`. Rollback without a rebuild: `JARVIS_AUDIO_OUTPUT_WATCH=false`; the Objective-C `play()` catch stays.
-- **Updated:** 10-02
-
-</details>
 
 <details id="ws-01">
 <summary>WS-01 — Reliability, privacy and memory gaps · Codex</summary>
@@ -596,6 +590,9 @@ Sources: [voice-workflows plan Progress, §5 and §12](docs/plans/MORTIMER_VOICE
 <details id="ws-09">
 <summary>WS-09 — Command Console and Atlas acceptance · Larry acceptance</summary>
 
+
+**Current evidence, 2026-10-17:** [Campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) identifies installed `575cc7b`, records the passed WS-18 switch and bounded five-turn conversation evidence, and reconciles the shared runbook to CC7a. Parent acceptance remains open; other physical/configuration/coverage cases are not inferred.
+
 ### Acceptance checklist — remaining
 
 Reuse valid shared receipts with WS-11 and preserve recorded orb, one-row and partial card/display checks. Older documents reuse some UI2 numbers; the linked requirement title determines the check.
@@ -671,6 +668,9 @@ Sources: [memory plan B5/B7/B9](docs/plans/MORTIMER_MEMORY_AUTOCONSOLIDATION_PLA
 <details id="ws-11">
 <summary>WS-11 — Adaptive interface C8 acceptance · Larry acceptance</summary>
 
+
+**Current evidence, 2026-10-17:** [Campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) identifies installed `575cc7b`, records the passed WS-18 switch and bounded five-turn conversation evidence, and reconciles the shared runbook to CC7a. Parent acceptance remains open; other physical/configuration/coverage cases are not inferred.
+
 ### Acceptance checklist — remaining
 
 WS-08's orb sign-off and other explicitly recorded partial checks remain closed. Shared WS-09/17/18 receipts may satisfy the same underlying requirement without duplicate runs.
@@ -702,6 +702,30 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 ### Completed: accepted product work and closed documentation reviews
 
 Accepted product workstreams and closed documentation reviews are listed below; implementation milestones also appear in §6.
+
+<details id="ws-18">
+<summary>WS-18 — Native audio: survive an output switch during speech · Claude</summary>
+
+### Acceptance checklist — completed
+
+- [x] **Larry · live AirPods switch:** On a build containing #144 or later, switch AirPods → Mac speaker and Mac speaker → AirPods while Mortimer is mid-answer. In both directions the app stays alive, any voice gap is short, and the log shows `audio output flowing` after each rebuild. Record build, date and both outcomes. Passed 2026-10-17 on installed `575cc7b`: Larry confirmed both directions, continued connection and no noticeable silence or only brief gaps; Codex verified PID survival and output-flow diagnostics. [Receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md).
+
+Source: [native-audio plan, WS-18 progress](docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md). The documented rollback flag is available; it is not an additional mandated live test.
+
+**Workstream:** Larry, 09-30: Mortimer crashed at 18:09:08 after switching from AirPods to the Mac speaker mid-answer. Log: the engine rebuilt (`audio engine rebuilt after configuration change`), Voice Processing then reported `failed to run downlink DSP (state fault)`, and `AVAudioPlayerNode.play()` raised `player did not see an IO cycle` five seconds later (uncaught Objective-C exception, SIGABRT).
+
+- **Owner:** `claude`
+- **Status:** accepted 10-17 for the WS-18 mid-speech output-switch gate on installed `575cc7b`; implementation landed via PR #144 (`c2f0f49`). Separate echo/wake/device and broader audio acceptance remain under their original gates.
+- **Implemented by:** Claude (Cowork)
+- **Remaining work / acceptance:** None for this bounded output-switch criterion. Preserve the separate native-audio and WS-11 requirements; this is not blanket audio acceptance.
+- **Model version:** not recorded; do not infer from system name.
+- **Where:** main (PR #144, `c2f0f49`)
+- **Plan:** `docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` (progress entry 2026-09-30)
+- **Scope:** `macos/JarvisKit/Sources/JarvisKit/AudioEngineIO.swift`, `macos/JarvisKit/Sources/JarvisKitObjC/`, `macos/JarvisKit/Package.swift` (new ObjC target), `JarvisFlags.outputIOWatchEnabled` in `JarvisConfig.swift`, `AudioEngineIOTests.swift`
+- **Next step:** codex: publish Larry’s exact-build acceptance evidence; larry/acceptance owners: continue the separate echo, wake/device and combined-load checks. The existing rollback flag remains available.
+- **Updated:** 10-17 (Larry physical acceptance; Codex evidence recording; implementation owner/scope unchanged)
+
+</details>
 
 <details id="ws-12">
 <summary>WS-12 — CI upkeep before the Ubuntu 26 runner switch · Claude (accepted 10-02)</summary>
