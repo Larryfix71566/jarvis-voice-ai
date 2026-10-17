@@ -27,9 +27,9 @@ provider, credential, activation, merge, or deployment authority.
 
 **PR cleanup, 2026-10-17:** Larry requested review and cleanup of the open
 PR backlog. Codex reconciles #172/#174 in `codex/pr-backlog-cleanup-20261017`:
-retain current roadmap facts and every acceptance gate, preserve Claude's
-missing historical logs and WS-21 plan correction, and close the old PRs as
-superseded after the replacement is published. Their branches are retained.
+retain current roadmap facts and every acceptance gate and preserve Claude's
+missing historical logs and WS-21 plan correction in replacement PR #207.
+#172/#174 were closed as superseded on 10-17; their branches are retained.
 #205 remains a separate Claude-owned mail-preflight review; no deployment or
 acceptance is implied by PR cleanup. See the
 [cleanup record](docs/roadmap-log/2026-10-17-ws-20-codex-pr-cleanup.md).

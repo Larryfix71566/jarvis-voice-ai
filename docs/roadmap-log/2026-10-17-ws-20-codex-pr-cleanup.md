@@ -2,7 +2,7 @@
 date: 2026-10-17
 system: codex
 rows: [WS-20, WS-21]
-prs: [172, 174, 205, 206]
+prs: [172, 174, 205, 206, 207]
 ---
 
 # Review and cleanup of the open PR backlog
@@ -66,3 +66,14 @@ requests corrections with inline references. GitHub event is COMMENT, not a
 formal REQUEST_CHANGES, because the connected account authors the PR. The
 specialized Bugbot runtime was unavailable; an independent subagent review
 was used and both findings were separately reproduced. No code was modified.
+
+
+## Cleanup action completed
+
+Replacement [PR #207](https://github.com/Larryfix71566/jarvis-voice-ai/pull/207)
+was published before the closures. Immediately before closing, GitHub confirmed
+#172 and #174 still matched the reviewed heads above. Both were closed as
+superseded on 2026-10-17; neither branch was deleted. #207 retains the unique
+content for review/merge. #205 remains open with the recorded findings.
+No code PR was merged or deployed. All pre-existing checkboxes and WS-22's hold
+remain unchanged.
