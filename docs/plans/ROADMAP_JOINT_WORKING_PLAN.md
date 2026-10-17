@@ -218,3 +218,17 @@ closed gates. Runtime source remains unchanged. Full host Python: 6,688 passed,
 15 skipped, five failures; four wiring failures also reproduce in the separate
 integration suite. Independent verification and remaining bounded live checks
 are recorded in the campaign receipt; no test threshold is relaxed.
+
+
+### 2026-10-17 — Current status / right-pane refresh (Codex)
+
+Larry requested updated roadmap statuses. Documentation branch
+`codex/roadmap-status-20261017` starts from `f363444` and reconciles the shared
+summary and Codex WS-17/20 handoffs. #204/#205/#207/#208 are merged; #209 final
+evidence and #210 Tart cleanup remain open. Preserve the successful `575cc7b`
+deployment receipt and separate current checkout/dirty-artifact provenance.
+WS-18's bounded gate is accepted; Recents/reuse, physical-Mac OCR verification,
+mail preflight, external hardware and other prerequisites remain open. Detailed
+receipts and every checkbox are preserved. See the
+[status reconciliation](../roadmap-log/2026-10-17-ws-20-codex-current-status-refresh.md).
+No implementation, gate waiver, merge or deployment is included.
