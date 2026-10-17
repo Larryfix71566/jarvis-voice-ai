@@ -233,23 +233,26 @@ def test_manifest_declares_exactly_the_five_names_as_optional():
     assert entry["args"] == ["-m", "mcp_servers.mcp_mail.server"]
 
 
-def _preflight(extra_env: dict) -> "subprocess.CompletedProcess":
+def _preflight(extra_env: dict, tmp_path, dotenv_text: str = "") -> "subprocess.CompletedProcess":
     import subprocess
     import sys
 
+    env_file = tmp_path / "startup.env"
+    env_file.write_text(dotenv_text)
     env = dict(os.environ)
     env.pop(registry_module.ENV_SCOPING_ENABLED_ENV, None)
     env.update({name: f"SENTINEL-{name}" for name in MAIL_NAMES})
     env["JARVIS_VAULT_ENABLED"] = "false"
     env.update(extra_env)
-    return subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "check_mail_env.py")],
+    return subprocess.run([sys.executable, str(REPO_ROOT / "scripts" / "check_mail_env.py"),
+                           "--env-file", str(env_file)],
                           env=env, capture_output=True, text=True, timeout=60, cwd=str(REPO_ROOT))
 
 
-def test_preflight_matrix_shows_mail_names_reach_only_mcp_mail(monkeypatch):
+def test_preflight_matrix_shows_mail_names_reach_only_mcp_mail(monkeypatch, tmp_path):
     """M1-1 (Codex review of #204, item 5): one row per name, one column per
     configured server, plus the effective scoping flag; never a value."""
-    proc = _preflight({})
+    proc = _preflight({}, tmp_path)
     assert proc.returncode == 0, proc.stderr
     assert "SENTINEL-" not in proc.stdout + proc.stderr
     out = proc.stdout
@@ -269,8 +272,8 @@ def test_preflight_matrix_shows_mail_names_reach_only_mcp_mail(monkeypatch):
     assert "would be read" in out
 
 
-def test_preflight_reports_disabled_scoping_as_a_failure():
-    proc = _preflight({registry_module.ENV_SCOPING_ENABLED_ENV: "false"})
+def test_preflight_reports_disabled_scoping_as_a_failure(tmp_path):
+    proc = _preflight({registry_module.ENV_SCOPING_ENABLED_ENV: "false"}, tmp_path)
     assert proc.returncode == 0
     assert "SENTINEL-" not in proc.stdout + proc.stderr
     assert "JARVIS_ENV_SCOPING_ENABLED (effective): OFF" in proc.stdout
@@ -280,15 +283,20 @@ def test_preflight_reports_disabled_scoping_as_a_failure():
     assert set(row.split()[2:]) == {"yes"}
 
 
-def _preflight_main(monkeypatch, tmp_path, argv, *, dotenv_text=None, env=None):
+def _preflight_main(monkeypatch, tmp_path, argv, *, dotenv_text="", env=None, config_text=None):
     """Run the preflight in-process against a temporary repo root, so its
-    .env handling is tested without touching the real one."""
+    .env handling is tested without touching the real one. `dotenv_text=None`
+    means no .env at all. The process environment is restored afterwards,
+    because the preflight applies the loaded .env to os.environ."""
     import importlib.util
     import shutil
 
     root = tmp_path / "repo"
     (root / "config").mkdir(parents=True)
-    shutil.copy(REPO_ROOT / "config" / "mcp_servers.yaml", root / "config" / "mcp_servers.yaml")
+    if config_text is None:
+        shutil.copy(REPO_ROOT / "config" / "mcp_servers.yaml", root / "config" / "mcp_servers.yaml")
+    else:
+        (root / "config" / "mcp_servers.yaml").write_text(config_text)
     if dotenv_text is not None:
         (root / ".env").write_text(dotenv_text)
     spec = importlib.util.spec_from_file_location("check_mail_env_under_test",
@@ -302,7 +310,12 @@ def _preflight_main(monkeypatch, tmp_path, argv, *, dotenv_text=None, env=None):
         monkeypatch.delenv(name, raising=False)
     for key, value in (env or {}).items():
         monkeypatch.setenv(key, value)
-    module.main(argv)
+    saved = dict(os.environ)
+    try:
+        module.main(argv)
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
 
 
 def test_preflight_with_no_mail_name_set_is_not_a_pass(monkeypatch, tmp_path, capsys):
@@ -331,6 +344,64 @@ def test_preflight_applies_dotenv_like_the_run_scripts(monkeypatch, tmp_path, ca
                     dotenv_text="# comment\nJARVIS_ENV_SCOPING_ENABLED=false\n",
                     env={registry_module.ENV_SCOPING_ENABLED_ENV: "true"})
     out = capsys.readouterr().out
-    assert "environment: .env applied" in out
+    assert "environment: .env loaded by the startup shell" in out
     assert "JARVIS_ENV_SCOPING_ENABLED (effective): OFF" in out
     assert "M1-1: FAIL - env scoping is off" in out
+
+
+def _startup_shell_value(env_file, name: str) -> str:
+    """What scripts/run_bot.sh's own loading gives the bot for `name`."""
+    import subprocess
+
+    proc = subprocess.run(["bash", "-c", f'set -e; set -a; . "$1"; set +a; printf %s "${{{name}-}}"',
+                           "startup", str(env_file)], capture_output=True, text=True,
+                          timeout=30, env={k: v for k, v in os.environ.items() if k != name})
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout
+
+
+@pytest.mark.parametrize("line", [
+    "JARVIS_ENV_SCOPING_ENABLED=false # intentionally disabled",    # Codex's reproduction
+    "export JARVIS_ENV_SCOPING_ENABLED='false'",
+    'JARVIS_ENV_SCOPING_ENABLED="false"   # quoted, then a comment',
+    "OFF_VALUE=false\nJARVIS_ENV_SCOPING_ENABLED=$OFF_VALUE",
+])
+def test_preflight_reads_dotenv_exactly_as_the_startup_shell(monkeypatch, tmp_path, capsys, line):
+    """Codex review of #205, item 1: the effective flag must be the startup
+    shell's, comments, quoting, export and expansion included."""
+    env_file = tmp_path / "check.env"
+    env_file.write_text(line + "\n")
+    assert _startup_shell_value(env_file, registry_module.ENV_SCOPING_ENABLED_ENV) == "false"
+    _preflight_main(monkeypatch, tmp_path, ["--sentinel"], dotenv_text=line + "\n")
+    out = capsys.readouterr().out
+    assert "JARVIS_ENV_SCOPING_ENABLED (effective): OFF" in out
+    assert "M1-1: FAIL - env scoping is off" in out
+    assert "M1-1: PASS" not in out
+
+
+@pytest.mark.parametrize("dotenv_text,reason", [
+    (None, ".env not found"),
+    ("JARVIS_ENV_SCOPING_ENABLED=on value-with-space-is-a-command\n", "the startup shell fails on this .env"),
+    ("JARVIS_ENV_SCOPING_ENABLED='unterminated\n", "the startup shell fails on this .env"),
+])
+def test_preflight_is_not_tested_when_the_startup_env_cannot_be_established(
+        monkeypatch, tmp_path, capsys, dotenv_text, reason):
+    _preflight_main(monkeypatch, tmp_path, ["--sentinel"], dotenv_text=dotenv_text)
+    out = capsys.readouterr().out
+    assert "M1-1: NOT TESTED" in out and reason in out
+    assert "JARVIS_ENV_SCOPING_ENABLED (effective): unknown" in out
+    assert "M1-1: PASS" not in out
+
+
+def test_preflight_fails_when_mcp_mail_is_not_configured(monkeypatch, tmp_path, capsys):
+    """Codex review of #205, item 2: no mail server, no PASS."""
+    import yaml
+
+    data = yaml.safe_load((REPO_ROOT / "config" / "mcp_servers.yaml").read_text())
+    servers = data if isinstance(data, list) else data["servers"]
+    kept = [s for s in servers if s["name"] != "mcp-mail"]
+    config = yaml.safe_dump(kept if isinstance(data, list) else {**data, "servers": kept})
+    _preflight_main(monkeypatch, tmp_path, ["--sentinel"], config_text=config)
+    out = capsys.readouterr().out
+    assert "M1-1: FAIL - mcp-mail is not in config/mcp_servers.yaml" in out
+    assert "M1-1: PASS" not in out

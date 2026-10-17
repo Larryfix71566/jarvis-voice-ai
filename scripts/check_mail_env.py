@@ -7,12 +7,19 @@ child by the registry's K2 env scoping (`build_child_env`), plus the
 effective JARVIS_ENV_SCOPING_ENABLED. Values are never printed: a name is
 reported as `set` (non-empty in this process) or not.
 
-The environment is built the way the bot's run scripts build it: the repo's
-.env is applied over the shell (`set -a; . ./.env`), then the vault fills any
-name that is still missing or empty (`jarvis.vault.inject_env`). So the
-effective scoping flag here is the one the bot gets.
+The environment is built the way the bot's startup builds it, by asking the
+same shell to do it: `bash -c 'set -e; set -a; . ./.env; set +a'`, exactly as
+scripts/run_bot.sh loads .env (comments, quoting, `export`, expansion and all),
+then the vault fills any name that is still missing or empty
+(`jarvis.vault.inject_env`). So the effective scoping flag here is the one the
+bot gets. If that environment cannot be established (no .env, which the bot
+cannot start without either; a .env the startup shell fails on; no bash), the
+check says NOT TESTED. `--env-file PATH` names the .env to load, for running
+this script from a worktree against production's file.
 
-M1-1 passes only when at least one mail name is set, every set name reaches
+M1-1 needs `mcp-mail` in config/mcp_servers.yaml (a missing entry is a FAIL).
+
+It passes only when at least one mail name is set, every set name reaches
 `mcp-mail`, none reaches any other server, and scoping is on. With no mail
 name set the check has nothing to observe and says NOT TESTED rather than
 pass. `--sentinel` sets each mail name to a fixed placeholder in this process
@@ -46,24 +53,53 @@ def _servers() -> list[dict]:
         data.get("servers") or data.get("mcp_servers") or [])
 
 
-def _apply_dotenv() -> bool:
-    """Mirror `set -a; . ./.env`: each KEY=VALUE line overrides the shell."""
-    from jarvis.config import _dotenv_values
+# Variables the shell itself sets while running the loader; not configuration.
+_SHELL_OWN = {"_", "SHLVL", "PWD", "OLDPWD"}
 
-    path = ROOT / ".env"
-    if not path.exists():
-        return False
-    for key, value in _dotenv_values(path).items():
-        key = key.removeprefix("export ").strip()
-        if key:
-            os.environ[key] = value
-    return True
+
+def _startup_env(env_file: Path) -> tuple[bool, str]:
+    """Apply `env_file` exactly as scripts/run_bot.sh does, by running the same
+    shell commands and reading back the resulting environment (NUL-separated,
+    never printed). Returns (established, note)."""
+    import shutil
+    import subprocess
+
+    if not env_file.exists():
+        return False, f".env not found at {env_file} (the bot cannot start without one)"
+    bash = shutil.which("bash")
+    if bash is None:
+        return False, "bash not found, so the startup shell's reading of .env cannot be reproduced"
+    # The environment is read back by this same interpreter, not `env -0`,
+    # whose -0 flag is not portable across the BSD and GNU versions.
+    dump = ("import os, sys; sys.stdout.buffer.write(b'\\0'.join("
+            "k + b'=' + v for k, v in os.environb.items()))")
+    script = 'set -e; set -a; . "$1"; set +a; exec "$2" -c "$3"'
+    try:
+        proc = subprocess.run([bash, "-c", script, "preflight", str(env_file), sys.executable, dump],
+                              cwd=str(env_file.parent), env=dict(os.environ),
+                              capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"the startup shell could not load .env ({type(exc).__name__})"
+    if proc.returncode != 0:
+        return False, (f"the startup shell fails on this .env (exit {proc.returncode}); "
+                       "the bot would not start with it")
+    for item in proc.stdout.split(b"\0"):
+        key, sep, value = item.partition(b"=")
+        if not sep or not key:
+            continue
+        name = key.decode("utf-8", "surrogateescape")
+        if name in _SHELL_OWN:
+            continue
+        os.environ[name] = value.decode("utf-8", "surrogateescape")
+    return True, f".env loaded by the startup shell ({env_file})"
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--sentinel", action="store_true",
                     help="set each mail name to a placeholder in this process to test forwarding")
+    ap.add_argument("--env-file", type=Path, default=None,
+                    help="the .env to load the way the bot's startup does (default: this checkout's)")
     args = ap.parse_args(argv)
 
     # The registry warns about OTHER servers' missing requires_env names when
@@ -79,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _report(args: argparse.Namespace) -> int:
-    dotenv = _apply_dotenv()
+    established, env_note = _startup_env(args.env_file or (ROOT / ".env"))
     vault_note = "vault module unavailable"
     try:
         from jarvis.vault import inject_env
@@ -99,9 +135,10 @@ def _report(args: argparse.Namespace) -> int:
 
     servers = _servers()
     scoping = env_scoping_enabled()
-    print(f"environment: .env {'applied' if dotenv else 'absent'}, {vault_note}"
+    print(f"environment: {env_note}; {vault_note}"
           + (", SENTINEL placeholders for the four mail names" if args.sentinel else ""))
-    print(f"JARVIS_ENV_SCOPING_ENABLED (effective): {'on' if scoping else 'OFF'}")
+    print("JARVIS_ENV_SCOPING_ENABLED (effective): "
+          + (("on" if scoping else "OFF") if established else "unknown (startup environment not established)"))
     print()
 
     children = {s["name"]: build_child_env(s) for s in servers}
@@ -126,7 +163,12 @@ def _report(args: argparse.Namespace) -> int:
             missing.append(name)
         print(f"{name:{width}s} {'yes' if is_set else 'no':5s} " + " ".join(cells))
     print()
-    if not scoping:
+    if not established:
+        print("M1-1: NOT TESTED - the bot's startup environment could not be established: "
+              + env_note + ".")
+    elif SERVER not in children:
+        print(f"M1-1: FAIL - {SERVER} is not in config/mcp_servers.yaml, so no mail name can reach it.")
+    elif not scoping:
         print("M1-1: FAIL - env scoping is off; every child inherits the whole environment.")
     elif offenders:
         print("M1-1: FAIL - forwarded beyond mcp-mail: "
