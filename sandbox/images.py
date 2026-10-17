@@ -13,6 +13,7 @@ from sandbox.artifacts import Candidate, SandboxError
 from sandbox.control import snapshot
 from sandbox.durable import atomic_bytes, atomic_json
 from sandbox.profiles import Profile
+from sandbox.prune import reclaim, require_headroom
 
 IMAGE_ID = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -98,6 +99,10 @@ class Images:
             raise SandboxError("Invalid allocated task identity")
         if parent_task is not None:
             self.controller.read(parent_task)
+        # Every clone is a chance to reclaim finished ones; a full volume
+        # fails here, before a half-written task record exists.
+        reclaim(self.controller)
+        require_headroom(self.controller)
         directory = self.controller.home / "tasks" / task
         inputs = directory / "input"
         directory.mkdir(parents=True, mode=0o700)

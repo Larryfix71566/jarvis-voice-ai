@@ -236,6 +236,29 @@ verification VMs, prevents late starts, and stops additional publication calls.
 An already in-flight remote request can finish; its returned object is recorded
 for recovery. Deleting a disposable task retains its review evidence.
 
+## Disk reclamation
+
+Every development and verification task is a full Tart clone (a 140 GB
+sparse `disk.img` under `tart/vms/`). Nothing is lost by deleting a finished
+clone: task records, edit journals, verification receipts and check logs stay
+on the host under `tasks/`, and `Verifier.receipt` never consults a VM.
+`sandbox/prune.py` holds the rules (grace period, verification children,
+session state, idle and low-disk thresholds) and runs from three places:
+
+- `Images.create` reclaims finished clones before every new clone and refuses
+  to clone when the sandbox volume has less than `MIN_FREE_BYTES` left.
+- `Verifier.verify` deletes its verification clone once it has stopped, and
+  `Session.submit` deletes the development clone once publication succeeded.
+- `com.mortimer.sandbox-prune` (`scripts/launchd_gen.py`, 04:20 daily) catches
+  what a host restart, an abandoned session or a direct Images/Verifier
+  driver left behind. Install it alone with
+  `python3 scripts/launchd_gen.py --install --only sandbox-prune`.
+
+Templates (`mortimer-base`, `mortimer-image-*`) are never candidates. Run
+`python3 -m sandbox.prune --dry-run` to see what a pass would delete; each
+real pass that deletes or fails appends one JSON line to `prune.log` in the
+sandbox home.
+
 ## Work still required for the complete development environment
 
 The complete scope is tracked in [IMPLEMENTATION.md](IMPLEMENTATION.md). It

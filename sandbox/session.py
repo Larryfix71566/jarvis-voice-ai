@@ -14,6 +14,7 @@ from contextvars import ContextVar
 from sandbox.artifacts import SandboxError, source_path_allowed
 from sandbox.durable import atomic_json
 from sandbox.files import WorkspaceFiles
+from sandbox.prune import discard
 
 SESSION_ID = re.compile(r"[0-9a-f]{32}\Z")
 SKILL_WORKSPACE_KIND = re.compile(r"skill-authoring-[a-z0-9]+(?:-[a-z0-9]+)*\Z")
@@ -280,6 +281,7 @@ class Session:
                 state.update(phase="published", publication=result)
                 self._save(state)
                 self.controller.stop(state["task"])
+                discard(self.controller, state["task"])  # resume() refuses a published session
                 return result
             except Exception:
                 state["phase"] = "publication_pending"

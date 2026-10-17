@@ -45,8 +45,14 @@ SERVICES = {
 # It needs the project's dependencies, so it runs the venv, and it sources
 # .env the way scripts/run_admin.sh does so it sees the same
 # OPENAI_BASE_URL/OPENAI_MODEL as the sidecar.
+#
+# sandbox-prune — 2026-10-17: deletes finished sandbox VM clones (see
+# sandbox/prune.py for the rules). The in-process hooks handle the common
+# paths; this catches what a host restart or an abandoned session leaves
+# behind. Stdlib-only, so the system python is correct here as for backup.
 CALENDAR_JOBS = {
     "backup": (["/usr/bin/python3", "scripts/backup_db.py"], 3, 15),
+    "sandbox-prune": (["/usr/bin/python3", "-m", "sandbox.prune"], 4, 20),
     "status-daily": (["/bin/bash", "-c", "cd {repo} && set -a && . ./.env && set +a && exec .venv/bin/python -m jarvis.status.daily"], 6, 30),
 }
 ALL_SERVICES = (*SERVICES, *CALENDAR_JOBS)
@@ -102,19 +108,30 @@ def plist_path(svc: str, home: Path | None = None) -> Path:
     return base / "Library" / "LaunchAgents" / f"com.mortimer.{svc}.plist"
 
 
-def write_all(repo: Path, hour: int, minute: int, home: Path | None = None) -> list[Path]:
+def _selected(only: str | None) -> tuple[str, ...]:
+    if only is None:
+        return ALL_SERVICES
+    if only not in ALL_SERVICES:
+        raise ValueError(f"unknown service: {only}")
+    return (only,)
+
+
+def write_all(repo: Path, hour: int, minute: int, home: Path | None = None,
+              only: str | None = None) -> list[Path]:
     plist_path(ALL_SERVICES[0], home).parent.mkdir(parents=True, exist_ok=True)
     written = []
-    for svc in ALL_SERVICES:
+    for svc in _selected(only):
         p = plist_path(svc, home)
         p.write_text(render(svc, repo, hour, minute))
         written.append(p)
     return written
 
 
-def install(repo: Path, hour: int, minute: int) -> None:
-    write_all(repo, hour, minute)
-    for svc in ALL_SERVICES:
+def install(repo: Path, hour: int, minute: int, only: str | None = None) -> None:
+    """`only` installs one job without booting the others out and back in --
+    adding a calendar job must not restart the running bot."""
+    write_all(repo, hour, minute, only=only)
+    for svc in _selected(only):
         target = f"gui/{_uid()}/com.mortimer.{svc}"
         # bootout first: bootstrap fails if the label is already loaded, and
         # a failed bootout (not currently loaded) is expected, not an error.
@@ -144,6 +161,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="print rendered plists, write nothing")
     parser.add_argument("--hour", type=int, default=3, help="backup schedule hour (default 3)")
     parser.add_argument("--minute", type=int, default=15, help="backup schedule minute (default 15)")
+    parser.add_argument("--only", choices=ALL_SERVICES, default=None,
+                        help="write/install just this service, leaving the others untouched")
     args = parser.parse_args(argv)
 
     if args.dry_run:
@@ -158,9 +177,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{svc}: {state}")
         return 0
     if args.install:
-        install(ROOT, args.hour, args.minute)
+        install(ROOT, args.hour, args.minute, only=args.only)
         return 0
-    for p in write_all(ROOT, args.hour, args.minute):
+    for p in write_all(ROOT, args.hour, args.minute, only=args.only):
         print(f"wrote {p}")
     return 0
 
