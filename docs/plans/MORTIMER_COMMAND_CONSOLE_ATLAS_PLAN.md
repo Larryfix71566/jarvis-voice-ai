@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); code awaits this branch/scope claim on main. Earlier WS-17 CC7a implementation landed through PR #198,
+**Status:** UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -2390,6 +2390,88 @@ completes live UI2-22…25. The failed 10-10 deployment and older SCK-startup
 failure remain historical evidence; this pass does not erase them.
 
 
+**Progress, 2026-10-17 (Codex; repair slices 3.2/3.5):** Both backend observed-inventory
+resolution and native Recents accept framed references including "open result number
+one" and "the first one". A narrow grammar preserves subjects such as "Route one"
+and "One Direction". Existing UUID/revision binding and ambiguous/stale refusal stay
+unchanged. Each dispatched console wait now emits one terminal action/status INFO
+breadcrumb; duplicate acknowledgements do not duplicate it, cancellation is labeled
+without guessing its cause, and targets, arguments, summaries and choices are excluded.
+Focused validation: 85 backend tests and 14 MortimerHost Recents tests passed. These
+are bounded regression checks, not proof of live Supervisor routing or UI2-24/25
+acceptance. No prompt guidance, menu refresh, weather-context, or roadmap-view/filter
+implementation is claimed by this slice. Next: action-level routing eval baseline
+before prompt changes, then the remaining ordered repairs and roadmap capability.
+
+
+### Repair progress — 2026-10-17, measured routing and rendered Recents
+
+On the claimed WS-17 branch following `ed4107b`, the real AppKit Results menu
+retained its first content closure after the store/button changed to two cities.
+The regression failed four assertions before the fix; `.id(consoleRevision)`
+rebuilds that transient menu using the existing inventory mutation owner.
+The same test now verifies two cities, pin order and close; 35 related native
+tests pass. Larry's original button showed **one** result, which this distinct
+menu-cache reproduction does not explain. Keep that live count/routing case open.
+
+Larry authorized the bounded Haiku baseline (two invented histories, no real
+tools/specialists/memories/logs, temporary databases, max 1,024 output tokens
+per call and at most twelve calls). On pre-guidance `ed4107b`,
+`claude-haiku-4-5` called `view_set` twice instead of `result_select` for the
+numbered-result case (FAIL); repeat weather delegated to Analyst (PASS).
+Overall 1/2 with workflows/reply guard off. This does not reproduce the prior
+live no-delegation weather failure and is not native/audio acceptance.
+
+Candidate guidance explicitly asks for inventory → result_select with the
+observed revision and teaches Supervisor/Developer the guarded roadmap-read
+route. Action-level evaluators distinguish merely opening the view from actual
+selection and require real Analyst delegation for the repeat-weather case.
+The synthetic runner disables all tool/specialist execution, caps requests and
+isolates temporary state. 185 focused backend/prompt tests pass. Candidate live
+comparison requires its own bounded approval; no routing-success claim yet.
+
+The roadmap snapshot wire field is reserved in ROADMAP §3 before its reader is
+implemented. Weather-context minimization, complete native roadmap/filter/refresh/
+sharing behavior, cross-review, independent release and live acceptance remain
+open. The separately reported #210 prune race/fingerprint findings still block
+deployment; this slice does not alter that code.
+
+Broader local validation of this slice: Python unit suite 6,503 passed / 11 skipped / 13 warnings; full MortimerHost 553 executed / six skipped / zero failures, including actual private captures. No Tart/cleanup run or deployment. These are local suite results, not independent release acceptance.
+
+
+### Repair progress — 2026-10-17, candidate routing and source foundations
+
+Larry approved the bounded candidate comparison. On prompt/evaluator source
+`75694b7`, both synthetic Haiku cases passed: observed inventory then
+`result_select`, and repeat weather delegated to Analyst. Baseline `ed4107b`
+was 1/2; candidate is 2/2. This is neither the full 31-case evaluation nor
+live audio/native acceptance. No additional paid probes are authorized by
+this receipt.
+
+The weather-context safeguard follows actual successful weather calls and the
+Supervisor's response boundaries. It keeps a late result for its first relay,
+then removes delivered forecast copies from retained model context at a later
+real user turn. Transcript/TTS text and unrelated tool results remain intact;
+already-delivered assistant prose in a mixed weather turn is minimized too.
+Nine direct regression tests and 61 related tests pass. No freshness owner,
+backend TTL, privacy policy or native result identity changed.
+
+Dormant roadmap foundations parse every complete workstream card and guarded
+dated log with provenance, retaining unknown fields and reporting malformed
+sections explicitly. Eight reader tests plus 62 existing repo tests pass.
+The additive native decoder compiles; the 232 existing JarvisKit tests pass.
+The reader is not yet exposed and the native roadmap view/filter/refresh/share
+capability is not yet implemented. Source validation awaits the approved
+main-branch claim in #215; no registry guard has been relaxed.
+
+The frozen full backend run reports 6,519 passes, 11 skips and one failure:
+`test_storage_context.py::test_scope_paths_real_connections_explicit_precedence_preferences_and_legacy`
+observed an unexpected outside.db. All eleven tests in that file pass alone.
+Record the full-suite failure as unresolved; do not convert the isolated pass
+into release evidence. No production or Tart operation occurred. Next: land
+#215, strictly validate the complete source contract, then finish the native
+presentation and controls before cross-review/release/live acceptance.
+
 ### Roadmap source-contract claim — 2026-10-17
 
 Larry approved extending WS-17 to the repository-read source validator in
@@ -2403,3 +2485,141 @@ floors and external-source permissions remain intact. The reader stays on its
 legacy response shape until the corresponding validation is implemented.
 This is a bounded scope claim for the existing implementation branch, not
 feature completion, review, deployment or acceptance.
+
+
+### Roadmap source validation — 2026-10-17, claim #215 landed
+
+Claim #215 merged as `b2d1b10` with all five checks green and is integrated into
+the implementation branch. Canonical `ROADMAP.md` reads now include the reserved
+complete snapshot. Ordinary reads retain exactly their existing four fields.
+The host re-reads and reconstructs cards, provenance and every guarded log hash;
+exact JSON comparison rejects missing, extra or fabricated fields, changed files,
+wrong paths and altered dates/owners/statuses. It rejects timestamps more than
+five minutes old or more than five seconds ahead; this validates the tool reply,
+not freshness relative to GitHub main. CRLF bytes are retained for exact hashing.
+Existing privacy floors and classified envelopes are unchanged.
+
+The snapshot is bounded to 512 KiB and at most 255 dated files, preserving the
+existing 256-source-reference envelope including ROADMAP.md. Excess data refuses
+explicitly. On this branch the real source produces all 22 cards and 185 dated
+logs; two unknown lifecycle phrases remain visibly unclassified, not guessed.
+Reader/source-policy validation: 138 passed, including 22 new attestation cases.
+Native metadata decoder: three new regressions pass, including full details past
+30,000 characters, malformed logs and oversized/duplicate snapshots.
+
+The snapshot is available on the repository-read transport, but display mapping,
+native controls, filter-preserving refresh, voice parity and filtered sharing are
+still unfinished. Do not describe this as the completed roadmap-view feature.
+The unchanged-main local comparison ran under restricted socket permissions and
+had 85 failures, so it is not a valid baseline comparison for the prior isolated
+storage failure. A full candidate rerun with synthetic local socket access is
+pending. No live provider, production, Tart, merge of runtime work or deployment
+is authorized or claimed by these test receipts.
+
+
+### Final validation of this slice — 2026-10-17
+
+Draft PR #216 publishes this bounded implementation; source head `0c6e1af`.
+With synthetic local-socket access permitted, full backend units passed:
+6,543 passed, 11 skipped, 13 warnings, two subtests passed in 171.70 seconds.
+The earlier storage-isolation failure did not recur; its cause has not been
+established, and both earlier failed runs remain recorded above. MortimerHost
+compiled against the additive payload model and all 28 affected CC7a.3/response
+router tests passed. These are local regression results, not independent release
+verification, physical acceptance or authorization to deploy.
+
+Evidence SHA-256 (local synthetic test logs):
+- `/private/tmp/ws17-validated-source-unit.log`: `e960340c75671046e4c7818dd7e5c7112f6db8768407099bbb0b09cce0190281`
+- `/private/tmp/ws17-source-contract-tests.log`: `47abf29edf92949ff5a62e444c88cd421da94934ef74edf7f310609f69fb07de`
+- `/private/tmp/ws17-roadmap-decoder.log`: `1707b0e4acfb6417b8f5ca5ab1a0d7bd5e0cdd039877a8a43073a136f41db972`
+
+Next: finish the native roadmap view, typed voice/pointer filters, preserved
+refresh and filtered sharing. Keep PR #216 draft until those contracts and tests
+are complete, then obtain the required cross-review. The original one-result
+live incident and UI2-24/25 acceptance remain open. Separate #210 findings still
+preclude deployment through the current main cleanup path.
+
+
+### 2026-10-17 — Roadmap view, controls and guarded refresh (Codex)
+
+Implemented the dedicated read-only roadmap result in the existing workspace:
+complete cards, source fingerprint, explicit source issues, deterministic typed
+filters and counts, focused workstreams and read-only acceptance checklists.
+Current Owner and historical Implemented by are separate; AND/OR, replace,
+refine, clear, empty matches, Monday/local-time and rolling-seven-day evidence
+use one native projection for voice, pointer and export. Unknown values retain
+the current view. Readiness and blocker wording are conservative, with excluded
+historical/ambiguous mentions and prerequisite labels.
+
+The reserved `roadmap_control` action uses the existing request/result channel.
+Refresh reads only the guarded, host-classified ROADMAP source, with an eight-
+second source deadline; the app waits at most fifteen seconds and voice twenty.
+Source repository identity, path, session/generation and read timestamp bind the
+reply. Failed, protected, mismatched or older replies keep the prior snapshot;
+refresh and repeated reads preserve UUID, filter, expansion, pin and placement.
+Sharing freezes the filtered projection through the existing preview workflow.
+No new server, model call, Git fetch or acceptance mutation is introduced.
+
+Validation on this implementation slice: 265 focused backend tests; ten native
+roadmap tests, including the real SDK/router path and accessibility at widths
+520 and 1100. The full MortimerHost suite passed 563 tests / five skips / zero
+failures before the final negative-readiness/out-of-order guards; the ten
+roadmap cases then passed with those guards. The initial full backend suite
+reported 6,571 passes and two new fixture failures because the console flag was
+inherited disabled; fixtures now set the enabled case explicitly and test the
+kill switch separately. A final full backend rerun remains required.
+
+The initial-display route still needs one bounded integration fix. A read-only
+probe of this checkout produced 433,560 characters; the full display mapper
+worked, while the actual 20,000-character Developer event projection did not.
+Larry approved the roadmap-only observation extension; docs-only claim #217
+must merge before editing Base. Other tool/file limits and privacy/source-
+before-sink behavior remain unchanged. PR #216 remains draft. No deployment,
+physical monitor acceptance or original one-result/UI2-24/25 closure is claimed.
+
+- 2026-10-17 WS-17 filter parity follow-up: Python now accepts only ASCII digits in workstream IDs, matching the native contract. A non-ASCII digit regression is included; all 31 roadmap console tests pass. The first-arrival event extension still waits for the approved scope claim #217 to land.
+
+- 2026-10-17 WS-17 integration follow-up: earlier #216 CI revealed two pipeline-order expectations missing the new weather-context minimizer. The assertions now pin that processor before the workflow injector and preserve all other ordering; all 64 bot-wiring integration tests pass.
+
+### 2026-10-17 WS-17 complete roadmap event and final verification
+
+Approved scope claim #217 merged as `ed21d82` before the Base change; CX-22
+records coordination with WS-05. Only the ordinary canonical
+`repo_read_file(path="ROADMAP.md")` observation gets a complete snapshot
+(512 KiB snapshot / 600 KiB event maximum). The duplicate raw Markdown is
+omitted from that event. Malformed/oversize/read-failure observations produce a
+closed, content-free Roadmap unavailable display instead of partial JSON.
+Every other tool/file keeps its 20,000-character cap. Private/redacted paths,
+model history, RunLogger and source-before-sink enforcement are unchanged.
+Routed calls retain exact host-envelope validation; legacy calls retain their
+existing source semantics. The projection grants no `data_policy`, external
+sharing authority, source approval or route activation. Cross-review must
+check both paths; passing a wire-shape check is not source authorization.
+
+The actual agent-to-display regression covers legacy and classified calls;
+invalid source binding prevents continuation/publication. Other cases cover
+sensitive redaction, ordinary-file bounds, malformed/oversize snapshots and
+unchanged model history. The pre-documentation measurement carried all 22
+current cards with the snapshot unchanged in a 262,321-byte event (439,644
+characters in the original duplicated tool response).
+
+Validation: 111 focused event/source/privacy cases passed; final combined
+unit/integration/scripted-agent run passed **6,802 tests**, 15 skipped,
+13 warnings, two subtests, zero failures (239.80 seconds). Existing warnings
+include dependency deprecations and an unawaited reply-guard test coroutine;
+no failure is hidden by those warnings. Bot-wiring expectations now include
+the intended WeatherContextMinimizer position (64 passes). JarvisKit's full
+235-test run passed earlier on the same SDK source. Final full native suite
+is running; its result will be recorded below. No paid/model probe, production
+edit, deployment, live voice, hardware or acceptance sign-off was performed.
+
+Implementation is ready for exact-source cross-system review once final native
+verification is recorded. #216 remains draft. Independent release verification,
+the separate #210 cleanup blocker and Larry's deployed UI2-24/25/roadmap cases
+remain open. Preserve the original one-result store/routing incident separately
+from the fixed two-entry/stale-AppKit-menu reproduction.
+
+Final native result: **563 tests, five skipped, zero failures** in 135.871 seconds, including the final readiness/refresh guards and ten roadmap cases. Roadmap checker: zero errors/warnings; real current-document snapshot/card-count regressions pass after status updates. Required cross-system review and deployment/live acceptance remain open.
+
+
+**Cross-review attempt, 2026-10-17 (Codex, WS-17):** Larry authorized only the source/test patch at `61f701d683d76b3633afc1b060e4a19f20d9339d` and this plan’s §7.2 for a read-only Claude subscription review, excluding secrets/runtime logs, merge and deployment. Claude Code 2.1.291 was invoked with `claude-sonnet-5`, tools disabled, restricted/safe mode, empty MCP configuration, hooks disabled, no session persistence, and a temporary working directory. The process timed out after 900 seconds; stdout and stderr were empty. No verdict, successful model completion, or approval is claimed. All five GitHub checks passed on that exact commit. PR #216 remains draft; cross-review, independent release verification and live acceptance remain open. No runtime source changed during this review attempt.

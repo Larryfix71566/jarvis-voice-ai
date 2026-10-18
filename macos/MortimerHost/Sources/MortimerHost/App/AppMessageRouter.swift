@@ -122,6 +122,7 @@ final class AppMessageRouter {
                             lat: lat, lon: lon, label: result.label ?? "") }
                     }
                 case .consoleResult(let result):
+                    if consoleCoordinator?.acceptRoadmapReply(result) == true { break }
                     // Acknowledgement is retained for the shared console
                     // surface. It is deliberately not converted to an
                     // optimistic UI mutation; the coordinator applies state
@@ -155,6 +156,17 @@ final class AppMessageRouter {
                         break
                     }
                     guard let consoleCoordinator else { break }
+                    if request.action == .roadmapControl && request.args["operation"] == .string("refresh") {
+                        Task { @MainActor in
+                            let outcome = await consoleCoordinator.refreshRoadmap(request)
+                            let ok = outcome == .applied
+                            client.send(.consoleResult(ConsoleResult(sessionID: request.sessionID,
+                                generation: request.generation, requestID: request.requestID,
+                                status: ok ? "ok" : "error", code: ok ? "applied" : "not_confirmed",
+                                summary: ok ? "Roadmap refreshed from the local repository; filters and placement preserved." : "Roadmap refresh was not confirmed; previous snapshot retained.")))
+                        }
+                        break
+                    }
                     if request.action == .weatherReuse {
                         let runID = request.args["run_id"]?.stringValue
                         let now = Date()
@@ -202,7 +214,13 @@ final class AppMessageRouter {
                     let summary: String
                     var choices: [ConsoleChoice]?
                     switch outcome {
-                    case .applied: status = "ok"; code = "applied"; summary = "Console action applied."
+                    case .applied:
+                        status = "ok"; code = "applied"
+                        if request.action == .roadmapControl, let id = request.target.flatMap(UUID.init(uuidString:)),
+                           let item = workspace?.results.first(where: { $0.id == id }), let snapshot = item.payload.roadmap {
+                            let view = item.roadmapFilter.project(snapshot, timezone: item.payload.roadmapTimezone)
+                            summary = "Roadmap: \(view.cards.count) of \(view.total) workstreams. " + (item.roadmapFilter.chips.isEmpty ? "All filters cleared." : item.roadmapFilter.chips.map(\.1).joined(separator: "; "))
+                        } else { summary = "Console action applied." }
                     case .previewReady(let previewID):
                         status = "ok"; code = "skill_draft_preview"
                         summary = "Skill draft preview ready. Use preview ID \(previewID) to start sandbox drafting."
@@ -219,7 +237,7 @@ final class AppMessageRouter {
                     case .pendingUser: status = "pending_user"; code = "user_action_required"; summary = "The requested system action is waiting for your choice."
                     case .unsupported: status = "unsupported"; code = "unsupported"; summary = "That console action is unavailable here."
                     case .capacity: status = "error"; code = "panel_limit"; summary = "Return a panel before opening another."
-                    case .invalid: status = "error"; code = "invalid_target"; summary = "That console target is no longer available."
+                    case .invalid: status = "error"; code = "invalid_target"; summary = request.action == .roadmapControl ? "Roadmap request refused: unknown filter/workstream, protected source or unavailable result. Current view unchanged." : "That console target is no longer available."
                     case .stale: status = "error"; code = "stale_selection"; summary = "The console changed; please choose the item again."
                     case .needsChoice(let offered):
                         // CC7a.3: ambiguous number or subject; nothing changed.
@@ -265,6 +283,14 @@ final class AppMessageRouter {
                     attachments?.presentConsent(consent)
                 case .display(let payload):
                     let existingID = workspace?.reuseExistingIdentity(for: payload)
+                    if payload.roadmap != nil, let existingID {
+                        // A repeated repository read refreshes its existing
+                        // owner without selecting, moving or reopening it.
+                        let applied = workspace?.refreshRoadmap(existingID, payload: payload) == true
+                        if !applied { workspace?.setRoadmapRefreshStatus(existingID, "Refresh failed; previous snapshot is stale.") }
+                        consoleCoordinator?.publishInventory()
+                        break
+                    }
                     let previous = existingID.flatMap { id in workspace?.results.first { $0.id == id } }
                     let result = WorkspaceResult(payload: payload,
                         id: existingID ?? UUID())

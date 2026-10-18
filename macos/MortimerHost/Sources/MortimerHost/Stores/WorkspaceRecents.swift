@@ -175,11 +175,18 @@ enum WorkspaceRecents {
         "second": 2, "third": 3, "fourth": 4, "fifth": 5,
     ]
 
-    /// "3", "#3", "number 3", "no 3", "number three". Anything with other
-    /// words is a subject, not a number.
+    /// Narrow framing grammar, in parity with console_actions._spoken_result_number.
+    /// Preserve subject words: "Route one" must not select position one.
     private static func spokenNumber(_ text: String) -> Int? {
         var words = text.split(separator: " ").map(String.init)
-        if words.first == "number" || words.first == "no" { words.removeFirst() }
+        for prefix: Set<String> in [["open", "show", "select"], ["the"], ["result", "card"], ["number", "no"]] {
+            if let first = words.first, prefix.contains(first) { words.removeFirst() }
+        }
+        if words.last == "again" { words.removeLast() }
+        if words.count == 2, ["result", "card"].contains(words[1]) { words.removeLast() }
+        if words.count == 2, ["first", "second", "third", "fourth", "fifth"].contains(words[0]), words[1] == "one" {
+            words.removeLast()
+        }
         guard words.count == 1 else { return nil }
         let word = words[0].hasPrefix("#") ? String(words[0].dropFirst()) : words[0]
         if let value = Int(word), value > 0 { return value }

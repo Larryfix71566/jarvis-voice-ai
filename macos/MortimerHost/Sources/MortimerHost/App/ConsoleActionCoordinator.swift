@@ -26,6 +26,63 @@ final class ConsoleActionCoordinator {
     private let registry = ConsoleActionRegistry()
     private var skillWorkspaceActionOwner: UUID?
     private var skillWorkspaceActionHandler: ((ConsoleAction, ConsoleRequest) -> Outcome)?
+    private struct RoadmapRead {
+        let request: ConsoleRequest
+        let target: UUID
+        let completion: CheckedContinuation<Outcome, Never>
+    }
+    private var roadmapReads: [UUID: RoadmapRead] = [:]
+
+    func refreshRoadmap(_ request: ConsoleRequest) async -> Outcome {
+        guard request.revision == workspace.consoleRevision else { return .stale }
+        guard registry.validate(request), request.args["operation"] == .string("refresh"),
+              let id = request.target.flatMap(UUID.init(uuidString:)),
+              let result = workspace.results.first(where: { $0.id == id }), result.payload.roadmap != nil,
+              !result.payload.isProtectedLocal, let client,
+              let session = client.consoleSessionID, let generation = client.consoleGeneration,
+              request.sessionID == session, request.generation == generation else {
+            if let id = request.target.flatMap(UUID.init(uuidString:)) {
+                workspace.setRoadmapRefreshStatus(id, "Refresh unavailable; previous snapshot is stale.")
+            }
+            return .invalid
+        }
+        guard !roadmapReads.values.contains(where: { $0.target == id }) else { return .pendingUser }
+        let backend = ConsoleRequest(sessionID: session, generation: generation, requestID: UUID(),
+            revision: workspace.consoleRevision, action: .roadmapControl, target: id.uuidString,
+            args: ["operation": .string("refresh")])
+        workspace.setRoadmapRefreshStatus(id, "Refreshing local roadmap…")
+        return await withCheckedContinuation { continuation in
+            roadmapReads[backend.requestID] = RoadmapRead(request: backend, target: id, completion: continuation)
+            client.send(.consoleRequest(backend))
+            Task {
+                try? await Task.sleep(for: .seconds(15))
+                guard let pending = self.roadmapReads.removeValue(forKey: backend.requestID) else { return }
+                self.workspace.setRoadmapRefreshStatus(pending.target, "Refresh not confirmed; previous snapshot is stale.")
+                pending.completion.resume(returning: .invalid)
+            }
+        }
+    }
+
+    @discardableResult
+    func acceptRoadmapReply(_ reply: ConsoleResult) -> Bool {
+        guard let pending = roadmapReads[reply.requestID] else { return false }
+        guard reply.sessionID == pending.request.sessionID, reply.generation == pending.request.generation,
+              client?.consoleSessionID == reply.sessionID, client?.consoleGeneration == reply.generation else { return true }
+        if reply.status == "pending_user" { return true }
+        roadmapReads.removeValue(forKey: reply.requestID)
+        if reply.status == "ok", reply.code == "roadmap_snapshot",
+           let value = reply.data?["display"], let bytes = try? JSONEncoder().encode(value), bytes.count <= 600 * 1024,
+           let payload = try? JSONDecoder().decode(DisplayPayload.self, from: bytes),
+           workspace.refreshRoadmap(pending.target, payload: payload) {
+            publishInventory()
+            pending.completion.resume(returning: .applied)
+        } else {
+            workspace.setRoadmapRefreshStatus(pending.target, "Refresh failed; previous snapshot is stale.")
+            pending.completion.resume(returning: .invalid)
+        }
+        return true
+    }
+
     /// WS-21: the one route to the supporting display (plan D1).
     let supportingDisplay: SupportingDisplayCoordinator?
     /// WS-21 D2: connected screens as placement identifies them. Panel moves
@@ -283,6 +340,13 @@ final class ConsoleActionCoordinator {
         guard request.revision == workspace.consoleRevision else { return .stale }
         guard registry.validate(request, currentRevision: workspace.consoleRevision) else { return .invalid }
         switch request.action {
+        case .roadmapControl:
+            guard let id = request.target.flatMap(UUID.init(uuidString:)) else { return .invalid }
+            if request.args["operation"] == .string("refresh") {
+                Task { [weak self] in _ = await self?.refreshRoadmap(request) }
+                return .pendingUser
+            }
+            return workspace.applyRoadmapFilter(id, args: request.args) ? .applied : .invalid
         case .help, .inventory:
             return .applied
         case .viewSet:

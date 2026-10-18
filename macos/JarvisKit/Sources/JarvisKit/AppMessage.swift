@@ -158,9 +158,89 @@ public struct DisplayLink: Sendable, Equatable, Codable {
     public let url: String
 }
 
-/// Every member from web/src/displayResults.ts:15-48, cross-checked
-/// against jarvis/bot/display.py:6-13 and the two direct-tool emitters
-/// in jarvis/bot/handoff_tools.py.
+/// Complete source-derived roadmap. Unknown prose remains in card details;
+/// malformed snapshots fail as a whole rather than dropping later cards.
+public struct RoadmapSnapshot: Codable, Sendable, Equatable {
+    public struct Provenance: Codable, Sendable, Equatable {
+        public let path: String
+        public let repositoryID: String
+        public let revision: String?
+        public let sha256: String
+        public let readAt: String
+        public let dirty: Bool?
+        public let sourceKind: String
+        enum CodingKeys: String, CodingKey {
+            case path, revision, sha256, dirty
+            case readAt = "read_at", sourceKind = "source_kind", repositoryID = "repository_id"
+        }
+    }
+    public struct ChecklistItem: Codable, Sendable, Equatable {
+        public let text: String
+        public let checked: Bool
+        public let section: String
+    }
+    public struct Card: Codable, Sendable, Equatable, Identifiable {
+        public let id: String
+        public let title: String
+        public let status: String
+        public let lifecycle: String
+        public let owner: String
+        public let fields: [String: String]
+        public let details: String
+        public let checklist: [ChecklistItem]
+    }
+    public struct Log: Codable, Sendable, Equatable {
+        public let path: String
+        public let date: String
+        public let rows: [String]
+        public let sha256: String
+        public let title: String
+    }
+    public let schema: String
+    public let provenance: Provenance
+    public let cards: [Card]
+    public let logs: [Log]
+    public let issues: [String]
+
+    public var isValid: Bool {
+        let states: Set<String> = ["proposed", "claimed", "in-progress", "review", "landed", "accepted", "blocked", "parked", "unclassified"]
+        func matches(_ value: String, _ pattern: String) -> Bool {
+            value.range(of: pattern, options: .regularExpression) != nil
+        }
+        func validDay(_ value: String) -> Bool {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.dateFormat = "yyyy-MM-dd"
+            formatter.isLenient = false
+            guard let date = formatter.date(from: value) else { return false }
+            return formatter.string(from: date) == value
+        }
+        guard schema == "mortimer.roadmap.v1", provenance.path == "ROADMAP.md",
+              provenance.sourceKind == "local_checkout",
+              matches(provenance.sha256, "^[a-f0-9]{64}$"),
+              matches(provenance.repositoryID, "^[a-f0-9]{64}$"),
+              provenance.revision.map({ matches($0, "^(?:[a-f0-9]{40}|[a-f0-9]{64})$") }) ?? true,
+              Set(cards.map(\.id)).count == cards.count,
+              cards.allSatisfy({ matches($0.id, "^WS-[0-9]+$") && states.contains($0.lifecycle) }),
+              Set(logs.map(\.path)).count == logs.count,
+              logs.allSatisfy({ log in
+                  matches(log.path, "^docs/roadmap-log/[^/]+\\.md$")
+                  && !log.path.contains("\u{0000}")
+                  && matches(log.sha256, "^[a-f0-9]{64}$")
+                  && validDay(log.date) && !log.rows.isEmpty
+                  && log.rows.allSatisfy({ matches($0, "^WS-[0-9]+$") })
+              }),
+              let data = try? JSONEncoder().encode(self), data.count <= 512 * 1024 else { return false }
+        let timestamp = ISO8601DateFormatter()
+        timestamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if timestamp.date(from: provenance.readAt) != nil { return true }
+        timestamp.formatOptions = [.withInternetDateTime]
+        return timestamp.date(from: provenance.readAt) != nil
+    }
+}
+
 public struct DisplayPayload: Sendable, Equatable, Decodable {
     /// In-memory presentation of the assistant's existing transcript. This
     /// creates no transport event, persistence, or additional model request.
@@ -170,7 +250,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         runID = nil; ts = timestamp; surface = .window; tool = nil
         commands = nil; note = nil; expectOutput = nil; content = nil
         chars = nil; truncated = nil; dataPolicy = nil; opaqueRef = nil
-        weather = nil
+        weather = nil; roadmap = nil; roadmapTimezone = nil
         subjectKey = nil; freshUntil = nil; weatherSource = nil
     }
 
@@ -204,6 +284,8 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
     /// Lenient: nil when absent, malformed or of an unknown schema, so the
     /// markdown body still renders.
     public let weather: WeatherCard?
+    public let roadmap: RoadmapSnapshot?
+    public let roadmapTimezone: String?
     /// CC7a.4: exact content identity and original fetch expiry. Invalid
     /// cache metadata never prevents the existing display body rendering.
     public let subjectKey: String?
@@ -223,7 +305,8 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         case expectOutput = "expect_output"
         case content, chars, truncated
         case dataPolicy = "data_policy", opaqueRef = "opaque_ref"
-        case weather
+        case weather, roadmap
+        case roadmapTimezone = "roadmap_timezone"
         case subjectKey = "subject_key", freshUntil = "fresh_until"
         case weatherSource = "weather_source"
     }
@@ -254,6 +337,9 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         dataPolicy = try c.decodeIfPresent(String.self, forKey: .dataPolicy)
         opaqueRef = try c.decodeIfPresent(String.self, forKey: .opaqueRef)
         weather = (try? c.decodeIfPresent(WeatherCard.self, forKey: .weather)) ?? nil
+        roadmapTimezone = try? c.decodeIfPresent(String.self, forKey: .roadmapTimezone)
+        let roadmapValue = try? c.decodeIfPresent(RoadmapSnapshot.self, forKey: .roadmap)
+        roadmap = roadmapValue.flatMap { $0.isValid ? $0 : nil }
         let key = try? c.decodeIfPresent(String.self, forKey: .subjectKey)
         subjectKey = key.flatMap { !$0.isEmpty && $0.unicodeScalars.count <= 200 ? $0 : nil }
         let expiry = try? c.decodeIfPresent(Double.self, forKey: .freshUntil)

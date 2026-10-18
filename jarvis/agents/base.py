@@ -10,7 +10,7 @@ Locked behavior:
 - Never raises: failures return "FAILED: <reason>" strings.
 - Emits on_event dicts: agent_start / agent_tool / agent_tool_result /
   agent_done. agent_tool_result carries the raw tool result (truncated to
-  TOOL_RESULT_EVENT_MAX chars) so the pipeline can forward display-worthy
+  TOOL_RESULT_EVENT_MAX chars, except a bounded complete roadmap snapshot) so the pipeline can forward display-worthy
   output (research, radar, project plans, commit summaries) to the UI.
 """
 
@@ -150,6 +150,91 @@ ITERATIONS_EXHAUSTED_MESSAGE = (
 )
 # Cap tool results in events so a huge payload can't flood the data channel.
 TOOL_RESULT_EVENT_MAX = 20_000
+
+# WS-17: one complete local roadmap observation, without duplicating its raw
+# Markdown. These are event bounds only, never model/history/source grants.
+ROADMAP_EVENT_MAX_BYTES = 600 * 1024
+ROADMAP_EVENT_SNAPSHOT_MAX_BYTES = 512 * 1024
+
+
+def _tool_result_observation(tool: str, arguments: dict, result: str) -> str:
+    """Project only the canonical roadmap after the loop's existing guards.
+
+    Routed calls have already validated their host envelope. Legacy calls keep
+    their existing source semantics; this projection asserts no data_policy or
+    external-sharing authority. Sensitive output retains the old cap and is
+    still stripped by _emit. Model history and RunLogger use the original.
+    """
+    if (tool != "repo_read_file" or arguments != {"path": "ROADMAP.md"}
+            or is_sensitive()):
+        return result[:TOOL_RESULT_EVENT_MAX]
+    failure = '{"ok":false,"error":"roadmap_display_unavailable","path":"ROADMAP.md"}'
+    try:
+        data = json.loads(result)
+        if not isinstance(data, dict) or data.get("ok") is not True or data.get("path") != "ROADMAP.md":
+            return failure
+        snapshot = data.get("roadmap")
+        if not _roadmap_observation_shape(snapshot):
+            return failure
+        encoded = json.dumps(snapshot, ensure_ascii=False, allow_nan=False)
+        if len(encoded.encode("utf-8")) > ROADMAP_EVENT_SNAPSHOT_MAX_BYTES:
+            return failure
+        projected = json.dumps({"ok": True, "path": "ROADMAP.md",
+            "content": "Read-only roadmap snapshot.", "roadmap": snapshot},
+            ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        if len(projected.encode("utf-8")) > ROADMAP_EVENT_MAX_BYTES:
+            return failure
+        return projected
+    except (ValueError, TypeError, UnicodeError, RecursionError):
+        return failure
+
+
+def _roadmap_observation_shape(snapshot: Any) -> bool:
+    """Wire-shape check, not source authorization (owned by the registry)."""
+    import re
+
+    def text_fields(value, names):
+        return isinstance(value, dict) and all(isinstance(value.get(key), str) for key in names)
+
+    def matches(value, pattern):
+        return isinstance(value, str) and re.fullmatch(pattern, value) is not None
+
+    if not isinstance(snapshot, dict) or snapshot.get("schema") != "mortimer.roadmap.v1":
+        return False
+    source = snapshot.get("provenance")
+    if (not text_fields(source, ("path", "repository_id", "sha256", "read_at", "source_kind"))
+            or source["path"] != "ROADMAP.md" or source["source_kind"] != "local_checkout"
+            or not all(matches(source[key], r"[a-f0-9]{64}") for key in ("repository_id", "sha256"))
+            or (source.get("revision") is not None and not matches(source["revision"], r"[a-f0-9]{40}|[a-f0-9]{64}"))
+            or (source.get("dirty") is not None and type(source["dirty"]) is not bool)):
+        return False
+    if datetime.fromisoformat(source["read_at"].replace("Z", "+00:00")).tzinfo is None:
+        return False
+    cards, logs, issues = (snapshot.get(key) for key in ("cards", "logs", "issues"))
+    if not all(isinstance(value, list) for value in (cards, logs, issues)) or not all(isinstance(x, str) for x in issues):
+        return False
+    states = {"proposed", "claimed", "in-progress", "review", "landed", "accepted", "blocked", "parked", "unclassified"}
+    ids, paths = set(), set()
+    for card in cards:
+        if (not text_fields(card, ("id", "title", "status", "lifecycle", "owner", "details"))
+                or not matches(card["id"], r"WS-[0-9]+") or card["id"] in ids
+                or card["lifecycle"] not in states or not isinstance(card.get("fields"), dict)
+                or not all(isinstance(v, str) for v in card["fields"].values())
+                or not isinstance(card.get("checklist"), list)
+                or not all(text_fields(item, ("text", "section")) and type(item.get("checked")) is bool for item in card["checklist"])):
+            return False
+        ids.add(card["id"])
+    for entry in logs:
+        if (not text_fields(entry, ("path", "date", "sha256", "title"))
+                or not matches(entry["path"], r"docs/roadmap-log/[^/\x00]+\.md") or entry["path"] in paths
+                or not matches(entry["sha256"], r"[a-f0-9]{64}")
+                or not isinstance(entry.get("rows"), list) or not entry["rows"]
+                or not all(matches(row, r"WS-[0-9]+") for row in entry["rows"])):
+            return False
+        if datetime.strptime(entry["date"], "%Y-%m-%d").strftime("%Y-%m-%d") != entry["date"]:
+            return False
+        paths.add(entry["path"])
+    return True
 
 # MORTIMER_AGENT_TRUST_PLAN.md D3 (amended 2026-08-16, MORTIMER_
 # DEVELOPER_AGENT_FIX_PLAN.md F1) — appended as a `system`-role message
@@ -1757,7 +1842,7 @@ class SubAgent:
                     "display_name": self.display_name,
                     "tool": tool_name,
                     "arguments": arguments,
-                    "result": observed_result[:TOOL_RESULT_EVENT_MAX],
+                    "result": _tool_result_observation(tool_name, arguments, observed_result),
                     # Activity ticker (Larry 2026-08-21): ok/latency feed
                     # the per-run line the Agents card renders — the same
                     # verdict the run log records (classify_tool_result),

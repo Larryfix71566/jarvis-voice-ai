@@ -592,7 +592,7 @@ class SkillRegistry:
         """
         from mcp_servers.mcp_repo.logic import (
             REPO_READ_MAX_BYTES, REPO_SEARCH_MAX_RESULTS,
-            resolve_repo_path,
+            ROADMAP_SNAPSHOT_MAX_BYTES, _roadmap_snapshot, resolve_repo_path,
         )
 
         root = contract.repo_root
@@ -604,15 +604,45 @@ class SkillRegistry:
             expected = resolve_repo_path(root, arguments["path"])
             if body is None:
                 return (str(expected),)
-            if (set(body) != {"ok", "path", "bytes", "content"}
+            canonical_roadmap = expected.relative_to(root).as_posix() == "ROADMAP.md"
+            keys = {"ok", "path", "bytes", "content"}
+            if canonical_roadmap and "roadmap" in body:
+                keys.add("roadmap")
+            if (set(body) != keys
                     or body["ok"] is not True or type(body["path"]) is not str
                     or type(body["bytes"]) is not int or type(body["content"]) is not str
                     or body["path"] != expected.relative_to(root).as_posix()
                     or resolve_repo_path(root, body["path"]) != expected
                     or not expected.is_file() or expected.stat().st_size > REPO_READ_MAX_BYTES
                     or body["bytes"] != expected.stat().st_size
-                    or expected.read_text(encoding="utf-8") != body["content"]):
+                    or (expected.read_bytes().decode("utf-8") if "roadmap" in body
+                        else expected.read_text(encoding="utf-8")) != body["content"]):
                 raise ValueError("tool_source_scope_invalid")
+            if "roadmap" in body:
+                # The MCP process cannot attest its own derived fields. Rebuild
+                # every card and dated-log hash from guarded host reads. Exact
+                # JSON equality also distinguishes booleans from numeric values.
+                from datetime import datetime, timezone
+
+                snapshot = body["roadmap"]
+                if type(snapshot) is not dict or type(snapshot.get("provenance")) is not dict:
+                    raise ValueError("tool_source_scope_invalid")
+                stamp = snapshot["provenance"].get("read_at")
+                if type(stamp) is not str or len(stamp) > 64:
+                    raise ValueError("tool_source_scope_invalid")
+                read_at = datetime.fromisoformat(stamp)
+                if (read_at.tzinfo is None or read_at.utcoffset().total_seconds() != 0
+                        or not -5 <= (datetime.now(timezone.utc) - read_at).total_seconds() <= 300):
+                    raise ValueError("tool_source_scope_invalid")
+                encoded = json.dumps(snapshot, sort_keys=True, ensure_ascii=False, allow_nan=False)
+                if len(encoded.encode("utf-8")) > ROADMAP_SNAPSHOT_MAX_BYTES:
+                    raise ValueError("tool_source_scope_invalid")
+                verified = _roadmap_snapshot(root, body["content"])
+                verified["provenance"]["read_at"] = stamp
+                if encoded != json.dumps(verified, sort_keys=True, ensure_ascii=False, allow_nan=False):
+                    raise ValueError("tool_source_scope_invalid")
+                refs = tuple(str(resolve_repo_path(root, entry["path"])) for entry in verified["logs"])
+                return (str(expected), *refs)
             return (str(expected),)
         allowed = {"subdir", "pattern"} if tool_name == "repo_list_files" else {"query", "subdir"}
         if (not set(arguments).issubset(allowed)
