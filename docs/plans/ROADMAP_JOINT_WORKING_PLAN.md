@@ -244,6 +244,18 @@ receipts and every checkbox are preserved. See the
 No implementation, gate waiver, merge or deployment is included.
 
 
+### 2026-10-17 — Consolidated enhancement intake (Codex)
+
+At Larry’s request, map all eight supplied items into the shared roadmap.
+Baseline/acceptance stays with existing owners; Mail Reader stays WS-13 P5
+(separate from P4 prose); evidence/handoff stays WS-22. Add proposed, parked
+WS-23 verification within Systems, WS-24 durable tasks, WS-25 Scheduler/Librarian
+commitments and WS-26 event follow-through, with dependencies and acceptance
+checklists. Preserve daily-report behavior as a baseline inventory requirement,
+not an unsupported claim about complete deployed capability. Reconcile WS-22’s
+future lifecycle with WS-24 so it cannot become a competing task authority.
+No implementation is claimed or started; no existing acceptance box changes.
+
 ### 2026-10-17 — Three-PR review and cleanup (Codex)
 
 Larry requested review and cleanup of the three PRs. #212 had already merged
@@ -255,3 +267,8 @@ after its session began validation and a running child appeared; its cleanup
 module is also absent from runner identity. Keep #210 open for scoped repairs
 and re-review. No real VM was pruned, no mailbox contacted, and no deployment
 or acceptance gate changed. Details: [review record](../roadmap-log/2026-10-17-ws-20-codex-three-pr-review.md).
+
+
+### 2026-10-18 — Restore parked enhancement intake after #211 merge (Codex)
+
+The 10-17 `fc9c958` candidate added the eight-item intake and four parked WS-23–26 cards after PR #211’s merged head `98ad864`. The merge therefore did not contain those later additions, although the old right-pane preview showed them. Rebased the exact documentation additions on current main `28420af`, preserving the separate three-PR review note and all intervening WS-17/13/20 source. The restoration creates no implementation claim, deployment or acceptance.
