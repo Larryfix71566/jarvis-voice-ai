@@ -10,6 +10,7 @@ from unittest.mock import patch
 from sandbox.artifacts import Candidate, File, SandboxError
 from sandbox.profiles import Profile
 from sandbox.verify import Verifier
+from sandbox import verify as verify_module
 
 
 class VerificationTests(unittest.TestCase):
@@ -157,6 +158,20 @@ class VerificationTests(unittest.TestCase):
         (directory / "required.log").write_text("corrupt")
         with self.assertRaises(SandboxError):
             self.verifier.receipt(self, "prepared-image", self.profile)
+
+    def test_cleanup_code_mutation_invalidates_runner_and_saved_receipt(self):
+        receipt = self.verify()
+        before = verify_module.runner_fingerprint()
+        self.assertEqual(self.verifier.receipt(self, "prepared-image", self.profile), receipt)
+        read = Path.read_bytes
+        cleanup = Path(verify_module.__file__).resolve().parent / "prune.py"
+        def changed(path):
+            data = read(path)
+            return data + b"\n# synthetic cleanup change\n" if path == cleanup else data
+        with patch.object(Path, "read_bytes", new=changed):
+            self.assertNotEqual(before, verify_module.runner_fingerprint())
+            with self.assertRaisesRegex(SandboxError, "current candidate and runner"):
+                self.verifier.receipt(self, "prepared-image", self.profile)
 
     def test_failing_check_and_source_mutation_never_approve_publication(self):
         for mode in ["check", "mutation"]:

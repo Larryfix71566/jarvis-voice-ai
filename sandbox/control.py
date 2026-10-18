@@ -7,6 +7,7 @@ are sent to the guest. Source imports come from an explicit committed revision.
 from __future__ import annotations
 
 import argparse
+from contextlib import nullcontext
 import fcntl
 import hashlib
 import io
@@ -431,7 +432,7 @@ esac
         state["status"] = "stopped"
         self.save(task, state)
 
-    def destroy(self, task: str):
+    def destroy(self, task: str, *, guard=None):
         """Delete only a stopped disposable VM; retain its host evidence."""
         with (self.home / "start.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
@@ -443,12 +444,14 @@ esac
             matching = [vm for vm in json.loads(result.stdout) if vm.get("Name") == state["vm"]]
             if matching and (len(matching) != 1 or matching[0].get("State") != "stopped"):
                 raise SandboxError("Task VM is still active; refusing deletion")
-            state["status"] = "deleting"
-            self.save(task, state)
-            if matching:
-                self.command("delete", state["vm"], timeout=120)
-            state.update(status="deleted", deleted_at=int(time.time()))
-            self.save(task, state)
+            # Cleanup policy and its leases stay held through the destructive call.
+            with guard() if guard is not None else nullcontext():
+                state["status"] = "deleting"
+                self.save(task, state)
+                if matching:
+                    self.command("delete", state["vm"], timeout=120)
+                state.update(status="deleted", deleted_at=int(time.time()))
+                self.save(task, state)
 
     def cancel(self, task: str):
         """Serialize cancellation with VM start, including verification children."""

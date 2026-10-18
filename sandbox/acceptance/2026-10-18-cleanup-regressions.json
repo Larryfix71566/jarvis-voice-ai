@@ -1,0 +1,73 @@
+{
+  "recorded_at": "2026-10-18T20:30:20.349250+00:00",
+  "system": "codex",
+  "session": "01a1140b-72bf-76bc-bc11-ac283fa6b0e2/delegated-task-3",
+  "workstream": "WS-28",
+  "branch": "codex/sandbox-cleanup-repair-20261018",
+  "claim_pr": 221,
+  "claim_merge": "afa1dd9b45ac60bfbac0c2b6fbb3fc23c1dbd35d",
+  "runtime_test_diff_sha256": "143a89f082e9a996648ec79d3560f25e301e05240d262a203c355df9c6ca8a8c",
+  "runtime_test_paths": [
+    "sandbox/control.py",
+    "sandbox/images.py",
+    "sandbox/prune.py",
+    "sandbox/verify.py",
+    "sandbox/tests/test_images.py",
+    "sandbox/tests/test_prune.py",
+    "sandbox/tests/test_verify.py"
+  ],
+  "host_python": "3.12.13",
+  "baseline": {
+    "tests": 145,
+    "failures": 0,
+    "seconds": 3.574
+  },
+  "candidate": {
+    "tests": 153,
+    "failures": 0,
+    "seconds": 3.683
+  },
+  "red_on_unrepaired_main": {
+    "test_methods": 8,
+    "assertion_failures_including_subtests": 9,
+    "exit": 1,
+    "status": "expected failure"
+  },
+  "checks": {
+    "shell_syntax": "passed",
+    "whitespace": "passed"
+  },
+  "logs": {
+    "sandbox-baseline-tests.log": {
+      "sha256": "814494fbdd380c36dd6d16241620ce119a14e42b39cf3c95722e71cc2141a342",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/sandbox-baseline-tests.log"
+    },
+    "sandbox-repair-tests.log": {
+      "sha256": "089d435700987455d3c624126328f0b6ad39020f9f758c5411958d0711aa7366",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/sandbox-repair-tests.log"
+    },
+    "cleanup-red-regressions.log": {
+      "sha256": "4ee6db549a55386c522c00615d325b7c5a9f86108e900da9da1bf35c87b99256",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/cleanup-red-regressions.log"
+    }
+  },
+  "independent_review": {
+    "status": "pending",
+    "scope": "exact cleanup runtime/test diff; no external cleanup review attempted"
+  },
+  "release_verification": {
+    "status": "blocked pending independent cleanup review; no real clone/cleanup/verification invoked"
+  },
+  "boundaries": {
+    "test_homes": "temporary only",
+    "tart": "fake missing binary and mocked commands only",
+    "production_writes": false,
+    "production_restart": false,
+    "real_vm_mutation": false,
+    "provider_workload": false,
+    "installation": false,
+    "profile_changes": false,
+    "required_profile_checks": 12,
+    "acceptance_closed": false
+  }
+}

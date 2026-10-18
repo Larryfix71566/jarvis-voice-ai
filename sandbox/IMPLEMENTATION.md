@@ -146,3 +146,25 @@ Use this existing lifecycle ledger, temporary-home/fake-Tart regressions and
 independent exact-head review. No real prune/reclaim or affected clone routine
 before reviewed repair; no job installation, production write, restart or
 deployment. Both findings remain unresolved at claim source `b29c7aba`.
+
+## 2026-10-18 — WS-28 cleanup repair candidate and synthetic proof
+
+Claim #221 landed as `afa1dd9b` before code. The repair rechecks cleanup
+eligibility after the stopped-VM probe, under the existing start/delete lock,
+with nonblocking session/file mutation leases held through deletion. Busy or
+malformed ownership retains the VM. New verification-child registration shares
+that lifecycle lock and precedes reclamation; if deletion won first, child
+creation refuses. Ordinary no-parent disk preflight remains unchanged.
+
+`prune.py` is now part of the runner fingerprint; a synthetic mutation changes
+the fingerprint and makes the saved verifier receipt refuse. Eight new test
+methods fail on unrepaired main (nine assertion failures including subtests);
+all 153 controller tests pass on the candidate (baseline 145). Tests use
+temporary homes and fake Tart only. Shell syntax and whitespace pass. See
+`acceptance/2026-10-18-cleanup-regressions.json` for patch/log hashes and limits.
+
+This candidate is not independent review, a real cleanup exercise or release
+verification. Independent exact-head review is pending. No real VM lifecycle,
+job installation, production source/settings write, restart or deployment ran.
+The runtime PR remains separate from claim #221 and requires review before
+merge; the original twelve-check profile, scanner/pins and baseline are intact.

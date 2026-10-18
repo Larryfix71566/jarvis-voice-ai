@@ -42,6 +42,8 @@ for anything those paths missed (host restarts, abandoned sessions).
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager, ExitStack
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -157,6 +159,42 @@ class Pruner:
             return "idle for %d days" % (waited // 86400)
         return None
 
+    @contextmanager
+    def deletion_guard(self, task: str, now: float | None = None):
+        """Revalidate policy under Controller's start/delete lock.
+
+        Session and file operations may hold their mutation lock before asking
+        for the lifecycle lock. Never wait for those locks in reverse order:
+        a busy owner makes cleanup fail closed, including a long validation
+        whose saved timestamp has aged past the idle threshold.
+        """
+        with ExitStack() as leases:
+            paths = [self.controller.task_dir(task) / "files.lock"]
+            for record in sorted((self.controller.home / "sessions").glob("*/session.json")):
+                if record.is_symlink() or record.parent.is_symlink():
+                    raise SandboxError("Cleanup cannot establish session ownership")
+                # A malformed ownership record must not become an orphan grant.
+                json.loads(record.read_bytes())
+                paths.append(record.parent / "session.lock")
+            for record in sorted((self.controller.home / "tasks").glob("*/state.json")):
+                if record.is_symlink() or record.parent.is_symlink():
+                    raise SandboxError("Cleanup cannot establish child ownership")
+                if not isinstance(json.loads(record.read_bytes()), dict):
+                    raise SandboxError("Cleanup task record is malformed")
+            for path in paths:
+                if path.is_symlink():
+                    raise SandboxError("Cleanup mutation lock is not a regular host path")
+                lock = leases.enter_context(path.open("a"))
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    raise SandboxError("Cleanup owner is active; retaining its VM") from None
+            # This runs after Tart's stopped-state probe, immediately before
+            # deletion, while fresh child registration/start are excluded.
+            if not any(item["task"] == task for item in self.plan(now)):
+                raise SandboxError("Cleanup eligibility changed; retaining its VM")
+            yield
+
     def run(self, *, dry_run: bool = False, now: float | None = None) -> dict:
         report = {"at": int(time.time()), "dry_run": dry_run, "free_before": free_bytes(self.controller.home),
                   "destroyed": [], "failed": [], "kept": []}
@@ -165,7 +203,8 @@ class Pruner:
                 report["kept"].append(item)
                 continue
             try:
-                self.controller.destroy(item["task"])
+                self.controller.destroy(item["task"],
+                                        guard=lambda: self.deletion_guard(item["task"], now))
                 report["destroyed"].append(item)
             except Exception as exc:  # One stuck VM must not keep every other clone.
                 report["failed"].append({**item, "error": str(exc)})

@@ -1,4 +1,5 @@
 import json
+import fcntl
 import os
 from pathlib import Path
 import subprocess
@@ -156,6 +157,77 @@ class PruneTests(unittest.TestCase):
             with self.assertRaises(SandboxError) as result:
                 prune.require_headroom(self.c)
         self.assertIn("sandbox.prune", str(result.exception))
+
+    def test_stale_plan_revalidates_session_activity(self):
+        task = self.task("aaaabbbb0001", purpose="development")
+        self.session(task, idle=8 * DAY)
+        session = self.root / "sessions" / (task * 3)[:32] / "session.json"
+        original = self.pruner.plan
+        def plan(now=None):
+            result = original(now)
+            data = json.loads(session.read_bytes())
+            data["updated_at"] = int(self.now)
+            session.write_text(json.dumps(data))
+            return result
+        with patch.object(self.pruner, "plan", side_effect=plan):
+            report = self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        self.assertEqual([x["task"] for x in report["failed"]], [task])
+        self.assertEqual(self.c.read(task)["status"], "stopped")
+
+    def test_stale_plan_revalidates_new_verification_child(self):
+        task = self.task("aaaabbbb0002", age=7 * 3600, purpose="development")
+        original = self.pruner.plan
+        def plan(now=None):
+            result = original(now)
+            if not (self.root / "tasks" / "aaaabbbb0003").exists():
+                self.task("aaaabbbb0003", age=1, status="creating", vm_state=None,
+                          purpose="verification", parent_task=task)
+            return result
+        with patch.object(self.pruner, "plan", side_effect=plan):
+            report = self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        self.assertEqual([x["task"] for x in report["failed"]], [task])
+
+    def test_revalidates_task_activity_after_tart_stopped_probe(self):
+        task = self.task("aaaabbbb0004", age=7 * 3600, purpose="development")
+        original = self.command
+        def command(*args, **kwargs):
+            result = original(*args, **kwargs)
+            if args[0] == "list":
+                record = self.root / "tasks" / task / "state.json"
+                os.utime(record, (self.now, self.now))
+            return result
+        with patch.object(self.c, "command", side_effect=command):
+            self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        self.assertEqual(self.c.read(task)["status"], "stopped")
+
+    def test_busy_mutation_locks_retain_old_stopped_tasks(self):
+        task = self.task("aaaabbbb0005", purpose="development")
+        self.session(task, idle=8 * DAY)
+        for path in [self.root / "sessions" / (task * 3)[:32] / "session.lock",
+                     self.root / "tasks" / task / "files.lock"]:
+            with self.subTest(path=path.name), path.open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                report = self.pruner.run(now=self.now)
+                self.assertEqual(self.deleted, [])
+                self.assertEqual([x["task"] for x in report["failed"]], [task])
+
+    def test_malformed_ownership_cannot_grant_orphan_cleanup(self):
+        task = self.task("aaaabbbb0006", age=7 * 3600, purpose="development")
+        session = self.root / "sessions" / (task * 3)[:32]
+        session.mkdir(parents=True)
+        (session / "session.json").write_text("invalid json")
+        self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        (session / "session.json").unlink()
+        child = self.root / "tasks" / "aaaabbbb0007"
+        child.mkdir()
+        (child / "state.json").write_text("invalid json")
+        self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        self.assertEqual(self.c.read(task)["status"], "stopped")
 
     def test_discard_reports_instead_of_raising(self):
         task = self.task("abcdefabcdef", purpose="verification")
