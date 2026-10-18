@@ -1,0 +1,33 @@
+{
+  "recorded_at": "2026-10-18T20:31:22.393099+00:00",
+  "system": "codex",
+  "row": "WS-17",
+  "claim_pr": 221,
+  "claim_merge": "afa1dd9b45ac60bfbac0c2b6fbb3fc23c1dbd35d",
+  "source": "61f701d683d76b3633afc1b060e4a19f20d9339d",
+  "base": "ed21d824e270acc2e6c02c3eb6d0ac04f8b4880e",
+  "packet_bytes": 242485,
+  "packet_sha256": "5e94744363f51d0adbd01fabe9ff32c847260ef4c611ab14ab875d1b8a521ef0",
+  "patch_sha256": "d7565096a989bfe61e265b86c8727e24c518e2a84768f34d681d334253be8a24",
+  "destination": "existing Claude Code 2.1.291 subscription, requested model claude-sonnet-5",
+  "requested_controls": {
+    "tools": [],
+    "MCP": "empty and strict",
+    "hooks": "disabled",
+    "session_persistence": false,
+    "API_credentials": "excluded from inherited environment",
+    "private_records_or_runtime_logs": "excluded"
+  },
+  "attempt": {
+    "status": "blocked before process creation",
+    "source_transmitted": false,
+    "verdict": null,
+    "reason": "Automatic approval review rejected the external private source/test transmission because it did not consider payload-and-destination authorization explicit enough."
+  },
+  "prior_attempt": {
+    "date": "2026-10-17",
+    "timeout_seconds": 900,
+    "verdict": null
+  },
+  "required_next": "Explicit approval for this precise packet/destination, then exact-source cross-review; independent candidate verification and release/live gates remain open."
+}

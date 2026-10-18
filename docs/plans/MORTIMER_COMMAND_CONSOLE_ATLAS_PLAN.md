@@ -2636,3 +2636,22 @@ independent verification after WS-28 cleanup repair/review. Existing twelve
 checks, protected baseline and source-authority constraints remain. No runtime
 edit, new provider/source grant, acceptance waiver, deployment or app restart
 is included. This claim reports no new review verdict or verifier result.
+
+### 2026-10-18 — Exact-source cross-review blocked before transmission
+
+Claim #221 landed as `afa1dd9b` before this follow-up. The prepared read-only
+review includes only the #216 source/test diff at `61f701d` against `ed21d82`
+and this plan’s approved §7.2. It excludes secrets, runtime logs and real user
+records; the request uses the existing Claude Code 2.1.291 subscription with
+`claude-sonnet-5`, tools/MCP/hooks/persistence disabled and API credential
+variables excluded. Automatic approval review rejected the operation before
+process creation because it did not consider payload-and-destination consent
+explicit enough. No source was sent, no review ran and no verdict is claimed.
+
+The precise packet hash and limits are in
+`docs/acceptance/command-console/receipts/ws17-cross-review-2026-10-18.json`.
+Larry must explicitly approve that payload/destination (or supply an authorized
+cross-system reviewer). No workaround or repeat source transmission was tried.
+Historical 900-second timeout remains a separate incomplete attempt. Cleanup
+repair/review, exact-candidate independent verification and all live/release
+gates remain open. No installation, production write, app action or deployment.
