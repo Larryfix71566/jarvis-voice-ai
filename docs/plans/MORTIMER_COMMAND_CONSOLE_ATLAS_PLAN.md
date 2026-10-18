@@ -2515,3 +2515,26 @@ had 85 failures, so it is not a valid baseline comparison for the prior isolated
 storage failure. A full candidate rerun with synthetic local socket access is
 pending. No live provider, production, Tart, merge of runtime work or deployment
 is authorized or claimed by these test receipts.
+
+
+### Final validation of this slice — 2026-10-17
+
+Draft PR #216 publishes this bounded implementation; source head `0c6e1af`.
+With synthetic local-socket access permitted, full backend units passed:
+6,543 passed, 11 skipped, 13 warnings, two subtests passed in 171.70 seconds.
+The earlier storage-isolation failure did not recur; its cause has not been
+established, and both earlier failed runs remain recorded above. MortimerHost
+compiled against the additive payload model and all 28 affected CC7a.3/response
+router tests passed. These are local regression results, not independent release
+verification, physical acceptance or authorization to deploy.
+
+Evidence SHA-256 (local synthetic test logs):
+- `/private/tmp/ws17-validated-source-unit.log`: `e960340c75671046e4c7818dd7e5c7112f6db8768407099bbb0b09cce0190281`
+- `/private/tmp/ws17-source-contract-tests.log`: `47abf29edf92949ff5a62e444c88cd421da94934ef74edf7f310609f69fb07de`
+- `/private/tmp/ws17-roadmap-decoder.log`: `1707b0e4acfb6417b8f5ca5ab1a0d7bd5e0cdd039877a8a43073a136f41db972`
+
+Next: finish the native roadmap view, typed voice/pointer filters, preserved
+refresh and filtered sharing. Keep PR #216 draft until those contracts and tests
+are complete, then obtain the required cross-review. The original one-result
+live incident and UI2-24/25 acceptance remain open. Separate #210 findings still
+preclude deployment through the current main cleanup path.
