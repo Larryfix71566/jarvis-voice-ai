@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
+**Status:** A claim-only current-request foreground amendment is proposed on `docs/ws17-arrival-claim-20261018`; CX-25 and Larry's decision must precede implementation. The existing no-jump rule remains binding. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -2691,3 +2691,47 @@ remain separate. Timezone consistency is unconfirmed, not a validated defect.
 The missing source-review verdict and its primary candidate are therefore
 resolved; cleanup review, full independent release verification and all
 deployment/live acceptance gates remain open. No parent checkbox closes.
+
+
+### 2026-10-18 — Proposed current-request foreground exception (CX-25)
+
+Current main `d38c886` and the open PR inventory were refreshed before this
+proposal. Only #224 (independent-verification documentation) was open; this
+proposal does not alter its branch or receipts. WS-28 owns cleanup only.
+WS-17 owns the arrival files, but its current registered branch is reserved
+for review/verification. The proposed implementation branch is
+`codex/ws17-current-request-arrival-20261018`; it remains inactive until Larry
+approves this claim and it lands on main.
+
+The approved §7.2 table says a new result while reading raises a New notice
+without taking the stage. The UI2-23 checklist explicitly includes weather
+requested while reading. Selecting a requested answer from that stage is
+therefore a design amendment requiring Larry's decision, rather than an
+unconditional bug fix under the existing rule. This proposal preserves that
+rule and all acceptance checkboxes until the decision is recorded.
+
+**Proposed policy for approval:** A result proven to complete the still-active
+explicit request may open from the results stage, including native fresh-cache
+reuse. A newer user request, explicit cancellation, stale/unknown request
+identity or an unrelated/background completion removes foreground eligibility.
+Define a deterministic single foreground winner for duplicate/multiple arrivals;
+never infer current ownership from recency alone. Preserve the sole supporting-
+display renderer and explicit display-transfer ownership. Do not introduce a
+second durable task system for this bounded UI repair.
+
+**Required synthetic verification after approval:** Exercise actual router,
+conversation/run binding, store and native weather-reuse paths for
+Spartanburg → Atlanta → cached Spartanburg. Assert two stable UUIDs, correct
+active result at each requested completion, unchanged fetch/expiry on a cache
+hit and one reference. Add controlled races for a newer turn before completion,
+late/background and unknown-run arrivals, cancel-before-completion,
+duplicate/multiple arrivals and display ownership. The witness must fail on
+the original caller chain where the proposed behavior differs; isolated store
+assumptions are insufficient. No paid provider call, live history fixture or
+production logs are needed.
+
+No source/test edit, acceptance waiver, new wire identifier, credential,
+installation, merge, deployment or restart is authorized by this claim-only
+proposal. If caller analysis requires WS-05-owned paths or a new wire field,
+obtain the precise coordination/reservation first. Existing exact-source
+cross-review and release gates still apply to any eventual repair.
