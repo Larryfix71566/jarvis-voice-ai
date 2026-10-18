@@ -150,10 +150,20 @@ def repo_read_file(path: str) -> dict:
     except UnicodeDecodeError:
         return _err(f"{path} is not valid UTF-8 text (binary file?)")
     rel = resolved.relative_to(root.resolve(strict=False)).as_posix()
-    # Preserve the exact source-attestation response contract. The dormant
-    # roadmap snapshot helper below needs the corresponding host validator
-    # extension before it can be exposed on this transport.
-    return {"ok": True, "path": rel, "bytes": size, "content": content}
+    result = {"ok": True, "path": rel, "bytes": size, "content": content}
+    if rel == "ROADMAP.md":
+        try:
+            # Hash the actual file bytes, including CRLF, rather than universal
+            # newline normalization. Ordinary document reads stay unchanged.
+            raw = resolved.read_bytes()
+            if len(raw) > REPO_READ_MAX_BYTES:
+                raise RepoPathError("Roadmap grew beyond the read limit; not truncated")
+            result["content"] = raw.decode("utf-8")
+            result["bytes"] = len(raw)
+            result["roadmap"] = _roadmap_snapshot(root, result["content"])
+        except (OSError, UnicodeError, RepoPathError) as exc:
+            return _err(str(exc))
+    return result
 
 
 # A derived presentation of the canonical source, never another status store.

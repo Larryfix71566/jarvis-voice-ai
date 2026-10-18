@@ -58,7 +58,7 @@ def test_guarded_reader_provenance_logs_and_dirty_state(tmp_path, monkeypatch):
     subprocess.run(['git','-C',str(tmp_path),'add','.'], check=True)
     subprocess.run(['git','-C',str(tmp_path),'-c','user.name=Test','-c','user.email=test@example.invalid','-c','core.hooksPath=/dev/null','commit','-qm','fixture'], check=True)
     result = logic.repo_read_file('ROADMAP.md')
-    snapshot = logic._roadmap_snapshot(tmp_path, result['content'])
+    snapshot = result['roadmap']
     assert snapshot['provenance']['sha256'] == hashlib.sha256(doc.read_bytes()).hexdigest()
     assert len(snapshot['provenance']['revision']) == 40
     assert snapshot['provenance']['dirty'] is False
@@ -82,7 +82,11 @@ def test_guarded_logs_refuse_symlink_and_aggregate_bounds(tmp_path, monkeypatch)
     monkeypatch.setattr(logic, 'ROADMAP_SNAPSHOT_MAX_BYTES', 10)
     import pytest
     with pytest.raises(logic.RepoPathError, match='no workstreams were silently truncated'):
-        logic._roadmap_snapshot(tmp_path, logic.repo_read_file('ROADMAP.md')['content'])
+        logic._roadmap_snapshot(tmp_path, card('WS-01'))
+    refused = logic.repo_read_file('ROADMAP.md')
+    assert refused['ok'] is False
+    assert 'no workstreams were silently truncated' in refused['error']
+    assert 'roadmap' not in refused and 'content' not in refused
 
 
 def test_generic_read_does_not_add_snapshot(tmp_path, monkeypatch):
@@ -104,11 +108,11 @@ def test_real_repo_has_complete_card_count_and_bounded_snapshot(monkeypatch):
     assert len(json.dumps(snapshot).encode()) < logic.ROADMAP_SNAPSHOT_MAX_BYTES
 
 
-def test_roadmap_read_keeps_exact_existing_source_contract_until_extension(tmp_path, monkeypatch):
+def test_roadmap_read_adds_only_reserved_snapshot_field(tmp_path, monkeypatch):
     monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
     (tmp_path / 'ROADMAP.md').write_text(card('WS-01'))
     result = logic.repo_read_file('ROADMAP.md')
-    assert set(result) == {'ok', 'path', 'bytes', 'content'}
+    assert set(result) == {'ok', 'path', 'bytes', 'content', 'roadmap'}
 
 
 def test_log_count_and_total_size_refuse_instead_of_partial_snapshot(tmp_path, monkeypatch):

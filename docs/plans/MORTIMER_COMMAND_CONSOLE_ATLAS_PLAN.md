@@ -2485,3 +2485,33 @@ floors and external-source permissions remain intact. The reader stays on its
 legacy response shape until the corresponding validation is implemented.
 This is a bounded scope claim for the existing implementation branch, not
 feature completion, review, deployment or acceptance.
+
+
+### Roadmap source validation — 2026-10-17, claim #215 landed
+
+Claim #215 merged as `b2d1b10` with all five checks green and is integrated into
+the implementation branch. Canonical `ROADMAP.md` reads now include the reserved
+complete snapshot. Ordinary reads retain exactly their existing four fields.
+The host re-reads and reconstructs cards, provenance and every guarded log hash;
+exact JSON comparison rejects missing, extra or fabricated fields, changed files,
+wrong paths and altered dates/owners/statuses. It rejects timestamps more than
+five minutes old or more than five seconds ahead; this validates the tool reply,
+not freshness relative to GitHub main. CRLF bytes are retained for exact hashing.
+Existing privacy floors and classified envelopes are unchanged.
+
+The snapshot is bounded to 512 KiB and at most 255 dated files, preserving the
+existing 256-source-reference envelope including ROADMAP.md. Excess data refuses
+explicitly. On this branch the real source produces all 22 cards and 185 dated
+logs; two unknown lifecycle phrases remain visibly unclassified, not guessed.
+Reader/source-policy validation: 138 passed, including 22 new attestation cases.
+Native metadata decoder: three new regressions pass, including full details past
+30,000 characters, malformed logs and oversized/duplicate snapshots.
+
+The snapshot is available on the repository-read transport, but display mapping,
+native controls, filter-preserving refresh, voice parity and filtered sharing are
+still unfinished. Do not describe this as the completed roadmap-view feature.
+The unchanged-main local comparison ran under restricted socket permissions and
+had 85 failures, so it is not a valid baseline comparison for the prior isolated
+storage failure. A full candidate rerun with synthetic local socket access is
+pending. No live provider, production, Tart, merge of runtime work or deployment
+is authorized or claimed by these test receipts.
