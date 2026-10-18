@@ -2,7 +2,9 @@
 
 Recorder: Codex. Operator: Larry. Session:
 `01a14bae-5269-78b0-abe8-6611e9c357dc`. Branch:
-`codex/acceptance-campaign-20261017`.
+`codex/acceptance-campaign-20261017` (initial evidence PR #208, merged
+`f363444` while verification ran); final results follow-up:
+`codex/acceptance-campaign-results-20261017`.
 
 Larry requested all existing acceptance testing, offering human intervention.
 New development remains deferred. No provider/source/auth activation, production
@@ -14,7 +16,13 @@ source edit, deployment, rollback or feature implementation is part of this slic
 - Installed/live source: `575cc7b770b621b5c8049097ef63e93618ba3016`.
 - App: `/Users/larryfix/jarvis-voice-ai-clean/macos/MortimerHost/.build/MortimerHost.app`.
 - Executable SHA-256: `6c67661bb94ddde5fa95d0a807dd77e5d837483a69c0d979412064fdcd3eaf29`.
-- Bundle configuration: debug. Live app PID: 21674.
+- Bundle configuration: debug. Live-session app PID: 21674. The bundle also
+  reports `MortimerSourceDirty=true`; the source marker and executable hash
+  identify the tested artifact, not a reproducible clean-commit build.
+- Live Supervisor startup logged `service=anthropic model=claude-haiku-4-5`
+  at 17:50:26.939. This is the observed route, not a model-independent live pass.
+  Bounded tool-name metadata shows delegate calls for the two initial weather
+  requests and one console-action call for the numbered opening attempt.
 - Admin 1045, knowledge service 1052 and bot 1056 use the production working
   directories; their processes started October 13 at 22:33:11 local. October 17
   health checks returned HTTP 200 on ports 7861, 8484 and 7860 respectively.
@@ -125,17 +133,20 @@ remain open.
 | Sandbox controller tests and shell syntax | 134 passed; syntax checks passed | Does not substitute for independent VM |
 | JarvisKit on host | 232 tests, 0 failures | First restricted toolchain attempt could not initialize; host-permission run passed |
 | MortimerHost on host | 551 executed, 6 skipped, 1 failure | Five active-app/WindowServer prerequisites and one external-monitor skip; wide Skills selection p95 22.77575 ms exceeded unchanged 20 ms limit under concurrent load |
+| MortimerHost quiet-host repeat | 551 executed, 6 skipped, 2 failures | Skills benchmark passed: wide selection 14.834125 ms, compact 7.861292 ms; cached navigation 49.707292 / 28.66 ms. Two rendered-thread tests failed inside Vision OCR before text assertions |
+| Focused OCR retry | 2 executed, 2 failures | Same `e5rtError` code 13 in both; host native verification remains open |
 | Skills benchmark alone | 1 passed | Wide selection 15.28025 ms, compact 8.5905 ms; cached navigation 49.996 / 30.771 ms under 100 ms. This does not erase the original failure or accept combined load |
 | Knowledge service | 17 passed | Isolated environment with declared test dependencies; borrowed environments initially lacked pytest/watchdog |
 | Web | Dependency setup and production build passed | Isolated worktree; npm setup used `--ignore-scripts` |
+| GitHub CI on initial evidence head `ba6a7bc` | All five checks passed | PR #208: allowlist, policy, controller, knowledge service and full validate workflow; final evidence-only head has its own CI |
 | Scripted latency fixture | Passed | Nondelegated p50 1153 ms ≤1200; delegated 1412 ms ≤2500; overall p90 1353 ms ≤3500. Synthetic, not live latency |
 | Initial restricted combined Python | 107 failed / 6582 passed / 15 skipped / 4 errors | Local socket/process permissions and environment contamination; retained, not a product pass |
 | Exact failed-node host retry | 111 passed | Narrow rerun only |
 | Complete combined host Python | 5 failed / 6688 passed / 15 skipped | One audio-filter factory default and four bot-wiring function lists; 2 subtests passed |
 | Separate integration process | 4 failed / 193 passed / 4 skipped | Same four bot-wiring failures; therefore not merely unit-to-integration ordering |
 | Separate scripted evaluations | 13 passed | No live provider evaluations |
-| Python with automatic dotenv discovery disabled | Pending completion | Same unchanged runtime/tests; clean environment, temporary DB/home and nonexistent vault |
-| Independent twelve-check VM | Pending completion | Exact committed `9f9bc71`, unchanged profile; dedicated offline clones, no production config/credentials |
+| Python with automatic dotenv discovery disabled | 1 failed / 6692 passed / 15 skipped; 2 subtests passed | Earlier five failures disappeared. A 5 ms admission-deadline test emitted only failed rather than queued/failed while VM verification was concurrent; quiet single-case recheck passed with the original 5 ms limit |
+| Independent twelve-check VM | All 12 passed; source unchanged; receipt and log hashes validated | Exact committed `9f9bc71`, unchanged profile, offline clones. Both unit passes: 6483 passed / 11 skipped / 2 subtests. Both native library passes: 232 tests / 0 failures. Both native app passes: 551 executed / 8 skips / 0 failures. Both VMs stopped; running count zero |
 
 Host runtime/test files match `9f9bc71`; acceptance documentation changed in
 the same worktree during execution. Host runs therefore are not immutable
@@ -150,7 +161,13 @@ inside the borrowed production venv. The application's import wrapper restores
 preexisting environment entries but retains newly added entries. This can
 introduce production feature flags into tests even when the test checkout has
 no `.env`. The controlled rerun sets `PYTHON_DOTENV_DISABLED=1`; explicit
-Pydantic dotenv fixtures remain in the suite. No assertions, thresholds or
+Pydantic dotenv fixtures remain in the suite. All five earlier failures disappeared in this rerun. The remaining deadline
+case is `test_deadline_includes_admission_wait_and_does_not_create_client`: its
+5 ms budget expired before the expected queued event, yielding only failed.
+Client creation remained absent as required. The quiet-host single-case rerun
+passed after both VMs stopped, without changing the original 5 ms timeout. Both independent VM unit passes subsequently passed all 6,483 tests each,
+including this case, with eleven skips each. Concurrency/timing is a candidate
+explanation, not a reason to waive the failure. No assertions, thresholds or
 runtime code were changed. Initial runs cannot be described as fully isolated
 from production configuration; the vault and test database overrides were
 explicitly set. No production file was edited.
@@ -162,6 +179,47 @@ unset by the startup shell remain in the parent's overlay, and a relative
 The first can misreport effective configuration; the second fails startup for
 an existing file. These are checker defects, not evidence of live mail failure.
 The formal M1-1 production repeat is not closed from this campaign.
+
+**Unresolved host OCR failure:** the final quiet native suite and one focused
+retry both throw `e5rtError` (`e5rt_execution_stream_operation_create_precompiled_compute_operation_with_options call failed`, code 13)
+from `VNImageRequestHandler.perform`. Affected tests:
+`ConversationThreadTests.testRenderedThreadShowsAResultCard` and
+`testRenderedThreadShowsBothSpeakersAndTheEndOfALongReply`. Their text assertions
+were not reached. They passed earlier in the initial host suite and both VM
+runs; the cause of this later host framework failure is not established.
+Do not classify the final host suite as passing, infer a product text-rendering
+failure from this exception, skip assertions, or widen thresholds. The physical
+Mac verification gate needs this failure resolved and a clean rerun.
+
+Final read-only checks found the installed artifact hash/source marker
+unchanged and all three services healthy at their documented endpoints
+(admin `/api/health`, vault `/health`, bot `/`), with their original PIDs.
+An initial final-health probe used the wrong admin/bot endpoint; its HTTP
+errors are retained separately and are not service failures. The Mortimer app
+was stopped by the final check; the operator was asked whether this was manual.
+No matching MortimerHost crash report was found. Until that is answered, its
+exit cause remains unknown; do not extend the earlier observed app-survival
+claim across the unattended test interval. No app relaunch was performed.
+
+## Independent verification identity
+
+Completed 18:37 EDT. Attempt `b7195d9e0a8e40efbc8712dd00c880d1`.
+The candidate and baseline are the same committed snapshot, fingerprint
+`f60c9c5a4b1c789aa795ce58e5f7ff6825c0f1e4d52f24d0710525bd8ddc5e18`.
+Image `c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18`,
+profile `c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e`,
+runner `67dfc621dae442649cac7977e2349b53bc0b0e193684e0d7ce4c95e6745e9188`.
+The attached guest desktop probe passed. The prepared matching image was selected
+for this run only; the installed settings pointer remained `32a82fdd…`.
+Both owned tasks (`b7788c4611a4`, `bd4f894e69b1`) and their Tart VMs were stopped;
+the final running-VM count was zero. `Verifier.receipt` revalidated all twelve
+check names/commands/statuses and log hashes against the unchanged runner/profile.
+VM performance measurements are not physical-Mac performance acceptance.
+
+[Machine-readable receipt and evidence hashes](acceptance-campaign-2026-10-17.json)
+bind the observations, raw-log identities, suite results, final runtime probe
+and validated independent receipt. Raw host logs remain local; this summary
+does not publish production environment contents or private conversations.
 
 ## Remaining acceptance disposition
 
