@@ -2,7 +2,7 @@
 date: 2026-10-17
 system: codex
 rows: [WS-20, WS-17, WS-18, WS-09, WS-11]
-prs: [208]
+prs: [208, 209]
 ---
 
 # 2026-10-17 — Existing acceptance campaign
