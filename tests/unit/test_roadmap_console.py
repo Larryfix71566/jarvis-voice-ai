@@ -43,7 +43,7 @@ def test_typed_roadmap_wire_accepts_supported_controls(args):
     {'operation': []}, {'checklist': {}}, {'period': []}, {'blockers': 1},
     {'owners': ['unknown']}, {'authors': ['unknown']}, {'states': ['merged']},
     {'topics': [' ']}, {'topics': ['x'] * 5}, {'topics': [True]},
-    {'workstreams': ['../ROADMAP.md']}, {'operation': 'refresh', 'owners': []},
+    {'workstreams': ['../ROADMAP.md']}, {'workstreams': ['WS-١٧']}, {'operation': 'refresh', 'owners': []},
     {'operation': 'focus', 'workstreams': []}, {'operation': 'focus', 'workstreams': ['WS-1', 'WS-2']},
     {'operation': 'clear', 'path': '.env'}, {'states': None},
 ])

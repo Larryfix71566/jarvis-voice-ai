@@ -2576,3 +2576,5 @@ Larry approved the roadmap-only observation extension; docs-only claim #217
 must merge before editing Base. Other tool/file limits and privacy/source-
 before-sink behavior remain unchanged. PR #216 remains draft. No deployment,
 physical monitor acceptance or original one-result/UI2-24/25 closure is claimed.
+
+- 2026-10-17 WS-17 filter parity follow-up: Python now accepts only ASCII digits in workstream IDs, matching the native contract. A non-ASCII digit regression is included; all 31 roadmap console tests pass. The first-arrival event extension still waits for the approved scope claim #217 to land.

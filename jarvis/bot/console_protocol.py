@@ -172,7 +172,7 @@ def validate_request(message: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError("unknown roadmap owner")
         if any(v not in {"open", "completed", "proposed", "claimed", "in-progress", "review", "landed", "accepted", "blocked", "parked", "unclassified"} for v in args.get("states", [])):
             raise ValueError("unknown roadmap lifecycle")
-        if any(not re.fullmatch(r"WS-\d+", v) for v in args.get("workstreams", [])):
+        if any(not re.fullmatch(r"WS-[0-9]+", v) for v in args.get("workstreams", [])):
             raise ValueError("invalid roadmap workstream")
         if type(args.get("checklist", "all")) is not str or type(args.get("period", "all")) is not str or args.get("checklist", "all") not in {"all", "remaining", "larry"} or args.get("period", "all") not in {"all", "this_week", "last_seven_days"}:
             raise ValueError("invalid roadmap facet")
