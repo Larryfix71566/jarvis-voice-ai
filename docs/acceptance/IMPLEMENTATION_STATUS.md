@@ -1,5 +1,65 @@
 # Implementation and acceptance status
 
+**Current reconciliation: 2026-10-18, refreshed main `9ea27c7` (initial inventory `28420af`).** [ROADMAP](../../ROADMAP.md#current-acceptance-status--reconciled-2026-10-18)
+owns state/assignments; [acceptance clearance and exhaustive inventory](../plans/ROADMAP_JOINT_WORKING_PLAN.md#9-acceptance-clearance--current-priority-2026-10-18)
+define the next sequence. Plans retain requirements, receipts retain exact scope.
+This is a documentation audit, not a test run, release, activation or waiver.
+
+| Current disposition | Evidence and remaining action |
+|---|---|
+| Accepted/closed | Seven existing rows: WS-08/12/14/15/16/18 and documentation WS-19. AirPods switch, orb, Skills B/C and Versions wording remain bounded passes; historical display and 22/23 subsets need candidate-applicability review. No open UI2 parent closes from the audit. |
+| Runnable after release prerequisites | 23 open UI2 IDs (02–20,22–25). Fail-fast 24/25, then 22/23 and dependent 04/09/13; batch Atlas/graph/sharing/voice/accessibility/roadmap and matching P0/C8/Skills cases. |
+| Repair/review/deployment blocked | #210 merged but deletion-plan race/runner fingerprint findings remain; #216 merged as `28420af` with five green checks but Claude review timed out with no verdict. Independent exact-release verification, deployment and live retest remain open. No pruning/reclaim. |
+| Unimplemented/prerequisite blocked | WS-04 onboarding; WS-13 P2/P3 (P4/P5 later); Skills auth/VM/source/model/eval; WS-02/05 runtime/source/account/confidential route; WS-10 stages; WS-06 missing eleven-check map. Not immediate Larry chores or invented global release blockers. |
+| Hardware unavailable | External monitor unavailable October 17. Mirrored/three-screen/portrait/non-Retina cases need actual hardware or requirement-permitted written limitation; virtual proof only covers its subset. |
+| Observation pending | Five frozen-release days, distinct native-client attestation, WS-06 week, and separately approved memory stages. Share compatible observations, not blanket elapsed time. |
+| Parked/deferred | WS-22–26, including #219’s restored parked cards; new WS-27 enhancement implementation. Optional activation and private-model/mail stages retain separate decisions. |
+
+**Count discipline:** 26 existing rows = 14 current-open-obligation + 7 closed + 5 parked.
+There are 112 unchecked workstream bullets: 97 current obligations plus 15 parked
+future criteria restored by #219. The latter are not runnable acceptance work.
+There are 97 aggregate unchecked roadmap bullets plus eight duplicate MAR summary
+bullets. Release readiness has 34 unchecked / 19 checked entries and 23 unique open
+UI2 requirement IDs. 24 compound P0 rows/five C8 umbrellas overlap these; Skills
+ten open gates and MAR eight open families are feature-specific. Mail R.12 has 28
+source/11 Mac rows: M1-2/3 retain October 13 passes, M1-1 awaits #212 deployment/repeat;
+eight P2/P3 Mac rows are implementation-blocked. These are different counting
+units; do not add them or claim 97 distinct tests. WS-27 documentation and #219's
+parked future criteria are excluded from the 97-current-obligation clearance queue.
+
+Primary disposition of the 97 aggregate obligations: 27 UX/voice, 11 hardware,
+16 system/sandbox, 4 automated, 1 explicit code prerequisite, 22 decisions/access/
+dependencies, 12 review/release/evidence, 4 observation. Definitions, every source
+bullet/actor/dependency and the 23-ID release map are in the linked clearance plan.
+
+**Current source versus installed evidence:** #218 merged as `0b49706` and #219
+as `9ea27c7` during publication. Their source status/intake/cards/dependency note
+are incorporated; only draft #220 remained open at refresh. #209/#210/#212/#216
+are also merged. No runtime code changed in the two documentation merges. The roadmap's latest
+successful deployment receipt is `575cc7b` (October 13); October 17 had a dirty-source marker.
+No host probe here establishes a newer installed build. The
+[October 17 campaign](command-console/receipts/acceptance-campaign-2026-10-17.md)
+retains its exact `9f9bc71` independent 12-check proof and historical physical OCR
+failures. Later [#216 source evidence](../roadmap-log/2026-10-17-ws-17-codex-roadmap-controls.md)
+records 563 MortimerHost tests/five skips/zero failures; reconcile source/coverage
+before more OCR investigation. It is local source evidence, not a new independent
+release or physical acceptance pass. No historical failure receipt is overwritten.
+
+**Mail decisions:** revised plan R.0d/R.5 records Larry's D1–D9 answers October 10;
+do not ask those superseded questions again. R.12 supersedes August V1–V10.
+Current report integration path still requires verification; existing daily
+mail report must be extended only for demonstrated gaps.
+
+**Next:** B0 evidence/review/safe-verification/candidate preparation; B1
+10–15-minute fail-fast Recents/reuse; B2 shared console/accessibility session;
+B3 physical displays; B4 automated contracts + audible checks; B5 observations;
+B6 closure. Estimated 1.5–2.5 hours Larry active time plus observations, excluding
+setup/repair/special hardware/prerequisite features. Runtime remains untouched.
+
+<details>
+<summary>Historical September integration status and test counts — retained verbatim, superseded as current status</summary>
+
+
 Updated 2026-09-28 during integration of main `2e6f769` into
 `codex/isolated-20260924`. [ROADMAP](../../ROADMAP.md) owns workstream status
 and assignments. Plans specify requirements; receipts prove only their recorded
@@ -129,3 +189,5 @@ flags into the old YAML fixture. The live profile flags remain, as approved,
 and a separate regression checks only that intended overlay against the
 historical snapshot. All 59 registry tests pass with three historical byte-
 snapshot tests appropriately skipped after the deliberate live-pool change.
+
+</details>
