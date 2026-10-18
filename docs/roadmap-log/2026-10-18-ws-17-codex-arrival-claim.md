@@ -2,7 +2,7 @@
 date: 2026-10-18
 system: codex
 rows: [WS-17]
-prs: []
+prs: [225]
 ---
 
 # Proposed current-request arrival claim and foreground-policy decision
