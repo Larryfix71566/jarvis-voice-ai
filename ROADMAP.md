@@ -60,8 +60,8 @@ sandbox planning can proceed. See [the new end-of-roadmap plan](#ws-27).
 
 This current report supersedes stale next-action/PR-status prose below while
 preserving every receipt and existing owner's scope. Source is `28420af`, not
-proof of the installed build. Only [#218](https://github.com/Larryfix71566/jarvis-voice-ai/pull/218)
-and [#219](https://github.com/Larryfix71566/jarvis-voice-ai/pull/219) are open, both
+proof of the installed build. At preparation, only [#218](https://github.com/Larryfix71566/jarvis-voice-ai/pull/218)
+and [#219](https://github.com/Larryfix71566/jarvis-voice-ai/pull/219) were open, both
 draft docs. #218's WS-17 update and #219's parked proposals keep their branches.
 
 - **Accepted with bounded evidence:** WS-08/12/14/15/16/18 and WS-19 documentation

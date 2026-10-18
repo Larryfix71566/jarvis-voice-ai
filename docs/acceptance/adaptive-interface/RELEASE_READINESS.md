@@ -5,11 +5,11 @@
 [status report](../IMPLEMENTATION_STATUS.md) and
 [clearance plan/inventory](../../plans/ROADMAP_JOINT_WORKING_PLAN.md#9-acceptance-clearance--current-priority-2026-10-18)
 are the current navigation. This file has **34 unchecked / 19 checked** entries;
-**23 unique open UI2 IDs** are 02–20 and 22–25.24 P0 rows/five C8 umbrellas overlap
+**23 unique open UI2 IDs** are 02–20 and 22–25. 24 P0 rows/five C8 umbrellas overlap
 coverage. No checkbox is changed by this audit. All older source/deployment/count
 narratives below retain their dates and are superseded as current status.
 #216 merged as `28420af`; missing review verdict, independent release, deployment
-and live acceptance remain open. Newer563-test/five-skip/zero-failure local native
+and live acceptance remain open. Newer 563-test/five-skip/zero-failure local native
 evidence does not erase historical OCR failures or prove release acceptance.
 
 Use B0 release prerequisites → 24/25 fail-fast → 22/23 and dependent 04/09/13 →

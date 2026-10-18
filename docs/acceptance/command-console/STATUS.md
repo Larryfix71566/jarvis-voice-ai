@@ -7,7 +7,7 @@ supersede the historical “current” build/count narratives below. 23 UI2 IDs
 remain open; no parent gate closes from this audit. #216 is merged, source
 reports 563 MortimerHost tests/five skips/zero failures, and missing exact-source
 cross-review, independent release verification, deployment and live acceptance
-remain open. #218/#219 are the only open PRs, both docs drafts. Preserve historical
+remain open. #218/#219 were the only open PRs at preparation, both docs drafts. Preserve historical
 OCR failures/accepted subsets by revision; newer local suites require coverage
 review before deciding whether more OCR diagnosis is needed. No run here.
 

@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** FOUNDATION LANDED; current acceptance status and fastest clearance sequence reconciled 2026-10-18 on main `28420af` in §9. #209/#210/#212/#216 are merged; #210 cleanup findings and missing #216 cross-review remain open obligations. Only #218/#219 are open, both draft documentation. Existing release/live gates and checker-enforcement decision remain open; no product acceptance is granted. Historical progress below retains its dated scope.
+**Status:** FOUNDATION LANDED; current acceptance status and fastest clearance sequence reconciled 2026-10-18 on main `28420af` in §9. #209/#210/#212/#216 are merged; #210 cleanup findings and missing #216 cross-review remain open obligations. At preparation, only #218/#219 were open, both draft documentation. Existing release/live gates and checker-enforcement decision remain open; no product acceptance is granted. Historical progress below retains its dated scope.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry

@@ -15,10 +15,10 @@ This is a documentation audit, not a test run, release, activation or waiver.
 | Observation pending | Five frozen-release days, distinct native-client attestation, WS-06 week, and separately approved memory stages. Share compatible observations, not blanket elapsed time. |
 | Parked/deferred | WS-22 and proposed #219 cards; new WS-27 enhancement implementation. Optional activation and private-model/mail stages retain separate decisions. |
 
-**Count discipline:**22 existing rows =14 open-obligation +7 closed +1 parked.
+**Count discipline:** 22 existing rows = 14 open-obligation + 7 closed + 1 parked.
 There are 97 aggregate unchecked roadmap bullets plus eight duplicate MAR summary
 bullets. Release readiness has 34 unchecked / 19 checked entries and 23 unique open
-UI2 requirement IDs.24 compound P0 rows/five C8 umbrellas overlap these; Skills
+UI2 requirement IDs. 24 compound P0 rows/five C8 umbrellas overlap these; Skills
 ten open gates and MAR eight open families are feature-specific. Mail R.12 has 28
 source/11 Mac rows: M1-2/3 retain October 13 passes, M1-1 awaits #212 deployment/repeat;
 eight P2/P3 Mac rows are implementation-blocked. These are different counting
@@ -30,7 +30,7 @@ Primary disposition of the 97 aggregate obligations: 27 UX/voice, 11 hardware,
 dependencies, 12 review/release/evidence, 4 observation. Definitions, every source
 bullet/actor/dependency and the 23-ID release map are in the linked clearance plan.
 
-**Current source versus installed evidence:** only #218/#219 are open, both
+**Current source versus installed evidence:** at preparation, only #218/#219 were open, both
 draft documentation; #209/#210/#212/#216 are merged. The roadmap's latest
 successful deployment receipt is `575cc7b` (October 13); October 17 had a dirty-source marker.
 No host probe here establishes a newer installed build. The
