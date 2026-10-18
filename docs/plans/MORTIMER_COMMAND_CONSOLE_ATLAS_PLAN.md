@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** WS-17 CC7a closure is landed in main through PR #198,
+**Status:** UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); code awaits this branch/scope claim on main. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -14,8 +14,7 @@ actual capture tests executed. The unchanged twelve-check offline comparison
 passed against approved `08c0635`, with exact source/log/pin identities and
 clean shutdown. All five source-head CI checks passed on `3e557c8`; the
 final evidence-only publication retains the normal CI merge gate.
-Production remains `bde22bb`; exact-main DEPLOY-MAIN and live UI2-22…25
-remain open. Keep the temporary thread switch. See
+The later deployment is recorded in ROADMAP.md’s single Production receipt (`575cc7b`, October 13). The October 17 campaign found UI2-24/25 failures; the final #209 receipt preserves independent passes and unresolved physical-Mac OCR errors. Repair, reviewed release and remaining live UI2-22…25 gates remain open. Keep the temporary thread switch. See
 [10-10 comparison receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json),
 [merged-source audit](../acceptance/command-console/CC7A_MERGED_SOURCE_AUDIT_2026-10-10.json)
 and [exact-source review](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md).
@@ -1337,6 +1336,45 @@ server retains local presentation/copy/save; unsupported voice/upload shows a
 clear capability notice, never a fabricated successful action.
 
 ### 7.2 CC7a — Conversation-first stage (Larry, 2026-09-30)
+
+**Dated repair amendment — 2026-10-17 (Larry dispatch #213; Codex):**
+The canonical diagnosis and dispatch are the two October 17 WS-17 log entries.
+This claim implements the existing UI2-24/25 intent, in this order:
+
+1. **Slices 3.2 + 3.5:** pin backend/native spoken-number parsing with tests,
+   then add action/status-only console diagnostics. Keep observed-inventory
+   revision binding, UUID identity and stale/ambiguous refusal unchanged.
+   Filler handling must not convert a real subject containing number words
+   into an unrelated positional target.
+2. **Slice 3.3:** add prior-history evaluation cases and action-level assertions
+   before changing Supervisor routing guidance. Record actual baseline outcomes,
+   including a pass if one occurs; do not manufacture a failing baseline.
+   Keep live provider use within its existing authorized source/account scope.
+   Offline scripted tests are not measured live-model routing evidence.
+3. **Slice 3.1:** distinguish store state from rendered menu state with a two-city
+   title/rows reproduction and native rendering regression. Choose the repair
+   from that evidence, preserving pin/order/unread/Older behavior.
+4. **Slice 3.4(b), approved by Larry:** replace retained weather-delegation
+   forecast detail in Supervisor context with a bounded reference/instruction
+   stub directing repeats back through the weather tool. Preserve the full
+   spoken answer and visible transcript, source/privacy restrictions and other
+   delegation types. Audit all relevant retained context paths so another copy
+   does not defeat the intended minimization. This is context minimization,
+   not a guarantee that a generative model will call a tool; measure the rule-off
+   evaluation and the actual reuse acknowledgement. `WorkspaceStore` remains
+   the only cache/freshness authority, with the existing 15-minute/identity rules.
+
+No backend cache, forced guessed result selection, global registry callback,
+extra feature flag, migration, launchd label or port is introduced. Required
+cross-review, frozen validation, deployment and Larry’s affected-case live
+acceptance remain separate gates. WS-21 transfer behavior is unchanged.
+
+**Claim progress:** main `c097ee0` includes the dispatch but still names the old
+branch and lacks the prompt/evaluation/context scope in its Scope field. This
+documentation-only claim supplies those fields before code. Main also includes
+unrepaired #210 cleanup findings; do not treat that merge as a clean deployment
+recommendation or run automatic cleanup during this repair’s validation.
+
 
 **Ownership/status amendment, 2026-10-07 (Larry):** Codex takes the remaining CC7a.3 repairs and CC7a.4 implementation on `codex/ws17-closure-20261007`. Claude’s earlier increments and PR #173 remain attributed to Claude; preserve that source and its design intent. This is a main-branch ownership claim, not code completion, merge approval, deployment or acceptance. Every increment retains review/verification and Larry’s exact-build acceptance; remove the thread switch only after UI2-22…25 pass. See ROADMAP CX-20 for the active documentation/display overlap boundary.
 
