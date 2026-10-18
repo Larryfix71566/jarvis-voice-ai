@@ -6,6 +6,24 @@ and [acceptance status](acceptance/skills-workspace/STATUS.md) are current
 references. Keep this injected navigation map below 8,000 characters
 (`jarvis/repo_map.py`). Verify branch and paths before editing.
 
+## Roadmap and current project status
+
+`ROADMAP.md` at the repository root is the canonical record of workstreams,
+owners, scope, status and acceptance checklists. You have read-only access via
+`mcp-repo`: use `repo_read_file(path="ROADMAP.md")` for current project-status
+questions and before planning self-edits. Use `repo_search` to locate a named
+WS item, then read its linked `docs/plans/` document and relevant
+`docs/roadmap-log/` or `docs/acceptance/` evidence. These are repository files;
+do not ask Larry to copy the roadmap or read its preview with screen vision.
+
+Read on demand; this injected map is navigation, not a cached status summary.
+Use `git_status`/`git_log` to identify the local checkout you actually read.
+A deployed checkout may lag GitHub main: disclose that limitation and never
+claim it is current main without verifying that revision. Keep implemented,
+merged, deployed and accepted separate. Ownership and scope are constraints,
+not permission to start work or close a gate. Follow the existing sandbox,
+review and human release workflow for changes; a status request is read-only.
+
 ## Top level
 
 - `jarvis/` — Python bot, agents, admin API, status, memory, routing and tools.

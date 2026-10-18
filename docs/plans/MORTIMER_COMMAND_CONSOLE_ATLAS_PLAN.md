@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** WS-17 CC7a closure is landed in main through PR #198,
+**Status:** UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); code awaits this branch/scope claim on main. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -14,8 +14,7 @@ actual capture tests executed. The unchanged twelve-check offline comparison
 passed against approved `08c0635`, with exact source/log/pin identities and
 clean shutdown. All five source-head CI checks passed on `3e557c8`; the
 final evidence-only publication retains the normal CI merge gate.
-Production remains `bde22bb`; exact-main DEPLOY-MAIN and live UI2-22…25
-remain open. Keep the temporary thread switch. See
+The later deployment is recorded in ROADMAP.md’s single Production receipt (`575cc7b`, October 13). The October 17 campaign found UI2-24/25 failures; the final #209 receipt preserves independent passes and unresolved physical-Mac OCR errors. Repair, reviewed release and remaining live UI2-22…25 gates remain open. Keep the temporary thread switch. See
 [10-10 comparison receipt](../acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json),
 [merged-source audit](../acceptance/command-console/CC7A_MERGED_SOURCE_AUDIT_2026-10-10.json)
 and [exact-source review](../acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md).
@@ -1337,6 +1336,161 @@ server retains local presentation/copy/save; unsupported voice/upload shows a
 clear capability notice, never a fabricated successful action.
 
 ### 7.2 CC7a — Conversation-first stage (Larry, 2026-09-30)
+
+**Dated repair amendment — 2026-10-17 (Larry dispatch #213; Codex):**
+The canonical diagnosis and dispatch are the two October 17 WS-17 log entries.
+This claim implements the existing UI2-24/25 intent, in this order:
+
+1. **Slices 3.2 + 3.5:** pin backend/native spoken-number parsing with tests,
+   then add action/status-only console diagnostics. Keep observed-inventory
+   revision binding, UUID identity and stale/ambiguous refusal unchanged.
+   Filler handling must not convert a real subject containing number words
+   into an unrelated positional target.
+2. **Slice 3.3:** add prior-history evaluation cases and action-level assertions
+   before changing Supervisor routing guidance. Record actual baseline outcomes,
+   including a pass if one occurs; do not manufacture a failing baseline.
+   Keep live provider use within its existing authorized source/account scope.
+   Offline scripted tests are not measured live-model routing evidence.
+3. **Slice 3.1:** distinguish store state from rendered menu state with a two-city
+   title/rows reproduction and native rendering regression. Choose the repair
+   from that evidence, preserving pin/order/unread/Older behavior.
+4. **Slice 3.4(b), approved by Larry:** replace retained weather-delegation
+   forecast detail in Supervisor context with a bounded reference/instruction
+   stub directing repeats back through the weather tool. Preserve the full
+   spoken answer and visible transcript, source/privacy restrictions and other
+   delegation types. Audit all relevant retained context paths so another copy
+   does not defeat the intended minimization. This is context minimization,
+   not a guarantee that a generative model will call a tool; measure the rule-off
+   evaluation and the actual reuse acknowledgement. `WorkspaceStore` remains
+   the only cache/freshness authority, with the existing 15-minute/identity rules.
+
+No backend cache, forced guessed result selection, global registry callback,
+extra feature flag, migration, launchd label or port is introduced. Required
+cross-review, frozen validation, deployment and Larry’s affected-case live
+acceptance remain separate gates. WS-21 transfer behavior is unchanged.
+
+**Roadmap awareness addition — Larry, 2026-10-17:** Mortimer must know that
+`ROADMAP.md` is readable through the Developer's existing repository tools.
+The source navigation map now names that route within its injected 8,000-character
+prefix. After the claim lands, add explicit Supervisor delegation for roadmap,
+workstream, blocker and acceptance-status questions and Developer guidance to
+read the file and its linked evidence on demand. Do not answer project status
+from stale conversational memory or treat reading as edit authorization. Report
+the actual checkout/revision; local deployment is not automatically current
+GitHub main. Preserve existing path exclusions, permissions and privacy guards.
+Validate prompt routing and real read access with synthetic/offline tests; a
+live "what remains in WS-17?" check belongs to the reviewed deployed candidate.
+
+**Roadmap display addition — Larry, 2026-10-17:**
+
+The read-only roadmap must be a first-class result in the existing app workspace,
+opened by "show the roadmap", navigable to a named workstream by voice and
+refreshable on request. Use `ROADMAP.md` as the single source; do not maintain
+status in a second database or inject a full roadmap snapshot into the voice
+system prompt. The existing `repo_read_file` route already produces a window
+payload, but `_fmt_repo_read` clips to `DOC_DISPLAY_MAX_CHARS = 30_000`; that
+plain-text route alone cannot fulfill this feature for the 154 KB roadmap.
+
+Implementation requirements:
+
+- Read the fixed repository document through existing path/privacy guards.
+  Derive structured workstream cards from the full permitted source: stable WS
+  IDs, titles, status, owner, next step, checkboxes and linked evidence. Group
+  open work before completed work and retain source order within each group.
+  Expand/collapse details; status and checkboxes are read-only. Preserve unknown
+  fields in details and report unsupported/malformed sections rather than
+  silently omitting them or rendering arbitrary HTML/scripts.
+- Carry read provenance with the displayed snapshot: source path, local Git
+  revision, content SHA-256, checked/read timestamp, dirty state and source kind.
+  Those values come from the reader, not model-generated prose. Source revision
+  and installed-app revision are distinct. Local access cannot claim freshness
+  relative to GitHub main without a verified comparison. No implicit Git pull,
+  fetch, credential change or network sync is introduced.
+- Reuse the existing repository-read transport and result lifecycle with a
+  dedicated bounded roadmap presentation. Reserve any additional wire field
+  before coding; preserve compatibility for ordinary repository documents.
+  If the complete structured snapshot exceeds a transport bound, use explicit
+  pagination/loading with a total count or refuse with a clear size error;
+  do not drop the later workstreams. Refresh changes the existing roadmap
+  result, preserving pin, placement and sensible reading/expansion state.
+- Voice and pointer use the same navigation/refresh behavior. A request for
+  "WS-17" focuses that card, while an unknown ID explains the mismatch.
+  No fabricated success before the app receives and applies the result.
+  Use existing sharing preview/approval and confirmed supporting-display
+  transfer; retain the main conversation and avoid duplicate windows.
+- No editing, self-edit launch, acceptance sign-off or checkbox mutation from
+  viewing. No automatic model/provider call just to display the document.
+  Preserve source classification; roadmap access grants no new external
+  sharing permission. Model summaries are not the displayed source of truth.
+
+**Roadmap filters — Larry addition, 2026-10-17:**
+
+Voice and pointer must control the same typed filter state on the existing
+roadmap result. Filter the complete parsed snapshot, not just currently loaded
+or visible cards. Support these requests and their combinations:
+
+| Request | Required behavior / source |
+|---|---|
+| "Show only blockers" | Workstreams explicitly marked blocked or carrying an explicit unresolved blocker in their current-status/next-step or unchecked acceptance requirements. Show the source excerpt supporting each match. Historical mentions of a resolved blocker do not qualify. |
+| "Show items waiting for my acceptance" | Unchecked acceptance/decision items explicitly assigned to Larry. Distinguish ready-for-Larry checks from checks still awaiting implementation, deployment, equipment or other prerequisites; unchecked alone does not mean ready. |
+| "Show Codex's work" / "Show Claude's work" | Match the current Owner field, including shared ownership. Historical Implemented by attribution is a separate explicitly labeled filter, never substituted for current ownership. |
+| "Show interface work still open" | Combine open status with case-insensitive topic search over titles and current workstream fields. Display the interpreted search terms. Do not invent topic tags or silently use a model's guessed category; offer refinement when the requested category has no explicit mapping. |
+| "Show WS-17's remaining checklist" | Focus the exact workstream and its unchecked checklist items; retain parent status, owner and prerequisite context. Completed checklist entries remain accessible by clearing the checklist filter. |
+| "Show completed work" / "Show open work" | Match explicit current completion/acceptance state, not the presence of a merged PR or the word completed in historical prose. Preserve the distinction between landed code and accepted work. Unrecognized lifecycle wording remains visible as unclassified, with the original value. |
+| "What changed this week?" | Select entries from `docs/roadmap-log/` by their front-matter date and associate them only through explicit `rows` IDs. Show linked dated entries alongside the current matching cards; log activity is not proof of code completion. Missing/malformed dates or row metadata are reported, not inferred from file modification time. |
+
+- Across different facets use AND; multiple selections within a facet use OR.
+  A new standalone request replaces the filter set. "Also", "only those" and
+  "narrow that to" refine it; an ambiguous refinement asks for clarification
+  without changing the view. "Show the full roadmap" and Clear filters reset
+  all filters. Focusing a named WS makes it visible even if previously excluded,
+  and visibly clears conflicting filters instead of showing an empty card.
+- Display removable filter chips, matching/total workstream counts and the
+  source snapshot's provenance. If checklist items are filtered, give a separate
+  item count. A zero-match state says so and offers Clear filters; never silently
+  broaden the request. Native and voice acknowledgements reflect the applied
+  filter, not a predicted outcome. Unknown owner/WS/filter values preserve state.
+- Treat free-form blocker/acceptance wording conservatively. Match explicit
+  evidence and include its source excerpt; ambiguous rows are reported as
+  unclassified rather than called blocked, ready, completed or irrelevant.
+  Pin parser/matcher rules with fixtures from the current roadmap before coding
+  the presentation. A model may translate intent to filter fields, but does not
+  classify arbitrary statuses or fabricate the result set.
+- "This week" means Monday 00:00 through now in the user's configured timezone;
+  show the resolved dates. "Last seven days" is a separate rolling interval.
+  Read dated logs through the existing repository path/privacy guards and bind
+  their hashes to the displayed snapshot. This scope adds read-only log access,
+  not another status store or implicit GitHub synchronization.
+- Refresh preserves filters and recomputes matches from the newly read snapshot;
+  failed refresh keeps the prior content visibly stale. Filtering neither creates
+  another result/window nor changes pin, source data, acceptance state or existing
+  placement. Supporting-display transfer preserves filters. Sharing preview shows
+  the active filters and the exact subset being shared, with current approval and
+  source-classification protections intact; hidden rows must not leak into it.
+
+Filter acceptance: fixtures must distinguish shared current ownership from past
+authorship, landed-but-unaccepted from completed, resolved historical failures
+from current blockers, unchecked-but-prerequisite-gated from ready acceptance,
+and unknown fields from known states. Verify combined AND/OR filters, refinements,
+clear/reset, empty matches, named-WS focus, date boundaries/timezone and missing
+log metadata; include a matching card after character 30,000. Prove identical
+voice/pointer results, accessible filter labels/counts, filter-preserving refresh
+and transfer, and a frozen sharing preview containing only its disclosed subset.
+
+Required proof: a fixture larger than 30,000 characters with its final WS and
+checklist still accessible; complete ID/count parity; malformed/missing/path
+refusal behavior; accurate revision/hash/dirty metadata; repeat refresh under
+one result identity; named-card voice targeting; compact/expanded and VoiceOver
+rendering; existing share/transfer safeguards; physical display acceptance on
+a reviewed deployed candidate. This new requirement is explicitly requested,
+but the earlier UI2-24/25 repair order remains first. It closes no existing gate.
+
+**Claim progress:** main `c097ee0` includes the dispatch but still names the old
+branch and lacks the prompt/evaluation/context scope in its Scope field. This
+documentation-only claim supplies those fields before code. Main also includes
+unrepaired #210 cleanup findings; do not treat that merge as a clean deployment
+recommendation or run automatic cleanup during this repair’s validation.
+
 
 **Ownership/status amendment, 2026-10-07 (Larry):** Codex takes the remaining CC7a.3 repairs and CC7a.4 implementation on `codex/ws17-closure-20261007`. Claude’s earlier increments and PR #173 remain attributed to Claude; preserve that source and its design intent. This is a main-branch ownership claim, not code completion, merge approval, deployment or acceptance. Every increment retains review/verification and Larry’s exact-build acceptance; remove the thread switch only after UI2-22…25 pass. See ROADMAP CX-20 for the active documentation/display overlap boundary.
 
