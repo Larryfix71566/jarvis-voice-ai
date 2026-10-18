@@ -132,6 +132,16 @@ def build_display_payload(
         return None
     if not isinstance(data, dict):
         return None
+    # The roadmap observation may fail after a successful source read (size or
+    # malformed snapshot). Show a closed, content-free diagnostic instead of
+    # silently losing the requested roadmap. Ordinary tool failures stay spoken.
+    roadmap_unavailable = (tool == "repo_read_file" and arguments == {"path": "ROADMAP.md"}
+        and data == {"ok": False, "error": "roadmap_display_unavailable", "path": "ROADMAP.md"})
+    if roadmap_unavailable:
+        return {"kind": "markdown", "title": "Roadmap unavailable",
+            "body": "The complete roadmap could not be displayed: its read failed, its snapshot was malformed, or it exceeded the display limit. No partial roadmap was shown. Existing results are unchanged.",
+            "images": [], "basemap_images": [], "links": [], "agent": display_name or agent,
+            "run_id": run_id or None, "ts": time.time(), "surface": "window", "tool": tool}
     # Failures are spoken by the agent — never pop a window for them.
     if data.get("error") or data.get("ok") is False:
         return None

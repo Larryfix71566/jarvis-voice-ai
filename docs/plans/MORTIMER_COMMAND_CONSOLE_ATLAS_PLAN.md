@@ -2580,3 +2580,43 @@ physical monitor acceptance or original one-result/UI2-24/25 closure is claimed.
 - 2026-10-17 WS-17 filter parity follow-up: Python now accepts only ASCII digits in workstream IDs, matching the native contract. A non-ASCII digit regression is included; all 31 roadmap console tests pass. The first-arrival event extension still waits for the approved scope claim #217 to land.
 
 - 2026-10-17 WS-17 integration follow-up: earlier #216 CI revealed two pipeline-order expectations missing the new weather-context minimizer. The assertions now pin that processor before the workflow injector and preserve all other ordering; all 64 bot-wiring integration tests pass.
+
+### 2026-10-17 WS-17 complete roadmap event and final verification
+
+Approved scope claim #217 merged as `ed21d82` before the Base change; CX-22
+records coordination with WS-05. Only the ordinary canonical
+`repo_read_file(path="ROADMAP.md")` observation gets a complete snapshot
+(512 KiB snapshot / 600 KiB event maximum). The duplicate raw Markdown is
+omitted from that event. Malformed/oversize/read-failure observations produce a
+closed, content-free Roadmap unavailable display instead of partial JSON.
+Every other tool/file keeps its 20,000-character cap. Private/redacted paths,
+model history, RunLogger and source-before-sink enforcement are unchanged.
+Routed calls retain exact host-envelope validation; legacy calls retain their
+existing source semantics. The projection grants no `data_policy`, external
+sharing authority, source approval or route activation. Cross-review must
+check both paths; passing a wire-shape check is not source authorization.
+
+The actual agent-to-display regression covers legacy and classified calls;
+invalid source binding prevents continuation/publication. Other cases cover
+sensitive redaction, ordinary-file bounds, malformed/oversize snapshots and
+unchanged model history. The pre-documentation measurement carried all 22
+current cards with the snapshot unchanged in a 262,321-byte event (439,644
+characters in the original duplicated tool response).
+
+Validation: 111 focused event/source/privacy cases passed; final combined
+unit/integration/scripted-agent run passed **6,802 tests**, 15 skipped,
+13 warnings, two subtests, zero failures (239.80 seconds). Existing warnings
+include dependency deprecations and an unawaited reply-guard test coroutine;
+no failure is hidden by those warnings. Bot-wiring expectations now include
+the intended WeatherContextMinimizer position (64 passes). JarvisKit's full
+235-test run passed earlier on the same SDK source. Final full native suite
+is running; its result will be recorded below. No paid/model probe, production
+edit, deployment, live voice, hardware or acceptance sign-off was performed.
+
+Implementation is ready for exact-source cross-system review once final native
+verification is recorded. #216 remains draft. Independent release verification,
+the separate #210 cleanup blocker and Larry's deployed UI2-24/25/roadmap cases
+remain open. Preserve the original one-result store/routing incident separately
+from the fixed two-entry/stale-AppKit-menu reproduction.
+
+Final native result: **563 tests, five skipped, zero failures** in 135.871 seconds, including the final readiness/refresh guards and ten roadmap cases. Roadmap checker: zero errors/warnings; real current-document snapshot/card-count regressions pass after status updates. Required cross-system review and deployment/live acceptance remain open.
