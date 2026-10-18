@@ -34,3 +34,11 @@ This PR contains repository policy/claim text and synthetic scenarios only.
 No production log, transcript, result UUID, service metadata, credential or
 private runtime receipt is included. No source/test edit, provider call,
 runtime change, merge or deployment occurred.
+
+
+Claim-review correction: align the canonical unchecked UI2-23 criterion in
+`docs/acceptance/adaptive-interface/RELEASE_READINESS.md` with Larry's approved
+exception and preserve the original rule through the dated plan link. Its
+checkbox remains unchecked; runtime implementation and live acceptance are
+still open. This is the authorized bounded policy-documentation addition to
+this PR, not a runtime scope expansion.

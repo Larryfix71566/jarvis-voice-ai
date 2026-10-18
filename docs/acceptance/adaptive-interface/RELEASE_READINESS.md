@@ -314,11 +314,18 @@ sandbox evidence; all additions remain open as release-acceptance gates.
   display rules.
 - [ ] **UI2-23 — Inline result cards (CC7a.2).** Weather, research and image
   results appear as compact cards at their turn; open and Back work; compare and
-  pin from a card; a weather result that arrives while another result is open
-  shows a notice and does not take focus; on the conversation the result
-  Larry just asked for opens (Larry, 2026-10-03), while a background completion
-  stays a card and an open supporting display keeps the conversation; closing a card leaves its
-  Output record.
+  pin from a card; the result proven to answer the still-active explicit request
+  opens from Conversation or another result, including fresh native weather-cache
+  reuse. Unrelated/background, superseded, stale or cancelled arrivals never take
+  focus; retained cards stay unread and use the existing New notice while reading.
+  Preserve supporting-display ownership
+  and its sole renderer. Closing a card leaves its Output record. **Policy
+  amendment approved by Larry, 2026-10-18:** this current-request exception
+  supersedes the earlier weather-while-reading no-jump criterion; the original
+  rule and decision history are retained in the [Command Console plan's dated
+  amendment](../../plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md#2026-10-18--larry-approves-the-foreground-exception-claim-awaits-main).
+  Implementation and exact-build live acceptance remain open; this unchecked
+  criterion records the target behavior, not a demonstrated pass.
 - [ ] **UI2-24 — Recents replaces tabs (CC7a.1b, CC7a.3).** One console row and
   nothing below it in any view (CC7a.1b); no tab strip; Recents lists
   results pinned first; `result_select/close/pin/unpin` and "show the Folly

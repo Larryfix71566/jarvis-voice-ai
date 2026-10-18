@@ -2761,3 +2761,14 @@ draft #224 was open at refresh. Subsequent source changes require the main
 claim, actual caller-chain regressions, exact-source cross-review and the
 existing independent release gates. No implementation or runtime operation
 ran during claim publication.
+
+
+### 2026-10-18 — Canonical unchecked UI2-23 criterion aligned
+
+Claim review found that the roadmap described the approved exception while
+`docs/acceptance/adaptive-interface/RELEASE_READINESS.md` still required the
+prior unconditional weather-while-reading no-jump behavior. The authorized
+policy-docs correction aligns that canonical unchecked criterion with the
+active-request exception and background/cancellation/focus protections. It
+links back to the dated approval and preserves the old rule in plan history.
+No checkbox state changes or implementation/live pass are claimed.
