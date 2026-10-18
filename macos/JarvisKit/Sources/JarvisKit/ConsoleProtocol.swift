@@ -3,6 +3,7 @@ import Foundation
 /// Versioned Command Console messages. Presentation clients must reject
 /// unknown actions before sending; the bot remains the authority for state.
 public enum ConsoleAction: String, Codable, Sendable, CaseIterable {
+    case roadmapControl = "roadmap_control"
     case inventory, help, viewSet = "view_set", resultSelect = "result_select"
     case resultClose = "result_close", resultPin = "result_pin", resultUnpin = "result_unpin"
     case resultReopen = "result_reopen", weatherReuse = "weather_reuse"

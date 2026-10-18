@@ -329,7 +329,7 @@ def _roadmap_snapshot(root: Path, content: str) -> dict:
     except (OSError, subprocess.SubprocessError):
         issues.append("Local Git provenance unavailable; no main/installed-revision claim")
     snapshot = {"schema": "mortimer.roadmap.v1", "provenance": {
-        "path": "ROADMAP.md", "revision": revision, "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        "path": "ROADMAP.md", "repository_id": hashlib.sha256(str(root.resolve()).encode("utf-8")).hexdigest(), "revision": revision, "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
         "read_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "dirty": dirty, "source_kind": "local_checkout"},
         "cards": cards, "logs": logs, "issues": issues + log_issues}

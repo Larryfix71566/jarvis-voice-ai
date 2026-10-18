@@ -66,6 +66,9 @@ struct ConsoleActionRegistry: Sendable {
                 break
             }
         }
+        if request.action == .roadmapControl {
+            return request.target.flatMap(UUID.init(uuidString:)) != nil && RoadmapFilter.validArguments(request.args)
+        }
         guard Self.argumentsAreWellTyped(request) else { return false }
         if request.action == .atlasMove {
             let hasRelation = request.args["relation"] != nil
@@ -143,6 +146,7 @@ struct ConsoleActionRegistry: Sendable {
     func validate(_ request: ConsoleRequest) -> Bool { validate(request, currentRevision: nil) }
 
     private static let argumentFields: [ConsoleAction: Set<String>] = [
+        .roadmapControl: ["operation", "owners", "authors", "states", "topics", "workstreams", "checklist", "blockers", "period"],
         .inventory: ["scope", "cursor"],
         .weatherReuse: ["subject_key", "tool", "days", "units", "run_id", "ordinary_turn"],
         .viewSet: ["mode"], .resultMode: ["mode"], .compareSide: ["side"],
@@ -215,7 +219,7 @@ struct ConsoleActionRegistry: Sendable {
         // Targets are required only where the action cannot safely use the
         // current selection. Enum-like values remain arguments (with the
         // legacy target fallback retained by the coordinator).
-        .resultSelect, .resultPin, .resultUnpin, .resultClose, .resultReopen, .weatherReuse, .resultMode,
+        .roadmapControl, .resultSelect, .resultPin, .resultUnpin, .resultClose, .resultReopen, .weatherReuse, .resultMode,
         .compareSet, .groupRename, .groupAssign, .groupRemoveCard, .groupDissolve,
         .atlasMove, .graphFocus, .graphSelect, .graphSelectEdge, .graphFilter,
         .graphGroup, .graphPath, .graphCenter, .graphMoveNode,

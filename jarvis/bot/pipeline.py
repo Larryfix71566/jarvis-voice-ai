@@ -104,6 +104,8 @@ from jarvis.bot.console_protocol import (
 )
 from jarvis.bot.console_protocol import hello as console_hello
 from jarvis.bot.console_session import ConsoleSession
+from jarvis.privacy_policy import DataPolicy, make_tool_execution_scope, validate_tool_result
+from jarvis.runlog.context import get_run_id
 from jarvis.bot.costs_tool import build_cost_summary_tool
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.handoff_tools import (
@@ -230,6 +232,36 @@ class _WeatherContextCall:
 
 _weather_context_call: ContextVar[_WeatherContextCall | None] = ContextVar(
     "weather_context_call", default=None)
+
+
+
+async def _read_console_roadmap(runtime: Any, request: dict) -> dict:
+    """Fixed-source, classified read; no delegation, model or provider call.
+
+    The native client keeps ownership of the result and only applies this
+    snapshot to the pending UUID after checking session and source identity.
+    """
+    arguments = {"path": "ROADMAP.md"}
+    scope = make_tool_execution_scope(
+        get_run_id() or request["request_id"], request["request_id"],
+        request["request_id"], "repo_read_file", arguments,
+        DataPolicy("confidential" if _voice_is_sensitive() else "approved_external",
+                   "console-roadmap-refresh"))
+    envelope = await asyncio.wait_for(runtime.registry.call_classified(
+        "repo_read_file", arguments, execution_scope=scope), timeout=8.0)
+    policy, content = validate_tool_result(scope, envelope)
+    payload = build_display_payload("developer", "Developer", "repo_read_file", arguments, content)
+    if payload is None or not isinstance(payload.get("roadmap"), dict):
+        raise ValueError("roadmap_snapshot_unavailable")
+    # An ordinary roadmap must never launder a newly protected source.
+    # Keep the existing snapshot instead of transmitting protected content.
+    if policy.level != "approved_external":
+        raise ValueError("roadmap_source_protected")
+    payload["data_policy"] = policy.level
+    payload["roadmap_timezone"] = runtime.settings.jarvis_timezone
+    if len(json.dumps(payload, ensure_ascii=True, allow_nan=False).encode("utf-8")) > 600 * 1024:
+        raise ValueError("roadmap_snapshot_too_large")
+    return payload
 
 
 def _mark_weather_context() -> None:
@@ -2388,8 +2420,12 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # native client remains the state owner for visible selections;
             # until it sends a live inventory we expose only truthful session
             # actions and never invent a target.
+            refresh_requests = []
             try:
                 def _console_apply(request: dict) -> tuple[str, str]:
+                    if request["action"] == "roadmap_control" and request["args"]["operation"] == "refresh":
+                        refresh_requests.append(request)
+                        return "pending_user", "Reading the local roadmap."
                     if request["action"] == "help":
                         return "ok", "Voice console is ready; choose a visible result or panel action."
                     return "unsupported", "That console action is not wired to this session yet."
@@ -2403,6 +2439,17 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             except ValueError as exc:
                 _log_console_validation_failure("request", exc)
                 return
+            if refresh_requests:
+                try:
+                    payload = await _read_console_roadmap(runtime, refresh_requests[0])
+                    response.update(status="ok", code="roadmap_snapshot",
+                                    summary="Local roadmap snapshot read.", data={"display": payload})
+                except Exception:
+                    # Never echo tool exceptions, source text or file paths.
+                    response.update(status="error", code="roadmap_read_failed",
+                                    summary="Roadmap refresh failed; previous snapshot retained.")
+                # ConsoleSession caches this same response object: retries
+                # replay its settled value and do not launch another read.
             await send_app_message(transport, response)
 
         async def handle_shared_content(message: Any) -> None:

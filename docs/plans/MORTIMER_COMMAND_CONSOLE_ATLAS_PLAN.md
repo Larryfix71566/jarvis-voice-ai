@@ -2538,3 +2538,41 @@ refresh and filtered sharing. Keep PR #216 draft until those contracts and tests
 are complete, then obtain the required cross-review. The original one-result
 live incident and UI2-24/25 acceptance remain open. Separate #210 findings still
 preclude deployment through the current main cleanup path.
+
+
+### 2026-10-17 — Roadmap view, controls and guarded refresh (Codex)
+
+Implemented the dedicated read-only roadmap result in the existing workspace:
+complete cards, source fingerprint, explicit source issues, deterministic typed
+filters and counts, focused workstreams and read-only acceptance checklists.
+Current Owner and historical Implemented by are separate; AND/OR, replace,
+refine, clear, empty matches, Monday/local-time and rolling-seven-day evidence
+use one native projection for voice, pointer and export. Unknown values retain
+the current view. Readiness and blocker wording are conservative, with excluded
+historical/ambiguous mentions and prerequisite labels.
+
+The reserved `roadmap_control` action uses the existing request/result channel.
+Refresh reads only the guarded, host-classified ROADMAP source, with an eight-
+second source deadline; the app waits at most fifteen seconds and voice twenty.
+Source repository identity, path, session/generation and read timestamp bind the
+reply. Failed, protected, mismatched or older replies keep the prior snapshot;
+refresh and repeated reads preserve UUID, filter, expansion, pin and placement.
+Sharing freezes the filtered projection through the existing preview workflow.
+No new server, model call, Git fetch or acceptance mutation is introduced.
+
+Validation on this implementation slice: 265 focused backend tests; ten native
+roadmap tests, including the real SDK/router path and accessibility at widths
+520 and 1100. The full MortimerHost suite passed 563 tests / five skips / zero
+failures before the final negative-readiness/out-of-order guards; the ten
+roadmap cases then passed with those guards. The initial full backend suite
+reported 6,571 passes and two new fixture failures because the console flag was
+inherited disabled; fixtures now set the enabled case explicitly and test the
+kill switch separately. A final full backend rerun remains required.
+
+The initial-display route still needs one bounded integration fix. A read-only
+probe of this checkout produced 433,560 characters; the full display mapper
+worked, while the actual 20,000-character Developer event projection did not.
+Larry approved the roadmap-only observation extension; docs-only claim #217
+must merge before editing Base. Other tool/file limits and privacy/source-
+before-sink behavior remain unchanged. PR #216 remains draft. No deployment,
+physical monitor acceptance or original one-result/UI2-24/25 closure is claimed.

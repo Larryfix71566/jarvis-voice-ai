@@ -57,6 +57,21 @@ CONSOLE_ACTION_SCHEMA = {
             "observed list, never a newer list. For 'open result number one', call "
             "inventory then result_select target '1' with inventory_revision; "
             "view_set merely opens a view and does not select that requested result. "
+            "For an existing roadmap result UUID, roadmap_control uses args.operation replace/refine/clear/focus/refresh. "
+            "Filters are owners/authors (codex, claude, larry, unassigned), states (open, completed or explicit lifecycle), "
+            "topics and workstreams (WS-17) as arrays; checklist all/remaining/larry, blockers boolean, "
+            "period all/this_week/last_seven_days. Across facets AND, within arrays OR. Replace for a new request; "
+            "refine only for an explicit narrowing; ask about ambiguous refinements. Focus clears conflicting facets. "
+            "Refresh reads the local source without a model call. If no roadmap result exists, delegate Developer "
+            "to repo_read_file ROADMAP.md first. Never claim applied filters or refresh before native confirmation. "
+            "For roadmap_control read inventory for its UUID; args.operation is replace (standalone request), "
+            "refine (also/only those), clear, focus (one workstreams ID, clears conflicting filters), or refresh. "
+            "Filter arrays owners/authors accept codex, claude, larry, unassigned; authors means historical Implemented by. "
+            "states accepts open, accepted, completed, landed, proposed, claimed, in-progress, review, blocked, parked, unclassified. "
+            "topics are literal current-field terms; workstreams are WS-N IDs. Arrays have up to four values (OR), facets use AND. "
+            "checklist is all, remaining or larry; blockers is boolean; period is all, this_week (Monday in configured timezone), "
+            "or last_seven_days. Show a named WS's remaining checklist with replace, workstreams and checklist=remaining. "
+            "Ambiguous refinements require clarification without a console action. clear/refresh accept no other args. "
             "result_reopen shows an existing retained "
             "result without fetching it again. compare_set also requires secondary_target."
         ),
@@ -307,7 +322,7 @@ def build_console_action_tool(send: Callable[[dict], Any], *, session_id: str,
             if await_result is None:
                 return f"Console action {action} submitted."
             try:
-                result = await asyncio.wait_for(pending, timeout=5.0) if inspect.isawaitable(pending) else pending
+                result = await asyncio.wait_for(pending, timeout=20.0 if action == "roadmap_control" and args.get("operation") == "refresh" else 5.0) if inspect.isawaitable(pending) else pending
             except asyncio.TimeoutError:
                 result = None
         finally:

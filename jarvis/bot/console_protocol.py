@@ -9,7 +9,7 @@ from typing import Any
 MAX_SUMMARY = 240
 MAX_MESSAGE = 32 * 1024
 ALLOWED_ACTIONS = frozenset({
-    "inventory", "help", "view_set", "result_select", "result_close", "result_pin",
+    "roadmap_control", "inventory", "help", "view_set", "result_select", "result_close", "result_pin",
     "result_unpin", "result_reopen", "weather_reuse", "result_next", "result_previous", "result_mode", "compare_set",
     "compare_end", "compare_side", "content_scroll", "source_select", "source_open",
     "source_inspector", "image_select", "atlas_fit", "atlas_arrange", "atlas_zoom",
@@ -36,6 +36,7 @@ ALLOWED_ACTIONS = frozenset({
 # this table beside the validator prevents a new UI control from smuggling an
 # unreviewed field across the voice/native boundary.
 ACTION_ARG_FIELDS: dict[str, frozenset[str]] = {
+    "roadmap_control": frozenset({"operation", "owners", "authors", "states", "topics", "workstreams", "checklist", "blockers", "period"}),
     "inventory": frozenset({"scope", "cursor"}),
     "weather_reuse": frozenset({"subject_key", "tool", "days", "units", "run_id", "ordinary_turn"}),
     "view_set": frozenset({"mode"}),
@@ -93,7 +94,7 @@ ACTION_ARG_FIELDS: dict[str, frozenset[str]] = {
 # enum-like argument; legacy callers may still supply the latter in target
 # where the native coordinator explicitly supports that fallback.
 REQUIRED_TARGET_ACTIONS = frozenset({
-    "result_select", "result_close", "result_pin", "result_unpin", "result_reopen", "weather_reuse", "result_mode",
+    "roadmap_control", "result_select", "result_close", "result_pin", "result_unpin", "result_reopen", "weather_reuse", "result_mode",
     "compare_set", "group_rename", "group_assign", "group_remove_card",
     "group_dissolve", "atlas_move", "graph_focus", "graph_select",
     "graph_select_edge", "graph_filter", "graph_group", "graph_path",
@@ -157,6 +158,30 @@ def validate_request(message: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("console action requires a target")
     if action in REQUIRED_SECONDARY_TARGET_ACTIONS and not message.get("secondary_target"):
         raise ValueError("console action requires a secondary target")
+    if action == "roadmap_control":
+        operation = args.get("operation")
+        if type(operation) is not str or operation not in {"replace", "refine", "clear", "focus", "refresh"}:
+            raise ValueError("invalid roadmap operation")
+        _uuid(message.get("target"), "target")
+        arrays = {"owners", "authors", "states", "topics", "workstreams"}
+        for key in arrays & args.keys():
+            if type(args[key]) is not list or len(args[key]) > 4 or any(type(v) is not str or not v.strip() or len(v) > 120 for v in args[key]):
+                raise ValueError("invalid roadmap filter array")
+        for key in {"owners", "authors"} & args.keys():
+            if any(v not in {"codex", "claude", "larry", "unassigned"} for v in args[key]):
+                raise ValueError("unknown roadmap owner")
+        if any(v not in {"open", "completed", "proposed", "claimed", "in-progress", "review", "landed", "accepted", "blocked", "parked", "unclassified"} for v in args.get("states", [])):
+            raise ValueError("unknown roadmap lifecycle")
+        if any(not re.fullmatch(r"WS-\d+", v) for v in args.get("workstreams", [])):
+            raise ValueError("invalid roadmap workstream")
+        if type(args.get("checklist", "all")) is not str or type(args.get("period", "all")) is not str or args.get("checklist", "all") not in {"all", "remaining", "larry"} or args.get("period", "all") not in {"all", "this_week", "last_seven_days"}:
+            raise ValueError("invalid roadmap facet")
+        if "blockers" in args and type(args["blockers"]) is not bool:
+            raise ValueError("invalid roadmap blocker facet")
+        if operation in {"clear", "refresh"} and set(args) != {"operation"}:
+            raise ValueError("unexpected roadmap filters")
+        if operation == "focus" and (set(args) != {"operation", "workstreams"} or len(args["workstreams"]) != 1):
+            raise ValueError("focus requires exactly one workstream")
     if action == "atlas_move":
         has_relation = "relation" in args
         has_row = "row" in args
@@ -172,7 +197,7 @@ def validate_request(message: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, str) and len(value) > limit:
             raise ValueError("console action argument exceeds size limit")
         if isinstance(value, list):
-            if not 1 <= len(value) <= 4:
+            if not (0 if action == "roadmap_control" else 1) <= len(value) <= 4:
                 raise ValueError("console action array exceeds its item limit")
             if any(not isinstance(item, str) or len(item) > 120 for item in value):
                 raise ValueError("console action array contains an invalid item")

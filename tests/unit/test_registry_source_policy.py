@@ -501,7 +501,7 @@ async def test_roadmap_snapshot_attests_complete_cards_and_each_guarded_log(road
     assert envelope.canonical_refs == (str(roadmap_project / 'ROADMAP.md'), str(roadmap_project / 'docs/roadmap-log/evidence.md'))
 
 
-@pytest.mark.parametrize('variant', ['card', 'omit-card', 'extra-field', 'provenance', 'hash', 'date', 'revision', 'dirty-type', 'omit-log', 'log-hash', 'log-title', 'log-rows', 'log-path', 'disk-log', 'disk-card', 'old', 'future', 'naive', 'wrong-file', 'symlink'])
+@pytest.mark.parametrize('variant', ['card', 'omit-card', 'extra-field', 'provenance', 'hash', 'date', 'revision', 'dirty-type', 'repository-id', 'omit-log', 'log-hash', 'log-title', 'log-rows', 'log-path', 'disk-log', 'disk-card', 'old', 'future', 'naive', 'wrong-file', 'symlink'])
 async def test_roadmap_snapshot_cannot_self_attest_derived_or_changed_content(roadmap_project, variant):
     arguments = {'path': 'ROADMAP.md'}
     body = repo_logic.repo_read_file(**arguments)
@@ -513,6 +513,7 @@ async def test_roadmap_snapshot_cannot_self_attest_derived_or_changed_content(ro
     elif variant == 'hash': snapshot['provenance']['sha256'] = '0' * 64
     elif variant == 'date': snapshot['logs'][0]['date'] = '2026-10-18'
     elif variant == 'revision': snapshot['provenance']['revision'] = '0' * 40
+    elif variant == 'repository-id': snapshot['provenance']['repository_id'] = 'e' * 64
     elif variant == 'dirty-type': snapshot['provenance']['dirty'] = 1
     elif variant == 'omit-log': snapshot['logs'] = []
     elif variant == 'log-hash': snapshot['logs'][0]['sha256'] = '0' * 64

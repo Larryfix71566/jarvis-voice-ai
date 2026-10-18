@@ -4,7 +4,7 @@ import XCTest
 final class RoadmapPayloadTests: XCTestCase {
     private func snapshot() -> [String: Any] {
         ["schema": "mortimer.roadmap.v1", "provenance": [
-            "path": "ROADMAP.md", "revision": String(repeating: "a", count: 40),
+            "path": "ROADMAP.md", "repository_id": String(repeating: "d", count: 64), "revision": String(repeating: "a", count: 40),
             "sha256": String(repeating: "b", count: 64), "read_at": "2026-10-17T20:10:20.123+00:00",
             "dirty": false, "source_kind": "local_checkout"],
          "cards": [["id": "WS-17", "title": "Console", "status": "landed; acceptance open",

@@ -163,6 +163,7 @@ public struct DisplayLink: Sendable, Equatable, Codable {
 public struct RoadmapSnapshot: Codable, Sendable, Equatable {
     public struct Provenance: Codable, Sendable, Equatable {
         public let path: String
+        public let repositoryID: String
         public let revision: String?
         public let sha256: String
         public let readAt: String
@@ -170,7 +171,7 @@ public struct RoadmapSnapshot: Codable, Sendable, Equatable {
         public let sourceKind: String
         enum CodingKeys: String, CodingKey {
             case path, revision, sha256, dirty
-            case readAt = "read_at", sourceKind = "source_kind"
+            case readAt = "read_at", sourceKind = "source_kind", repositoryID = "repository_id"
         }
     }
     public struct ChecklistItem: Codable, Sendable, Equatable {
@@ -219,6 +220,7 @@ public struct RoadmapSnapshot: Codable, Sendable, Equatable {
         guard schema == "mortimer.roadmap.v1", provenance.path == "ROADMAP.md",
               provenance.sourceKind == "local_checkout",
               matches(provenance.sha256, "^[a-f0-9]{64}$"),
+              matches(provenance.repositoryID, "^[a-f0-9]{64}$"),
               provenance.revision.map({ matches($0, "^(?:[a-f0-9]{40}|[a-f0-9]{64})$") }) ?? true,
               Set(cards.map(\.id)).count == cards.count,
               cards.allSatisfy({ matches($0.id, "^WS-[0-9]+$") && states.contains($0.lifecycle) }),
@@ -248,7 +250,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         runID = nil; ts = timestamp; surface = .window; tool = nil
         commands = nil; note = nil; expectOutput = nil; content = nil
         chars = nil; truncated = nil; dataPolicy = nil; opaqueRef = nil
-        weather = nil; roadmap = nil
+        weather = nil; roadmap = nil; roadmapTimezone = nil
         subjectKey = nil; freshUntil = nil; weatherSource = nil
     }
 
@@ -283,6 +285,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
     /// markdown body still renders.
     public let weather: WeatherCard?
     public let roadmap: RoadmapSnapshot?
+    public let roadmapTimezone: String?
     /// CC7a.4: exact content identity and original fetch expiry. Invalid
     /// cache metadata never prevents the existing display body rendering.
     public let subjectKey: String?
@@ -303,6 +306,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         case content, chars, truncated
         case dataPolicy = "data_policy", opaqueRef = "opaque_ref"
         case weather, roadmap
+        case roadmapTimezone = "roadmap_timezone"
         case subjectKey = "subject_key", freshUntil = "fresh_until"
         case weatherSource = "weather_source"
     }
@@ -333,6 +337,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         dataPolicy = try c.decodeIfPresent(String.self, forKey: .dataPolicy)
         opaqueRef = try c.decodeIfPresent(String.self, forKey: .opaqueRef)
         weather = (try? c.decodeIfPresent(WeatherCard.self, forKey: .weather)) ?? nil
+        roadmapTimezone = try? c.decodeIfPresent(String.self, forKey: .roadmapTimezone)
         let roadmapValue = try? c.decodeIfPresent(RoadmapSnapshot.self, forKey: .roadmap)
         roadmap = roadmapValue.flatMap { $0.isValid ? $0 : nil }
         let key = try? c.decodeIfPresent(String.self, forKey: .subjectKey)
