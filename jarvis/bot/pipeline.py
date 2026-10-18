@@ -745,6 +745,18 @@ def build_pipeline(
         def finished(_future: asyncio.Future) -> None:
             if console_waiters.get(request_id) is future:
                 console_waiters.pop(request_id, None)
+            # One terminal, content-free breadcrumb per dispatched request.
+            # Cancellation includes timeout/disconnect; do not invent its cause.
+            action = getattr(_future, "_mortimer_console_action", None)
+            if not isinstance(action, str) or action not in ALLOWED_ACTIONS:
+                action = "unknown"
+            status = "cancelled" if _future.cancelled() else "unconfirmed"
+            if not _future.cancelled() and _future.exception() is None:
+                reply = _future.result()
+                value = reply.get("status") if isinstance(reply, dict) else None
+                if isinstance(value, str) and value in {"ok", "noop", "needs_choice", "pending_user", "unsupported", "error"}:
+                    status = value
+            _logger.info("console_action action=%s status=%s", action, status)
         future.add_done_callback(finished)
         return future
     catalog = load_voice_catalog()

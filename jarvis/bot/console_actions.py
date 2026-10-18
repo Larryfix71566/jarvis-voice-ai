@@ -112,6 +112,28 @@ def _reference_words(value: str, *, fillers: bool = True) -> list[str]:
     return [w for w in words if w not in _RESULT_FILLERS] if fillers else words
 
 
+def _spoken_result_number(words: list[str]) -> int | None:
+    """A narrow framing grammar; subject words must never become positions.
+
+    Keep in parity with WorkspaceRecents.spokenNumber. Do not use the subject
+    filler list here: removing every "one" would erase the requested position.
+    """
+    words = list(words)
+    for prefix in ({"open", "show", "select"}, {"the"}, {"result", "card"}, {"number", "no"}):
+        if words and words[0] in prefix:
+            words.pop(0)
+    if words and words[-1] == "again":
+        words.pop()
+    if len(words) == 2 and words[-1] in {"result", "card"}:
+        words.pop()
+    if len(words) == 2 and words[0] in {"first", "second", "third", "fourth", "fifth"} and words[-1] == "one":
+        words.pop()
+    if len(words) != 1:
+        return None
+    word = words[0].removeprefix("#")
+    return int(word) if word.isdecimal() else _RESULT_NUMBERS.get(word)
+
+
 def _resolve_observed_reference(reference: str, snapshot: dict) -> tuple[str | None, str | None]:
     """Resolve only the bounded, public entries actually disclosed by inventory.
 
@@ -123,11 +145,7 @@ def _resolve_observed_reference(reference: str, snapshot: dict) -> tuple[str | N
             if isinstance(row, dict) and _canonical_uuid(row.get("id"))
             and type(row.get("number")) is int and row["number"] > 0]
     raw_words = _reference_words(reference, fillers=False)
-    numbered = raw_words[1:] if raw_words and raw_words[0] in {"number", "no"} else raw_words
-    number = None
-    if len(numbered) == 1:
-        word = numbered[0].removeprefix("#")
-        number = int(word) if word.isdecimal() else _RESULT_NUMBERS.get(word)
+    number = _spoken_result_number(raw_words)
     if number is not None:
         matches = [row for row in rows if row["number"] == number]
     else:

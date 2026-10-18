@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); code awaits this branch/scope claim on main. Earlier WS-17 CC7a implementation landed through PR #198,
+**Status:** UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -2388,3 +2388,17 @@ Codex reviewer verified the actual terminal receipt and source/cleanup audit. La
 reviews/merges PR #203, reruns normal DEPLOY-MAIN against exact main, then
 completes live UI2-22…25. The failed 10-10 deployment and older SCK-startup
 failure remain historical evidence; this pass does not erase them.
+
+
+**Progress, 2026-10-17 (Codex; repair slices 3.2/3.5):** Both backend observed-inventory
+resolution and native Recents accept framed references including "open result number
+one" and "the first one". A narrow grammar preserves subjects such as "Route one"
+and "One Direction". Existing UUID/revision binding and ambiguous/stale refusal stay
+unchanged. Each dispatched console wait now emits one terminal action/status INFO
+breadcrumb; duplicate acknowledgements do not duplicate it, cancellation is labeled
+without guessing its cause, and targets, arguments, summaries and choices are excluded.
+Focused validation: 85 backend tests and 14 MortimerHost Recents tests passed. These
+are bounded regression checks, not proof of live Supervisor routing or UI2-24/25
+acceptance. No prompt guidance, menu refresh, weather-context, or roadmap-view/filter
+implementation is claimed by this slice. Next: action-level routing eval baseline
+before prompt changes, then the remaining ordered repairs and roadmap capability.

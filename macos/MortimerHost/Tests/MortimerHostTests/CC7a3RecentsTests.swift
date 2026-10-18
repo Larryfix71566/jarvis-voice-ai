@@ -105,6 +105,24 @@ final class CC7a3RecentsTests: XCTestCase {
         XCTAssertEqual(WorkspaceRecents.resolve("0", in: entries), .none)
     }
 
+    func testFramedNumbersAndSubjectsContainingNumberWords() {
+        let now = Date()
+        let route = result("Route one", minutesAgo: 4, now: now)
+        let band = result("One Direction", minutesAgo: 3, now: now)
+        let atlanta = result("Atlanta", minutesAgo: 2, now: now)
+        let paris = result("Paris", minutesAgo: 1, now: now)
+        let entries = WorkspaceRecents.listing(results: [route, band, atlanta, paris], pinned: [], unread: [], active: nil).entries
+        for phrase in ["result number one", "open result number one", "the first one", "show the first result", "select card number 1 again"] {
+            XCTAssertEqual(WorkspaceRecents.resolve(phrase, in: entries), .result(paris.id), phrase)
+        }
+        for (phrase, id) in [("Route one", route.id), ("One Direction", band.id), ("the Atlanta one", atlanta.id)] {
+            XCTAssertEqual(WorkspaceRecents.resolve(phrase, in: entries), .result(id), phrase)
+        }
+        for phrase in ["one two", "number one two", "first two", "0", "result number 99"] {
+            XCTAssertEqual(WorkspaceRecents.resolve(phrase, in: entries), .none, phrase)
+        }
+    }
+
     func testSubjectMatchesEveryWordAndExactSubjectWins() {
         let now = Date()
         let beach = result("Folly Beach", minutesAgo: 9, now: now, sources: true)

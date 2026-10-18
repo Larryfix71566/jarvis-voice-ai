@@ -7,6 +7,7 @@ a test implementation; the real action handler consumes their acknowledgement.
 import ast
 import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,7 +17,7 @@ import uuid
 import pytest
 
 from jarvis.bot.console_actions import build_console_action_tool, handle_console_request, _disclosed_inventory
-from jarvis.bot.console_protocol import MAX_MESSAGE
+from jarvis.bot.console_protocol import MAX_MESSAGE, ALLOWED_ACTIONS
 from jarvis.bot.console_protocol import validate_inventory
 from jarvis.bot.console_session import ConsoleSession
 
@@ -33,6 +34,7 @@ def bridge(*, with_sender=False):
     assert len(nodes) == 5
     waiters = {}
     namespace = dict(asyncio=asyncio, uuid=uuid, json=json, os=os, Any=Any,
+                     ALLOWED_ACTIONS=ALLOWED_ACTIONS, _logger=logging.getLogger("jarvis.bot.pipeline"),
                      MAX_MESSAGE=MAX_MESSAGE, _disclosed_inventory=_disclosed_inventory,
                      validate_inventory=validate_inventory,
                      console_session=ConsoleSession(session_id=SESSION, generation=GENERATION),
@@ -652,3 +654,66 @@ def test_unprojectable_numbered_passive_inventory_is_rejected_not_truncated(monk
         assert ns["console_inventory_revision"]["value"] == 0
         assert ns["console_session"].inventory is None
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("phrase", ["result number one", "open result number one", "the first one", "show the first result", "select card number 1 again"])
+def test_framed_voice_selection_binds_to_disclosed_uuid(phrase):
+    async def run():
+        prepare, callback, _ = bridge()
+        first, second = str(uuid.uuid4()), str(uuid.uuid4())
+        sent = []
+        async def send(request):
+            sent.append(request)
+            data = {"revision": 7, "results": [row(first, 1, "Atlanta"), row(second, 2, "Folly Beach")]}
+            await callback(native_reply(request, data=data if request["action"] == "inventory" else None))
+        _, handler = build_console_action_tool(send, session_id=SESSION, generation=GENERATION,
+                                             revision=7, await_result=prepare)
+        await handler({"action": "inventory"})
+        await handler({"action": "result_select", "target": phrase, "inventory_revision": 7})
+        assert sent[-1]["action"] == "result_select"
+        assert sent[-1]["target"] == first
+        assert sent[-1]["revision"] == 7
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("phrase,subject", [("Route one", "Route one"), ("One Direction", "One Direction"), ("the Atlanta one", "Atlanta")])
+def test_number_word_in_subject_does_not_choose_position_one(phrase, subject):
+    from jarvis.bot.console_actions import _resolve_observed_reference
+    first, subject_id = str(uuid.uuid4()), str(uuid.uuid4())
+    snapshot = {"results": [row(first, 1, "Paris"), row(subject_id, 2, subject)]}
+    assert _resolve_observed_reference(phrase, snapshot) == (subject_id, None)
+
+
+@pytest.mark.parametrize("phrase", ["one two", "number one two", "first two", "0", "result number 99"])
+def test_invalid_or_missing_number_never_selects_another_result(phrase):
+    from jarvis.bot.console_actions import _resolve_observed_reference
+    resolved, refusal = _resolve_observed_reference(phrase, {"results": [row(str(uuid.uuid4()), 1, "Atlanta")]})
+    assert resolved is None and refusal
+
+
+def test_console_terminal_log_is_once_and_content_free(caplog):
+    async def run():
+        prepare, callback, waiters, send, ns = bridge(with_sender=True)
+        async def transport_send(_transport, message):
+            reply = native_reply(message, status="needs_choice", summary="PRIVATE SUMMARY",
+                                 choices=[{"id": str(uuid.uuid4()), "label": "PRIVATE TITLE"}])
+            await callback(reply)
+            await callback(reply)  # duplicate acknowledgement must not duplicate logging
+        ns["send_app_message"] = transport_send
+        pending = prepare(str(uuid.uuid4()))
+        request_id = next(iter(waiters))
+        await send({"type": "console/request", "request_id": request_id, "action": "result_select",
+                    "target": "PRIVATE TARGET", "args": {"query": "PRIVATE QUERY"}})
+        await pending
+        await asyncio.sleep(0)
+        pending = prepare(str(uuid.uuid4()))
+        pending._mortimer_console_action = "PRIVATE INVALID ACTION"
+        pending.cancel()
+        await asyncio.sleep(0)
+        assert waiters == {}
+    with caplog.at_level(logging.INFO, logger="jarvis.bot.pipeline"):
+        asyncio.run(run())
+    assert [r.getMessage() for r in caplog.records] == [
+        "console_action action=result_select status=needs_choice",
+        "console_action action=unknown status=cancelled",
+    ]
