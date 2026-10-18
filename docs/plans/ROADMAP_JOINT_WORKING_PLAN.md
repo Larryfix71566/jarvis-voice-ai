@@ -267,3 +267,8 @@ after its session began validation and a running child appeared; its cleanup
 module is also absent from runner identity. Keep #210 open for scoped repairs
 and re-review. No real VM was pruned, no mailbox contacted, and no deployment
 or acceptance gate changed. Details: [review record](../roadmap-log/2026-10-17-ws-20-codex-three-pr-review.md).
+
+
+### 2026-10-18 — Restore parked enhancement intake after #211 merge (Codex)
+
+The 10-17 `fc9c958` candidate added the eight-item intake and four parked WS-23–26 cards after PR #211’s merged head `98ad864`. The merge therefore did not contain those later additions, although the old right-pane preview showed them. Rebased the exact documentation additions on current main `28420af`, preserving the separate three-PR review note and all intervening WS-17/13/20 source. The restoration creates no implementation claim, deployment or acceptance.

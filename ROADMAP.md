@@ -80,7 +80,7 @@ and the [dated reconciliation](docs/roadmap-log/2026-10-17-ws-20-codex-current-s
 
 This records all eight requested additions as planning inputs, not permission to
 implement, activate, contact anyone, or release. Codex owns this documentation
-slice on `codex/roadmap-status-20261017` (PR #211); new implementation owners,
+follow-up on `codex/roadmap-status-20261017` after #211 merged; new implementation owners,
 branches and scope must be dispatched before code. Existing acceptance-first
 priority remains in force. The next plans must build on the existing host,
 SQLite, run logs, result identities and durable notification/outbox pathways.
@@ -157,7 +157,7 @@ References: [architecture](docs/ARCHITECTURE.md),
 [mail/calendar/brief canonical design](docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md),
 [evidence-workflow canonical design](docs/plans/MORTIMER_EVIDENCE_WORKFLOW_IMPLEMENTATION_PLAN.md),
 [merged acceptance receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md)
-and [pending final evidence #209](https://github.com/Larryfix71566/jarvis-voice-ai/pull/209).
+and [merged final evidence #209](https://github.com/Larryfix71566/jarvis-voice-ai/pull/209).
 
 <details>
 <summary>Historical navigation — October 7 (superseded handoffs; retained for context)</summary>
@@ -472,15 +472,15 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
 - **Owner:** `codex` (bounded roadmap documentation); `claude` retains B4 and WS-13 ownership. Remaining WS-17 implementation belongs to Codex under Larry’s 10-07 assignment (CX-20); historical Claude attribution is preserved.
-- **Status:** landed foundation and documentation: B1–B4, 72-entry migration, ten-PR observation and #191 are complete. #207 reconciled and replaced closed #172/#174; #206 acceptance-first priority and #208 initial campaign evidence merged. Final campaign evidence is published via #209; #210 has reproduced cleanup findings and #212 has a bounded post-merge review; strict checker enforcement and remaining Phase A/B live-evidence closure stay open. This status refresh adds no product acceptance.
+- **Status:** landed foundation and documentation; four proposed parked enhancement cards (WS-23–26) are restored on the 10-18 follow-up branch after the original #211 merge omitted its later candidate commit. B1–B4, 72-entry migration, ten-PR observation and #191 are complete. #207 reconciled and replaced closed #172/#174; #206 acceptance-first priority and #208 initial campaign evidence merged. Final campaign evidence is published via #209; #210 has reproduced cleanup findings and #212 has a bounded post-merge review; strict checker enforcement and remaining Phase A/B live-evidence closure stay open. This status refresh adds no product acceptance.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
 - **Remaining work / acceptance:** Final evidence is published via #209; acceptance owners resolve and retest their remaining gates. Larry decides whether the checker becomes blocking after the warning period. #172/#174 cleanup and #173 implementation handoffs are complete, not pending work.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** current status documentation: `codex/roadmap-status-20261017`, based on main `f363444`, dispatched by Larry 10-17. Final campaign evidence and the current PR-review reconciliation are on `codex/acceptance-campaign-results-20261017` (#209), merged with main `f3d5378`. Earlier foundation, observation and cleanup attribution is preserved in the linked logs.
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
 - **Scope:** Active Codex documentation expansion authorized by Larry, 2026-10-07: `ROADMAP.md` top operational summary (actions, owners, blockers, pass conditions), Larry decision queue, and linked acceptance grouping (ready now versus waiting on code or decisions); this WS-20 block; narrow stale state/Where/Next step/Updated and evidence-reference wording in WS-17/21/11, reusing pending #172/#174 corrections and #191 exact-build results rather than creating parallel fixes or repeating tests; `docs/roadmap-log/**`; dated status/progress in the existing `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`. The #191 lifecycle-prefix corrections and exact-build receipts are already merged as `b6f09f4`; preserve them and reuse the existing evidence. Preserve all detailed source blocks, open/accepted gates, ownership, implementation scopes, production receipts and human decisions. Claude retains #173 repairs and #172/#174 integration; no edits to their branches, code or plans. No new plan, tracking copy, checker enforcement, credentials, provider workload, product change, activation or deployment. Historical B4 (Claude) and B1–B3 (Codex) scopes are inactive. Larry authorized merging only claim PR #192 after checks; the substantive roadmap update must remain a separate draft PR for Larry.
-- **Next step:** larry: retain release, acceptance and checker-enforcement decisions. codex: re-review #210 after its owner repairs the recorded findings. claude: reconcile WS-13’s stale #212 merge handoff and own later mail/calendar claims; #210 needs its sandbox ownership/launchd reservation recorded before landing. WS-22 remains parked.
-- **Updated:** 10-17 (main/PR/deployment reconciliation and right-pane refresh; no gate waived)
+- **Next step:** larry: review the follow-up documentation PR restoring the four parked proposals; retain release, acceptance and checker-enforcement decisions. codex: re-review #210 after its owner repairs the recorded findings. claude: reconcile WS-13’s stale #212 merge handoff and own later mail/calendar claims; #210 needs its sandbox ownership/launchd reservation recorded before landing. WS-22 remains parked.
+- **Updated:** 10-18 (restored enhancement intake on follow-up branch; no gate waived)
 
 </details>
 

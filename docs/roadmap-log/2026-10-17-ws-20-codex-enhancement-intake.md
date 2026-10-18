@@ -26,3 +26,8 @@ Shared task/run/result/notification identity and host authority are explicit;
 WS-22 now points to proposed WS-24 for lifecycle reconciliation. Existing
 checklists remain unchanged; new boxes are future requirements, not acceptance
 results. Sequence and parked state retain Larry’s acceptance-first priority.
+
+
+### 2026-10-18 — Restore parked enhancement intake after #211 merge (Codex)
+
+The 10-17 `fc9c958` candidate added the eight-item intake and four parked WS-23–26 cards after PR #211’s merged head `98ad864`. The merge therefore did not contain those later additions, although the old right-pane preview showed them. Rebased the exact documentation additions on current main `28420af`, preserving the separate three-PR review note and all intervening WS-17/13/20 source. The restoration creates no implementation claim, deployment or acceptance.
