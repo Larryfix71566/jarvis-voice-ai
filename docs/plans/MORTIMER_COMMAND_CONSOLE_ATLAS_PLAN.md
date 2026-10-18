@@ -2636,3 +2636,58 @@ independent verification after WS-28 cleanup repair/review. Existing twelve
 checks, protected baseline and source-authority constraints remain. No runtime
 edit, new provider/source grant, acceptance waiver, deployment or app restart
 is included. This claim reports no new review verdict or verifier result.
+
+### 2026-10-18 — Exact-source cross-review blocked before transmission
+
+Claim #221 landed as `afa1dd9b` before this follow-up. The prepared read-only
+review includes only the #216 source/test diff at `61f701d` against `ed21d82`
+and this plan’s approved §7.2. It excludes secrets, runtime logs and real user
+records; the request uses the existing Claude Code 2.1.291 subscription with
+`claude-sonnet-5`, tools/MCP/hooks/persistence disabled and API credential
+variables excluded. Automatic approval review rejected the operation before
+process creation because it did not consider payload-and-destination consent
+explicit enough. No source was sent, no review ran and no verdict is claimed.
+
+The precise packet hash and limits are in
+`docs/acceptance/command-console/receipts/ws17-cross-review-2026-10-18.json`.
+Larry must explicitly approve that payload/destination (or supply an authorized
+cross-system reviewer). No workaround or repeat source transmission was tried.
+Historical 900-second timeout remains a separate incomplete attempt. Cleanup
+repair/review, exact-candidate independent verification and all live/release
+gates remain open. No installation, production write, app action or deployment.
+
+### 2026-10-18 — Completed Claude review and caller-context validation
+
+Larry explicitly approved both precise source/test packet transmissions at
+20:34:47 UTC. The tools-disabled existing Claude Code 2.1.291 subscription
+review (`claude-sonnet-5`) completed on `61f701d` at 21:00:28 UTC. The returned
+report raises a first-arrival privacy candidate because two unchanged caller/
+Swift definitions were not in its diff. Full source inspection and 65 focused
+synthetic passes establish that sensitive events lose arguments/results before
+display mapping, while absent policy preserves legacy local rendering without
+a public source grant. No policy label is invented and no review pass is
+claimed from the focused tests. Exact report and hashes are in
+`docs/acceptance/command-console/receipts/ws17-cross-review-2026-10-18.md`
+and its JSON companion. Prior rejection, timeouts and plan-only output remain
+separate historical attempts, not verdicts.
+
+Cleanup source `241a382` has five green checks and 156 controller passes, but
+its Claude review raises global reclamation blockage on unrelated corrupt
+records. Atomic-write contract checks pass; corruption/ownership disposition
+remains unresolved rather than waived. No real VM operation, independent
+release verification, runtime merge, app action or deployment ran.
+
+### 2026-10-18 — Reviewer explicitly invalidates the first-arrival candidate
+
+The focused tools-disabled Claude reconciliation completed at 21:19:32 UTC
+on unchanged application source `61f701d`. It explicitly marks Finding 1
+INVALID as a blocking issue after reviewing the previously omitted sensitive
+event stripping and Swift nil-policy definition. The field asymmetry is real
+but deliberate; no implementation or public-source-label change is needed.
+Original report, explicit reconciliation and exact hashes are preserved in
+the `ws17-cross-review-2026-10-18` receipt JSON and paired report files.
+The reviewer executed no tests; the recorder’s 65 focused synthetic passes
+remain separate. Timezone consistency is unconfirmed, not a validated defect.
+The missing source-review verdict and its primary candidate are therefore
+resolved; cleanup review, full independent release verification and all
+deployment/live acceptance gates remain open. No parent checkbox closes.
