@@ -1243,3 +1243,32 @@ Earlier completed plans: [implemented plans](docs/plans/implemented/) and
 - **Updated:** 10-17 (Larry: acceptance before new development; previous parallel-start proposal superseded)
 
 </details>
+
+---
+
+## 10. Mortimer enhancement implementation plan — Larry, 2026-10-18
+
+<details id="ws-27">
+<summary>WS-27 — Subsequent enhancement design, sandbox voice evaluation and private local model · documentation only</summary>
+
+Larry requested this new plan at the end of the authoritative Git roadmap.
+This is the documentation dispatch for the new row and its two technical
+appendices; it grants no implementation claim. The acceptance-first priority
+above remains binding. Proposed verification, durable recovery, commitment and
+follow-through work already in [draft #219](https://github.com/Larryfix71566/jarvis-voice-ai/pull/219)
+keeps its own future workstream authority; this plan cross-references those
+proposals rather than restoring or assigning them again. [Draft #218](https://github.com/Larryfix71566/jarvis-voice-ai/pull/218)
+retains its existing release/acceptance status scope.
+
+- **Owner:** `codex` for this documentation dispatch only; implementation owners unassigned
+- **Status:** landed documentation via this PR; all proposed development and benchmark execution remain parked behind existing acceptance and a fresh dispatch
+- **Implemented by:** Codex authored the plan and technical appendices; no runtime implementation or benchmark results
+- **Remaining work / acceptance:** Review design and unresolved decisions; finish existing acceptance under its owners; separately authorize an isolated harness, setup/access and spend before runs. Compare immutable baseline → sandbox shared optimization/ablations → candidate models → held-out results; separately decide any production migration. Jev is ON HOLD until voice optimization and newer-model comparison resolve.
+- **Model version:** User requested GPT-6.1 Sol with high effort for planning; this entry records the preference, not independently verified execution telemetry or the deployed voice model
+- **Where:** `codex/mortimer-enhancement-plan-20261018`, based on main `28420af`; isolated worktree; no implementation branch
+- **Plan:** [Canonical enhancement plan](docs/plans/MORTIMER_ENHANCEMENT_IMPLEMENTATION_PLAN_2026-10-18.md), with [sandbox voice-model evaluation protocol](docs/plans/MORTIMER_VOICE_EVALUATION_PROTOCOL_2026-10-18.md) and [local-model setup/integration runbook](docs/plans/MORTIMER_PRIVATE_LOCAL_MODEL_RUNBOOK_2026-10-18.md) as appendices of this same row
+- **Scope:** Documentation only: this new end section of `ROADMAP.md`, the three linked documents, and the dated new-row log. Existing source blocks, plans, production receipt, ownership and acceptance checkboxes stay authoritative. No runtime paths, credentials, policy settings, model installations, provider calls, shared config/port/migration/launchd identifiers or deployment are authorized or reserved.
+- **Next step:** larry: review decisions and the sandbox-only test design; existing owners: complete release/acceptance first. Later assigned implementer: refresh main/claims, establish a safe non-destructive sandbox and obtain a bounded implementation/run dispatch. Do not invoke Tart pruning/reclaim while the recorded cleanup race/fingerprint blockers remain unresolved.
+- **Updated:** 10-18 (new documentation request and sandbox optimization/testing constraints; no gate closed)
+
+</details>
