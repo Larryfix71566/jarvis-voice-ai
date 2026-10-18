@@ -316,9 +316,11 @@ def test_pipeline_processor_order_locked(runtime, fakes):
     # -> TTS -> output -> assistant, plus MORTIMER_VOICE_WORKFLOWS_PLAN.md
     # D5/D6: the voice-workflow injector right before the LLM and the reply
     # guard right after it, so nothing reaches the transcript or TTS unchecked.
+    # WS-17 minimizes completed weather delegation context before workflow
+    # injection; it must not sit after the LLM or mutate the audio stages.
     assert kinds == [
         "TRANSPORT_INPUT", "VAD", "STT", "LLMUserAggregator",
-        "VoiceWorkflowInjector", "LLM", "ReplyGuard",
+        "WeatherContextMinimizer", "VoiceWorkflowInjector", "LLM", "ReplyGuard",
         "TRANSCRIPT", "TTS", "TRANSPORT_OUTPUT", "LLMAssistantAggregator",
     ]
 
@@ -337,7 +339,7 @@ def test_websocket_case_puts_the_client_message_processor_right_after_input(runt
     assert pipeline.processors[0] == "TRANSPORT_INPUT"
     assert pipeline.processors[1] is processor
     assert isinstance(pipeline.processors[2], FakeVAD)
-    assert len(pipeline.processors) == 12   # the order above plus this processor
+    assert len(pipeline.processors) == 13   # the order above plus this processor
 
 
 def test_anthropic_base_url_builds_native_service_with_caching(runtime, fakes, monkeypatch):
