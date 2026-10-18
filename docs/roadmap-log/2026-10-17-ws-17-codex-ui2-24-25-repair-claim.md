@@ -23,3 +23,18 @@ They are outside WS-17; this claim neither edits that code nor enables cleanup.
 WS-13's stale #212 handoff remains with Claude. The two-city title/rows
 observation remains open and can run on the already installed app without
 first deploying main.
+
+
+## Roadmap access and awareness follow-up
+
+Larry asked Codex to ensure Mortimer has roadmap access and knows it. A read-only
+probe of `mcp_servers.mcp_repo.logic.repo_read_file("ROADMAP.md")`, with the
+repository root explicitly set to production, succeeded: 154,209 bytes, WS-17
+present. No contents were sent to a model or printed. Developer has `mcp-repo`
+in its configured roster; map injection exists in both developer loops. The
+injected map previously contained no `ROADMAP.md` reference, and neither did
+the Supervisor/Developer prompt instructions. Source navigation now documents
+the existing route; the pending claim explicitly covers the missing prompt
+routing and focused tests before code edits. This is not proof that a running
+Supervisor has loaded the new instructions. Deployment/restart and an actual
+voice check remain separate, and the #210 deployment caution is unchanged.

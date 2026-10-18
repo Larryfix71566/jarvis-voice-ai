@@ -1369,6 +1369,18 @@ extra feature flag, migration, launchd label or port is introduced. Required
 cross-review, frozen validation, deployment and Larry’s affected-case live
 acceptance remain separate gates. WS-21 transfer behavior is unchanged.
 
+**Roadmap awareness addition — Larry, 2026-10-17:** Mortimer must know that
+`ROADMAP.md` is readable through the Developer's existing repository tools.
+The source navigation map now names that route within its injected 8,000-character
+prefix. After the claim lands, add explicit Supervisor delegation for roadmap,
+workstream, blocker and acceptance-status questions and Developer guidance to
+read the file and its linked evidence on demand. Do not answer project status
+from stale conversational memory or treat reading as edit authorization. Report
+the actual checkout/revision; local deployment is not automatically current
+GitHub main. Preserve existing path exclusions, permissions and privacy guards.
+Validate prompt routing and real read access with synthetic/offline tests; a
+live "what remains in WS-17?" check belongs to the reviewed deployed candidate.
+
 **Claim progress:** main `c097ee0` includes the dispatch but still names the old
 branch and lacks the prompt/evaluation/context scope in its Scope field. This
 documentation-only claim supplies those fields before code. Main also includes
