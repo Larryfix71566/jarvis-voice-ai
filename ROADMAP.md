@@ -970,6 +970,27 @@ Renumbering completed in the main integration. Read-only production verification
 
 **WS-17 roadmap snapshot reservation before implementation, 2026-10-17 (Codex):** Optional `roadmap` on the existing `repo_read_file` response and DisplayPayload, schema `mortimer.roadmap.v1`, carries a complete bounded read-only snapshot of the fixed `ROADMAP.md` and guarded dated log files. Fields: `schema`, `provenance` (`path`, local `revision`, `sha256`, `read_at`, nullable `dirty`, `source_kind`), `cards` (stable `id`, `title`, verbatim `status`, derived `lifecycle`, current `owner`, `fields`, `details`, `checklist`), `logs` (guarded `path`, front-matter `date`, `rows`, `sha256`, `title`), and `issues`. No provider-generated status, new permission, service, port, migration, persistent cache or implicit Git fetch. Oversized snapshots refuse explicitly instead of dropping rows. Native filters/actions will be reserved with their exact contract before they are implemented; this reservation alone does not activate a native view or filtering.
 
+**WS-17 roadmap controls reservation, 2026-10-17 (Codex, before implementation):**
+One additive `roadmap_control` console action (existing negotiated protocol).
+Target is an existing roadmap result UUID; `args.operation` is `replace`,
+`refine`, `clear`, `focus`, or `refresh`. Filter fields: `owners`, `authors`,
+`states`, `topics`, `workstreams` (bounded string arrays); `checklist` is
+`all`, `remaining` or `larry`; `blockers` is a boolean; `period` is `all`,
+`this_week` or `last_seven_days`. AND across facets / OR within; empty arrays
+clear a facet. Focus requires exactly one known workstream and clears conflicting
+facets. Unknown values refuse without changing selection. Native and voice use
+the same state owner. The existing console request/result channel carries fixed
+read-only roadmap refresh requests and a bounded `data.display` reply; no model
+call, new endpoint, arbitrary path or broader source authority. Refresh timeout
+is 15 seconds native / 20 seconds voice, and source acquisition is bounded to
+8 seconds. Optional DisplayPayload `roadmap_timezone` carries the configured
+IANA timezone; unavailable/invalid timezone refuses relative-date filters.
+Roadmap provenance adds `repository_id` (SHA-256 of the canonical guarded repo
+root, never the raw path) to distinguish identity across checkouts. Filter state
+and expansion remain native memory only. Sharing exports the frozen filtered
+projection, never hidden cards; protected results retain their existing limits.
+
+
 ## 4. Conflict register
 
 Open means not yet resolved. Each entry names who resolves it.
