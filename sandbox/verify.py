@@ -14,6 +14,7 @@ from sandbox.artifacts import Candidate, SECRET, SandboxError
 from sandbox.control import GUEST_INPUT, GUEST_ROOT
 from sandbox.durable import atomic_bytes, atomic_json
 from sandbox.files import WorkspaceFiles
+from sandbox.prune import discard
 
 
 # GC1b: retain Larry's 900-second full-unit gate after moving it into the VM.
@@ -190,6 +191,11 @@ class Verifier:
             except Exception:
                 receipt.update(passed=False, status="stop_failed")
                 raise
+            else:
+                # The receipt and logs above are the evidence; the clone is
+                # not. Delete it now rather than leaving one per validation.
+                if verification_task is not None:
+                    receipt["cleanup"] = discard(self.controller, verification_task)
             finally:
                 atomic_json(directory / "receipt.json", receipt)
                 with files._locked():
