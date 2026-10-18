@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** A claim-only current-request foreground amendment is proposed on `docs/ws17-arrival-claim-20261018`; CX-25 and Larry's decision must precede implementation. The existing no-jump rule remains binding. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
+**Status:** Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -2735,3 +2735,29 @@ installation, merge, deployment or restart is authorized by this claim-only
 proposal. If caller analysis requires WS-05-owned paths or a new wire field,
 obtain the precise coordination/reservation first. Existing exact-source
 cross-review and release gates still apply to any eventual repair.
+
+
+### 2026-10-18 — Larry approves the foreground exception; claim awaits main
+
+Larry approved the proposed current-request foreground behavior and publication
+of this roadmap/ownership update to `Larryfix71566/jarvis-voice-ai` for review
+at 23:44 UTC. This approves the policy described immediately above. It does
+not approve merging the claim or a runtime PR, deployment, restart or changes
+to live history. The proposed implementation branch remains inactive until the
+claim is on main. The current UI2-23 checklist reflects the approved exception;
+its original no-jump rule is retained in §7.2 and the preceding dated history.
+
+Classification correction: an unread named-city arrival while another result
+was active matched the prior no-jump rule. That observation alone did not
+prove a UI2-24 failure; the earlier diagnostic classification was too broad.
+UI2-24 actions remain untested and UI2-25 has only partial identity/cache
+proof, with full reopen/stale-refresh acceptance still open. No observation
+is erased and no parent acceptance checkbox closes. This entry contains no
+production log, transcript, service metadata or private operational receipt.
+
+The exact originally prepared documentation commit `6102f01` was published
+once after Larry's explicit consent. Current main remains `d38c886`; only
+draft #224 was open at refresh. Subsequent source changes require the main
+claim, actual caller-chain regressions, exact-source cross-review and the
+existing independent release gates. No implementation or runtime operation
+ran during claim publication.
