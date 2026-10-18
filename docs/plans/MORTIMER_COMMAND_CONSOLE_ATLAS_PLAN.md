@@ -2402,3 +2402,38 @@ are bounded regression checks, not proof of live Supervisor routing or UI2-24/25
 acceptance. No prompt guidance, menu refresh, weather-context, or roadmap-view/filter
 implementation is claimed by this slice. Next: action-level routing eval baseline
 before prompt changes, then the remaining ordered repairs and roadmap capability.
+
+
+### Repair progress — 2026-10-17, measured routing and rendered Recents
+
+On the claimed WS-17 branch following `ed4107b`, the real AppKit Results menu
+retained its first content closure after the store/button changed to two cities.
+The regression failed four assertions before the fix; `.id(consoleRevision)`
+rebuilds that transient menu using the existing inventory mutation owner.
+The same test now verifies two cities, pin order and close; 35 related native
+tests pass. Larry's original button showed **one** result, which this distinct
+menu-cache reproduction does not explain. Keep that live count/routing case open.
+
+Larry authorized the bounded Haiku baseline (two invented histories, no real
+tools/specialists/memories/logs, temporary databases, max 1,024 output tokens
+per call and at most twelve calls). On pre-guidance `ed4107b`,
+`claude-haiku-4-5` called `view_set` twice instead of `result_select` for the
+numbered-result case (FAIL); repeat weather delegated to Analyst (PASS).
+Overall 1/2 with workflows/reply guard off. This does not reproduce the prior
+live no-delegation weather failure and is not native/audio acceptance.
+
+Candidate guidance explicitly asks for inventory → result_select with the
+observed revision and teaches Supervisor/Developer the guarded roadmap-read
+route. Action-level evaluators distinguish merely opening the view from actual
+selection and require real Analyst delegation for the repeat-weather case.
+The synthetic runner disables all tool/specialist execution, caps requests and
+isolates temporary state. 185 focused backend/prompt tests pass. Candidate live
+comparison requires its own bounded approval; no routing-success claim yet.
+
+The roadmap snapshot wire field is reserved in ROADMAP §3 before its reader is
+implemented. Weather-context minimization, complete native roadmap/filter/refresh/
+sharing behavior, cross-review, independent release and live acceptance remain
+open. The separately reported #210 prune race/fingerprint findings still block
+deployment; this slice does not alter that code.
+
+Broader local validation of this slice: Python unit suite 6,503 passed / 11 skipped / 13 warnings; full MortimerHost 553 executed / six skipped / zero failures, including actual private captures. No Tart/cleanup run or deployment. These are local suite results, not independent release acceptance.

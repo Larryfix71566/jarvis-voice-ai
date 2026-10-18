@@ -85,3 +85,27 @@
   must_not_say: "bundle|swift build"
   prior: [{role: user, content: "Is pull request 49 ready?"}, {role: assistant, content: "Validation passed. Pull request 49 is open."}]
 - {control: true, input: "What's the weather in Alpharetta?", expect_any: [analyst]}
+
+# WS-17 UI2-24/25: synthetic prior turns shaped like the 10-17 failures.
+# Action assertions distinguish opening a view from selecting a retained result.
+- id: ws17-numbered-result
+  input: "Open result number one"
+  require_tool: console_action
+  require_action: result_select
+  action_order: [inventory, result_select]
+  prior:
+    - {role: user, content: "What's the weather in Folly Beach?"}
+    - {role: assistant, content: "Folly Beach is sunny and 75 degrees. Its weather card is open."}
+    - {role: user, content: "What's the weather in Atlanta?"}
+    - {role: assistant, content: "Atlanta is cloudy and 70 degrees. Its weather card is open."}
+- id: ws17-repeat-weather
+  input: "What's the weather in Folly Beach?"
+  require_tool: delegate_task
+  require_delegate: analyst
+  prior:
+    - {role: user, content: "What's the weather in Folly Beach?"}
+    - role: assistant
+      content: ""
+      tool_calls: [{id: call_weather_fixture, type: function, function: {name: delegate_task, arguments: '{"agent_name":"analyst","task":"Get the weather in Folly Beach"}'}}]
+    - {role: tool, tool_call_id: call_weather_fixture, content: "Folly Beach is sunny and 75 degrees, with a light southeast wind. The weather card is open."}
+    - {role: assistant, content: "Folly Beach is sunny and 75 degrees, with a light southeast wind."}

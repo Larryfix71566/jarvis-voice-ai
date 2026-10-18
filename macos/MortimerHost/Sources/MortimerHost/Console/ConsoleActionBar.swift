@@ -219,6 +219,11 @@ struct ConsoleActionBar: View {
         .padding(.horizontal, 2)
         .background(mode == .results ? AppTheme.accentFaint : Color.clear)
         .clipShape(RoundedRectangle(cornerRadius: 6))
+        // AppKit retains the Menu content closure across store updates: the
+        // button count changed while its opened rows kept the first result.
+        // Rebuild this transient menu on the existing inventory revision;
+        // that revision also covers pin/order/close and remains voice's guard.
+        .id(workspace.consoleRevision)
         .help("Show results; the arrow lists Recents")
         .accessibilityLabel(title)
         .accessibilityIdentifier("console.results")

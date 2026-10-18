@@ -54,7 +54,10 @@ CONSOLE_ACTION_SCHEMA = {
             "by number. For result commands, read inventory with args.scope='results' "
             "before using a number or subject, and pass "
             "that inventory's revision as inventory_revision. Numbers refer to that "
-            "observed list, never a newer list. result_reopen shows an existing retained "
+            "observed list, never a newer list. For 'open result number one', call "
+            "inventory then result_select target '1' with inventory_revision; "
+            "view_set merely opens a view and does not select that requested result. "
+            "result_reopen shows an existing retained "
             "result without fetching it again. compare_set also requires secondary_target."
         ),
         "parameters": {
