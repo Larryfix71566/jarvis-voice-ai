@@ -2,7 +2,7 @@
 date: 2026-10-18
 system: codex
 rows: [WS-27]
-prs: []
+prs: [220]
 ---
 
 # Mortimer subsequent enhancement documentation dispatch
@@ -65,3 +65,7 @@ all changed files Markdown, all local relative file links present, balanced
 code fences, all 97 inventory rows present with consistent category counts,
 and unchanged existing checkbox-state sequences. No runtime or live API suite
 was run; no acceptance results, private records or provider workloads fabricated.
+
+Published draft [PR #220](https://github.com/Larryfix71566/jarvis-voice-ai/pull/220).
+The branch is mergeable at publication; GitHub checks were pending. No merge or
+deployment was performed. Final local documentation checks pass.
