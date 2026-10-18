@@ -2437,3 +2437,37 @@ open. The separately reported #210 prune race/fingerprint findings still block
 deployment; this slice does not alter that code.
 
 Broader local validation of this slice: Python unit suite 6,503 passed / 11 skipped / 13 warnings; full MortimerHost 553 executed / six skipped / zero failures, including actual private captures. No Tart/cleanup run or deployment. These are local suite results, not independent release acceptance.
+
+
+### Repair progress — 2026-10-17, candidate routing and source foundations
+
+Larry approved the bounded candidate comparison. On prompt/evaluator source
+`75694b7`, both synthetic Haiku cases passed: observed inventory then
+`result_select`, and repeat weather delegated to Analyst. Baseline `ed4107b`
+was 1/2; candidate is 2/2. This is neither the full 31-case evaluation nor
+live audio/native acceptance. No additional paid probes are authorized by
+this receipt.
+
+The weather-context safeguard follows actual successful weather calls and the
+Supervisor's response boundaries. It keeps a late result for its first relay,
+then removes delivered forecast copies from retained model context at a later
+real user turn. Transcript/TTS text and unrelated tool results remain intact;
+already-delivered assistant prose in a mixed weather turn is minimized too.
+Nine direct regression tests and 61 related tests pass. No freshness owner,
+backend TTL, privacy policy or native result identity changed.
+
+Dormant roadmap foundations parse every complete workstream card and guarded
+dated log with provenance, retaining unknown fields and reporting malformed
+sections explicitly. Eight reader tests plus 62 existing repo tests pass.
+The additive native decoder compiles; the 232 existing JarvisKit tests pass.
+The reader is not yet exposed and the native roadmap view/filter/refresh/share
+capability is not yet implemented. Source validation awaits the approved
+main-branch claim in #215; no registry guard has been relaxed.
+
+The frozen full backend run reports 6,519 passes, 11 skips and one failure:
+`test_storage_context.py::test_scope_paths_real_connections_explicit_precedence_preferences_and_legacy`
+observed an unexpected outside.db. All eleven tests in that file pass alone.
+Record the full-suite failure as unresolved; do not convert the isolated pass
+into release evidence. No production or Tart operation occurred. Next: land
+#215, strictly validate the complete source contract, then finish the native
+presentation and controls before cross-review/release/live acceptance.

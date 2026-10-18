@@ -150,8 +150,180 @@ def repo_read_file(path: str) -> dict:
     except UnicodeDecodeError:
         return _err(f"{path} is not valid UTF-8 text (binary file?)")
     rel = resolved.relative_to(root.resolve(strict=False)).as_posix()
+    # Preserve the exact source-attestation response contract. The dormant
+    # roadmap snapshot helper below needs the corresponding host validator
+    # extension before it can be exposed on this transport.
     return {"ok": True, "path": rel, "bytes": size, "content": content}
 
+
+# A derived presentation of the canonical source, never another status store.
+ROADMAP_SNAPSHOT_MAX_BYTES = 512 * 1024
+ROADMAP_LOG_MAX_FILES = 512
+ROADMAP_LOG_TOTAL_MAX_BYTES = 4 * 1024 * 1024
+_ROADMAP_STATES = frozenset({"proposed", "claimed", "in-progress", "review", "landed", "accepted", "blocked", "parked"})
+
+
+def _roadmap_cards(content: str) -> tuple[list[dict], list[str]]:
+    """Parse fenced Markdown conservatively; retain unknown prose verbatim."""
+    import re
+    cards, issues = [], []
+    current, depth, fence = None, 0, None
+    seen: set[str] = set()
+    for line in content.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith(("```", "~~~")):
+            marker = stripped[:3]
+            fence = None if fence == marker else (marker if fence is None else fence)
+        if fence is not None or stripped.startswith(("```", "~~~")):
+            if current is not None:
+                current[1].append(line)
+            continue
+        opening = re.search(r'<details\b[^>]*\bid=["\'](ws-\d+)["\'][^>]*>', line, re.I)
+        if opening:
+            if current is not None:
+                issues.append(f"{current[0]}: nested workstream section is unsupported")
+            else:
+                current = [opening[1].upper(), []]
+                depth = 0
+        if current is None:
+            continue
+        current[1].append(line)
+        depth += len(re.findall(r'<details\b[^>]*>', line, re.I))
+        depth -= len(re.findall(r'</details\s*>', line, re.I))
+        if depth > 0:
+            continue
+        identity, lines = current
+        current = None
+        if identity in seen:
+            issues.append(f"{identity}: duplicate section; not combined")
+            continue
+        seen.add(identity)
+        details = "\n".join(lines)
+        summary = re.search(r'<summary>(.*?)</summary>', details, re.S)
+        title = re.sub(r'<[^>]+>', '', summary[1]).strip() if summary else identity
+        fields: dict[str, str] = {}
+        checklist = []
+        section = ""
+        for source_line in lines:
+            field = re.match(r'^- \*\*([^*]+):\*\*\s*(.*)$', source_line)
+            if field:
+                label, value = field.groups()
+                if label in fields:
+                    issues.append(f"{identity}: duplicate {label} field; see source details")
+                else:
+                    fields[label] = value.strip()
+                section = label
+            elif source_line.startswith("#"):
+                section = source_line.lstrip("# ")
+            item = re.match(r'^\s*- \[([ xX])\]\s+(.*)$', source_line)
+            if item:
+                checklist.append({"text": item[2], "checked": item[1].lower() == "x", "section": section})
+        status = fields.get("Status", "")
+        token = re.match(r'^([a-z-]+)(?=\s|:|$)', status.casefold())
+        lifecycle = token[1] if token and token[1] in _ROADMAP_STATES else "unclassified"
+        if not summary or not status or "Owner" not in fields:
+            issues.append(f"{identity}: missing summary, Status or Owner; see source details")
+        if lifecycle == "unclassified":
+            issues.append(f"{identity}: unclassified lifecycle; original status preserved")
+        cards.append({"id": identity, "title": title, "status": status, "lifecycle": lifecycle,
+                      "owner": fields.get("Owner", ""), "fields": fields,
+                      "details": details, "checklist": checklist})
+    if current is not None:
+        issues.append(f"{current[0]}: unclosed workstream section; source is malformed")
+    if not cards:
+        issues.append("No complete workstream sections found")
+    # Stable sort; landed remains open until explicitly accepted.
+    return sorted(cards, key=lambda c: c["lifecycle"] == "accepted"), issues
+
+
+def _roadmap_logs(root: Path) -> tuple[list[dict], list[str]]:
+    import datetime
+    import hashlib
+    import re
+    import yaml
+    records, issues = [], []
+    try:
+        directory = resolve_repo_path(root, "docs/roadmap-log")
+        if not directory.is_dir():
+            return [], ["Dated roadmap log directory is missing"]
+        files = sorted(directory.glob("*.md"))
+        if len(files) > ROADMAP_LOG_MAX_FILES:
+            raise RepoPathError("Roadmap logs exceed the file limit; snapshot was not truncated")
+        total = 0
+        for file in files:
+            # Validate every child, including symlinks, through the same guards.
+            relative = file.relative_to(root.resolve()).as_posix()
+            try:
+                resolved = resolve_repo_path(root, relative)
+                size = resolved.stat().st_size
+                total += size
+                if total > ROADMAP_LOG_TOTAL_MAX_BYTES:
+                    raise RepoPathError("Roadmap logs exceed the total byte limit; snapshot was not truncated")
+                if size > REPO_READ_MAX_BYTES:
+                    issues.append(f"{relative}: exceeds guarded per-file read limit")
+                    continue
+                raw = resolved.read_bytes()
+                if len(raw) > REPO_READ_MAX_BYTES:
+                    raise RepoPathError("Roadmap log grew beyond the read limit")
+                text = raw.decode("utf-8")
+                match = re.match(r'\A---\r?\n(.*?)\r?\n---(?:\r?\n|$)', text, re.S)
+                metadata = yaml.safe_load(match[1]) if match else None
+                if not isinstance(metadata, dict):
+                    raise ValueError("missing front matter")
+                date_value = metadata.get("date")
+                if isinstance(date_value, datetime.date) and not isinstance(date_value, datetime.datetime):
+                    day = date_value.isoformat()
+                elif isinstance(date_value, str) and re.fullmatch(r'\d{4}-\d{2}-\d{2}', date_value):
+                    day = datetime.date.fromisoformat(date_value).isoformat()
+                else:
+                    raise ValueError("invalid date")
+                rows = metadata.get("rows")
+                if not isinstance(rows, list) or not rows or any(
+                    not isinstance(row, str) or not re.fullmatch(r'WS-\d+', row) for row in rows
+                ):
+                    raise ValueError("invalid rows")
+                heading = next((line.lstrip("# ").strip() for line in text[match.end():].splitlines()
+                                if line.startswith("# ")), file.stem)
+                records.append({"path": relative, "date": day, "rows": rows,
+                                "sha256": hashlib.sha256(raw).hexdigest(), "title": heading})
+            except (OSError, UnicodeError, ValueError, yaml.YAMLError):
+                issues.append(f"{relative}: unreadable or malformed date/rows metadata")
+            except RepoPathError as exc:
+                # A refused symlink is reported; an aggregate bound refuses the
+                # snapshot rather than returning a plausible partial history.
+                if "limit" in str(exc):
+                    raise
+                issues.append(f"{relative}: path refused by repository guards")
+    except OSError:
+        issues.append("Dated roadmap log directory could not be read")
+    return records, issues
+
+
+def _roadmap_snapshot(root: Path, content: str) -> dict:
+    import datetime
+    import hashlib
+    import json
+    import subprocess
+    cards, issues = _roadmap_cards(content)
+    logs, log_issues = _roadmap_logs(root.resolve())
+    revision, dirty = None, None
+    # Local read only. Disable executable fsmonitor hooks; never fetch or pull.
+    def git(*args):
+        return subprocess.run(["git", "-c", "core.fsmonitor=false", "-C", str(root), *args],
+                              capture_output=True, text=True, check=True, timeout=3).stdout.strip()
+    try:
+        revision = git("rev-parse", "--verify", "HEAD")
+        dirty = bool(git("status", "--porcelain", "--untracked-files=all", "--", "ROADMAP.md", "docs/roadmap-log"))
+    except (OSError, subprocess.SubprocessError):
+        issues.append("Local Git provenance unavailable; no main/installed-revision claim")
+    snapshot = {"schema": "mortimer.roadmap.v1", "provenance": {
+        "path": "ROADMAP.md", "revision": revision, "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        "read_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "dirty": dirty, "source_kind": "local_checkout"},
+        "cards": cards, "logs": logs, "issues": issues + log_issues}
+    if len(json.dumps(snapshot, ensure_ascii=False).encode("utf-8")) > ROADMAP_SNAPSHOT_MAX_BYTES:
+        raise RepoPathError("Roadmap snapshot exceeds 512 KiB; no workstreams were silently truncated")
+    return snapshot
 
 def repo_list_files(subdir: str = "", pattern: str = "") -> dict:
     """List files under `subdir` (repo root if empty), optionally filtered

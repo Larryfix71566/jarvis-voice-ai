@@ -30,6 +30,7 @@ import os
 import re
 import time
 import uuid
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -39,7 +40,10 @@ from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.frames.frames import OutputTransportMessageUrgentFrame
+from pipecat.frames.frames import (OutputTransportMessageUrgentFrame, LLMContextFrame,
+    LLMFullResponseStartFrame, LLMFullResponseEndFrame, InterruptionFrame)
+from pipecat.observers.base_observer import BaseObserver
+from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -75,6 +79,7 @@ from jarvis.bot.voice_guidance import (
     VoiceTurnState,
     VoiceWorkflowInjector,
     rtvi_observer_params,
+    is_real_user_message,
 )
 from jarvis.bot.sensitive_turn import is_sensitive as _voice_is_sensitive
 from jarvis.voice_workflows import wrap_delegate_handler
@@ -201,6 +206,167 @@ from jarvis.vision import execution_route_summary, resolve_vision_execution_rout
 _logger = logging.getLogger(__name__)
 
 
+# Only successful weather tool execution marks a request. No task-text or
+# forecast keyword inference, process-global callback, source cache or TTL.
+_WEATHER_CONTEXT_NOTE = (
+    "[Weather details omitted from retained Supervisor context. The original "
+    "conversation transcript is unchanged. For weather again, use "
+    "local_weather for here or delegate the named place to Analyst. The native "
+    "workspace alone decides whether its original result is still fresh.]"
+)
+
+
+@dataclass
+class _WeatherContextCall:
+    owner: Any
+    call_id: str
+    used: bool = False
+
+    def mark(self) -> None:
+        self.used = True
+        if self.call_id:
+            self.owner.weather_calls.add(self.call_id)
+
+
+_weather_context_call: ContextVar[_WeatherContextCall | None] = ContextVar(
+    "weather_context_call", default=None)
+
+
+def _mark_weather_context() -> None:
+    call = _weather_context_call.get()
+    if call is not None:
+        call.mark()
+
+
+class WeatherContextMinimizer(FrameProcessor):
+    """Forget delivered forecast copies only at a later REAL user turn.
+
+    Pipecat's universal context stores OpenAI-shaped tool messages (provider
+    adapters translate a copy). Tool IDs and explicit late-note object identity
+    are the authority, never model-generated task text. The original callback,
+    transcript observer and TTS receive the complete answer. In a mixed turn,
+    unrelated tool results remain intact; only the assistant's already-delivered
+    prose is replaced alongside the weather result, so its paraphrase cannot
+    reintroduce the stale forecast. No current-turn result is rewritten.
+    """
+    def __init__(self) -> None:
+        super().__init__()
+        self.weather_calls: set[str] = set()
+        self.late_notes: list[dict] = []
+        self.ready_calls: set[str] = set()
+        self.ready_notes: set[int] = set()
+        self.relay_turns: list[dict] = []
+        self.context: Any = None
+        self.active_relay: tuple[set[str], set[int], dict | None] | None = None
+
+    def arm_late_note(self, message: dict) -> None:
+        call = _weather_context_call.get()
+        if call is not None and call.used:
+            self.late_notes.append(message)
+            # A cancelled function delivers through this note, not another
+            # tool-result frame. Transfer ownership instead of retaining its
+            # old call ID for the rest of the session.
+            call.owner.weather_calls.discard(call.call_id)
+
+    def begin_relay(self) -> None:
+        messages = self.context.get_messages() if self.context is not None else []
+        calls = {message.get("tool_call_id") for message in messages
+                 if isinstance(message, dict) and message.get("role") == "tool"
+                 and message.get("tool_call_id") in self.weather_calls}
+        notes = {id(note) for note in self.late_notes if any(note is message for message in messages)}
+        turn = next((message for message in reversed(messages) if is_real_user_message(message)), None)
+        self.active_relay = (calls, notes, turn)
+
+    def finish_relay(self) -> None:
+        if self.active_relay is None:
+            return  # a stale end frame must not consume a newly delivered note
+        calls, notes, turn = self.active_relay
+        self.ready_calls.update(calls)
+        self.ready_notes.update(notes)
+        if (calls or notes) and turn is not None and not any(turn is old for old in self.relay_turns):
+            self.relay_turns.append(turn)
+        self.active_relay = None
+
+    def minimize(self, context: Any) -> None:
+        self.context = context
+        messages = context.get_messages()
+        boundaries = [i for i, message in enumerate(messages) if is_real_user_message(message)]
+        if not boundaries:
+            return
+        # A tool continuation or injected note is not a new user turn. Even
+        # when another user has interrupted, a result appended after them is
+        # still available for its first relay until a subsequent real turn.
+        cutoff = boundaries[-1]
+        affected = False
+        consumed: set[str] = set()
+        for message in messages[:cutoff]:
+            if not isinstance(message, dict):
+                continue
+            if is_real_user_message(message):
+                affected = any(message is turn for turn in self.relay_turns)
+            # A delegate task can itself quote an older forecast. Retain its
+            # tool identity and non-weather parallel calls, but not that copy.
+            for tool_call in message.get("tool_calls", []) or []:
+                if not isinstance(tool_call, dict) or tool_call.get("id") not in self.ready_calls:
+                    continue
+                function = tool_call.get("function")
+                if isinstance(function, dict) and function.get("name") == "delegate_task":
+                    try:
+                        arguments = json.loads(function.get("arguments") or "{}")
+                    except (ValueError, TypeError):
+                        arguments = {}
+                    agent = arguments.get("agent") if isinstance(arguments, dict) else None
+                    function["arguments"] = json.dumps({"agent": agent or "analyst", "task": _WEATHER_CONTEXT_NOTE})
+                affected = True
+                if message.get("content"):
+                    message["content"] = _WEATHER_CONTEXT_NOTE
+            call_id = message.get("tool_call_id")
+            weather_result = (message.get("role") == "tool"
+                              and isinstance(call_id, str) and call_id in self.ready_calls)
+            late_note = id(message) in self.ready_notes and any(message is note for note in self.late_notes)
+            if weather_result or late_note:
+                message["content"] = _WEATHER_CONTEXT_NOTE
+                affected = True
+                if weather_result:
+                    consumed.add(call_id)
+                if late_note:
+                    self.ready_notes.discard(id(message))
+                    self.late_notes = [note for note in self.late_notes if note is not message]
+            elif affected and message.get("role") == "assistant" and message.get("content"):
+                message["content"] = _WEATHER_CONTEXT_NOTE
+        self.weather_calls.difference_update(consumed)
+        self.ready_calls.difference_update(consumed)
+        self.relay_turns = [turn for turn in self.relay_turns if any(turn is msg for msg in messages[cutoff:])]
+        # Do not retain notes already removed by a context compactor.
+        self.late_notes = [note for note in self.late_notes if any(note is msg for msg in messages)]
+
+    async def process_frame(self, frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+        if isinstance(frame, LLMContextFrame) and direction == FrameDirection.DOWNSTREAM:
+            self.minimize(frame.context)
+        await self.push_frame(frame, direction)
+
+
+class WeatherContextRelayObserver(BaseObserver):
+    """Only the actual Supervisor's response boundaries can retire a result.
+
+    Snapshot eligible call/note identities at START, so a result injected during
+    an older response cannot be erased by that response's END. Frame forwarding
+    through downstream processors must not create a second start/end cycle.
+    """
+    def __init__(self, owner: WeatherContextMinimizer, llm: Any) -> None:
+        super().__init__()
+        self.owner, self.llm = owner, llm
+
+    async def on_push_frame(self, data) -> None:
+        if data.direction != FrameDirection.DOWNSTREAM or data.source is not self.llm:
+            return
+        if isinstance(data.frame, LLMFullResponseStartFrame):
+            self.owner.begin_relay()
+        elif isinstance(data.frame, (LLMFullResponseEndFrame, InterruptionFrame)):
+            self.owner.finish_relay()
+
+
 def _weather_candidate_inventory(data: dict, subject_key: str) -> dict | None:
     """A host-only exact-key query projection; never a model-observed list."""
     if (type(data.get("revision")) is not int or data["revision"] < 0
@@ -246,6 +412,7 @@ class Runtime:
     # Capability generation shared by the pipeline's app-message handlers and
     # the inbound content transfer. Set by build_pipeline for this session.
     console_generation: str = ""
+    weather_context: Any = field(default_factory=WeatherContextMinimizer)
     # Command Console state is created per pipeline in build_pipeline() and
     # read by run_session()'s message handlers. It lives here because the
     # two functions share no scope: #80 read these as build_pipeline locals
@@ -346,7 +513,7 @@ def connection_greeting_note(timezone: str, now: datetime | None = None) -> str:
 
 def adapt_to_pipecat(
     name: str, dict_handler, *, runlog_enabled: bool = False,
-    session_id: str | None = None,
+    session_id: str | None = None, weather_context: WeatherContextMinimizer | None = None,
 ):
     """Adapt a jarvis tool handler to pipecat's calling convention.
 
@@ -376,6 +543,8 @@ def adapt_to_pipecat(
         runlog.tool_call(name, dict(params.arguments), tool_call_id=tool_call_id)
         started = time.perf_counter()
         result_known = False
+        weather_token = (_weather_context_call.set(_WeatherContextCall(weather_context, tool_call_id))
+                         if weather_context is not None else None)
         try:
             with run_logger_scope(runlog):
                 result = await dict_handler(params.arguments)
@@ -392,6 +561,8 @@ def adapt_to_pipecat(
                 outcome.ok, tool_call_id=tool_call_id,
             )
             result_known = True
+            if name == "local_weather" and outcome.ok and weather_context is not None:
+                _mark_weather_context()
             await params.result_callback(result)
             runlog.finish("supervisor tool completed")
         except asyncio.CancelledError:
@@ -411,13 +582,16 @@ def adapt_to_pipecat(
             error_type = type(exc).__name__[:64] or "SupervisorToolError"
             runlog.finish(f"FAILED: supervisor tool raised ({error_type}).")
             raise
+        finally:
+            if weather_token is not None:
+                _weather_context_call.reset(weather_token)
 
     return wrapper
 
 
 def register_supervisor_tool(
     llm, name: str, dict_handler, *, runlog_enabled: bool = False,
-    session_id: str | None = None,
+    session_id: str | None = None, weather_context: WeatherContextMinimizer | None = None,
 ) -> None:
     """Register one direct Supervisor tool under a single spelling of its
     name — passing it twice invites a handler registered under the wrong
@@ -426,7 +600,7 @@ def register_supervisor_tool(
         name,
         adapt_to_pipecat(
             name, dict_handler, runlog_enabled=runlog_enabled,
-            session_id=session_id,
+            session_id=session_id, weather_context=weather_context,
         ),
     )
 
@@ -527,6 +701,8 @@ def make_agent_event_handler(transport: Any) -> Any:
             except RuntimeError:
                 pass  # no running loop (tests calling the handler directly)
             if tool_name in ("get_weather", "get_weather_radar"):
+                if bool(event.get("ok", True)):
+                    _mark_weather_context()
                 # W5 — route through the merger instead of displaying each
                 # tool's result on its own; offer() returns a payload only
                 # once both halves are accounted for (or None while still
@@ -820,6 +996,7 @@ def build_pipeline(
             ip_lookup=lambda: asyncio.to_thread(ambient_weather.ip_location))
 
     async def _push_weather_card(payload: dict) -> None:
+        _mark_weather_context()
         _logger.info("display_payload tool=local_weather surface=%s agent=supervisor kind=%s",
                      payload.get("surface"), payload.get("kind"))
         await send_app_message(transport, {"type": "display", "display": payload})
@@ -1211,6 +1388,7 @@ def build_pipeline(
             llm, name, handler,
             runlog_enabled=bool(getattr(settings, "jarvis_runlog_enabled", False)),
             session_id=runtime.session_id,
+            weather_context=runtime.weather_context if name in {"delegate_task", "local_weather"} else None,
         )
 
     register_voice_tool("delegate_task", weather_delegate_handler if command_console_enabled else delegate_handler)
@@ -1435,6 +1613,7 @@ def build_pipeline(
         pipeline_steps.append(speaker_transcript_gate)
     pipeline_steps.extend([
         aggregators.user(),
+        runtime.weather_context,
         voice_injector,
         llm,
         reply_guard,
@@ -1745,6 +1924,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 tts_default_model="eleven_flash_v2_5",
             ),
             late_neutralizer,
+            WeatherContextRelayObserver(runtime.weather_context, llm),
         ]
         if os.environ.get("JARVIS_DEBUG_OBSERVER"):
             # Temporary diagnostic: print every function-call frame hop with
@@ -1867,6 +2047,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # rewrites — pipecat's LLMContext keeps the caller's objects.
             message = {"role": "user", "content": text}
             late_neutralizer.arm(message)
+            runtime.weather_context.arm_late_note(message)
             aggregators.user().add_messages([message])
             # 2026-09-05 — do NOT force a turn while a tool call is still
             # outstanding. Pushing a context frame mid-delegation makes the

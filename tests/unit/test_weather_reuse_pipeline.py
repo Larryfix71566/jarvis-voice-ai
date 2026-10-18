@@ -19,6 +19,7 @@ from jarvis.bot.console_actions import _disclosed_inventory, build_console_actio
 from jarvis.bot.console_protocol import MAX_MESSAGE, validate_inventory, validate_request
 from jarvis.bot.console_session import ConsoleSession
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
+from jarvis.bot.pipeline import _mark_weather_context
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn, is_sensitive
 from jarvis.bot.weather_reuse import WeatherReuseBridge, current_weather_reuse, weather_reuse_scope
 
@@ -93,6 +94,7 @@ class Harness:
             weather_query_lock=asyncio.Lock(), _voice_is_sensitive=is_sensitive,
             _log_console_validation_failure=lambda *_: None,
             _logger=SimpleNamespace(info=lambda *_: None), bot_event_log=lambda *_: None,
+            _mark_weather_context=_mark_weather_context,
             WeatherReuseBridge=WeatherReuseBridge, WeatherReportMerger=WeatherReportMerger,
             build_display_payload=build_display_payload, current_weather_reuse=current_weather_reuse,
             weather_reuse_scope=weather_reuse_scope)
