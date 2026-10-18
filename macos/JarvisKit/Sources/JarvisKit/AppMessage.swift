@@ -158,9 +158,6 @@ public struct DisplayLink: Sendable, Equatable, Codable {
     public let url: String
 }
 
-/// Every member from web/src/displayResults.ts:15-48, cross-checked
-/// against jarvis/bot/display.py:6-13 and the two direct-tool emitters
-/// in jarvis/bot/handoff_tools.py.
 /// Complete source-derived roadmap. Unknown prose remains in card details;
 /// malformed snapshots fail as a whole rather than dropping later cards.
 public struct RoadmapSnapshot: Codable, Sendable, Equatable {
@@ -209,16 +206,28 @@ public struct RoadmapSnapshot: Codable, Sendable, Equatable {
         func matches(_ value: String, _ pattern: String) -> Bool {
             value.range(of: pattern, options: .regularExpression) != nil
         }
+        func validDay(_ value: String) -> Bool {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.calendar = Calendar(identifier: .gregorian)
+            formatter.dateFormat = "yyyy-MM-dd"
+            formatter.isLenient = false
+            guard let date = formatter.date(from: value) else { return false }
+            return formatter.string(from: date) == value
+        }
         guard schema == "mortimer.roadmap.v1", provenance.path == "ROADMAP.md",
               provenance.sourceKind == "local_checkout",
               matches(provenance.sha256, "^[a-f0-9]{64}$"),
               provenance.revision.map({ matches($0, "^(?:[a-f0-9]{40}|[a-f0-9]{64})$") }) ?? true,
               Set(cards.map(\.id)).count == cards.count,
               cards.allSatisfy({ matches($0.id, "^WS-[0-9]+$") && states.contains($0.lifecycle) }),
+              Set(logs.map(\.path)).count == logs.count,
               logs.allSatisfy({ log in
-                  log.path.hasPrefix("docs/roadmap-log/") && !log.path.split(separator: "/").contains("..")
+                  matches(log.path, "^docs/roadmap-log/[^/]+\\.md$")
+                  && !log.path.contains("\u{0000}")
                   && matches(log.sha256, "^[a-f0-9]{64}$")
-                  && matches(log.date, "^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+                  && validDay(log.date) && !log.rows.isEmpty
                   && log.rows.allSatisfy({ matches($0, "^WS-[0-9]+$") })
               }),
               let data = try? JSONEncoder().encode(self), data.count <= 512 * 1024 else { return false }

@@ -38,4 +38,17 @@ final class RoadmapPayloadTests: XCTestCase {
         }
         XCTAssertNil(try decode(nil).roadmap)
     }
+    func testMalformedLogDatePathAndRowsRefuseWholeSnapshot() throws {
+        for change: [String: Any] in [
+            ["date": "2026-02-30"], ["path": "docs/roadmap-log/../private.md"],
+            ["rows": []], ["sha256": "invented"]
+        ] {
+            var value = snapshot()
+            var logs = value["logs"] as! [[String: Any]]
+            logs[0].merge(change) { _, new in new }
+            value["logs"] = logs
+            XCTAssertNil(try decode(value).roadmap)
+        }
+    }
+
 }
