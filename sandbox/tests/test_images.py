@@ -157,6 +157,29 @@ class ImageTests(unittest.TestCase):
         self.assertEqual(self.c.read(child)["parent_task"], parent)
         self.assertEqual(self.c.read(child)["status"], "created")
 
+    def test_validating_session_can_reclaim_unrelated_vm_for_headroom(self):
+        image = self.images.register(self.task, self.profile)
+        parent = self.images.create(image, self.repo, "HEAD", self.profile)
+        session = self.c.home / "sessions" / ("a" * 32)
+        session.mkdir(parents=True)
+        (session / "session.json").write_text(json.dumps(
+            {"id": session.name, "task": parent, "phase": "validating", "updated_at": 0}))
+        finished = "abababab1212"
+        (self.c.home / "tasks" / finished / "input").mkdir(parents=True)
+        self.c.save(finished, {"vm": "mortimer-" + finished, "status": "stopped", "purpose": "verification"})
+        record = self.c.task_dir(finished) / "state.json"
+        os.utime(record, (record.stat().st_mtime - 7200,) * 2)
+        self.vms["mortimer-" + finished] = "stopped"
+        def available(home):
+            return prune.MIN_FREE_BYTES + (1 if "mortimer-" + finished not in self.vms else -1)
+        with (session / "session.lock").open("a") as lock, patch.object(prune, "free_bytes", side_effect=available):
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            child = self.images.create(image, self.repo, "HEAD", self.profile,
+                                       purpose="verification", parent_task=parent)
+        self.assertEqual(self.c.read(finished)["status"], "deleted")
+        self.assertEqual(self.c.read(child)["status"], "created")
+        self.assertIn("mortimer-" + parent, self.vms)
+
     def test_verification_child_refuses_if_parent_deletion_won(self):
         image = self.images.register(self.task, self.profile)
         parent = self.images.create(image, self.repo, "HEAD", self.profile)

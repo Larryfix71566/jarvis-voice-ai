@@ -168,3 +168,14 @@ verification. Independent exact-head review is pending. No real VM lifecycle,
 job installation, production source/settings write, restart or deployment ran.
 The runtime PR remains separate from claim #221 and requires review before
 merge; the original twelve-check profile, scanner/pins and baseline are intact.
+
+### WS-28 follow-up: target-owner leases and headroom
+
+Additional independent source review found that leasing every session blocked
+unrelated finished clones during active validation. Three new synthetic
+methods reproduce the issue and ambiguous target ownership on `24206281`
+(two assertion failures, one low-headroom error). Lease only the exact
+candidate’s owner; reject malformed/ambiguous ownership. The shared lifecycle
+lock and atomic child reservation remain. All 156 controller tests pass.
+The earlier Claude packet covers `24206281` only; final amended code requires
+its own exact-source cross-review. No real cleanup/clone/VM action occurred.

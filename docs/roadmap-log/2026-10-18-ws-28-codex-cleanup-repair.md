@@ -20,3 +20,9 @@ and the remaining gates are in `sandbox/acceptance/2026-10-18-cleanup-regression
 No profile, baseline, scanner, permission, job or production change occurred.
 Independent review and real release verification remain pending; no real
 prune/reclaim/clone, installation, app restart or deployment was invoked.
+
+Additional source review identified foreign-session locking that prevented
+otherwise-safe reclamation and could fail low-disk validation. Three new
+regressions fail on initial `24206281` and pass after target-owner leasing and
+ambiguous-owner refusal. The full suite is now 156 tests, zero failures.
+The old Claude packet/result cannot clear this amended exact source.

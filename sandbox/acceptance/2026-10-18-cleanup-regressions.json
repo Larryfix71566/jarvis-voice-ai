@@ -6,7 +6,7 @@
   "branch": "codex/sandbox-cleanup-repair-20261018",
   "claim_pr": 221,
   "claim_merge": "afa1dd9b45ac60bfbac0c2b6fbb3fc23c1dbd35d",
-  "runtime_test_diff_sha256": "143a89f082e9a996648ec79d3560f25e301e05240d262a203c355df9c6ca8a8c",
+  "runtime_test_diff_sha256": "0d6b2673336c485e6bb8968bf3afcfdb0044d67de9242c0d53dc399dde4015aa",
   "runtime_test_paths": [
     "sandbox/control.py",
     "sandbox/images.py",
@@ -23,9 +23,8 @@
     "seconds": 3.574
   },
   "candidate": {
-    "tests": 153,
-    "failures": 0,
-    "seconds": 3.683
+    "tests": 156,
+    "failures": 0
   },
   "red_on_unrepaired_main": {
     "test_methods": 8,
@@ -49,11 +48,19 @@
     "cleanup-red-regressions.log": {
       "sha256": "4ee6db549a55386c522c00615d325b7c5a9f86108e900da9da1bf35c87b99256",
       "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/cleanup-red-regressions.log"
+    },
+    "cleanup-owner-lease-red.log": {
+      "sha256": "13f245db84d98f0b74f737c6ed9e6bafdf41c5ed9a20398baa528c3f222d6691",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/cleanup-owner-lease-red.log"
+    },
+    "sandbox-repair-owner-tests.log": {
+      "sha256": "101c6d0cb4d26be3c11f27d2d941ca5896c9f842c6ee9d1f8f1a3966918eefb9",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/sandbox-repair-owner-tests.log"
     }
   },
   "independent_review": {
-    "status": "pending",
-    "scope": "exact cleanup runtime/test diff; no external cleanup review attempted"
+    "status": "pending final amended exact-source review",
+    "initial_Claude_packet": "24206281; its result cannot clear amended code"
   },
   "release_verification": {
     "status": "blocked pending independent cleanup review; no real clone/cleanup/verification invoked"
@@ -69,5 +76,21 @@
     "profile_changes": false,
     "required_profile_checks": 12,
     "acceptance_closed": false
+  },
+  "initial_runtime_test_diff_sha256": "143a89f082e9a996648ec79d3560f25e301e05240d262a203c355df9c6ca8a8c",
+  "initial_candidate": {
+    "tests": 153,
+    "failures": 0,
+    "seconds": 3.683
+  },
+  "additional_review_finding": {
+    "source": "24206281fd15fd2bd940da259a72b01b920023e2",
+    "finding": "Guarding every session prevented busy session A from reclaiming unrelated finished VM B, including low-disk child creation. Duplicate target ownership was also not rejected.",
+    "red": {
+      "methods": 3,
+      "failures": 2,
+      "errors": 1
+    },
+    "fix": "Lease only the exact candidate owner; refuse ambiguous or malformed ownership. Shared lifecycle lock still serializes child registration/deletion."
   }
 }

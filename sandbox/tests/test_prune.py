@@ -214,6 +214,29 @@ class PruneTests(unittest.TestCase):
                 self.assertEqual(self.deleted, [])
                 self.assertEqual([x["task"] for x in report["failed"]], [task])
 
+    def test_busy_foreign_session_does_not_block_finished_vm_cleanup(self):
+        busy = self.task("aaaacccc0001", purpose="development")
+        self.session(busy, idle=8 * DAY)
+        finished = self.task("aaaacccc0002", purpose="verification")
+        path = self.root / "sessions" / (busy * 3)[:32] / "session.lock"
+        with path.open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            report = self.pruner.run(now=self.now)
+        self.assertIn("mortimer-" + finished, self.deleted)
+        self.assertNotIn("mortimer-" + busy, self.deleted)
+        self.assertIn(finished, [item["task"] for item in report["destroyed"]])
+
+    def test_ambiguous_target_session_ownership_retains_vm(self):
+        task = self.task("aaaacccc0003", purpose="development")
+        self.session(task, idle=8 * DAY)
+        other = self.root / "sessions" / ("b" * 32)
+        other.mkdir()
+        (other / "session.json").write_text(json.dumps(
+            {"id": other.name, "task": task, "phase": "published", "updated_at": 0}))
+        report = self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        self.assertEqual([item["task"] for item in report["failed"]], [task])
+
     def test_malformed_ownership_cannot_grant_orphan_cleanup(self):
         task = self.task("aaaabbbb0006", age=7 * 3600, purpose="development")
         session = self.root / "sessions" / (task * 3)[:32]

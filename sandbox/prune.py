@@ -165,7 +165,7 @@ class Pruner:
 
         Session and file operations may hold their mutation lock before asking
         for the lifecycle lock. Never wait for those locks in reverse order:
-        a busy owner makes cleanup fail closed, including a long validation
+        a busy target owner makes cleanup fail closed, including a long validation
         whose saved timestamp has aged past the idle threshold.
         """
         with ExitStack() as leases:
@@ -174,8 +174,13 @@ class Pruner:
                 if record.is_symlink() or record.parent.is_symlink():
                     raise SandboxError("Cleanup cannot establish session ownership")
                 # A malformed ownership record must not become an orphan grant.
-                json.loads(record.read_bytes())
-                paths.append(record.parent / "session.lock")
+                owner = json.loads(record.read_bytes())
+                if not isinstance(owner, dict) or not isinstance(owner.get("task"), str) or not TASK_ID.fullmatch(owner["task"]):
+                    raise SandboxError("Cleanup cannot establish session ownership")
+                if owner["task"] == task:
+                    if len(paths) > 1:
+                        raise SandboxError("Cleanup target has ambiguous session ownership")
+                    paths.append(record.parent / "session.lock")
             for record in sorted((self.controller.home / "tasks").glob("*/state.json")):
                 if record.is_symlink() or record.parent.is_symlink():
                     raise SandboxError("Cleanup cannot establish child ownership")
