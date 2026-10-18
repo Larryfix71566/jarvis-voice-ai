@@ -2,7 +2,7 @@
 date: 2026-10-17
 system: codex
 rows: [WS-20, WS-17, WS-18, WS-09, WS-11]
-prs: []
+prs: [208, 209]
 ---
 
 # 2026-10-17 — Existing acceptance campaign
@@ -21,3 +21,14 @@ prs: []
   complete scoped repairs/review/release before retesting affected gates.
   Required hardware, activation decisions and frozen observation periods
   remain open. No parent acceptance is inferred from a subset.
+
+## Final results follow-up
+
+Initial evidence PR #208 merged as `f363444` during verification. The final
+receipt follows on `codex/acceptance-campaign-results-20261017` with the same
+scope. Independent verification: all twelve checks pass, source unchanged,
+receipt hashes validated, both VMs stopped. Quiet-host performance and the
+single deadline case pass, but two Vision OCR errors reproduce in a focused
+retry; the final host suite is not clean. Live Recents/reuse and synthetic mail
+preflight failures remain open. The receipt records final runtime observations
+and the remaining hardware, activation, release and observation prerequisites.

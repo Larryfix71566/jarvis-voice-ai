@@ -477,3 +477,63 @@ async def test_real_execution_boundary_blocks_private_result_and_continues_reduc
     assert CANARY not in repr(calls) + repr(events) + repr(logger._buffer) + repr(derived)
     assert "source_scope" not in repr(calls)
     assert "canonical_refs" not in repr(calls)
+
+
+@pytest.fixture
+def roadmap_project(project):
+    (project / 'ROADMAP.md').write_bytes(b'<details id="ws-17">\r\n<summary>Console</summary>\r\n- **Owner:** codex\r\n- **Status:** landed\r\n- [ ] Larry checks\r\n</details>\r\n')
+    logs = project / 'docs/roadmap-log'; logs.mkdir()
+    (logs / 'evidence.md').write_text('---\ndate: 2026-10-17\nrows: [WS-17]\nprs: []\n---\n# Evidence\nSynthetic source\n')
+    return project
+
+
+@pytest.mark.parametrize('floor', ['approved_external', 'confidential'])
+async def test_roadmap_snapshot_attests_complete_cards_and_each_guarded_log(roadmap_project, floor):
+    arguments = {'path': 'ROADMAP.md'}
+    body = repo_logic.repo_read_file(**arguments)
+    registry = registry_for('repo_read_file', 'mcp-repo', Session(response(body)), pinned=True, root=roadmap_project)
+    scope = execution('repo_read_file', arguments, privacy=floor)
+    envelope = await registry.call_classified('repo_read_file', arguments, execution_scope=scope)
+    policy, content = validate_tool_result(scope, envelope)
+    assert policy.level == floor
+    assert json.loads(content) == body
+    assert '\r\n' in body['content']
+    assert envelope.canonical_refs == (str(roadmap_project / 'ROADMAP.md'), str(roadmap_project / 'docs/roadmap-log/evidence.md'))
+
+
+@pytest.mark.parametrize('variant', ['card', 'omit-card', 'extra-field', 'provenance', 'hash', 'date', 'revision', 'dirty-type', 'repository-id', 'omit-log', 'log-hash', 'log-title', 'log-rows', 'log-path', 'disk-log', 'disk-card', 'old', 'future', 'naive', 'wrong-file', 'symlink'])
+async def test_roadmap_snapshot_cannot_self_attest_derived_or_changed_content(roadmap_project, variant):
+    arguments = {'path': 'ROADMAP.md'}
+    body = repo_logic.repo_read_file(**arguments)
+    snapshot = body['roadmap']
+    if variant == 'card': snapshot['cards'][0]['status'] = 'accepted'
+    elif variant == 'omit-card': snapshot['cards'] = []
+    elif variant == 'extra-field': snapshot['not_source'] = CANARY
+    elif variant == 'provenance': snapshot['provenance']['source_kind'] = 'github_main'
+    elif variant == 'hash': snapshot['provenance']['sha256'] = '0' * 64
+    elif variant == 'date': snapshot['logs'][0]['date'] = '2026-10-18'
+    elif variant == 'revision': snapshot['provenance']['revision'] = '0' * 40
+    elif variant == 'repository-id': snapshot['provenance']['repository_id'] = 'e' * 64
+    elif variant == 'dirty-type': snapshot['provenance']['dirty'] = 1
+    elif variant == 'omit-log': snapshot['logs'] = []
+    elif variant == 'log-hash': snapshot['logs'][0]['sha256'] = '0' * 64
+    elif variant == 'log-title': snapshot['logs'][0]['title'] = CANARY
+    elif variant == 'log-rows': snapshot['logs'][0]['rows'] = ['WS-13']
+    elif variant == 'log-path': snapshot['logs'][0]['path'] = '.env'
+    elif variant == 'disk-log': (roadmap_project / 'docs/roadmap-log/evidence.md').write_text('changed')
+    elif variant == 'disk-card': (roadmap_project / 'ROADMAP.md').write_text('changed')
+    elif variant == 'old': snapshot['provenance']['read_at'] = '2000-01-01T00:00:00+00:00'
+    elif variant == 'future': snapshot['provenance']['read_at'] = '2100-01-01T00:00:00+00:00'
+    elif variant == 'naive': snapshot['provenance']['read_at'] = '2026-10-17T12:00:00'
+    elif variant == 'wrong-file':
+        arguments = {'path': 'docs/ARCHITECTURE.md'}
+        body = {**repo_logic.repo_read_file(**arguments), 'roadmap': snapshot}
+    elif variant == 'symlink':
+        log = roadmap_project / 'docs/roadmap-log/evidence.md'
+        log.unlink(); (roadmap_project / '.env').write_text(CANARY); log.symlink_to(roadmap_project / '.env')
+    registry = registry_for('repo_read_file', 'mcp-repo', Session(response(body)), pinned=True, root=roadmap_project)
+    scope = execution('repo_read_file', arguments)
+    policy, content = validate_tool_result(scope, await registry.call_classified('repo_read_file', arguments, execution_scope=scope))
+    assert policy.level == 'confidential'
+    assert json.loads(content) == {'ok': False, 'error': 'tool_source_scope_invalid'}
+    assert CANARY not in content

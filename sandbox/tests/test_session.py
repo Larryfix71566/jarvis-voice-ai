@@ -171,9 +171,13 @@ class SessionTests(unittest.TestCase):
         with self.assertRaises(SandboxError): self.session.submit(publisher, 'Title', 'Body')
         self.assertEqual(self.session.status()['phase'], 'publication_pending')
         with self.assertRaises(SandboxError): self.session.propose_edit('app.py', 'late edit', 'denied')
+        task = self.session.status()['task']
+        self.assertEqual(self.c.read(task)['status'], 'running')  # a retry still needs the VM
         self.assertTrue(self.session.submit(publisher, 'Title', 'Body')['ok'])
         self.assertEqual(self.session.status()['phase'], 'published')
-        self.assertEqual(self.c.read(self.session.status()['task'])['status'], 'stopped')
+        # A published session is never resumed, so its clone is discarded at once.
+        self.assertEqual(self.events[-2:], [('stop', task), ('destroy', task)])
+        self.assertEqual(self.c.read(task)['status'], 'deleted')
 
     def test_interrupted_publication_recovers_after_reopening_session(self):
         # Model a host crash after the session journal enters publishing and

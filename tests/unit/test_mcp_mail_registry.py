@@ -393,6 +393,51 @@ def test_preflight_is_not_tested_when_the_startup_env_cannot_be_established(
     assert "M1-1: PASS" not in out
 
 
+def test_preflight_applies_env_removals_then_vault(monkeypatch, tmp_path, capsys):
+    """Codex review of #205 revision 2, item 1: an `unset` in .env removes an
+    inherited name at startup, so the preflight must drop it too; the vault
+    then fills what is missing, as at startup. Inherited names .env leaves
+    alone are kept."""
+    import jarvis.vault
+
+    dotenv = "unset MAIL_ATT_USER JARVIS_ENV_SCOPING_ENABLED\n"
+    env_file = tmp_path / "removals.env"
+    env_file.write_text(dotenv)
+    assert _startup_shell_value(env_file, "MAIL_ATT_USER") == ""        # the shell removes it
+
+    def fake_inject_env() -> int:                                        # the vault refills it
+        os.environ.setdefault("MAIL_ATT_USER", "preflight-sentinel-not-a-credential")
+        return 1
+
+    monkeypatch.setattr(jarvis.vault, "inject_env", fake_inject_env)
+    _preflight_main(monkeypatch, tmp_path, [], dotenv_text=dotenv,
+                    env={"MAIL_ATT_USER": "inherited-from-the-shell",
+                         "MAIL_GMAIL_USER": "inherited-and-kept",
+                         registry_module.ENV_SCOPING_ENABLED_ENV: "false"})
+    out = capsys.readouterr().out
+    assert "vault injected 1 name(s)" in out
+    assert "JARVIS_ENV_SCOPING_ENABLED (effective): on" in out        # the unset took effect
+    rows = {line.split()[0]: line.split() for line in out.splitlines() if line.startswith("MAIL_")}
+    assert rows["MAIL_ATT_USER"][1] == "yes"                            # back from the vault
+    assert rows["MAIL_GMAIL_USER"][1] == "yes"                          # inherited, untouched
+    assert rows["MAIL_ATT_SECURE_MAIL_KEY"][1] == "no"
+    assert "M1-1: PASS" in out
+    assert "inherited" not in out and "preflight-sentinel" not in out
+
+
+def test_preflight_resolves_a_relative_env_file_before_changing_directory(monkeypatch, tmp_path, capsys):
+    """Codex review of #205 revision 2, item 2: `--env-file config/startup.env`
+    from the repo root was looked up as config/config/startup.env."""
+    (tmp_path / "config").mkdir(exist_ok=True)
+    (tmp_path / "config" / "startup.env").write_text("X=1\n")
+    monkeypatch.chdir(tmp_path)
+    _preflight_main(monkeypatch, tmp_path, ["--sentinel", "--env-file", "config/startup.env"])
+    out = capsys.readouterr().out
+    assert f"loaded by the startup shell ({tmp_path / 'config' / 'startup.env'})" in out
+    assert "NOT TESTED" not in out
+    assert "M1-1: PASS" in out
+
+
 def test_preflight_fails_when_mcp_mail_is_not_configured(monkeypatch, tmp_path, capsys):
     """Codex review of #205, item 2: no mail server, no PASS."""
     import yaml

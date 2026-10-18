@@ -146,9 +146,13 @@ struct WorkspaceResultPane: View {
         .accessibilityLabel("Share selected result")
     }
 
-    private var original: some View {
+    @ViewBuilder private var original: some View {
+        if result.payload.roadmap != nil && !result.payload.isProtectedLocal {
+            RoadmapView(result: result, coordinator: coordinator)
+        } else {
         DisplayContentView(payload: result.payload, restoredScrollOffset: workspace.scrollOffsets[result.id],
                            onScrollOffset: { workspace.rememberScroll($0, for: result.id) })
+        }
     }
 }
 

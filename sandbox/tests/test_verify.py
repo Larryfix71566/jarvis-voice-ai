@@ -41,6 +41,7 @@ class VerificationTests(unittest.TestCase):
     def frozen(self): return self.candidate
 
     def stop(self, task): self.events.append(("stop", task))
+    def destroy(self, task): self.events.append(("destroy", task))
     def start(self, task, **kwargs):
         self.events.append(("start", task)); self.start_kwargs.append(kwargs)
     def command(self, *args, **kwargs): return subprocess.CompletedProcess(args, 0)
@@ -106,7 +107,7 @@ class VerificationTests(unittest.TestCase):
             with self.assertRaises(SandboxError):
                 self.verify()
             self.assertNotIn("check", [event[0] for event in self.events], "no check may run without a desktop")
-            self.assertEqual(self.events[-1], ("stop", "independent-task"))
+            self.assertEqual(self.events[-2:], [("stop", "independent-task"), ("destroy", "independent-task")])
             self.assertFalse(self.journal["verification"]["passed"])
 
     def test_headless_profile_never_runs_the_desktop_probe(self):
@@ -147,7 +148,7 @@ class VerificationTests(unittest.TestCase):
         receipt = self.verify()
         self.assertTrue(receipt["passed"])
         self.assertEqual(receipt["verification_task"], "independent-task")
-        self.assertEqual(self.events[-1], ("stop", "independent-task"))
+        self.assertEqual(self.events[-2:], [("stop", "independent-task"), ("destroy", "independent-task")])
         self.assertEqual(self.verifier.receipt(self, "prepared-image", self.profile), receipt)
         changed = replace(self.profile, checks=(("other", ("/protected/python", "other.py")),))
         with self.assertRaises(SandboxError):
@@ -171,7 +172,7 @@ class VerificationTests(unittest.TestCase):
         self.failure = True
         with self.assertRaises(SandboxError):
             self.verify()
-        self.assertEqual(self.events[-1], ("stop", "independent-task"))
+        self.assertEqual(self.events[-2:], [("stop", "independent-task"), ("destroy", "independent-task")])
         self.assertFalse(self.journal["verification"]["passed"])
         receipt = json.loads(next((self.directory / "verification").glob("*/receipt.json")).read_bytes())
         self.assertFalse(receipt["passed"])

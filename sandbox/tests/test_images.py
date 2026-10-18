@@ -9,6 +9,7 @@ from unittest.mock import patch
 from sandbox.artifacts import Candidate, File, SandboxError
 from sandbox.control import Controller, snapshot
 from sandbox.images import Images
+from sandbox import prune
 from sandbox.profiles import Profile
 
 
@@ -39,6 +40,10 @@ class ImageTests(unittest.TestCase):
         self.commands = patch.object(self.c, "command", side_effect=self.command)
         self.commands.start()
         self.addCleanup(self.commands.stop)
+        # Creation checks the sandbox volume; the test host's free space is irrelevant.
+        self.free = patch.object(prune, "free_bytes", return_value=1024 ** 4)
+        self.free.start()
+        self.addCleanup(self.free.stop)
         self.images = Images(self.c)
 
     def git(self, *args):
@@ -62,6 +67,8 @@ class ImageTests(unittest.TestCase):
                 raise OSError("response lost")
         if args[0] == "stop":
             self.vms[args[1]] = "stopped"
+        if args[0] == "delete":
+            del self.vms[args[1]]
         return subprocess.CompletedProcess(args, 0)
 
     def test_image_rejects_a_vm_that_has_entered_development(self):
@@ -105,6 +112,26 @@ class ImageTests(unittest.TestCase):
         with self.assertRaises(SandboxError):
             self.images.create(image, self.repo, "HEAD", self.profile, candidate=candidate)
         self.assertEqual(len(self.clones), before)
+
+    def test_creation_reclaims_finished_clones_first_and_refuses_a_full_volume(self):
+        image = self.images.register(self.task, self.profile)
+        finished = "fedcba987654"
+        (self.c.home / "tasks" / finished / "input").mkdir(parents=True)
+        self.c.save(finished, {"vm": "mortimer-" + finished, "status": "stopped", "purpose": "verification"})
+        record = self.c.home / "tasks" / finished / "state.json"
+        os.utime(record, (record.stat().st_mtime - 7200,) * 2)
+        self.vms["mortimer-" + finished] = "stopped"
+        before = len(self.clones)
+        task = self.images.create(image, self.repo, "HEAD", self.profile)
+        self.assertEqual(self.c.read(finished)["status"], "deleted")
+        self.assertNotIn("mortimer-" + finished, self.vms)
+        self.assertEqual(len(self.clones), before + 1)
+        self.assertEqual(self.c.read(task)["status"], "created")
+        with patch.object(prune, "free_bytes", return_value=prune.MIN_FREE_BYTES - 1):
+            with self.assertRaises(SandboxError):
+                self.images.create(image, self.repo, "HEAD", self.profile)
+        self.assertEqual(len(self.clones), before + 1)
+        self.assertEqual(sorted(p.name for p in (self.c.home / "tasks").iterdir()), sorted([self.task, finished, task]))
 
     def test_failed_hydration_stops_and_cannot_be_retried_in_place(self):
         image = self.images.register(self.task, self.profile)

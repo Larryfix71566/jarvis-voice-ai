@@ -27,6 +27,9 @@ final class WorkspaceResultPresentation {
 enum WorkspaceResultExport {
     static func text(_ result: WorkspaceResult) -> String {
         let p = result.payload
+        if let roadmap = p.roadmap {
+            return result.roadmapFilter.export(roadmap, timezone: p.roadmapTimezone) + "\n"
+        }
         var parts = [p.title ?? "Mortimer result"]
         if let body = p.body, !body.isEmpty { parts.append(body) }
         if let links = p.links, !links.isEmpty {

@@ -27,8 +27,9 @@ provider, credential, activation, merge, or deployment authority.
 
 ## Current progress — verified 2026-10-17
 
-Reconciled against main `f363444`, the deployment receipts, merged #204/#205/#207/#208,
-and open #209/#210. This is a status refresh; existing owners and acceptance
+Reconciled against main `f3d5378`, the deployment receipts and merged
+#204/#205/#207/#208/#211/#212; final campaign evidence is published via #209,
+and #210 remains open with review findings. This is a status refresh; existing owners and acceptance
 requirements remain in force. The October 7 navigation below is historical.
 
 - **Released baseline:** the last successful deployment receipt is `575cc7b`,
@@ -45,33 +46,34 @@ requirements remain in force. The October 7 navigation below is historical.
   stale Recents, incomplete explicit voice selection, and missing fresh-result
   reopen/reference behavior. UI2-24/25 require repair and retest; bounded
   five-turn conversation passes do not close all UI2-22/23 cases.
-- **Verification (WS-09/11/20):** merged #208 records initial campaign evidence.
-  [Final evidence PR #209](https://github.com/Larryfix71566/jarvis-voice-ai/pull/209)
-  remains open at `37b290d`, with five green checks. Its receipt reports all
-  twelve independent checks passed on `9f9bc71`, but two repeatable physical-Mac
-  Vision OCR exceptions remain. No full final host-suite pass or product
-  acceptance is inferred. Final results remain proposed evidence until merged.
-- **Mail (WS-13):** #204 revision 3 merged and deployed; the earlier header-NO
-  finding is superseded by the revision-3 sign-off. #205 merged as `9f9bc71`.
-  Preserve the recorded October 13 M1-1/2/3 results, while the formal updated
-  production preflight repeat remains open. The campaign reproduced parent-env
-  overlay and relative-env-file defects in the preflight checker. Claude owns
-  those follow-ups and future P2/P3 claims; the older row's “merge #205” handoff
-  is stale, not an outstanding merge task.
+- **Verification (WS-09/11/20):** final campaign evidence is recorded via
+  [PR #209](https://github.com/Larryfix71566/jarvis-voice-ai/pull/209).
+  Its receipt reports all twelve independent checks passed on `9f9bc71`,
+  but two repeatable physical-Mac Vision OCR exceptions remain. The review
+  confirmed all twelve check hashes match the published log manifest. This
+  is evidence publication, not a full final host-suite pass or acceptance.
+- **Mail (WS-13):** #204 revision 3 merged and deployed; #205 merged as
+  `9f9bc71`. #212 merged as `f3d5378`, fixing the campaign's startup-env
+  replacement and relative-path findings. Codex's post-merge source review
+  found no new blocking issue; all 117 synthetic mail tests passed.
+  Preserve the October 13 M1-1/2/3 results. Deployment of the preflight fix
+  and its formal production M1-1 repeat remain separate, open steps.
 - **Shared roadmap (WS-20):** #172/#174 were closed as superseded; their
-  preserved replacement #207 merged. #206 acceptance-first priority and #208
-  initial evidence merged. Next: review/publish #209, resolve acceptance
-  blockers under their owners, and obtain Larry's checker-enforcement decision.
+  replacement #207 merged. #206/#208/#211 landed. #209 preserves both sides
+  of the documentation conflict and publishes the final campaign evidence.
+  Acceptance blockers and Larry's checker-enforcement decision remain open.
 - **Still prerequisite-gated:** model/source/account/private-route evidence
   (WS-02/05), onboarding and authenticated Skills (WS-03/04), workflow/guard
   evidence and decisions (WS-06/07), and staged memory approval (WS-10).
   Physical external-display cases in WS-21 remain untested in this campaign.
 - **Pending separate code:** [PR #210](https://github.com/Larryfix71566/jarvis-voice-ai/pull/210)
-  proposes automatic cleanup of finished Tart clones; it is open, not deployed
-  or accepted by this refresh. WS-22 remains parked behind existing acceptance.
+  proposes automatic cleanup of finished Tart clones. Review reproduced a
+  stale-plan deletion of a parent with a running verification child, and found
+  cleanup code omitted from the runner fingerprint. Keep it unmerged pending
+  repairs and re-review; no cleanup job was installed by this review. WS-22 remains parked behind existing acceptance.
 
 Sources: [merged campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md),
-[unmerged final receipt at exact #209 head](https://github.com/Larryfix71566/jarvis-voice-ai/blob/37b290d049fe4a79ab0830b0282401c3a3090d56/docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md),
+[reviewed final receipt at original #209 head](https://github.com/Larryfix71566/jarvis-voice-ai/blob/37b290d049fe4a79ab0830b0282401c3a3090d56/docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md),
 and the [dated reconciliation](docs/roadmap-log/2026-10-17-ws-20-codex-current-status-refresh.md).
 
 ## Consolidated enhancement intake — Larry, 2026-10-17
@@ -332,6 +334,32 @@ The earlier one-row and card-operation subparts keep their recorded passes. Curr
 - [ ] **Codex / cross-reviewer, then Larry · CC7a.4 implementation and reuse:** Subject/freshness reuse and exact-source review are complete; #196 and #198 merged 10-10. The test-only deployment-gate repair is in #203, with full Mac and unchanged twelve-check offline verification passed 10-11. The repair merged as #203 and was deployed; the 10-17 reuse check failed and needs a bounded repair/retest. Weather → Atlanta → original weather must yield two cards. Fresh ≤15-minute original content reopens without fetching and adds a reference line; stale refresh replaces the same identity. Record release-readiness UI2-25; remove the temporary feature switch only after UI2-22…25 pass.
 - [ ] **Larry / evidence recorder · dependent closure:** Record exact-build conversation/card/Recents/reuse outcomes, then finish changed console preservation, voice parity and accessibility UI2-04/09/13 in WS-09/11. Do not close them from the earlier partial CC7a checks.
 
+### Roadmap display — Larry addition, 2026-10-17
+
+- [ ] **Codex · read-only roadmap result:** "Show the roadmap" opens a readable
+  in-app view sourced from the repository's `ROADMAP.md`, with every workstream
+  represented, expandable status/owner/next-step/acceptance details, open work
+  first and completed work last. Do not silently truncate the document.
+- [ ] **Codex · provenance and refresh:** show checkout revision, content hash,
+  read time and whether local content is modified. Explicitly distinguish the
+  local checkout from verified GitHub main and from the deployed app revision.
+  Refresh rereads the source and updates the same result identity.
+- [ ] **Codex · voice and existing controls:** voice can show the roadmap,
+  show a named WS item and refresh it. Existing select/pin/close, sharing and
+  confirmed supporting-display transfer controls continue to work. Viewing
+  neither starts self-edit nor changes a status/checkbox.
+- [ ] **Codex / Larry · roadmap filters:** voice/pointer filters cover current
+  blockers, Larry's pending acceptance/decisions, current owner, topic plus open
+  status, a named WS's remaining checklist, completed/open work and dated change
+  logs. Visible filter chips and counts, combined filters, clear/reset and empty
+  states behave consistently. Preserve prerequisite context and source evidence;
+  refresh, sharing and supporting-display transfer retain the disclosed subset.
+- [ ] **Cross-reviewer / Larry · acceptance:** all source workstreams and
+  acceptance items remain accessible, including sections after character
+  30,000; compact/expanded layout, VoiceOver and both display placements work.
+  Missing/malformed/unreadable source or failed refresh is explained truthfully;
+  an old view is labeled stale, never silently presented as newly verified.
+
 Evidence: [10-10 approved-reference twelve-check receipt](docs/acceptance/command-console/CC7A_OFFLINE_VERIFICATION_2026-10-10.json), preserving [10-09 exact-source review and offline comparison](docs/acceptance/command-console/CC7A_REVIEW_AND_VERIFICATION_2026-10-09.md). These complete bounded pre-release checks, not the compound deployment/live acceptance checkboxes.
 
 Sources: [Command Console plan §7.2](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md), [release-readiness CC7a UI2-22…25](docs/acceptance/adaptive-interface/RELEASE_READINESS.md). The Atlas/developer checks with reused UI2 numbers in another status file are different requirements.
@@ -339,15 +367,15 @@ Sources: [Command Console plan §7.2](docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_
 **Workstream:** Larry, 09-30: conversation is spread over one tab per turn, only Mortimer's side shows, the tab strip fills up, and asking again re-fetches. Increment CC7a of the Command Console plan (WS-09's plan): one conversation thread with both sides, results as inline cards, Recents instead of tabs, reuse a fresh result by subject.
 
 - **Owner:** `codex` (remaining CC7a.3 repairs and CC7a.4 implementation, explicitly assigned by Larry 2026-10-07); historical Claude increments retain attribution; required cross-review and Larry release/acceptance remain separate
-- **Status:** landed implementation: #198 (`d5d3e7e`) and test-only capture repair #203 (`dc59bd0`) merged, followed by successful deployments recorded for `dc59bd0` and `575cc7b`. Acceptance remains open: the 10-17 campaign on the installed artifact found stale Recents, incomplete voice selection and missing fresh-result reopen/reference behavior (UI2-24/25). Bounded conversation/arrival passes remain valid only for their recorded cases. Final independent-pass/host-OCR evidence is proposed in open #209; it is not a full physical-Mac pass or release acceptance.
+- **Status:** in-progress: #214 claim merged as `bd7fca0`; slices 3.2/3.5 implemented on the claimed branch (spoken-number framing and content-free console diagnostics), with 85 backend and 14 native focused tests passing. A real AppKit menu reproduction now pins stale rows after a second city, pin and close; rebuilding the transient menu on the existing inventory revision fixes that case (35 related native tests pass). The bounded Haiku baseline on `ed4107b` scored 1/2: numbered selection used view_set twice and failed; repeat weather delegated to analyst and passed. The authorized synthetic Haiku comparison on `75694b7` passes 2/2. Retained-weather context now preserves the first relay before minimizing old forecast copies. Under merged claim #215 (`b2d1b10`), guarded roadmap snapshots and exact source validation pass 138 reader/source-policy tests; three native decoder regressions pass. Source `0c6e1af` passes the full backend suite (6,543 passed / 11 skipped) and 28 affected native Recents/router tests; no release acceptance is claimed. Roadmap cards, shared voice/pointer filters, guarded fixed-source refresh, filtered sharing and the complete first-arrival event are implemented via #216. Claim #217 merged as `ed21d82` before the bounded Base edit; CX-22 records WS-05 coordination. Final offline backend validation: 6,802 passed, 15 skipped, zero failures; 111 focused event/source/privacy tests pass. All 22 current workstream cards survive the actual observation path. JarvisKit: 235 passed. Final full MortimerHost verification passed 563 tests, five skipped, zero failures, including the ten roadmap controls/router/accessibility cases. Cross-system review, independent release verification and deployed roadmap/UI2-24/25 acceptance remain open. Earlier landed implementation: #198 (`d5d3e7e`) and test-only capture repair #203 (`dc59bd0`) merged, followed by successful deployments recorded for `dc59bd0` and `575cc7b`. Acceptance remains open: the 10-17 campaign on the installed artifact found stale Recents, incomplete voice selection and missing fresh-result reopen/reference behavior (UI2-24/25). Bounded conversation/arrival passes remain valid only for their recorded cases. Final independent-pass/host-OCR evidence landed via #209 (`a9701c2`); it is not a full physical-Mac pass or release acceptance. Larry dispatched the UI2-24/25 repair to Codex on 10-17 following Claude's read-only diagnosis (`docs/roadmap-log/2026-10-17-ws-17-claude-ui2-24-25-diagnosis.md`): the 10-17 voice failures were Supervisor tool choice (`view_set` instead of `result_select` for "open result number one"; no delegation at all on the repeated weather question), confirmed from the production bot log; the stale Recents menu is separately reproduced in AppKit with two store entries and a Results · 2 button. Larry confirms the original live button showed one result; that distinct store/routing incident remains to be traced/retested and is not closed by the menu repair. Larry approved the context-stub backstop (diagnosis slice 3.4, option b) as a plan §7.2 amendment.
 - **Implemented by:** Claude (Cowork): CC7a.1/1b/2/2b; Claude (Claude Code): CC7a.3 foundation from #173; Codex: observed-inventory voice/acknowledgement and Older-result repair `fee4ac0`, inventory-size/capacity correction `065d500`, measured reader retention `adf2597`, and CC7a.4 native-owned reuse/reference/upsert `6e218cd`/`47f9e05`; real thread-window capture readiness `0a2ff94`; source-age menu/VoiceOver/choices `748b1e5`
 - **Remaining work / acceptance:** CC7a.1-CC7a.4, each a reviewed PR; RELEASE_READINESS UI2-22..UI2-25 on the Mac. UI2-04, UI2-09 and UI2-13 are held until then. Larry, Mac, 10-02, build `ae70f2c`: one console row with nothing below it in conversation, results and Knowledge Atlas (UI2-24's CC7a.1b part; its Recents parts wait for CC7a.3); Knowledge ▾ and Tools ▾ send content to the supporting display with no result open, and "Return display content here" brings it back; a spoken answer showed once in the thread. Larry, Mac, 10-03, build `9545641` (UI2-23): cards sat after their replies; Open showed the result and Conversation came back; pin, compare and close worked from a card and closing kept the Output record; after a layout 1 to 2 switch a new result arrived without taking the screen. A weather asked for from the conversation stayed a card; Larry decided it should open (CC7a.2b). After Codex's review of #169, only the answer to what he just asked opens: a background job finishing later stays a card, and with the supporting display open the conversation stays on the main screen. UI2-23 is rechecked on a build that contains CC7a.2b. The 10-06 public voice session on `bde22bb` establishes bounded ordered/full-text and arrival-focus subchecks in the [#191 voice receipt](docs/roadmap-log/2026-10-06-ws-20-codex-voice-acceptance-review.md); full UI2-22/23 protected/focus/scroll/size and remaining card/display cases stay open. Reuse those subchecks rather than repeat the same public text/routing cases solely for documentation. Approved design: `docs/interface-research/cc7a/cc7a-approved-design-2026-09-30.html` (transcript rows, compact cards, Recents menu, reuse reference line, no-jump notice); Codex's boundaries in plan §7.2.
 - **Model version:** Historical implementation versions not recorded; do not infer from system name. Exact 10-09 cross-review: Claude Code 2.1.290 / `claude-sonnet-5`, recorded separately from Codex implementation in the linked receipt
-- **Where:** main: #198 `d5d3e7e`, #203 `dc59bd0`; recorded deployment `575cc7b`. Initial acceptance evidence #208 `f363444`; final evidence #209 at `37b290d` remains open. Historical implementation branch `codex/ws17-closure-20261007`; no runtime change in this status refresh.
+- **Where:** `codex/ws17-ui2-24-25-repair-20261017`, integrated main `ed21d82` (#217); implementation via PR #216. Recorded deployment remains the roadmap Production receipt; this feature is not deployed.
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.1 item 9 and §7.2
-- **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/ConversationThreadView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, `App/AppMessageRouter.swift` (display arrivals: whether a result opens on arrival), voice result actions (`App/ConsoleActionCoordinator.swift`, `App/ConsoleActionRegistry.swift`, JarvisKit `ConsoleProtocol.swift`, `jarvis/bot/console_protocol.py`), DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; `Console/ConsoleActionBar.swift`, `Stores/WorkspaceRecents.swift`, `jarvis/bot/console_actions.py`, the console inventory/turn binding and result acknowledgement portions of `jarvis/bot/pipeline.py`, `jarvis/bot/weather_tool.py`, `jarvis/bot/weather_card.py`; CC7a.4 expansion reserved on main via #195: new `jarvis/bot/weather_reuse.py` and associated tests; only the weather-call interception in `jarvis/skills/registry.py` `_invoke`, using a request-owned ContextVar hook after existing guards and preserving classified `_finish_invocation` envelopes; optional bounded `weather_source` in Python/JarvisKit DisplayPayload (`AppMessage.swift`), with `WorkspaceStore` as the sole in-memory cache/freshness owner; shared `weather_reuse` and `result_reopen` actions under the §3/plan §7.2 contract. No process-global registry callback, backend TTL mirror or registry guard/policy change; associated unit/native/contract tests and exact-build WS-17 evidence in `docs/acceptance/adaptive-interface/RELEASE_READINESS.md`, `docs/acceptance/command-console/`; dated progress in the existing plan and WS-17-specific `docs/roadmap-log/` files. Preserve WS-21 transfer/screen contracts and other active workstream behavior (CX-20)
-- **Next step:** codex: prepare the bounded Recents/voice-selection/reuse repair under WS-17 and obtain the required review, then repeat affected UI2-24/25 cases on the identified candidate. Resolve the physical-Mac OCR verification errors without weakening assertions. larry: remaining UI2-22/23, physical-display and exact-build acceptance; preserve the thread switch until all four live gates pass. #203 merge/deployment is already complete.
-- **Updated:** 10-17 (current merged/deployed state and recorded acceptance blockers; no new test or product sign-off)
+- **Scope:** `App/ResponseResultRouter.swift`, `Stores/WorkspaceStore.swift`, `Stores/ConversationStore.swift`, `Console/AdaptiveStageView.swift`, `Console/ConversationThreadView.swift`, `Console/TopBarView.swift`, `Display/WorkspaceView.swift`, `App/AppMessageRouter.swift` (display arrivals: whether a result opens on arrival), voice result actions (`App/ConsoleActionCoordinator.swift`, `App/ConsoleActionRegistry.swift`, JarvisKit `ConsoleProtocol.swift`, `jarvis/bot/console_protocol.py`), DisplayPayload `subject_key` (JarvisKit + `jarvis/bot/display.py`), weather tools' reuse check; `Console/ConsoleActionBar.swift`, `Stores/WorkspaceRecents.swift`, `jarvis/bot/console_actions.py`, the console inventory/turn binding and result acknowledgement portions of `jarvis/bot/pipeline.py`, `jarvis/bot/weather_tool.py`, `jarvis/bot/weather_card.py`; CC7a.4 expansion reserved on main via #195: new `jarvis/bot/weather_reuse.py` and associated tests; only the weather-call interception in `jarvis/skills/registry.py` `_invoke`, using a request-owned ContextVar hook after existing guards and preserving classified `_finish_invocation` envelopes; optional bounded `weather_source` in Python/JarvisKit DisplayPayload (`AppMessage.swift`), with `WorkspaceStore` as the sole in-memory cache/freshness owner; shared `weather_reuse` and `result_reopen` actions under the §3/plan §7.2 contract. No process-global registry callback, backend TTL mirror or registry guard/policy change; associated unit/native/contract tests and exact-build WS-17 evidence in `docs/acceptance/adaptive-interface/RELEASE_READINESS.md`, `docs/acceptance/command-console/`; dated progress in the existing plan and WS-17-specific `docs/roadmap-log/` files. Bounded 10-17 repair extension, per #213: weather-repeat, numbered-result and roadmap-read routing instructions only in `jarvis/prompts.py`; tool description and reference parsing in `jarvis/bot/console_actions.py`; content-free console action/status logging and weather-delegation context minimization only in `jarvis/bot/pipeline.py`; `tests/evals/voice_workflow_eval.py` and `tests/evals/voice_workflow_cases.yaml` for the affected synthetic-history cases and action-level assertions; native Recents-menu rendering and spoken-reference tests. Additional Larry request 10-17: ensure Mortimer can read and knows how to read the roadmap. Add the canonical path/read-only tools and checkout-freshness guidance near the beginning of injected `docs/REPO_MAP.md`; add explicit Supervisor-to-Developer roadmap/status routing and Developer read guidance in `jarvis/prompts.py`, with focused prompt/navigation/read-access tests. Preserve repo path restrictions and source/privacy policy; no auto-fetch, broader filesystem access, memory copy of roadmap status, runtime activation or claim of main freshness. Roadmap-display addition authorized 10-17: read-only roadmap parsing, dated `docs/roadmap-log/` evidence and provenance in `mcp_servers/mcp_repo/logic.py` using existing guarded repository reads; deterministic snapshot filters and voice/pointer filter state in the existing roadmap-result paths; presentation mapping in `jarvis/bot/display.py` and associated Python/JarvisKit DisplayPayload schema; existing `Display/DisplayContentView.swift` and a bounded `Display/RoadmapView.swift`, with refresh/navigation wiring in the already-owned console paths and focused tests. Reuse current result identity, transport, sharing and WS-21 transfer; no new server, port, credentials, registry trust changes or alternate status database. Reserve any new wire field in §3 before implementation. No other Supervisor/tool policy, live model/route/account setting, source approval, private log disclosure or provider activation. Preserve WS-21 transfer/screen contracts and other active workstream behavior (CX-20) Bounded source-contract extension explicitly approved by Larry 10-17: `jarvis/skills/registry.py` `_repo_source_refs` and associated classification tests may verify the optional roadmap snapshot and every included guarded dated-log source/hash. Preserve the exact legacy response contract for other files, reject fabricated or mismatched snapshot/provenance/log data, retain existing source-policy floors and approvals, and make no changes to unrelated registry guards, credentials, routing or activation. This closes the schema incompatibility before the new reader transport is enabled. Bounded roadmap-event extension explicitly approved by Larry 10-17: `jarvis/agents/base.py` only the `agent_tool_result` observation projection for canonical `repo_read_file ROADMAP.md`, plus directly related tests. Preserve the existing 20,000-character limit for every other tool/file and every private/redacted path. Carry a complete, bounded, already host-classified roadmap snapshot to the native display without broadening source approval, changing model history, run-log caps, delegation, budgets, tool permissions or WS-05 source-before-sink enforcement. Refuse oversize/malformed roadmap observations explicitly rather than emitting truncated JSON. Coordinate this narrow observation-only exception with WS-05 ownership of Base; no other Base edits are authorized.
+- **Next step:** codex: complete exact-source cross-review of #216 (`61f701d`); the authorized tools-disabled Claude subscription attempt timed out after 900 seconds without a verdict. All five GitHub checks passed; keep the PR draft. Then independent release verification and Larry release/acceptance. Retain the original one-result store/routing reproduction and live UI2-24/25/roadmap checks; no automated test closes them. Bounded Haiku comparison on `75694b7` remains 2/2; no additional provider calls were made.
+- **Updated:** 10-17
 
 
 </details>
@@ -370,14 +398,14 @@ Source: [mail/calendar/brief plan §R.12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIE
 **Workstream:** Review `MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md` (DRAFT, 2026-08-26) against today's main before anyone builds T5. Docs only.
 
 - **Owner:** `claude`
-- **Status:** landed: P1 (mail header source) merged in #204 as `575cc7b` (head `8b77df1`, revision 3) and deployed in `575cc7b` on 10-13; Codex reviewed revisions 1 and 2 and accepted the registry decisions (CX-21); Codex signed off revision 3 (`8b77df1`) on re-review; this follow-up fixes the M1-1 preflight, which printed PASS with no mail name set; Larry ran M1-1 to M1-3 on the Mac on 10-13 against the deployed `575cc7b` and all three passed (Mac acceptance recorded below; formal M1-1 repeat from production after this merges); P2 and P3 not yet claimed
+- **Status:** landed: P1 (mail header source) merged in #204 as `575cc7b` (head `8b77df1`, revision 3) and deployed in `575cc7b` on 10-13; Codex reviewed revisions 1 and 2 and accepted the registry decisions (CX-21); Codex signed off revision 3 (`8b77df1`) on re-review; #205 (merged as `9f9bc71`) fixed the M1-1 preflight, which printed PASS with no mail name set; Codex's two further preflight corrections (startup-shell removals applied, relative `--env-file` resolved) are in PR `ws13/p1-preflight-rev3`; Larry ran M1-1 to M1-3 on the Mac on 10-13 against the deployed `575cc7b` and all three passed (Mac acceptance recorded below; formal M1-1 repeat from production after the next deployment); P2 and P3 not yet claimed
 - **Implemented by:** P1: Claude (landed, #204 `575cc7b`); P2–P5: not started
-- **Remaining work / acceptance:** P1 Mac acceptance, 10-13, deployed `575cc7b`: M1-1 PASS (the corrected preflight from this branch, with the four vault names set: each reaches `mcp-mail` and no other of the 15 servers; effective JARVIS_ENV_SCOPING_ENABLED on; Larry's `.env` does not set it); M1-3 PASS (bellsouth.net via `imap.mail.att.net` with the secure mail key, and Gmail with an app password: both `status=ok`, `exact` counts, headers complete, call 3.1-3.6 s against the 13 s bound; the first Gmail attempt failed `login_rejected` because the stored user was not the full address and the password was not an app password, both corrected in the vault); M1-2 PASS (one unread test message per account: a second read still counted it as UNSEEN, `exact:1` on both, so the first headers read set no \Seen flag, and Larry confirmed both still unread in webmail); `mcp_server_started name=mcp-mail tools=1` logged at the first session after the deploy. Open: Codex's re-review of this follow-up at revision 2 (its two preflight corrections: .env read through the startup shell, and a missing `mcp-mail` entry is a FAIL); the formal M1-1 repeat from production after this merges; the macOS OSError seen in two Mac test runs before the `deadline` unification is still unidentified (it did not occur against the real servers). Then P2 (needs the Google account in macOS Internet Accounts for M2-2; its claim needs Codex's agreement on the WS-17 portions, plan §R.13) and P3, each claimed on its own against §R.12; P4/P5 stay separately gated (§R.11)
+- **Remaining work / acceptance:** P1 Mac acceptance, 10-13, deployed `575cc7b`: M1-1 PASS (the corrected preflight from this branch, with the four vault names set: each reaches `mcp-mail` and no other of the 15 servers; effective JARVIS_ENV_SCOPING_ENABLED on; Larry's `.env` does not set it); M1-3 PASS (bellsouth.net via `imap.mail.att.net` with the secure mail key, and Gmail with an app password: both `status=ok`, `exact` counts, headers complete, call 3.1-3.6 s against the 13 s bound; the first Gmail attempt failed `login_rejected` because the stored user was not the full address and the password was not an app password, both corrected in the vault); M1-2 PASS (one unread test message per account: a second read still counted it as UNSEEN, `exact:1` on both, so the first headers read set no \Seen flag, and Larry confirmed both still unread in webmail); `mcp_server_started name=mcp-mail tools=1` logged at the first session after the deploy. Open: Codex's review of `ws13/p1-preflight-rev3` (the preflight now replaces its environment with the startup shell's snapshot, so an `unset` in .env takes effect, and resolves a relative `--env-file` before loading; #205 at `9f9bc71` had the startup-shell read and the missing-server FAIL); the formal M1-1 repeat, `python scripts/check_mail_env.py` from production after the next deployment (the recorded deployment is still `575cc7b`; the checkout at `8842503` has no receipt); the macOS OSError seen in two Mac test runs before the `deadline` unification is still unidentified (it did not occur against the real servers). Then P2 (needs the Google account in macOS Internet Accounts for M2-2; its claim needs Codex's agreement on the WS-17 portions, plan §R.13) and P3, each claimed on its own against §R.12; P4/P5 stay separately gated (§R.11)
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main: P1 via #204 (`575cc7b`), the plan via #196; preflight follow-up branch `ws13/p1-preflight-honest` (PR open)
+- **Where:** main: P1 via #204 (`575cc7b`), the plan via #196, the preflight follow-up via #205 (`9f9bc71`); preflight revision 3 on branch `ws13/p1-preflight-rev3` (PR open)
 - **Plan:** `docs/plans/MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md`; §R (10-07) is authoritative and the August text is history except where §R.9 keeps it. No GitHub branch other than this one touches the plan. Migration `0035` stays reserved for T5 (`0035_brief`).
 - **Scope:** the plan file; and for P1 (plan §R.6): new `mcp_servers/mcp_mail/` (`__init__.py`, `logic.py`, `server.py`, `skill.yaml`), the `mcp-mail` entry in `config/mcp_servers.yaml`, the `mcp-mail` source-contract entries only in `jarvis/skills/registry.py` (WS-05 reviews; §4 CX-21), `EXPECTED` in `tests/unit/test_requires_env_snapshot.py`, `ALL_SERVERS`/`TOTAL_TOOLS` in `tests/integration/test_registry.py`, `EXPECTED_TOOLS` in `tests/integration/test_mcp_servers.py`, new `tests/unit/test_mcp_mail*.py` with the fake IMAP server fixture `tests/unit/mcp_mail_fake_server.py`, the names-only preflight script `scripts/check_mail_env.py` for M1-1, and `.env.example`. No agent, prompt, model, pipeline, Swift or migration change in P1
-- **Next step:** codex: re-review #205 at revision 2; larry: merge #205 after Codex's approval, deploy, and run `python scripts/check_mail_env.py` from production (formal M1-1 repeat); claude: answer the re-review, then propose the P2 claim, which needs Codex's agreement on the WS-17 portions
+- **Next step:** codex: review PR `ws13/p1-preflight-rev3`; larry: merge it after Codex's approval, deploy with DEPLOY-MAIN, and run `python scripts/check_mail_env.py` from production (formal M1-1 repeat); claude: answer the review, then propose the P2 claim, which needs Codex's agreement on the WS-17 portions
 - **Updated:** 10-17
 
 </details>
@@ -391,6 +419,8 @@ Source: [mail/calendar/brief plan §R.12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIE
 **Acceptance campaign authorization — Larry, 2026-10-17:** Codex runs the
 existing automated and live acceptance checks on
 `codex/acceptance-campaign-20261017`; Larry supplies human/hardware actions.
+Initial evidence merged via #208 (`f363444`); final results use
+`codex/acceptance-campaign-results-20261017` under the same bounded scope.
 The source baseline is `9f9bc71c26c82c832121be118346abaa1b4f89a4` (all PRs
 merged); the installed candidate remains `575cc7b`. This bounded claim covers
 test execution, evidence receipts, this note, the existing WS-20 plan/log,
@@ -442,14 +472,14 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
 - **Owner:** `codex` (bounded roadmap documentation); `claude` retains B4 and WS-13 ownership. Remaining WS-17 implementation belongs to Codex under Larry’s 10-07 assignment (CX-20); historical Claude attribution is preserved.
-- **Status:** landed foundation and documentation: B1–B4, 72-entry migration, ten-PR observation and #191 are complete. #207 reconciled and replaced closed #172/#174; #206 acceptance-first priority and #208 initial campaign evidence merged. Open #209 contains final evidence, with green CI; strict checker enforcement and remaining Phase A/B live-evidence closure stay open. This status refresh adds no product acceptance.
+- **Status:** landed foundation and documentation: B1–B4, 72-entry migration, ten-PR observation and #191 are complete. #207 reconciled and replaced closed #172/#174; #206 acceptance-first priority and #208 initial campaign evidence merged. Final campaign evidence is published via #209; #210 has reproduced cleanup findings and #212 has a bounded post-merge review; strict checker enforcement and remaining Phase A/B live-evidence closure stay open. This status refresh adds no product acceptance.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
-- **Remaining work / acceptance:** Review/publish final evidence #209; acceptance owners resolve and retest their remaining gates. Larry decides whether the checker becomes blocking after the warning period. #172/#174 cleanup and #173 implementation handoffs are complete, not pending work.
+- **Remaining work / acceptance:** Final evidence is published via #209; acceptance owners resolve and retest their remaining gates. Larry decides whether the checker becomes blocking after the warning period. #172/#174 cleanup and #173 implementation handoffs are complete, not pending work.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** current status documentation: `codex/roadmap-status-20261017`, based on main `f363444`, dispatched by Larry 10-17. Separate campaign evidence remains on `codex/acceptance-campaign-results-20261017` (#209). Earlier foundation, observation and cleanup attribution is preserved in the linked logs.
+- **Where:** current status documentation: `codex/roadmap-status-20261017`, based on main `f363444`, dispatched by Larry 10-17. Final campaign evidence and the current PR-review reconciliation are on `codex/acceptance-campaign-results-20261017` (#209), merged with main `f3d5378`. Earlier foundation, observation and cleanup attribution is preserved in the linked logs.
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
 - **Scope:** Active Codex documentation expansion authorized by Larry, 2026-10-07: `ROADMAP.md` top operational summary (actions, owners, blockers, pass conditions), Larry decision queue, and linked acceptance grouping (ready now versus waiting on code or decisions); this WS-20 block; narrow stale state/Where/Next step/Updated and evidence-reference wording in WS-17/21/11, reusing pending #172/#174 corrections and #191 exact-build results rather than creating parallel fixes or repeating tests; `docs/roadmap-log/**`; dated status/progress in the existing `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`. The #191 lifecycle-prefix corrections and exact-build receipts are already merged as `b6f09f4`; preserve them and reuse the existing evidence. Preserve all detailed source blocks, open/accepted gates, ownership, implementation scopes, production receipts and human decisions. Claude retains #173 repairs and #172/#174 integration; no edits to their branches, code or plans. No new plan, tracking copy, checker enforcement, credentials, provider workload, product change, activation or deployment. Historical B4 (Claude) and B1–B3 (Codex) scopes are inactive. Larry authorized merging only claim PR #192 after checks; the substantive roadmap update must remain a separate draft PR for Larry.
-- **Next step:** larry: review #209 and this status refresh; retain release, acceptance and checker-enforcement decisions. codex: keep the shared status and right-pane view aligned with merged/proposed evidence and support repairs only under their owning workstreams. claude: own mail-preflight follow-ups and later mail/calendar claims. WS-22 remains parked.
+- **Next step:** larry: retain release, acceptance and checker-enforcement decisions. codex: re-review #210 after its owner repairs the recorded findings. claude: reconcile WS-13’s stale #212 merge handoff and own later mail/calendar claims; #210 needs its sandbox ownership/launchd reservation recorded before landing. WS-22 remains parked.
 - **Updated:** 10-17 (main/PR/deployment reconciliation and right-pane refresh; no gate waived)
 
 </details>
@@ -719,7 +749,7 @@ Sources: [voice-workflows plan Progress, §5 and §12](docs/plans/MORTIMER_VOICE
 <summary>WS-09 — Command Console and Atlas acceptance · Larry acceptance</summary>
 
 
-**Current evidence, 2026-10-17:** [Campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) identifies installed `575cc7b`, records the passed WS-18 switch and bounded five-turn conversation evidence, and reconciles the shared runbook to CC7a. Parent acceptance remains open; other physical/configuration/coverage cases are not inferred.
+**Current evidence, 2026-10-17:** [Campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) identifies installed `575cc7b`, records the passed WS-18 switch and bounded five-turn conversation evidence, and reconciles the shared runbook to CC7a. All twelve independent checks passed on `9f9bc71`, but the final physical-Mac suite has two repeatable Vision OCR errors and Recents/reuse live failures remain. Parent acceptance remains open; other physical/configuration/coverage cases are not inferred.
 
 ### Acceptance checklist — remaining
 
@@ -797,7 +827,7 @@ Sources: [memory plan B5/B7/B9](docs/plans/MORTIMER_MEMORY_AUTOCONSOLIDATION_PLA
 <summary>WS-11 — Adaptive interface C8 acceptance · Larry acceptance</summary>
 
 
-**Current evidence, 2026-10-17:** [Campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) identifies installed `575cc7b`, records the passed WS-18 switch and bounded five-turn conversation evidence, and reconciles the shared runbook to CC7a. Parent acceptance remains open; other physical/configuration/coverage cases are not inferred.
+**Current evidence, 2026-10-17:** [Campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) identifies installed `575cc7b`, records the passed WS-18 switch and bounded five-turn conversation evidence, and reconciles the shared runbook to CC7a. All twelve independent checks passed on `9f9bc71`, but the final physical-Mac suite has two repeatable Vision OCR errors and Recents/reuse live failures remain. Parent acceptance remains open; other physical/configuration/coverage cases are not inferred.
 
 ### Acceptance checklist — remaining
 
@@ -978,7 +1008,7 @@ Source: [native-audio plan, WS-18 progress](docs/plans/MORTIMER_NATIVE_AUDIO_TRA
 - **Where:** main (PR #144, `c2f0f49`)
 - **Plan:** `docs/plans/MORTIMER_NATIVE_AUDIO_TRANSPORT_PLAN.md` (progress entry 2026-09-30)
 - **Scope:** `macos/JarvisKit/Sources/JarvisKit/AudioEngineIO.swift`, `macos/JarvisKit/Sources/JarvisKitObjC/`, `macos/JarvisKit/Package.swift` (new ObjC target), `JarvisFlags.outputIOWatchEnabled` in `JarvisConfig.swift`, `AudioEngineIOTests.swift`
-- **Next step:** codex: publish Larry’s exact-build acceptance evidence; larry/acceptance owners: continue the separate echo, wake/device and combined-load checks. The existing rollback flag remains available.
+- **Next step:** codex: preserve the published exact-artifact receipt; larry/acceptance owners: continue the separate echo, wake/device and combined-load checks. The existing rollback flag remains available.
 - **Updated:** 10-17 (Larry physical acceptance; Codex evidence recording; implementation owner/scope unchanged)
 
 </details>
@@ -1149,12 +1179,36 @@ Renumbering completed in the main integration. Read-only production verification
 
 **WS-17 host-only reuse eligibility reservation, 2026-10-07 (Codex):** Additional typed `weather_reuse` argument `ordinary_turn` is an exact boolean supplied only by the guarded host adapter. Backend turn classification remains authoritative and is checked before and after native awaiting; model-facing `console_action` refuses this internal action. Native requires this attestation to be `true` on its existing negotiated authenticated console channel, plus exact UUID/key/revision and explicitly public cache policy. Missing/false eligibility refuses without returning source. Native does not infer privacy from displayed text or default unknown turns to ordinary. No new classifier, privilege, external route, cache owner or credential is introduced.
 
+**WS-17 roadmap snapshot reservation before implementation, 2026-10-17 (Codex):** Optional `roadmap` on the existing `repo_read_file` response and DisplayPayload, schema `mortimer.roadmap.v1`, carries a complete bounded read-only snapshot of the fixed `ROADMAP.md` and guarded dated log files. Fields: `schema`, `provenance` (`path`, local `revision`, `sha256`, `read_at`, nullable `dirty`, `source_kind`), `cards` (stable `id`, `title`, verbatim `status`, derived `lifecycle`, current `owner`, `fields`, `details`, `checklist`), `logs` (guarded `path`, front-matter `date`, `rows`, `sha256`, `title`), and `issues`. No provider-generated status, new permission, service, port, migration, persistent cache or implicit Git fetch. Oversized snapshots refuse explicitly instead of dropping rows. Native filters/actions will be reserved with their exact contract before they are implemented; this reservation alone does not activate a native view or filtering.
+
+**WS-17 roadmap controls reservation, 2026-10-17 (Codex, before implementation):**
+One additive `roadmap_control` console action (existing negotiated protocol).
+Target is an existing roadmap result UUID; `args.operation` is `replace`,
+`refine`, `clear`, `focus`, or `refresh`. Filter fields: `owners`, `authors`,
+`states`, `topics`, `workstreams` (bounded string arrays); `checklist` is
+`all`, `remaining` or `larry`; `blockers` is a boolean; `period` is `all`,
+`this_week` or `last_seven_days`. AND across facets / OR within; empty arrays
+clear a facet. Focus requires exactly one known workstream and clears conflicting
+facets. Unknown values refuse without changing selection. Native and voice use
+the same state owner. The existing console request/result channel carries fixed
+read-only roadmap refresh requests and a bounded `data.display` reply; no model
+call, new endpoint, arbitrary path or broader source authority. Refresh timeout
+is 15 seconds native / 20 seconds voice, and source acquisition is bounded to
+8 seconds. Optional DisplayPayload `roadmap_timezone` carries the configured
+IANA timezone; unavailable/invalid timezone refuses relative-date filters.
+Roadmap provenance adds `repository_id` (SHA-256 of the canonical guarded repo
+root, never the raw path) to distinguish identity across checkouts. Filter state
+and expansion remain native memory only. Sharing exports the frozen filtered
+projection, never hidden cards; protected results retain their existing limits.
+
+
 ## 4. Conflict register
 
 Open means not yet resolved. Each entry names who resolves it.
 
 | ID | Conflict | Resolves | State |
 |---|---|---|---|
+| CX-22 | WS-17 roadmap first-arrival display needs the `agent_tool_result` observation projection in `jarvis/agents/base.py`, held by Codex WS-05. | Larry approved the bounded roadmap-only extension 10-17; Codex coordinates both scopes. | Approved and claimed on main through #217 (`ed21d82`): canonical roadmap observation only; preserve other caps, private redaction, model history, logs and source-before-sink guards. No broader Base edits. |
 | CX-21 | WS-13 P1 adds the `mcp-mail` source contract to `jarvis/skills/registry.py`, which WS-05 (Codex, claimed) holds for source classification. WS-13 edits only the `mcp-mail` entries (classification and `EXTERNAL_TOOL_SERVERS`/source-operation sets), not `_invoke` or any existing entry; plan §R.13. | `codex` (WS-05): review those entries in the P1 PR | resolved: Codex revision-3 sign-off recorded in WS-13; #204 merged `575cc7b`. Subsequent mail-preflight/live acceptance remains separate |
 | CX-20 | Larry explicitly reassigns remaining WS-17 from Claude to Codex on 10-07; WS-20 documentation #193 merged concurrently and edits narrow WS-17 state fields, and landed WS-21 shares console/inventory files. | `larry` (10-07): Codex owns remaining WS-17 implementation; `codex` preserves #173 and records this bounded coordination | resolved ownership/scope boundary: WS-17 owns its implementation/plan/evidence and current row; WS-20 retains operational summary/decision grouping and WS-20-specific logs; its landed #193 wording is reconciled to this newer assignment, with WS-17 owning its block/plan/receipts/logs; no edits to the other session’s branch. Preserve WS-21 transfer/screen behavior and its separate physical acceptance. Cross-review and release approvals remain required; no other row is reassigned |
 | CX-16 | WS-21 (supporting display transfer) edits the display-transfer, panel and screen parts of files in WS-17's scope: `console_protocol.py`, `ConsoleProtocol.swift`, `ConsoleActionRegistry.swift`, `ConsoleActionCoordinator.swift`, the `WorkspaceStore` inventory, and the display menu in `WorkspaceView.swift`. Both rows are Claude's; WS-17 has no open branch. | `larry` (10-03): new row WS-21; WS-17's CC7a.3 starts from main after WS-21 merges | resolved 10-06: PR #171 merged as `bde22bb` on 10-03; its live display acceptance remains open in WS-21 |

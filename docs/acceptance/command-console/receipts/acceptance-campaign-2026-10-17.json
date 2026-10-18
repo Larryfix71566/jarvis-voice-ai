@@ -1,0 +1,1013 @@
+{
+  "schema_version": 1,
+  "session": "01a14bae-5269-78b0-abe8-6611e9c357dc",
+  "initial_pull_request": "https://github.com/Larryfix71566/jarvis-voice-ai/pull/208",
+  "observations": {
+    "automated_source": "9f9bc71c26c82c832121be118346abaa1b4f89a4",
+    "installed_source": "575cc7b770b621b5c8049097ef63e93618ba3016",
+    "app_path": "/Users/larryfix/jarvis-voice-ai-clean/macos/MortimerHost/.build/MortimerHost.app",
+    "app_sha256": "6c67661bb94ddde5fa95d0a807dd77e5d837483a69c0d979412064fdcd3eaf29",
+    "bundle_configuration": "debug",
+    "initial_service_pids": {
+      "admin": 1045,
+      "vault": 1052,
+      "bot": 1056
+    },
+    "service_started_local": "2026-10-13 22:33:11",
+    "health_codes": {
+      "admin": 200,
+      "vault": 200,
+      "bot": 200
+    },
+    "hardware_user_report": "AirPods only",
+    "source_delta_scope": "documentation, scripts/check_mail_env.py, tests/unit/test_mcp_mail_registry.py",
+    "live_observations": [
+      {
+        "case": "ordinary long spoken answer",
+        "time_local": "2026-10-17 17:51",
+        "operator_report": "Complete answer at normal speed",
+        "agent_observation": "Five sentences visible in a single conversation reply longer than 160 characters; no result card; both speaker rows ordered",
+        "status": "bounded pass, parent UI2-22 remains open"
+      },
+      {
+        "case": "initial connect",
+        "time_local": "2026-10-17 17:50",
+        "observation": "Connected READY VOICE; mic initially on and ambient broadcast transcribed; recorder muted between controlled prompts",
+        "status": "observation, not microphone or echo acceptance"
+      },
+      {
+        "case": "five-turn ordinary conversation",
+        "time_local": "2026-10-17 17:55",
+        "operator_report": "All four follow-ups completed normally",
+        "agent_observation": "First long reply plus four requested follow-ups remain ordered in the conversation thread; no answer result cards/tabs; mic visibly muted afterward",
+        "qualification": "First red-leaves follow-up was mistranscribed and answered with a clarification; user repeated it successfully. This is a recognition issue, not a flawless first-attempt pass. Protected turns and reading-focus cases remain open.",
+        "status": "bounded conversation subcheck only"
+      },
+      {
+        "case": "WS-18 AirPods mid-speech switch",
+        "time_local": "2026-10-17 17:56:42\u201317:57:03 EDT",
+        "directions": [
+          "AirPods to Mac speakers",
+          "Mac speakers to AirPods"
+        ],
+        "operator_report": "Both directions worked; app stayed connected. No noticeable silence or only a brief gap.",
+        "agent_observation": "Same MortimerHost PID 21674 before/after; READY VOICE and conversation retained; audio output flowing logged after device reconfiguration at 17:56:44.623, 17:56:46.712, 17:56:52.663 and 17:57:03.387, each 200 ms after engine start.",
+        "qualification": "200 ms is engine-start-to-output, not total audible device-switch latency. Input device names were not independently measured; echo matrix remains separate.",
+        "status": "PASS for exact WS-18 switch criterion on installed 575cc7b"
+      },
+      {
+        "case": "UI2-23 requested public weather result opens",
+        "time_local": "2026-10-17 17:58\u201317:59 EDT",
+        "prompt": "Show me the weather in Folly Beach, South Carolina.",
+        "operator_report": "Weather result opened",
+        "agent_observation": "Conversation changed to Weather \u2014 Folly Beach; Results count 1; Recents contains exactly one Weather / Folly Beach item; weather content and radar visible.",
+        "status": "bounded requested-arrival pass"
+      },
+      {
+        "case": "UI2-23 arrival while reading and pointer notice navigation",
+        "time_local": "2026-10-17 17:59 EDT",
+        "prompt": "Show me the weather in Atlanta, Georgia",
+        "operator_report": "Folly Beach stays; a notice appears",
+        "agent_observation": "Folly Beach remained selected; Results count changed 1 to 2; arrival-notice said New: Weather / Atlanta. Pointer Show opened Atlanta. Pointer Conversation returned to two inline weather cards and retained full transcript.",
+        "status": "bounded arrival-focus and pointer navigation pass"
+      },
+      {
+        "case": "UI2-25 fresh ordinary weather repeat",
+        "time_local": "2026-10-17 18:00 EDT",
+        "actual_transcript": "What's the weather in Folly Beach, South Carolina?",
+        "operator_report": "It stayed in Conversation",
+        "agent_observation": "Repeated forecast only; two existing cards retained; no reuse reference line or reopened result. Read-only tool metadata shows initial Folly and Atlanta lookups but no new weather call for the repeat.",
+        "status": "FAIL for expected reopen/reference behavior; absence of fetch does not prove cache path or UUID preservation"
+      },
+      {
+        "case": "Explicit subject voice reopening attempts",
+        "time_local": "2026-10-17 18:01\u201318:05 EDT",
+        "actual_transcripts": [
+          "Show the file of each weather again.",
+          "So the Atlanta weather again."
+        ],
+        "operator_reports": [
+          "Mortimer said it did not have those results",
+          "It stayed in Conversation"
+        ],
+        "agent_observation": "First reply interpreted raw files; second repeated forecast. Both inputs differ materially from intended show command.",
+        "status": "Recognition-confounded, not proof of missing results"
+      },
+      {
+        "case": "UI2-24 Recents stale inventory and voice/pointer mismatch",
+        "time_local": "2026-10-17 18:02\u201318:07 EDT",
+        "operator_report": "Open result number one opened Atlanta",
+        "agent_observation": "Results count 2 and both cards exist. Recents repeatedly lists only 1 Weather / Folly Beach / now. Clicking Atlanta card opens Atlanta. Correctly transcribed Open result number one changes Conversation to results showing Atlanta, but assistant says it opened Results and asks which result; no successful numeric-target resolution is established. Recents still lists only Folly Beach as 1; clicking that row opens Folly Beach.",
+        "status": "FAIL: stale visible Recents inventory; voice selection not completed. Do not claim the numeric resolver chose the wrong UUID."
+      },
+      {
+        "case": "UI2-22 ordinary answer while reading result",
+        "actual_transcript": "Why do leaves fall from trees?",
+        "operator_report": "Folly Beach stayed visible; answer completed",
+        "agent_observation": "Folly Beach remains selected and mic muted; returning to Conversation shows ordered question/full long answer; Results count still two",
+        "status": "bounded PASS; protected-content and remaining viewport/scroll cases remain open"
+      },
+      {
+        "case": "UI2-23 card pin/compare/unpin",
+        "agent_observation": "Atlanta card Pin produced a Pinned accessibility marker; its menu changed to Unpin. Compare with Folly Beach opened both full weather bodies side by side. End comparison returned to Atlanta; Unpin and Conversation restored both cards without a pin marker. Recents remained a stale one-item Folly Beach list even while Atlanta was pinned.",
+        "status": "bounded pointer card-action PASS; Recents failure retained; close/Output and full voice parity remain open"
+      }
+    ],
+    "app_pid": 21674,
+    "host_test_source_qualification": "Runtime and test files match 9f9bc71; acceptance-only documentation edits were made in the same worktree during the host runs. Host results are not an immutable full-tree verification receipt. The separate verifier exports only committed Git objects.",
+    "transport": {
+      "force_webrtc_resolved": false,
+      "native_socket_session": 2,
+      "socket_open_local": "2026-10-17 17:50:24.347",
+      "established_local": "2026-10-17 17:50:27.022",
+      "reconnect_observation": "No second socket-open/session-established event in the captured session window through 18:00"
+    },
+    "production_tree_qualification": "git status reports one tracked pre-existing acceptance-data modification and several untracked files/directories. No production file was edited; those files were not inspected or cleaned. Installed artifact hash and tracked application/server source identity are recorded separately.",
+    "supervisor": {
+      "service": "anthropic",
+      "model": "claude-haiku-4-5",
+      "logged_start": "2026-10-17 17:50:26,939",
+      "source": "bot.launchd.log selected routing metadata"
+    }
+  },
+  "host_results": {
+    "python-clean-loader.xml": {
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "1",
+          "skipped": "15",
+          "tests": "6710",
+          "time": "403.005",
+          "timestamp": "2026-10-17T18:08:58.005191-04:00"
+        }
+      ],
+      "failed_nodes": [
+        "tests.unit.test_model_execution::test_deadline_includes_admission_wait_and_does_not_create_client"
+      ]
+    },
+    "python-results.xml": {
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "4",
+          "failures": "107",
+          "skipped": "15",
+          "tests": "6710",
+          "time": "303.709",
+          "timestamp": "2026-10-17T17:50:01.794950-04:00"
+        }
+      ],
+      "failed_nodes": [
+        "tests.unit.test_audio_filters::test_factory_disabled_returns_none_even_with_engine",
+        "tests.unit.test_claude_developer_capability::test_loopback_rejects_negative_lengths_and_drains_actual_thread",
+        "tests.unit.test_deploy_main::test_service_health_prints_only_status_codes_against_local_stub",
+        "tests.unit.test_deploy_main::test_deploy_main_never_runs_the_file_that_replaced_it",
+        "tests.unit.test_mcp_mail_logic::test_untrusted_certificates_fail_before_login[wrong_ca]",
+        "tests.unit.test_mcp_mail_logic::test_untrusted_certificates_fail_before_login[self_signed]",
+        "tests.unit.test_mcp_mail_logic::test_untrusted_certificates_fail_before_login[expired]",
+        "tests.unit.test_mcp_mail_logic::test_untrusted_certificates_fail_before_login[not_yet_valid]",
+        "tests.unit.test_mcp_mail_logic::test_untrusted_certificates_fail_before_login[wrong_host]",
+        "tests.unit.test_mcp_mail_logic::test_trusted_certificate_succeeds",
+        "tests.unit.test_mcp_mail_logic::test_only_the_permitted_commands_in_the_permitted_forms",
+        "tests.unit.test_mcp_mail_logic::test_command_gate_refuses_everything_else",
+        "tests.unit.test_mcp_mail_logic::test_handshake_failure_releases_the_watchdog_before_closing",
+        "tests.unit.test_mcp_mail_logic::test_constructor_abort_and_logout_release_before_imaplib_closes",
+        "tests.unit.test_mcp_mail_logic::test_logout_concurrent_with_the_watchdog_never_shuts_a_closed_descriptor",
+        "tests.unit.test_mcp_mail_logic::test_stalled_handshake_ends_at_the_deadline",
+        "tests.unit.test_mcp_mail_logic::test_stall_between_open_and_greeting_ends_at_the_deadline",
+        "tests.unit.test_mcp_mail_logic::test_many_slow_operations_each_under_the_op_timeout",
+        "tests.unit.test_mcp_mail_logic::test_slow_operations_that_exhaust_the_deadline_keep_partial_results",
+        "tests.unit.test_mcp_mail_logic::test_dripped_literal_is_bounded_by_the_watchdog",
+        "tests.unit.test_mcp_mail_logic::test_stalled_logout_costs_at_most_one_second",
+        "tests.unit.test_mcp_mail_logic::test_latch_set_before_connect_makes_no_connection",
+        "tests.unit.test_mcp_mail_logic::test_latch_during_tcp_connect_closes_the_socket_without_a_greeting",
+        "tests.unit.test_mcp_mail_logic::test_latch_before_login_sends_no_login",
+        "tests.unit.test_mcp_mail_logic::test_call_returns_at_the_call_deadline_with_the_other_account_intact",
+        "tests.unit.test_mcp_mail_logic::test_account_deadline_before_call_deadline_keeps_partial_results",
+        "tests.unit.test_mcp_mail_logic::test_two_stuck_resolvers_share_one_cleanup_second",
+        "tests.unit.test_mcp_mail_logic::test_single_flight_against_a_resolver_that_never_returns",
+        "tests.unit.test_mcp_mail_logic::test_exact_count_and_window_filtering",
+        "tests.unit.test_mcp_mail_logic::test_empty_mailbox_is_an_exact_zero",
+        "tests.unit.test_mcp_mail_logic::test_candidate_cap_gives_a_lower_bound",
+        "tests.unit.test_mcp_mail_logic::test_a_rejected_metadata_chunk_is_a_lower_bound_never_a_zero",
+        "tests.unit.test_mcp_mail_logic::test_partial_enumeration_with_no_confirmed_arrival_is_unknown",
+        "tests.unit.test_mcp_mail_logic::test_a_24_hour_window_spans_24_elapsed_hours_across_dst[local_now0-25]",
+        "tests.unit.test_mcp_mail_logic::test_a_24_hour_window_spans_24_elapsed_hours_across_dst[local_now1-23]",
+        "tests.unit.test_mcp_mail_logic::test_search_since_uses_the_day_before_the_window_start",
+        "tests.unit.test_mcp_mail_logic::test_oversized_literal_is_refused_before_it_is_read",
+        "tests.unit.test_mcp_mail_logic::test_metadata_phase_budget_is_enforced_line_by_line",
+        "tests.unit.test_mcp_mail_logic::test_unsolicited_flood_before_login_fails_closed",
+        "tests.unit.test_mcp_mail_logic::test_unsolicited_budget_counts_only_unsolicited_lines",
+        "tests.unit.test_mcp_mail_logic::test_duplicate_responses_first_wins_then_abort",
+        "tests.unit.test_mcp_mail_logic::test_responses_for_unrequested_uids_are_ignored",
+        "tests.unit.test_mcp_mail_logic::test_untagged_responses_are_cleared_before_each_command",
+        "tests.unit.test_mcp_mail_logic::test_junk_after_logout_changes_nothing",
+        "tests.unit.test_mcp_mail_logic::test_connection_dropped_after_search_is_failed_unknown",
+        "tests.unit.test_mcp_mail_logic::test_rejected_login_and_missing_uidvalidity",
+        "tests.unit.test_mcp_mail_logic::test_header_fetch_rejected_drops_the_chunk_and_downgrades_the_count",
+        "tests.unit.test_mcp_mail_logic::test_header_fetch_rejected_with_arrivals_outside_the_chunk_is_a_lower_bound",
+        "tests.unit.test_mcp_mail_logic::test_resource_exhaustion_in_the_headers_phase_keeps_the_count",
+        "tests.unit.test_mcp_mail_logic::test_malformed_headers_never_raise",
+        "tests.unit.test_mcp_mail_logic::test_a_search_reply_without_a_search_line_is_never_a_zero",
+        "tests.unit.test_mcp_mail_logic::test_a_search_reply_split_over_two_lines_is_read_whole",
+        "tests.unit.test_mcp_mail_logic::test_a_metadata_abort_keeps_the_per_account_cap_and_order",
+        "tests.unit.test_mcp_mail_logic::test_literal_before_the_uid_item_still_binds",
+        "tests.unit.test_mcp_mail_logic::test_session_phase_abort_still_reports_commands_and_bytes",
+        "tests.unit.test_mcp_mail_logic::test_expunge_between_search_and_fetch_is_a_lower_bound_without_substitution",
+        "tests.unit.test_mcp_mail_logic::test_a_message_vanishing_between_the_two_fetch_phases_is_removed[vanished0-expected_count0]",
+        "tests.unit.test_mcp_mail_logic::test_a_message_vanishing_between_the_two_fetch_phases_is_removed[vanished1-expected_count1]",
+        "tests.unit.test_mcp_mail_logic::test_a_selected_message_beyond_the_headline_cap_bounds_the_count",
+        "tests.unit.test_mcp_mail_logic::test_unparseable_headers_on_a_present_message_keep_the_count",
+        "tests.unit.test_mcp_mail_logic::test_malformed_search_data_is_failed_unknown[lines0]",
+        "tests.unit.test_mcp_mail_logic::test_malformed_search_data_is_failed_unknown[lines1]",
+        "tests.unit.test_mcp_mail_logic::test_malformed_search_data_is_failed_unknown[lines2]",
+        "tests.unit.test_mcp_mail_logic::test_malformed_search_data_is_failed_unknown[lines3]",
+        "tests.unit.test_mcp_mail_logic::test_malformed_search_data_is_failed_unknown[lines4]",
+        "tests.unit.test_mcp_mail_logic::test_a_genuinely_empty_search_is_an_exact_zero",
+        "tests.unit.test_mcp_mail_logic::test_uidvalidity_outside_nz_number_is_rejected[0]",
+        "tests.unit.test_mcp_mail_logic::test_uidvalidity_outside_nz_number_is_rejected[4294967296]",
+        "tests.unit.test_mcp_mail_logic::test_uidvalidity_outside_nz_number_is_rejected[abc]",
+        "tests.unit.test_mcp_mail_logic::test_uidvalidity_outside_nz_number_is_rejected[-1]",
+        "tests.unit.test_mcp_mail_logic::test_uidvalidity_outside_nz_number_is_rejected[]",
+        "tests.unit.test_mcp_mail_logic::test_server_bye_during_login_is_not_a_rejection",
+        "tests.unit.test_mcp_mail_logic::test_expunge_of_every_candidate_is_unknown",
+        "tests.unit.test_mcp_mail_logic::test_result_ids_bind_account_uidvalidity_and_uid",
+        "tests.unit.test_mcp_mail_logic::test_call_merges_both_accounts_newest_first_and_caps_the_total",
+        "tests.unit.test_mcp_mail_logic::test_disabled_not_configured_and_unknown_account",
+        "tests.unit.test_mcp_mail_logic::test_unresolved_placeholder_credentials_are_not_configured",
+        "tests.unit.test_mcp_mail_logic::test_fields_are_neutralised_and_bounded",
+        "tests.unit.test_mcp_mail_logic::test_log_output_contains_no_header_content",
+        "tests.unit.test_mcp_mail_logic::test_logs_are_content_free_on_failure_too",
+        "tests.unit.test_model_large_edits::test_actual_gateway_preserves_valid_large_edit_request_and_diff",
+        "tests.unit.test_rtvi_bot_text::test_default_observer_doubles_the_guarded_reply",
+        "tests.unit.test_rtvi_bot_text::test_each_guard_mode_sends_the_reply_once",
+        "tests.unit.test_rtvi_bot_text::test_turn_boundaries_are_still_sent_once",
+        "tests.unit.test_saygm::test_catalog_transport_does_not_forward_key_on_real_redirect",
+        "tests.unit.test_status_services::test_service_health_marks_down_on_refused_port",
+        "tests.unit.test_subscription_tools::test_actual_unix_gateway_preserves_large_unicode_and_control_content[cjk-200k]",
+        "tests.unit.test_subscription_tools::test_actual_unix_gateway_preserves_large_unicode_and_control_content[emoji-1m]",
+        "tests.unit.test_subscription_tools::test_actual_unix_gateway_preserves_large_unicode_and_control_content[controls-1m]",
+        "tests.integration.test_advisory_source_stdio::test_actual_advisory_stdio_hides_metadata_and_preserves_preview[mcp-selfedit-developer-plan_start-arguments0]",
+        "tests.integration.test_advisory_source_stdio::test_actual_advisory_stdio_hides_metadata_and_preserves_preview[mcp-web-analyst-research_compare_start-arguments1]",
+        "tests.integration.test_bot_wiring::test_six_functions_registered",
+        "tests.integration.test_bot_wiring::test_ui_control_kill_switch_unregisters_tool",
+        "tests.integration.test_bot_wiring::test_status_kill_switch_unregisters_tool",
+        "tests.integration.test_bot_wiring::test_screen_vision_kill_switch_unregisters_tools",
+        "tests.integration.test_registry_supervision::test_fact_3_4a_a_dead_child_fails_every_later_call",
+        "tests.integration.test_registry_supervision::test_fact_3_4c_exiting_from_another_task_fails",
+        "tests.integration.test_registry_supervision::test_dead_child_is_restarted_and_call_succeeds",
+        "tests.integration.test_registry_supervision::test_restart_backoff_marks_down_after_three",
+        "tests.integration.test_registry_supervision::test_down_server_tools_report_unavailable",
+        "tests.integration.test_registry_supervision::test_stop_from_another_task_is_clean",
+        "tests.integration.test_registry_supervision::test_concurrent_calls_share_one_session",
+        "tests.integration.test_registry_supervision::test_shared_registry_serves_sequential_sessions_on_one_loop",
+        "tests.integration.test_registry_supervision::test_children_exit_when_the_parent_is_terminated",
+        "tests.integration.test_registry_supervision::test_a_cancelled_caller_does_not_strand_the_restarted_server",
+        "tests.integration.test_registry_supervision::test_a_down_server_comes_back_after_backoff_without_a_call",
+        "tests.integration.test_registry_supervision::test_a_hanging_server_cannot_block_start",
+        "tests.integration.test_registry_supervision::test_stop_during_an_in_flight_restart_resurrects_nothing",
+        "tests.integration.test_registry_supervision::test_a_cancelled_start_stops_what_it_spawned",
+        "tests.integration.test_workspace_source_stdio::test_actual_stdio_roundtrip_and_schemas_hide_workspace_metadata[mcp-selfedit-selfedit_read-args0]",
+        "tests.integration.test_workspace_source_stdio::test_actual_stdio_roundtrip_and_schemas_hide_workspace_metadata[mcp-apps-app_build_start-args1]"
+      ]
+    },
+    "python-full-host-results.xml": {
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "5",
+          "skipped": "15",
+          "tests": "6710",
+          "time": "304.020",
+          "timestamp": "2026-10-17T17:58:16.458815-04:00"
+        }
+      ],
+      "failed_nodes": [
+        "tests.unit.test_audio_filters::test_factory_disabled_returns_none_even_with_engine",
+        "tests.integration.test_bot_wiring::test_six_functions_registered",
+        "tests.integration.test_bot_wiring::test_ui_control_kill_switch_unregisters_tool",
+        "tests.integration.test_bot_wiring::test_status_kill_switch_unregisters_tool",
+        "tests.integration.test_bot_wiring::test_screen_vision_kill_switch_unregisters_tools"
+      ]
+    },
+    "vault-results.xml": {
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "17",
+          "time": "5.860",
+          "timestamp": "2026-10-17T17:51:49.126915-04:00"
+        }
+      ],
+      "failed_nodes": []
+    },
+    "python-retry-results.xml": {
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "111",
+          "time": "63.007",
+          "timestamp": "2026-10-17T17:55:59.313162-04:00"
+        }
+      ],
+      "failed_nodes": []
+    },
+    "integration-ci-layout.xml": {
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "4",
+          "skipped": "4",
+          "tests": "201",
+          "time": "134.502",
+          "timestamp": "2026-10-17T18:05:39.042146-04:00"
+        }
+      ],
+      "failed_nodes": [
+        "tests.integration.test_bot_wiring::test_six_functions_registered",
+        "tests.integration.test_bot_wiring::test_ui_control_kill_switch_unregisters_tool",
+        "tests.integration.test_bot_wiring::test_status_kill_switch_unregisters_tool",
+        "tests.integration.test_bot_wiring::test_screen_vision_kill_switch_unregisters_tools"
+      ]
+    },
+    "evals-ci-layout.xml": {
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "13",
+          "time": "2.264",
+          "timestamp": "2026-10-17T18:07:59.660662-04:00"
+        }
+      ],
+      "failed_nodes": []
+    },
+    "quiet-deadline.xml": {
+      "suites": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "0",
+          "tests": "1",
+          "time": "0.910",
+          "timestamp": "2026-10-17T18:37:48.386378-04:00"
+        }
+      ],
+      "failed_nodes": []
+    }
+  },
+  "mail_preflight_probes": {
+    "source": "9f9bc71c26c82c832121be118346abaa1b4f89a4",
+    "unset_case": {
+      "startup_loaded": true,
+      "expected_absent": true,
+      "actually_absent": false
+    },
+    "relative_path_case": {
+      "expected_loaded": true,
+      "actually_loaded": false,
+      "note": "the startup shell fails on this .env (exit 1); the bot would not start with it"
+    }
+  },
+  "ci_before_final_evidence_commit": {
+    "headRefOid": "ba6a7bc26beb59dd80ce6e418a94a9b597aa40fb",
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-17T22:16:39Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39074395886/job/117518433897",
+        "name": "allowlist",
+        "startedAt": "2026-10-17T22:16:34Z",
+        "status": "COMPLETED",
+        "workflowName": ".github/workflows/validate.yml"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-17T22:16:54Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39074395818/job/117518433521",
+        "name": "knowledge-base",
+        "startedAt": "2026-10-17T22:16:34Z",
+        "status": "COMPLETED",
+        "workflowName": "Knowledge base"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-17T22:16:44Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39074395800/job/117518433500",
+        "name": "controller-tests",
+        "startedAt": "2026-10-17T22:16:34Z",
+        "status": "COMPLETED",
+        "workflowName": "Sandbox controller"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-17T22:16:39Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39074395886/job/117518433842",
+        "name": "policy-tests",
+        "startedAt": "2026-10-17T22:16:34Z",
+        "status": "COMPLETED",
+        "workflowName": ".github/workflows/validate.yml"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-17T22:29:50Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39074395886/job/117518433955",
+        "name": "validate",
+        "startedAt": "2026-10-17T22:16:34Z",
+        "status": "COMPLETED",
+        "workflowName": ".github/workflows/validate.yml"
+      }
+    ]
+  },
+  "independent_verification": {
+    "version": 1,
+    "attempt": "b7195d9e0a8e40efbc8712dd00c880d1",
+    "candidate": "f60c9c5a4b1c789aa795ce58e5f7ff6825c0f1e4d52f24d0710525bd8ddc5e18",
+    "baseline": "f60c9c5a4b1c789aa795ce58e5f7ff6825c0f1e4d52f24d0710525bd8ddc5e18",
+    "source_commit": "9f9bc71c26c82c832121be118346abaa1b4f89a4",
+    "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+    "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+    "runner": "67dfc621dae442649cac7977e2349b53bc0b0e193684e0d7ce4c95e6745e9188",
+    "development_task": "b7788c4611a4",
+    "checks": [
+      {
+        "name": "backend-imports",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-c",
+          "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 7.141,
+        "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      },
+      {
+        "name": "baseline-backend",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/unit",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 565.519,
+        "log_sha256": "e2f6b9742997a96ebeacd141188ad3c2b16e5612d0042e124bafb39c93321066"
+      },
+      {
+        "name": "backend",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "tests/unit",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 470.114,
+        "log_sha256": "f7b5aef7ec6f5d5872fcf3db6ab3c312cf13a513c7bedafffef824133173ba56"
+      },
+      {
+        "name": "scripted-evals",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/evals/sub_agent_evals.py",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 1.602,
+        "log_sha256": "e4c826c8aacf8cebd516febdef7fbe3da42645fee449acfc7ffc159f0f6f43ab"
+      },
+      {
+        "name": "latency",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "scripts/latency_probe.py",
+          "--budget",
+          "tests/fixtures/latency_sample.log"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 0.075,
+        "log_sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a"
+      },
+      {
+        "name": "knowledge-base",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "services/mortimer-vault/tests",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 3.605,
+        "log_sha256": "72d203ba74572a9d5ef591adae21ad72e8ea057787133e9b1264c9daa3639c65"
+      },
+      {
+        "name": "baseline-knowledge-base",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/services/mortimer-vault/tests",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 5.597,
+        "log_sha256": "fadb1d4b60f54b77a54a5a7ab4b244820af3182012f3036811163a5e06853bdb"
+      },
+      {
+        "name": "web",
+        "argv": [
+          "npm",
+          "--prefix",
+          "web",
+          "run",
+          "build"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 30.971,
+        "log_sha256": "bf67c75b75ff4c921d585acdec845395c526b396609269c9c88b83e6f54c0af3"
+      },
+      {
+        "name": "native-library",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/JarvisKit"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 90.918,
+        "log_sha256": "f8e240b8ad8fe77842ba15b371856b7407e0f5f456cf91a93fa11e25d07f753f"
+      },
+      {
+        "name": "native-app",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/MortimerHost"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 202.267,
+        "log_sha256": "ce125fc9f5792a71b701091db65872a9d06fc3e52cd77a9a1c1a4d50e7ccbfd9"
+      },
+      {
+        "name": "baseline-native-library",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/JarvisKit"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 23.686,
+        "log_sha256": "3b8a44fe420c13f90cd289a7f572bfd19ae86128c78e6a9aa303a7ff45b99363"
+      },
+      {
+        "name": "baseline-native-app",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/MortimerHost"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 224.849,
+        "log_sha256": "c91aa302e2e992cb82d7188136808d3f91cc4c4f634ec61b37753aa99d3e261a"
+      }
+    ],
+    "passed": true,
+    "status": "passed",
+    "verification_task": "bd4f894e69b1",
+    "desktop_probe": {
+      "returncode": 0,
+      "passed": true,
+      "seconds": 41.852,
+      "log_sha256": "adbe9a9199ac1cd291958992aa51394dbd50840d5c75fed5cd68600ea52742d9"
+    },
+    "source_unchanged": true
+  },
+  "qualification": "Host code/tests match 9f9bc71 with documentation overlay; VM baseline and candidate are the same exact Git object snapshot. This is not deployed-release verification, historical-baseline comparison, physical performance acceptance, or completion of all roadmap gates.",
+  "local_evidence": {
+    "audio-switch.log": {
+      "bytes": 6811,
+      "sha256": "254864ef0702c105c5d8577052292b384bf3b1335d32f228be0344acceb54c85"
+    },
+    "audit-verification.py": {
+      "bytes": 1852,
+      "sha256": "a3eebe053bba070c57bceec24da9d5fc2722b8ff1169eb1c2e4c04921d3b0d58"
+    },
+    "campaign-observations.json": {
+      "bytes": 8167,
+      "sha256": "385e31d2cf79b53feae79bdd121c751b9f5b82abeab2dc1242f88157de11ebe4"
+    },
+    "check-final-runtime.py": {
+      "bytes": 1501,
+      "sha256": "90ec956e8663ad4ac00e75c5c6080cee6c7c5e68bcf06452342ab7328704f570"
+    },
+    "ci-layout-receipt.json": {
+      "bytes": 996,
+      "sha256": "6ec9c2ddc6c9c0f9091d012847b598e97ffa11bb867b56ca530ab848ed1eb0e2"
+    },
+    "evals-ci-layout.log": {
+      "bytes": 99,
+      "sha256": "9568cc8a56b1da7a8319357941d4d483425f5793ea4394e88a09fb0a202a1434"
+    },
+    "evals-ci-layout.xml": {
+      "bytes": 1620,
+      "sha256": "f6d8656958a41dabc89d2388aa40a0252a27818fb6f5a35ef0f1ff6224708408"
+    },
+    "final-runtime-check.json": {
+      "bytes": 948,
+      "sha256": "dd884c890ef24f842a2970575d38575cb0ead8830b56f0384fccd44185f41749"
+    },
+    "final-runtime-wrong-endpoints.json": {
+      "bytes": 964,
+      "sha256": "badff5b8e05e9e7be695153d6eb3982e9e6f9202928fe840ff020180a981d03e"
+    },
+    "finalize-evidence.py": {
+      "bytes": 2414,
+      "sha256": "7e8eabbb54dc7cf5d366a6881a5dfedcc8214a8ea25fc992cd1659e6b735ddaa"
+    },
+    "host-test-summary.json": {
+      "bytes": 14332,
+      "sha256": "b103888df7e495faaa8dccad9a1f52a38a19dd3e6a74a8de812967bb208a12d8"
+    },
+    "independent-progress.json": {
+      "bytes": 450,
+      "sha256": "77cf660702d1e2ba45383d8687ad4d36a2241b4d4b84df3cfbd5c1d4468159d4"
+    },
+    "independent-receipt.json": {
+      "bytes": 5237,
+      "sha256": "a27718a007eb1d819df93ce34cea5901c770fd92f191d9ef2e1a9634ddb2cc2e"
+    },
+    "independent-test-summary.json": {
+      "bytes": 912,
+      "sha256": "a6a17d7fdbe70634c92e37c1b609b43f7bf9851e70e35c92b492c2f913805c64"
+    },
+    "independent-verification.log": {
+      "bytes": 1801,
+      "sha256": "41b625a6d640122198a5407591c4031e561ddc0203b08443026a7fcb0e5bf946"
+    },
+    "integration-ci-layout.log": {
+      "bytes": 10258,
+      "sha256": "bd207e1f5cfbc977392ebe1eeae5dc5529ac03066459b8e6520c7f8e0bee995f"
+    },
+    "integration-ci-layout.xml": {
+      "bytes": 35617,
+      "sha256": "415d5bc35f377fd93a7a9e4aadccbcba1cc5fc86cf9da8177030cddef9e4ce74"
+    },
+    "kb-test-package-setup.log": {
+      "bytes": 7794,
+      "sha256": "2adbb7a60f2d27af45ab4bd949d3258c53dc539f5a556048589013bfb0bbfeb7"
+    },
+    "kb-test-setup.log": {
+      "bytes": 1756,
+      "sha256": "0e7542ece046a75f46d8802d2e0aafd137ce91600e6b76346f87f118551dcfb2"
+    },
+    "live-tool-routing-metadata.json": {
+      "bytes": 565,
+      "sha256": "4fc0fafc4d85d110be15c3d742c0f128866b138734920b61fd6dafbabbfbda46"
+    },
+    "mail-preflight-regressions.json": {
+      "bytes": 351,
+      "sha256": "2327d19a500ccadba50c6c6fd4f9a1ab4571dcadbc841051939a77873b69fef7"
+    },
+    "pr208-first-head-ci.json": {
+      "bytes": 1641,
+      "sha256": "e167551650c54a08d081687d68586a011ee83bd47207a64ea876b9c54bead656"
+    },
+    "python-clean-loader-receipt.json": {
+      "bytes": 687,
+      "sha256": "5fbb8a34358f0527fe976928fa27fd22e454a71562e17953202a205e6e910a10"
+    },
+    "python-clean-loader.log": {
+      "bytes": 12165,
+      "sha256": "f4e6a8ebc64d0faa7054876aee43d9630f06af4d12c801cbaa2073a0a1d1633c"
+    },
+    "python-clean-loader.xml": {
+      "bytes": 1938081,
+      "sha256": "87f14f5a8b3e4511b9d50b0d60ef1248b84e163c20fe047ff0e2bc6726a5e4cf"
+    },
+    "python-failed-nodes.json": {
+      "bytes": 10915,
+      "sha256": "cbdc1a29d57facea82a03cde7335594346ea61f462128d0c4b95291f0f3d82af"
+    },
+    "python-full-host-receipt.json": {
+      "bytes": 534,
+      "sha256": "b6af880a936e2f26557fe8e3bca50b3fc3d8a1f4a9390220563155d528f26f26"
+    },
+    "python-full-host-results.xml": {
+      "bytes": 1944719,
+      "sha256": "3f3aba60e413bee6b5d52a5e80a887824f2fd7e86423a8574cac762da20bb226"
+    },
+    "python-full-host.log": {
+      "bytes": 20537,
+      "sha256": "e89cd5c3a0535c40b3776b0424b9d4b94eca055a8659242d46034c35796bc420"
+    },
+    "python-host-retry.log": {
+      "bytes": 837,
+      "sha256": "b051a55d5e7e9336cabab108a4289179a116c148b4c42c1f08fa7c5d8cebba98"
+    },
+    "python-receipt.json": {
+      "bytes": 524,
+      "sha256": "42adf58855148f6d348b875ba56eaf8054da5b0925c95af91540166ac0335554"
+    },
+    "python-results.xml": {
+      "bytes": 2221786,
+      "sha256": "b3e63b54bec940cc23e2788391f92bd5b347bd167d227d64deb0633d0a3bb024"
+    },
+    "python-retry-results.xml": {
+      "bytes": 15054,
+      "sha256": "357dc1e7c23d3170c1fdf963d0c283646d24d8b267789f675791d395166b2942"
+    },
+    "python-suite.log": {
+      "bytes": 346194,
+      "sha256": "c2dd002eb8f20ce9800884405ef4b158c86a89cb24de14772b84e1b5d779a211"
+    },
+    "quiet-deadline-receipt.json": {
+      "bytes": 797,
+      "sha256": "6e0580a819b4e6a6f90b07cc3d137558e961d94855c2f9b00bacf367c463803a"
+    },
+    "quiet-deadline.log": {
+      "bytes": 98,
+      "sha256": "85c3e34df3337375b023792993d5880ace51098d60f8a6d4b62bb027a039340d"
+    },
+    "quiet-deadline.xml": {
+      "bytes": 393,
+      "sha256": "7b0df053d0b1b573d68e351f5c2078b78a5d43e2dc6114bf4bd320e4ef2176b2"
+    },
+    "run-independent-verification.py": {
+      "bytes": 1856,
+      "sha256": "bcc9ca5313c345fd10dc9809f5a5d7f00e89c96735534cc5b51ceb9f5050cb9e"
+    },
+    "run-quiet-host-recheck.py": {
+      "bytes": 1989,
+      "sha256": "29ba3272ef8b00347254345ec70b50625c386693c6f642fd5810cced8ea86e61"
+    },
+    "sandbox-tests.log": {
+      "bytes": 13029,
+      "sha256": "1843e6314fe882a0fb8a6b4260927856d00e446b4825e2685152e521efd2a848"
+    },
+    "swift-jarviskit-host.log": {
+      "bytes": 59994,
+      "sha256": "de5c1f2f285edd45ea7125e0d383eda339a0ad0476d3725574855cce4d929ad7"
+    },
+    "swift-jarviskit.log": {
+      "bytes": 2766,
+      "sha256": "3c9852310824802390bc81a4302a3d95b2bb7d2e58d56a65dae06455cd4a9932"
+    },
+    "swift-mortimerhost-quiet-receipt.json": {
+      "bytes": 533,
+      "sha256": "6951b9fd86ca64697b7fc7baf81a29303df47ae6fd1763e9b2da985525adb400"
+    },
+    "swift-mortimerhost-quiet.log": {
+      "bytes": 162770,
+      "sha256": "c90da969cd838b7065c37a575a53bc682a4bfa27d54bbd205ec95332f6ea2ce5"
+    },
+    "swift-mortimerhost.log": {
+      "bytes": 217930,
+      "sha256": "cce262191236186759ec817d0bb57edd03489a5ae2aacde7e53877bb6823ea83"
+    },
+    "swift-ocr-retry-receipt.json": {
+      "bytes": 673,
+      "sha256": "6e5a4c1c96136e09b2b8bc58d564fba718fd5bd5bcad366fbb17017777f116c9"
+    },
+    "swift-ocr-retry.log": {
+      "bytes": 2045,
+      "sha256": "24a2a6bdba082d8a3ad6ba3984cda4f038f53415254f145724b5c3c73f5674a1"
+    },
+    "swift-skills-performance-retry.log": {
+      "bytes": 2222,
+      "sha256": "ca95086b642d50f85e0824f97c3dafde76715433be94b1cd6a076b283e23e0f9"
+    },
+    "vault-results.xml": {
+      "bytes": 1874,
+      "sha256": "8d471b8053fdbbbc1f5a137d473cb5a8ca6faa57b21d66f7349b5092fcbef1a2"
+    },
+    "vault-tests-isolated.log": {
+      "bytes": 2108,
+      "sha256": "7895dccedb01779e648e3411d20d300326eaece0f9aaa02c0108c7dd9517430b"
+    },
+    "vault-tests-main-env.log": {
+      "bytes": 435,
+      "sha256": "92266c38d70092dd252d1c721898d39072d3f640606f3042125983d8d409c593"
+    },
+    "vault-tests.log": {
+      "bytes": 103,
+      "sha256": "488c853b740a29f85e0d315cbed2ed3a4fe748be032d0ec57dacba1ebfb1b183"
+    },
+    "vm-final-state.json": {
+      "bytes": 503,
+      "sha256": "60e98911f514e103ff8042af53635a3d3573f31ef4a1324591ae1330d349d92a"
+    },
+    "vm-readiness.json": {
+      "bytes": 521,
+      "sha256": "7614c555d9a610cf08658df89035e094e556b75864e4caaab3649488b49303b7"
+    },
+    "weather-tool-metadata.json": {
+      "bytes": 2824,
+      "sha256": "f00105dfc8f2359726a842a1b4184231bc3f2dc3da92cae0c0cf6afdefd04ecc"
+    },
+    "web-build.log": {
+      "bytes": 1546,
+      "sha256": "ad70b67d5c45478a20594c331da2cfa373f488c2bb6cb723b4a4e5f76e1d9e4b"
+    },
+    "web-setup.log": {
+      "bytes": 226,
+      "sha256": "e73ad99e1153c02d9f100b35fce9d4ebab9b5347e4819587ee3403aeffd5c63e"
+    }
+  },
+  "independent_log_manifest": {
+    "backend-imports.log": {
+      "bytes": 1,
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    "backend.log": {
+      "bytes": 9800,
+      "sha256": "f7b5aef7ec6f5d5872fcf3db6ab3c312cf13a513c7bedafffef824133173ba56"
+    },
+    "baseline-backend.log": {
+      "bytes": 10267,
+      "sha256": "e2f6b9742997a96ebeacd141188ad3c2b16e5612d0042e124bafb39c93321066"
+    },
+    "baseline-knowledge-base.log": {
+      "bytes": 2511,
+      "sha256": "fadb1d4b60f54b77a54a5a7ab4b244820af3182012f3036811163a5e06853bdb"
+    },
+    "baseline-native-app.log": {
+      "bytes": 741978,
+      "sha256": "c91aa302e2e992cb82d7188136808d3f91cc4c4f634ec61b37753aa99d3e261a"
+    },
+    "baseline-native-library.log": {
+      "bytes": 62237,
+      "sha256": "3b8a44fe420c13f90cd289a7f572bfd19ae86128c78e6a9aa303a7ff45b99363"
+    },
+    "desktop-probe.log": {
+      "bytes": 187,
+      "sha256": "adbe9a9199ac1cd291958992aa51394dbd50840d5c75fed5cd68600ea52742d9"
+    },
+    "knowledge-base.log": {
+      "bytes": 1982,
+      "sha256": "72d203ba74572a9d5ef591adae21ad72e8ea057787133e9b1264c9daa3639c65"
+    },
+    "latency.log": {
+      "bytes": 249,
+      "sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a"
+    },
+    "native-app.log": {
+      "bytes": 738233,
+      "sha256": "ce125fc9f5792a71b701091db65872a9d06fc3e52cd77a9a1c1a4d50e7ccbfd9"
+    },
+    "native-library.log": {
+      "bytes": 62252,
+      "sha256": "f8e240b8ad8fe77842ba15b371856b7407e0f5f456cf91a93fa11e25d07f753f"
+    },
+    "scripted-evals.log": {
+      "bytes": 725,
+      "sha256": "e4c826c8aacf8cebd516febdef7fbe3da42645fee449acfc7ffc159f0f6f43ab"
+    },
+    "seed-0.log": {
+      "bytes": 832,
+      "sha256": "35e8ee314b992f37fb628be3f1bb994261d97e8cd968b3367974ccebaf72635d"
+    },
+    "seed-1.log": {
+      "bytes": 69,
+      "sha256": "ee7158c3f6ac572f8dd0734e79f9e99312760695831c190b8fed618aa9a23b34"
+    },
+    "web.log": {
+      "bytes": 1547,
+      "sha256": "bf67c75b75ff4c921d585acdec845395c526b396609269c9c88b83e6f54c0af3"
+    }
+  },
+  "final-runtime-check": {
+    "checked_at": "2026-10-17T18:42:42.391435-04:00",
+    "app_sha256": "6c67661bb94ddde5fa95d0a807dd77e5d837483a69c0d979412064fdcd3eaf29",
+    "source_markers": {
+      "MortimerSourceRevision": "575cc7b770b621b5c8049097ef63e93618ba3016",
+      "MortimerSourceDirty": "true"
+    },
+    "production_head": "575cc7b770b621b5c8049097ef63e93618ba3016",
+    "processes": {
+      "admin": {
+        "expected_pid": 1045,
+        "present": true,
+        "identity": "1045 .venv/bin/python Tue Oct 13 22:33:11 2026"
+      },
+      "vault": {
+        "expected_pid": 1052,
+        "present": true,
+        "identity": "1052 /Users/larryfix/ Tue Oct 13 22:33:11 2026"
+      },
+      "bot": {
+        "expected_pid": 1056,
+        "present": true,
+        "identity": "1056 .venv/bin/python Tue Oct 13 22:33:11 2026"
+      },
+      "app": {
+        "expected_pid": 21674,
+        "present": false,
+        "identity": ""
+      }
+    },
+    "health_codes": {
+      "admin": 200,
+      "vault": 200,
+      "bot": 200
+    }
+  },
+  "vm-final-state": {
+    "receipt_validated": true,
+    "passed_checks": 12,
+    "source_unchanged": true,
+    "owned_controller_states": {
+      "b7788c4611a4": "stopped",
+      "bd4f894e69b1": "stopped"
+    },
+    "owned_vm_states": {
+      "mortimer-b7788c4611a4": "stopped",
+      "mortimer-bd4f894e69b1": "stopped"
+    },
+    "running_vm_count": 0,
+    "configured_image_pointer": "32a82fdd1de4ebdd002bd720f671fe08af485a1631b21364442a7600d4abd49f",
+    "prepared_image_used": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18"
+  },
+  "quiet-deadline-receipt": {
+    "source_runtime_tests": "9f9bc71c26c82c832121be118346abaa1b4f89a4",
+    "start": "2026-10-17T18:37:48.216111-04:00",
+    "end": "2026-10-17T18:37:49.435428-04:00",
+    "command": [
+      "/Users/larryfix/jarvis-voice-ai-clean/.venv/bin/python",
+      "-m",
+      "pytest",
+      "tests/unit/test_model_execution.py::test_deadline_includes_admission_wait_and_does_not_create_client",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "--junitxml=/Users/larryfix/Documents/Codex/2026-10-17/re/work/acceptance-evidence/quiet-deadline.xml"
+    ],
+    "exit_code": 0,
+    "qualification": "Owned verification VMs stopped before this recheck; no other campaign test suite or UI actions were initiated concurrently. Existing production services remained running. No assertion, timeout or performance threshold changed."
+  },
+  "swift-mortimerhost-quiet-receipt": {
+    "source_runtime_tests": "9f9bc71c26c82c832121be118346abaa1b4f89a4",
+    "start": "2026-10-17T18:37:49.435724-04:00",
+    "end": "2026-10-17T18:40:37.674812-04:00",
+    "command": [
+      "/usr/bin/swift",
+      "test",
+      "--package-path",
+      "macos/MortimerHost"
+    ],
+    "exit_code": 1,
+    "qualification": "Owned verification VMs stopped before this recheck; no other campaign test suite or UI actions were initiated concurrently. Existing production services remained running. No assertion, timeout or performance threshold changed."
+  },
+  "swift-ocr-retry-receipt": {
+    "source_runtime_tests": "9f9bc71c26c82c832121be118346abaa1b4f89a4",
+    "start": "2026-10-17T18:41:22.893-04:00",
+    "end": "2026-10-17T18:41:37.585-04:00",
+    "exit_code": 1,
+    "executed": 2,
+    "failures": 2,
+    "error": "e5rtError: e5rt_execution_stream_operation_create_precompiled_compute_operation_with_options call failed (13)",
+    "test_names": [
+      "ConversationThreadTests.testRenderedThreadShowsAResultCard",
+      "ConversationThreadTests.testRenderedThreadShowsBothSpeakersAndTheEndOfALongReply"
+    ],
+    "qualification": "Same Vision engine exception in quiet full suite and one isolated retry; text assertions not reached. No tests or runtime settings changed."
+  }
+}

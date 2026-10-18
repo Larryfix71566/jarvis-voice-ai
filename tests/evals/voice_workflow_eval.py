@@ -17,13 +17,16 @@ specialists, self-edit sidecar sandboxed exactly as routing_eval does.
 
 from __future__ import annotations
 
+import argparse
 import asyncio
+import json
 import os
 import re
 import sys
 import tempfile
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 
 import yaml
 
@@ -41,10 +44,25 @@ CASES_PATH = Path(__file__).resolve().parent / "voice_workflow_cases.yaml"
 PASS_THRESHOLD = 0.90
 
 
-def grade(case: dict, reply: str, delegated: list[str], tools_called: list[str]) -> tuple[bool, str]:
+def grade(case: dict, reply: str, delegated: list[str], tools_called: list[str],
+          actions_called: list[str] | None = None) -> tuple[bool, str]:
     """Deterministic: (passed, reason)."""
     from jarvis.voice_workflows import ALLOWED_RE, reply_violations
 
+    actions = actions_called or []
+    required_action = case.get("require_action")
+    if required_action and required_action not in actions:
+        return False, f"did not call console_action {required_action}"
+    required_order = case.get("action_order") or []
+    cursor = 0
+    for action in actions:
+        if cursor < len(required_order) and action == required_order[cursor]:
+            cursor += 1
+    if cursor != len(required_order):
+        return False, f"missing ordered console actions {required_order}"
+    required_delegate = case.get("require_delegate")
+    if required_delegate and required_delegate not in delegated:
+        return False, f"did not delegate to {required_delegate}"
     if case.get("capability_question"):
         return (bool((reply or "").strip()), "capability question: any non-empty reply")
     if case.get("explicit_ask") or case.get("approve_proposal"):
@@ -89,7 +107,7 @@ def _hooked(message: dict, settings) -> dict:
     from jarvis.voice_workflows import match_voice_workflow, render_guidance, result_kinds
 
     message = dict(message)
-    if message.get("role") != "tool" or not settings.jarvis_voice_workflows_enabled:
+    if message.get("role") != "tool" or not getattr(settings, "jarvis_voice_workflows_enabled", False):
         return message
     kinds = result_kinds(message.get("content"))
     wf = match_voice_workflow(result_kinds=kinds) if kinds else None
@@ -152,6 +170,28 @@ async def run_eval() -> tuple[int, int]:
         for i, case in enumerate(cases, 1):
             delegated: list[str] = []
             tools_called: list[str] = []
+            actions_called: list[str] = []
+
+            async def console_probe(arguments: dict) -> str:
+                # Synthetic UI fixture; never contacts or controls the live app.
+                # Record only the closed action name, not private arguments.
+                from jarvis.bot.console_protocol import ALLOWED_ACTIONS
+                action = arguments.get("action")
+                if isinstance(action, str) and action in ALLOWED_ACTIONS:
+                    actions_called.append(action)
+                if action == "inventory":
+                    return json.dumps({"revision": 1, "results": [
+                        {"id": "00000000-0000-4000-8000-000000000001", "number": 1,
+                         "kind": "Weather", "subject": "Atlanta", "title": "Weather · Atlanta"},
+                        {"id": "00000000-0000-4000-8000-000000000002", "number": 2,
+                         "kind": "Weather", "subject": "Folly Beach", "title": "Weather · Folly Beach"},
+                    ]})
+                return "Console action applied in the synthetic evaluation fixture."
+
+            case_tools = list(extra_tools)
+            if case.get("require_action") and show_tools:
+                from jarvis.bot.console_actions import CONSOLE_ACTION_SCHEMA
+                case_tools.append((CONSOLE_ACTION_SCHEMA, console_probe))
 
             def on_event(event: dict) -> None:
                 if event.get("type") == "delegate_start":
@@ -160,7 +200,7 @@ async def run_eval() -> tuple[int, int]:
                     tools_called.append(event["tool"])
 
             orch = Orchestrator(settings, registry, str(uuid.uuid4()), on_event=on_event,
-                                extra_tools=extra_tools, voice_catalog=voice_catalog,
+                                extra_tools=case_tools, voice_catalog=voice_catalog,
                                 status=status_on and show_tools, weather=show_tools,
                                 **timing, **flags)
             orch._history.extend(_hooked(m, settings) for m in case.get("prior") or [])
@@ -169,13 +209,13 @@ async def run_eval() -> tuple[int, int]:
             except Exception as exc:  # noqa: BLE001 — a crash is a failed case
                 print(f"[{i:2d}/{len(cases)}] ERROR {case['input']!r}: {exc}")
                 continue
-            ok, reason = grade(case, reply, delegated, tools_called)
+            ok, reason = grade(case, reply, delegated, tools_called, actions_called)
             passed += ok
             print(f"[{i:2d}/{len(cases)}] {'ok  ' if ok else 'FAIL'} from={case.get('from', '-')} "
                   f"{case['input']!r} -> {reason}")
             if not ok:
                 print(f"{'':>9}delegated: {', '.join(delegated) or '(none)'}; "
-                      f"tools: {', '.join(tools_called) or '(none)'}")
+                      f"tools: {', '.join(tools_called) or '(none)'}; actions: {actions_called}")
                 print(f"{'':>9}said: {_one_line(reply)}")
     finally:
         await registry.stop()
@@ -184,11 +224,109 @@ async def run_eval() -> tuple[int, int]:
     return passed, len(cases)
 
 
+async def run_ws17_routing_probe(settings, *, client_factory=None) -> tuple[int, int]:
+    """Only model routing is live. No MCP servers, specialists or native actions.
+
+    Caller must select an isolated database before constructing Settings. This
+    does not establish end-to-end reuse/selection or live UI acceptance.
+    """
+    from jarvis.agents.supervisor import Orchestrator
+    from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+    from jarvis.bot.console_protocol import ALLOWED_ACTIONS
+    from jarvis.bot.tool_schemas import supervisor_tool_schemas
+    from jarvis.bot.voice_switch import catalog_summary, load_voice_catalog
+
+    roster = yaml.safe_load((REPO_ROOT / "config/agents.yaml").read_text())["sub_agents"]
+    agents = {a["name"]: SimpleNamespace(name=a["name"], display_name=a["display_name"],
+                                       description=a["description"]) for a in roster}
+    cases = [c for c in yaml.safe_load(CASES_PATH.read_text()) if c.get("id", "").startswith("ws17-")]
+    passed = 0
+    for case in cases:
+        called, delegated, actions = [], [], []
+        if client_factory is None:
+            from jarvis.llm_client import make_async_client
+            live_client = make_async_client(api_key=settings.openai_api_key,
+                                            base_url=settings.openai_base_url,
+                                            timeout=30, max_retries=0)
+            request_count = [0]
+            async def bounded_completion(**kwargs):
+                if request_count[0] >= 6:
+                    raise RuntimeError("routing probe request limit reached")
+                request_count[0] += 1
+                kwargs["max_tokens"] = 1024
+                return await live_client.chat.completions.create(**kwargs)
+            factory = lambda _: SimpleNamespace(base_url=settings.openai_base_url,
+                chat=SimpleNamespace(completions=SimpleNamespace(create=bounded_completion)))
+        else:
+            factory = client_factory
+        async def no_side_effect(_arguments):
+            return "Synthetic evaluation fixture: no live action was performed."
+        schemas = supervisor_tool_schemas(None, ui_control=True, screen=True, clipboard=True,
+                                         command_console=True, weather=True)
+        orch = Orchestrator(settings, None, str(uuid.uuid4()), sub_agents=agents,
+                            client_factory=factory,
+                            extra_tools=[(s, no_side_effect) for s in schemas],
+                            voice_catalog=catalog_summary(load_voice_catalog()),
+                            voice=True, ui_control=True, screen=True, clipboard=True, weather=True)
+        async def dispatch(name, arguments):
+            # Replace the execution seam, not the model's tool menu or prompt.
+            # No fallback to real handlers is possible, even for an unexpected call.
+            called.append(name)
+            if name == "delegate_task":
+                if arguments.get("agent_name") in agents:
+                    delegated.append(arguments["agent_name"])
+                return "Synthetic weather fixture: Folly Beach is sunny and 75 degrees; the card is available."
+            if name == "console_action":
+                action = arguments.get("action")
+                if isinstance(action, str) and action in ALLOWED_ACTIONS:
+                    actions.append(action)
+                if action == "inventory":
+                    return json.dumps({"revision": 1, "results": [
+                        {"id": "00000000-0000-4000-8000-000000000001", "number": 1, "kind": "Weather", "subject": "Atlanta", "title": "Weather · Atlanta"},
+                        {"id": "00000000-0000-4000-8000-000000000002", "number": 2, "kind": "Weather", "subject": "Folly Beach", "title": "Weather · Folly Beach"},
+                    ]})
+            return await no_side_effect(arguments)
+        orch._execute_tool = dispatch
+        orch._history.extend(_hooked(m, settings) for m in case.get("prior") or [])
+        token = current_sensitive_turn.set(SensitiveTurn())
+        try:
+            reply = await asyncio.wait_for(orch.chat(case["input"]), timeout=90)
+            ok, reason = grade(case, reply, delegated, called, actions)
+        except Exception as exc:
+            ok, reason = False, f"probe failed ({type(exc).__name__})"
+        finally:
+            current_sensitive_turn.reset(token)
+            if client_factory is None:
+                closer = getattr(live_client, "close", None)
+                if closer is None:
+                    closer = getattr(getattr(live_client, "_anthropic", None), "close", None)
+                if closer is not None:
+                    await closer()
+        passed += ok
+        print(f"{case['id']}: {'PASS' if ok else 'FAIL'}; {reason}; tools={called}; actions={actions}; delegated={delegated}")
+    return passed, len(cases)
+
+
 def main() -> int:
     if os.environ.get("RUN_LIVE") != "1":
         print("voice_workflow_eval makes real LLM calls; re-run with RUN_LIVE=1")
         return 2
-    passed, total = asyncio.run(run_eval())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ws17-routing-only", action="store_true",
+                        help="Only two synthetic WS-17 cases; model calls live, all tools stubbed")
+    args = parser.parse_args()
+    if args.ws17_routing_only:
+        root = Path(tempfile.mkdtemp(prefix="mortimer-ws17-routing-"))
+        os.environ["JARVIS_DB_PATH"] = str(root / "eval.db")
+        os.environ["JARVIS_COSTS_DB"] = str(root / "costs.db")
+        os.environ["JARVIS_CAPABILITY_GAP_LOG"] = str(root / "gaps.jsonl")
+        from jarvis.config import load_settings
+        from jarvis.db import run_migrations
+        settings = load_settings()
+        run_migrations()
+        passed, total = asyncio.run(run_ws17_routing_probe(settings))
+    else:
+        passed, total = asyncio.run(run_eval())
     return 0 if passed / total >= PASS_THRESHOLD else 1
 
 

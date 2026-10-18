@@ -11,11 +11,13 @@ struct WorkspaceResult: Identifiable, Equatable, Sendable {
     let id: UUID
     let payload: DisplayPayload
     let receivedAt: Date
+    let roadmapFilter: RoadmapFilter
 
-    init(payload: DisplayPayload, id: UUID = UUID(), receivedAt: Date = Date()) {
+    init(payload: DisplayPayload, id: UUID = UUID(), receivedAt: Date = Date(), roadmapFilter: RoadmapFilter = RoadmapFilter()) {
         self.id = id
         self.payload = payload
         self.receivedAt = receivedAt
+        self.roadmapFilter = roadmapFilter
     }
 }
 
@@ -86,6 +88,50 @@ final class WorkspaceStore {
     @ObservationIgnored private var presentations: [UUID: WorkspaceResultPresentation] = [:]
     @ObservationIgnored private var resultGraphs: [UUID: MemoryGraphStore] = [:]
     private(set) var scrollOffsets: [UUID: Double] = [:]
+    private(set) var roadmapExpanded: [UUID: Set<String>] = [:]
+    private(set) var roadmapRefreshStatus: [UUID: String] = [:]
+    func setRoadmapExpanded(_ id: UUID, card: String, expanded: Bool) {
+        if expanded { roadmapExpanded[id, default: []].insert(card) }
+        else { roadmapExpanded[id]?.remove(card) }
+    }
+    func setRoadmapRefreshStatus(_ id: UUID, _ status: String) { if containsResult(id) { roadmapRefreshStatus[id] = status } }
+    @discardableResult
+    func applyRoadmapFilter(_ id: UUID, args: [String: JSONValue], now: Date = Date()) -> Bool {
+        guard let index = results.firstIndex(where: { $0.id == id }),
+              let snapshot = results[index].payload.roadmap,
+              !results[index].payload.isProtectedLocal,
+              let filter = results[index].roadmapFilter.applying(args, to: snapshot,
+                timezone: results[index].payload.roadmapTimezone, now: now) else { return false }
+        let old = results[index]
+        results[index] = WorkspaceResult(payload: old.payload, id: id, receivedAt: old.receivedAt, roadmapFilter: filter)
+        for card in filter.workstreams { setRoadmapExpanded(id, card: card, expanded: true) }
+        inventoryRevision += 1
+        return true
+    }
+    private func roadmapReadDate(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: value) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
+    }
+    @discardableResult
+    func refreshRoadmap(_ id: UUID, payload: DisplayPayload, now: Date = Date()) -> Bool {
+        guard let index = results.firstIndex(where: { $0.id == id }),
+              let previous = results[index].payload.roadmap, let next = payload.roadmap,
+              previous.provenance.repositoryID == next.provenance.repositoryID,
+              previous.provenance.path == next.provenance.path,
+              let previousRead = roadmapReadDate(previous.provenance.readAt),
+              let nextRead = roadmapReadDate(next.provenance.readAt), nextRead >= previousRead,
+              !results[index].payload.isProtectedLocal, !payload.isProtectedLocal else { return false }
+        let old = results[index]
+        guard old.roadmapFilter.period == "all" || payload.roadmapTimezone.flatMap(TimeZone.init(identifier:)) != nil else { return false }
+        var filter = old.roadmapFilter; filter.evaluatedAt = now
+        results[index] = WorkspaceResult(payload: payload, id: id, receivedAt: old.receivedAt, roadmapFilter: filter)
+        roadmapRefreshStatus[id] = "Refreshed from the local repository."
+        inventoryRevision += 1
+        return true
+    }
     private var hasReceivedResult = false
     private var inventoryRevision = 0
     private var hasChosenPresentation = false
@@ -270,6 +316,10 @@ final class WorkspaceStore {
     /// without being shown. Off: the pre-CC7a behaviour.
     @discardableResult
     func receive(_ result: WorkspaceResult, quietly: Bool, answersCurrentRequest: Bool = false) -> UUID {
+        if let id = reuseExistingIdentity(for: result.payload), result.payload.roadmap != nil {
+            _ = refreshRoadmap(id, payload: result.payload)
+            return id
+        }
         if let id = reuseExistingIdentity(for: result.payload),
            let index = results.firstIndex(where: { $0.id == id }) {
             // Keep identity and all app-owned reader state, including the
@@ -316,6 +366,10 @@ final class WorkspaceStore {
     /// The router uses this before creating display/thread references, so an
     /// upsert cannot leave those references pointing at a discarded new UUID.
     func reuseExistingIdentity(for payload: DisplayPayload) -> UUID? {
+        if let roadmap = payload.roadmap, !payload.isProtectedLocal {
+            let matches = results.filter { !$0.payload.isProtectedLocal && $0.payload.roadmap?.provenance.repositoryID == roadmap.provenance.repositoryID && $0.payload.roadmap?.provenance.path == roadmap.provenance.path }
+            return matches.count == 1 ? matches.first?.id : nil
+        }
         guard Self.isPublicWeatherIdentity(payload), let key = payload.subjectKey else { return nil }
         let matches = results.filter {
             Self.isPublicWeatherIdentity($0.payload) && $0.payload.subjectKey == key
@@ -685,6 +739,8 @@ final class WorkspaceStore {
         presentations.removeValue(forKey: id)
         resultGraphs.removeValue(forKey: id)?.cancel()
         results.removeAll { $0.id == id }
+        roadmapExpanded.removeValue(forKey: id)
+        roadmapRefreshStatus.removeValue(forKey: id)
         pinnedIDs.remove(id)
         unreadIDs.remove(id)
         scrollOffsets.removeValue(forKey: id)

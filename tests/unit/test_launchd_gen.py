@@ -200,5 +200,21 @@ def test_status_daily_plist_argv_and_schedule():
 def test_hour_minute_flags_apply_to_backup_only():
     xml = launchd_gen.render("status-daily", Path("/repo"), hour=4, minute=45)
     assert plistlib.loads(xml.encode())["StartCalendarInterval"] == {"Hour": 6, "Minute": 30}
-    assert launchd_gen.ALL_SERVICES == (*launchd_gen.SERVICES, "backup", "status-daily")
+    assert launchd_gen.ALL_SERVICES == (*launchd_gen.SERVICES, "backup", "sandbox-prune", "status-daily")
     assert launchd_gen.CALENDAR_JOBS["backup"] == (["/usr/bin/python3", "scripts/backup_db.py"], 3, 15)
+
+
+def test_only_limits_write_and_install_to_one_service(tmp_path, monkeypatch):
+    written = launchd_gen.write_all(Path("/repo"), 3, 15, home=tmp_path, only="sandbox-prune")
+    assert [p.name for p in written] == ["com.mortimer.sandbox-prune.plist"]
+    assert sorted(p.name for p in (tmp_path / "Library" / "LaunchAgents").iterdir()) == ["com.mortimer.sandbox-prune.plist"]
+    parsed = plistlib.loads(written[0].read_bytes())
+    assert parsed["ProgramArguments"] == ["/usr/bin/python3", "-m", "sandbox.prune"]
+    assert parsed["StartCalendarInterval"] == {"Hour": 4, "Minute": 20}
+    calls = []
+    monkeypatch.setattr(launchd_gen.subprocess, "run", lambda argv, **kw: calls.append(argv))
+    monkeypatch.setattr(launchd_gen, "write_all", lambda *a, **kw: [])
+    launchd_gen.install(Path("/repo"), 3, 15, only="sandbox-prune")
+    assert all("com.mortimer.sandbox-prune" in " ".join(map(str, argv)) for argv in calls)
+    assert len(calls) == 2  # bootout, bootstrap
+

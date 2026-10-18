@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** FOUNDATION LANDED; documentation closeout prepared 2026-10-06. B1–B4, the 72-entry migration and the first ten published post-migration PR/integration merges are verified. Lifecycle-word cleanup is recorded by the bounded WS-20 documentation completion. Strict checker enforcement and the remaining Phase A/B live-evidence closure are still open; no new product acceptance is claimed. The bounded operational summary/decision queue/acceptance navigation is documented via the separate WS-20 PR after claim #192 (`e74f3af`); remaining product acceptance stays open.
+**Status:** FOUNDATION LANDED; final acceptance-campaign evidence published via #209 (2026-10-17). The #209 conflict is reconciled with main `f3d5378`; #210 remains open with reproduced review findings, and #212 is merged with a bounded post-merge review. B1–B4, the 72-entry migration and the first ten published post-migration PR/integration merges are verified. Lifecycle-word cleanup is recorded by the bounded WS-20 documentation completion. Strict checker enforcement and the remaining Phase A/B live-evidence closure are still open; no new product acceptance is claimed. The bounded operational summary/decision queue/acceptance navigation is documented via the separate WS-20 PR after claim #192 (`e74f3af`); remaining product acceptance stays open.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -219,6 +219,16 @@ closed gates. Runtime source remains unchanged. Full host Python: 6,688 passed,
 integration suite. Independent verification and remaining bounded live checks
 are recorded in the campaign receipt; no test threshold is relaxed.
 
+Final testing follow-up on `codex/acceptance-campaign-results-20261017`:
+initial evidence #208 merged as `f363444` while verification ran. All twelve
+independent checks on exact `9f9bc71` passed with unchanged source and validated
+log/profile/runner identities; both owned VMs stopped. Disabling automatic
+dotenv discovery eliminated the five configuration-contaminated host Python
+failures. The remaining 5 ms deadline case passed quietly and in both VM unit
+runs. The final host native suite passed the performance benchmark but failed
+two Vision OCR calls; both failed again in the focused retry, leaving physical
+Mac verification open. Recents/reuse and mail-preflight findings also remain.
+No runtime, test, production configuration or activation changes were made.
 
 ### 2026-10-17 — Current status / right-pane refresh (Codex)
 
@@ -245,3 +255,15 @@ checklists. Preserve daily-report behavior as a baseline inventory requirement,
 not an unsupported claim about complete deployed capability. Reconcile WS-22’s
 future lifecycle with WS-24 so it cannot become a competing task authority.
 No implementation is claimed or started; no existing acceptance box changes.
+
+### 2026-10-17 — Three-PR review and cleanup (Codex)
+
+Larry requested review and cleanup of the three PRs. #212 had already merged
+as `f3d5378` when checked. #209's sole conflict was an appended progress record:
+both entries are preserved, as are all receipts and acceptance limitations.
+The twelve independent check hashes match the attached manifest. #210's
+focused suite passed, but a mocked-Tart reproduction deleted a development VM
+after its session began validation and a running child appeared; its cleanup
+module is also absent from runner identity. Keep #210 open for scoped repairs
+and re-review. No real VM was pruned, no mailbox contacted, and no deployment
+or acceptance gate changed. Details: [review record](../roadmap-log/2026-10-17-ws-20-codex-three-pr-review.md).
