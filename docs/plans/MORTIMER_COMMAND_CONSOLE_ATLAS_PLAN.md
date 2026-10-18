@@ -2388,3 +2388,18 @@ Codex reviewer verified the actual terminal receipt and source/cleanup audit. La
 reviews/merges PR #203, reruns normal DEPLOY-MAIN against exact main, then
 completes live UI2-22…25. The failed 10-10 deployment and older SCK-startup
 failure remain historical evidence; this pass does not erase them.
+
+
+### Roadmap source-contract claim — 2026-10-17
+
+Larry approved extending WS-17 to the repository-read source validator in
+`jarvis/skills/registry.py`. The existing `_repo_source_refs` accepts exactly
+`ok`, `path`, `bytes`, `content`; an additive `roadmap` field would currently
+refuse the entire read. Extend that exact contract only for canonical
+`ROADMAP.md`, verifying the complete derived snapshot, local provenance and
+every guarded log hash/reference before releasing it. Keep ordinary file reads
+unchanged and reject invented content or widening source scope. Source-policy
+floors and external-source permissions remain intact. The reader stays on its
+legacy response shape until the corresponding validation is implemented.
+This is a bounded scope claim for the existing implementation branch, not
+feature completion, review, deployment or acceptance.
