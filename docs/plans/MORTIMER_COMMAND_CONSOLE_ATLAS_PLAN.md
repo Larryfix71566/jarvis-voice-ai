@@ -2676,3 +2676,18 @@ its Claude review raises global reclamation blockage on unrelated corrupt
 records. Atomic-write contract checks pass; corruption/ownership disposition
 remains unresolved rather than waived. No real VM operation, independent
 release verification, runtime merge, app action or deployment ran.
+
+### 2026-10-18 — Reviewer explicitly invalidates the first-arrival candidate
+
+The focused tools-disabled Claude reconciliation completed at 21:19:32 UTC
+on unchanged application source `61f701d`. It explicitly marks Finding 1
+INVALID as a blocking issue after reviewing the previously omitted sensitive
+event stripping and Swift nil-policy definition. The field asymmetry is real
+but deliberate; no implementation or public-source-label change is needed.
+Original report, explicit reconciliation and exact hashes are preserved in
+the `ws17-cross-review-2026-10-18` receipt JSON and paired report files.
+The reviewer executed no tests; the recorder’s 65 focused synthetic passes
+remain separate. Timezone consistency is unconfirmed, not a validated defect.
+The missing source-review verdict and its primary candidate are therefore
+resolved; cleanup review, full independent release verification and all
+deployment/live acceptance gates remain open. No parent checkbox closes.

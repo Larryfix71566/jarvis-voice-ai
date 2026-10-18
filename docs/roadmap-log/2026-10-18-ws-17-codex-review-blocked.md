@@ -28,3 +28,11 @@ Initial timeouts and plan-only output are not approvals. The privacy candidate
 is not reproduced with complete caller context and 65 focused synthetic
 passes; clean disposition remains open. The separate cleanup-corruption
 finding also remains unresolved. No runtime merge, real VM action or release.
+
+## Explicit reviewer reconciliation
+
+On the same `61f701d` source, the caller-context reconciliation completed at
+21:19:32 UTC and explicitly marks Finding 1 INVALID as a blocker. Both original
+and follow-up reports are preserved with hashes. No new public-policy label
+or code repair was introduced. Remaining timezone note is unconfirmed;
+cleanup/release/live gates remain open. No real operations or gate waiver.
