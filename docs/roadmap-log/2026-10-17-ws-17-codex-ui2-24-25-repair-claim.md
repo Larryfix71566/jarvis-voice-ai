@@ -38,3 +38,16 @@ the existing route; the pending claim explicitly covers the missing prompt
 routing and focused tests before code edits. This is not proof that a running
 Supervisor has loaded the new instructions. Deployment/restart and an actual
 voice check remain separate, and the #210 deployment caution is unchanged.
+
+
+## In-app roadmap view authorized
+
+Larry additionally requested the display capability. Added a bounded WS-17
+scope and acceptance checklist to the same pending claim and canonical plan:
+voice-opened, expandable read-only workstream cards, provenance/refresh,
+complete document coverage, and existing results/share/supporting-display
+behavior. Code inspection found the existing `repo_read_file` display route
+clips at 30,000 characters; simply displaying the full-file response would
+hide later roadmap sections. A dedicated bounded presentation must preserve
+all source workstreams instead. No runtime code or wire identifier is added
+in this claim; runtime implementation waits for the claim on main.

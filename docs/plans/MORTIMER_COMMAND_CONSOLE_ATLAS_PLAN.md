@@ -1381,6 +1381,56 @@ GitHub main. Preserve existing path exclusions, permissions and privacy guards.
 Validate prompt routing and real read access with synthetic/offline tests; a
 live "what remains in WS-17?" check belongs to the reviewed deployed candidate.
 
+**Roadmap display addition — Larry, 2026-10-17:**
+
+The read-only roadmap must be a first-class result in the existing app workspace,
+opened by "show the roadmap", navigable to a named workstream by voice and
+refreshable on request. Use `ROADMAP.md` as the single source; do not maintain
+status in a second database or inject a full roadmap snapshot into the voice
+system prompt. The existing `repo_read_file` route already produces a window
+payload, but `_fmt_repo_read` clips to `DOC_DISPLAY_MAX_CHARS = 30_000`; that
+plain-text route alone cannot fulfill this feature for the 154 KB roadmap.
+
+Implementation requirements:
+
+- Read the fixed repository document through existing path/privacy guards.
+  Derive structured workstream cards from the full permitted source: stable WS
+  IDs, titles, status, owner, next step, checkboxes and linked evidence. Group
+  open work before completed work and retain source order within each group.
+  Expand/collapse details; status and checkboxes are read-only. Preserve unknown
+  fields in details and report unsupported/malformed sections rather than
+  silently omitting them or rendering arbitrary HTML/scripts.
+- Carry read provenance with the displayed snapshot: source path, local Git
+  revision, content SHA-256, checked/read timestamp, dirty state and source kind.
+  Those values come from the reader, not model-generated prose. Source revision
+  and installed-app revision are distinct. Local access cannot claim freshness
+  relative to GitHub main without a verified comparison. No implicit Git pull,
+  fetch, credential change or network sync is introduced.
+- Reuse the existing repository-read transport and result lifecycle with a
+  dedicated bounded roadmap presentation. Reserve any additional wire field
+  before coding; preserve compatibility for ordinary repository documents.
+  If the complete structured snapshot exceeds a transport bound, use explicit
+  pagination/loading with a total count or refuse with a clear size error;
+  do not drop the later workstreams. Refresh changes the existing roadmap
+  result, preserving pin, placement and sensible reading/expansion state.
+- Voice and pointer use the same navigation/refresh behavior. A request for
+  "WS-17" focuses that card, while an unknown ID explains the mismatch.
+  No fabricated success before the app receives and applies the result.
+  Use existing sharing preview/approval and confirmed supporting-display
+  transfer; retain the main conversation and avoid duplicate windows.
+- No editing, self-edit launch, acceptance sign-off or checkbox mutation from
+  viewing. No automatic model/provider call just to display the document.
+  Preserve source classification; roadmap access grants no new external
+  sharing permission. Model summaries are not the displayed source of truth.
+
+Required proof: a fixture larger than 30,000 characters with its final WS and
+checklist still accessible; complete ID/count parity; malformed/missing/path
+refusal behavior; accurate revision/hash/dirty metadata; repeat refresh under
+one result identity; named-card voice targeting; compact/expanded and VoiceOver
+rendering; existing share/transfer safeguards; physical display acceptance on
+a reviewed deployed candidate. This new requirement is explicitly requested,
+but the earlier UI2-24/25 repair order remains first. It closes no existing gate.
+
 **Claim progress:** main `c097ee0` includes the dispatch but still names the old
 branch and lacks the prompt/evaluation/context scope in its Scope field. This
 documentation-only claim supplies those fields before code. Main also includes
