@@ -136,3 +136,13 @@ publication-status selection passed 87. The trusted controller suite passed
 101 tests. These are separate, overlapping runs. Exact source and log identifiers,
 plus the controlled failure-injection limits, are recorded in
 [the resume acceptance record](acceptance/2026-09-10-resume.json).
+
+## 2026-10-18 — WS-28 cleanup prerequisite repair claim
+
+Larry assigned Codex the two #210 defects at 20:08:26 UTC: stale cleanup-plan
+deletion and omitted cleanup runner fingerprint. Claim branch
+`codex/sandbox-cleanup-repair-20261018` must be registered on main before code.
+Use this existing lifecycle ledger, temporary-home/fake-Tart regressions and
+independent exact-head review. No real prune/reclaim or affected clone routine
+before reviewed repair; no job installation, production write, restart or
+deployment. Both findings remain unresolved at claim source `b29c7aba`.

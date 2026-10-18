@@ -554,3 +554,15 @@ Primary-category counts: **A 4**, **B 22**, **C 1**, **D 12**, **H 11**, **O 4**
 | [WS-11/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L756) | Larry / Codex · remaining physical audio | H | B4 | Physical audio/echo/earbud/wake/sleep/mic matrix; reuse WS-18 switch only for matching case. |
 | [WS-11/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L757) | Larry / Codex · monitor and rollback tails | H | B3 | Applicable monitor/layout/rollback tails; unsupported topology explicit. |
 | [WS-11/06](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L758) | Verifier / Larry · closure | O | B5/B6 | Exact C5/C8 proof + separate native/redesign daily-driver attestations, shared observations only if criteria match. |
+
+### 2026-10-18 — Larry-authorized acceptance execution claim (Codex)
+
+Larry approved ownership registration, the two cleanup prerequisite repairs,
+missing #216 cross-review and independent verification at 20:08:26 UTC.
+WS-20 now names `codex/acceptance-clearance-20261018` for bounded evidence/checks;
+WS-17 retains its exact-source review/verifier work on a separate branch;
+new WS-28 owns the cleanup-race/fingerprint repair. The claim-only workflow
+may merge after required checks, while runtime repair merge and production
+replacement/restart/deployment remain separate. Main inspected: `b29c7aba`;
+no open PR or competing claim. No runtime work or acceptance closure in this
+registration. Existing §9 sequencing and all counts/owners/receipts retained.

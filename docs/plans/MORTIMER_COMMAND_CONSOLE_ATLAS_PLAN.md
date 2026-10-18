@@ -2626,3 +2626,13 @@ Final native result: **563 tests, five skipped, zero failures** in 135.871 secon
 
 
 **Merge status, 2026-10-18 (Codex, WS-17):** PR #216 merged into main as `28420af` at 13:48 EDT, after five passing GitHub checks on `b347af2`. The runtime/source change remains `61f701d`; `b347af2` records the incomplete Claude subscription review. The 900-second review timeout produced no verdict. Implementation is on main, while cross-system review, independent release verification, production deployment and Larry’s UI2-24/25/roadmap live acceptance remain open. The earlier installed baseline `575cc7b` does not include this merge.
+
+### 2026-10-18 — Exact-source review and independent-verification follow-up claim
+
+Larry approved steps 1–2 of acceptance clearance at 20:08:26 UTC. Codex retains
+WS-17 ownership on `codex/ws17-release-verification-20261018` for the existing
+#216 patch-only/tools-disabled cross-review boundary and exact-candidate
+independent verification after WS-28 cleanup repair/review. Existing twelve
+checks, protected baseline and source-authority constraints remain. No runtime
+edit, new provider/source grant, acceptance waiver, deployment or app restart
+is included. This claim reports no new review verdict or verifier result.
