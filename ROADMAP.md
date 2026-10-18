@@ -25,12 +25,9 @@ it. Missing prerequisite code or activation decisions stay with their existing
 owners and require an explicit decision; this priority grants no new build,
 provider, credential, activation, merge, or deployment authority.
 
-## Current progress — verified 2026-10-17
+## Current progress — verified 2026-10-18
 
-Reconciled against main `f3d5378`, the deployment receipts and merged
-#204/#205/#207/#208/#211/#212; final campaign evidence is published via #209,
-and #210 remains open with review findings. This is a status refresh; existing owners and acceptance
-requirements remain in force. The October 7 navigation below is historical.
+Reconciled against main `28420af`, the deployment receipts and merged PRs #204, #205, #207, #208, #209, #211, #212 and #216. PR #210 remains open with review findings. The WS-17 source is merged but has no recorded deployment or completed cross-system review. Existing owners and acceptance requirements remain in force. The October 7 navigation below is historical.
 
 - **Released baseline:** the last successful deployment receipt is `575cc7b`,
   October 13 at 20:02 EDT. The October 17 campaign records an unchanged installed
@@ -41,11 +38,7 @@ requirements remain in force. The October 7 navigation below is historical.
 - **Completed:** WS-18's named AirPods/Mac output-switch criterion was accepted
   by Larry and recorded in merged #208. WS-08/12/14/15/16/19 remain closed.
   Broader echo, wake/device and combined-load audio checks remain open.
-- **Console (WS-17):** implementation and capture repair #198/#203 are merged
-  and included in the recorded deployment. The October 17 live session found
-  stale Recents, incomplete explicit voice selection, and missing fresh-result
-  reopen/reference behavior. UI2-24/25 require repair and retest; bounded
-  five-turn conversation passes do not close all UI2-22/23 cases.
+- **Console (WS-17):** repair and roadmap display PR #216 merged as `28420af` on October 18 with five green checks. The tools-disabled Claude subscription review timed out without a verdict. Independent release verification, deployment and live UI2-24/25/roadmap acceptance remain open; the October 17 installed-build failures are historical evidence for the next retest. Earlier #198/#203 are in the recorded deployment, and bounded five-turn conversation passes do not close all UI2-22/23 cases.
 - **Verification (WS-09/11/20):** final campaign evidence is recorded via
   [PR #209](https://github.com/Larryfix71566/jarvis-voice-ai/pull/209).
   Its receipt reports all twelve independent checks passed on `9f9bc71`,
