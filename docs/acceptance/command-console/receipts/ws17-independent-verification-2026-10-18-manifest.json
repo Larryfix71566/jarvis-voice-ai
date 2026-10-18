@@ -1,0 +1,247 @@
+{
+  "system": "codex",
+  "workstream": "WS-17",
+  "session": "01a1140b-72bf-76bc-bc11-ac283fa6b0e2/delegated-task-3",
+  "identity": {
+    "started_at": "2026-10-18T21:53:01.817642+00:00",
+    "source_commit": "d38c88646113cf27fd5b165f08f4739d3fe6ca01",
+    "protected_baseline_commit": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+    "candidate": "305540b836a604d966580897ad15ad8ad28e87638eb8f4f774956523d884b361",
+    "baseline": "1cb637d1ad2667fb040715a9ba54f43b6216b1cf8b7c943d77649afc70e67711",
+    "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+    "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+    "runner": "62019da52862d37e1e9c12b521849171440d27c57846a156c3e6994ee71d4b39",
+    "required_checks": [
+      "backend-imports",
+      "baseline-backend",
+      "backend",
+      "scripted-evals",
+      "latency",
+      "knowledge-base",
+      "baseline-knowledge-base",
+      "web",
+      "native-library",
+      "native-app",
+      "baseline-native-library",
+      "baseline-native-app"
+    ],
+    "home": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-vm-home",
+    "initial_cleanup_plan": [],
+    "rollback": {
+      "path": "/Users/larryfix/MortimerRollback/release-575cc7b-20261013-195439",
+      "sha256": {
+        "ROLLBACK.sh": "e68adc37d062e0ecf25345ebdd6c12f476c5fbd9e9c4cc7fd6739fb317305502",
+        "code.tgz": "c190c9853d6841b81cfe5057225e6ceeac175a83d697a8e5350bd0266faf58bb",
+        "deployment-receipt.json": "a4e165a7e64198c203b7a9e93007a9982fe766763e6e418a17d0fcdc3b066c5e"
+      },
+      "modified": false
+    },
+    "settings_pointer_modified": false,
+    "production_modified": false,
+    "paid_service": false
+  },
+  "execution": {
+    "started_at": "2026-10-18T21:53:01.851053+00:00",
+    "source_commit": "d38c88646113cf27fd5b165f08f4739d3fe6ca01",
+    "status": "passed",
+    "passed": true,
+    "development_task": "63ec4cc92721",
+    "attempt": "105c7adecbd444eeb56844bc1badedd4",
+    "verification_task": "f894ca6ed5f5",
+    "ended_at": "2026-10-18T22:20:09.961296+00:00",
+    "owned_cleanup": [
+      {
+        "task": "63ec4cc92721",
+        "result": "deleted"
+      }
+    ],
+    "rollback_unchanged": true
+  },
+  "preservation": {
+    "existing_vms": [
+      {
+        "name": "mortimer-b7788c4611a4",
+        "state": "stopped"
+      },
+      {
+        "name": "mortimer-base",
+        "state": "stopped"
+      },
+      {
+        "name": "mortimer-bd4f894e69b1",
+        "state": "stopped"
+      },
+      {
+        "name": "mortimer-image-32a82fdd1de4ebdd002b",
+        "state": "stopped"
+      },
+      {
+        "name": "mortimer-image-9e71cb3f07c046fb9d0e",
+        "state": "stopped"
+      },
+      {
+        "name": "mortimer-image-a4a94ef6fcbceea4e5e7",
+        "state": "stopped"
+      },
+      {
+        "name": "mortimer-image-c43cc422ac3ecc9a5725",
+        "state": "stopped"
+      }
+    ],
+    "existing_vm_count": 7,
+    "installed_executable_unchanged": true,
+    "installed_executable_sha256": "6c67661bb94ddde5fa95d0a807dd77e5d837483a69c0d979412064fdcd3eaf29",
+    "settings_pointer_unchanged": true
+  },
+  "test_summaries": {
+    "backend-imports": "command exit 0",
+    "baseline-backend": "6280 passed, 11 skipped, 54 warnings, 2 subtests passed in 421.22s (0:07:01)",
+    "backend": "6592 passed, 11 skipped, 53 warnings, 2 subtests passed in 422.23s (0:07:02)",
+    "scripted-evals": "13 passed, 1 warning in 0.93s",
+    "latency": "command exit 0",
+    "knowledge-base": "17 passed, 5 warnings in 3.07s",
+    "baseline-knowledge-base": "17 passed, 6 warnings in 4.68s",
+    "web": "command exit 0",
+    "native-library": "Executed 235 tests, with 0 failures (0 unexpected) in 9.763 (9.790) seconds",
+    "native-app": "Executed 563 tests, with 8 tests skipped and 0 failures (0 unexpected) in 160.675 (160.723) seconds",
+    "baseline-native-library": "Executed 227 tests, with 0 failures (0 unexpected) in 9.632 (9.655) seconds",
+    "baseline-native-app": "Executed 514 tests, with 7 tests skipped and 0 failures (0 unexpected) in 147.506 (147.556) seconds"
+  },
+  "native_skip_reasons": {
+    "backend-imports": [],
+    "baseline-backend": [],
+    "backend": [],
+    "scripted-evals": [],
+    "latency": [],
+    "knowledge-base": [],
+    "baseline-knowledge-base": [],
+    "web": [],
+    "native-library": [],
+    "native-app": [
+      "Test skipped - Thread window capture requires Screen Recording and an interactive WindowServer; no acceptance is inferred",
+      "Test skipped - Grant Screen Recording to the test runner to exercise real window capture",
+      "Test skipped - requires at least two non-mirrored displays",
+      "Test skipped - requires two connected displays",
+      "Test skipped - requires two connected displays",
+      "Test skipped - the test host cannot become the active app in this WindowServer session",
+      "Test skipped - the test host cannot become the active app in this WindowServer session",
+      "Test skipped - the test host cannot become the active app in this WindowServer session"
+    ],
+    "baseline-native-library": [],
+    "baseline-native-app": [
+      "Test skipped - Grant Screen Recording to the test runner to exercise real window capture",
+      "Test skipped - requires at least two non-mirrored displays",
+      "Test skipped - requires two connected displays",
+      "Test skipped - requires two connected displays",
+      "Test skipped - the test host cannot become the active app in this WindowServer session",
+      "Test skipped - the test host cannot become the active app in this WindowServer session",
+      "Test skipped - the test host cannot become the active app in this WindowServer session"
+    ]
+  },
+  "raw_receipt_sha256": "43dbd825fdc090a054b3057efcffc1bae7048342e1d0a31cec15c922abcb4650",
+  "ci_applicability": {
+    "runtime_test_source_identical_to_reviewed_head": "1632afb726ae2fb4df25c6349647f2e731a29766",
+    "only_changed_paths": [
+      "ROADMAP.md",
+      "docs/acceptance/command-console/receipts/ws17-cross-review-2026-10-18.json",
+      "docs/acceptance/command-console/receipts/ws17-cross-review-2026-10-18.md",
+      "docs/acceptance/command-console/receipts/ws17-cross-review-reconciliation-2026-10-18.md",
+      "docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md",
+      "docs/roadmap-log/2026-10-18-ws-17-codex-review-blocked.md"
+    ],
+    "receipts": [
+      {
+        "pr": 222,
+        "head": "1632afb726ae2fb4df25c6349647f2e731a29766",
+        "draft": true,
+        "checks": [
+          {
+            "name": "allowlist",
+            "conclusion": "SUCCESS",
+            "completed_at": "2026-10-18T21:29:08Z",
+            "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39168025269/job/117795005124"
+          },
+          {
+            "name": "knowledge-base",
+            "conclusion": "SUCCESS",
+            "completed_at": "2026-10-18T21:29:23Z",
+            "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39168025328/job/117795005206"
+          },
+          {
+            "name": "controller-tests",
+            "conclusion": "SUCCESS",
+            "completed_at": "2026-10-18T21:29:10Z",
+            "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39168025293/job/117795005075"
+          },
+          {
+            "name": "policy-tests",
+            "conclusion": "SUCCESS",
+            "completed_at": "2026-10-18T21:29:07Z",
+            "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39168025269/job/117795005116"
+          },
+          {
+            "name": "validate",
+            "conclusion": "SUCCESS",
+            "completed_at": "2026-10-18T21:43:15Z",
+            "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39168025269/job/117795004816"
+          }
+        ],
+        "receipt_sha256": "8203f36a60e2d2d9c4cdce418bb3c3bc8c4d8bd3233efaf43a2da6a06fb48203"
+      },
+      {
+        "pr": 223,
+        "head": "6ca55768ae975905ef589e817f8aa51e9c00697c",
+        "draft": true,
+        "checks": [
+          {
+            "name": "allowlist",
+            "conclusion": "SUCCESS",
+            "completed_at": "2026-10-18T21:29:13Z",
+            "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39168031048/job/117795023171"
+          },
+          {
+            "name": "knowledge-base",
+            "conclusion": "SUCCESS",
+            "completed_at": "2026-10-18T21:29:26Z",
+            "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39168031046/job/117795023039"
+          },
+          {
+            "name": "controller-tests",
+            "conclusion": "SUCCESS",
+            "completed_at": "2026-10-18T21:29:16Z",
+            "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39168031024/job/117795023024"
+          },
+          {
+            "name": "policy-tests",
+            "conclusion": "SUCCESS",
+            "completed_at": "2026-10-18T21:29:13Z",
+            "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39168031048/job/117795023261"
+          },
+          {
+            "name": "validate",
+            "conclusion": "SUCCESS",
+            "completed_at": "2026-10-18T21:42:54Z",
+            "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39168031048/job/117795023446"
+          }
+        ],
+        "receipt_sha256": "a2773e4f01fcf8f8633399afa069446beb7fe747d19f5d7ab8f614fe60d7bab0"
+      }
+    ]
+  },
+  "remaining_acceptance": {
+    "UI2-14": "full-profile technical evidence complete; frozen candidate and source-equivalent CI bound here; aggregate reconciliation remains with existing owner",
+    "UI2-15": "open; rollback artifacts preserved, no rollback exercise",
+    "UI2-16": "open; deployment/restart not authorized or performed",
+    "UI2-17": "open; candidate not installed, no new observation period",
+    "UI2-18": "open; final live/physical closure not established",
+    "UI2-22/23/24/25 and 04/09/13": "open; live acceptance unchanged"
+  },
+  "boundaries": {
+    "production_modified": false,
+    "settings_or_permissions_changed": false,
+    "existing_assets_deleted": false,
+    "provider_calls": false,
+    "profile_checks_or_timeouts_changed": false,
+    "protected_baseline_changed": false
+  }
+}

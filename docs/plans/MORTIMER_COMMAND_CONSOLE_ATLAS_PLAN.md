@@ -2691,3 +2691,20 @@ remain separate. Timezone consistency is unconfirmed, not a validated defect.
 The missing source-review verdict and its primary candidate are therefore
 resolved; cleanup review, full independent release verification and all
 deployment/live acceptance gates remain open. No parent checkbox closes.
+
+
+### 2026-10-18 — Full independent VM verification completed
+
+Larry confirmed #222/#223 merged at 21:49. Verified merges `406bec0` and
+`d38c886`; integrated current main before freezing candidate `305540b8…b361`.
+The unchanged full-profile verifier passed all twelve checks, exact source
+capture and receipt/log validation at 22:20 UTC, against approved protected
+reference `08c0635`. See [the complete receipt and limits](../acceptance/command-console/receipts/ws17-independent-verification-2026-10-18.md).
+A new isolated VM home protected every preexisting VM from reclamation. Both
+fresh task clones were deleted; evidence and the copied template remain.
+Rollback/app hashes and existing settings pointer were unchanged. Native
+candidate result: 563 tests/eight skips/zero failures; all skip reasons remain
+explicitly unaccepted physical/permission cases. No test/profile/budget waiver.
+UI2-14 technical evidence is complete; rollback drill, separate deployment/loaded
+identity, UI2-24/25 then 22/23 and 04/09/13, physical checks, real observations
+and final acceptance remain open. No production change or deployment occurred.
