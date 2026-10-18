@@ -1,4 +1,5 @@
 import json
+import fcntl
 import os
 from pathlib import Path
 import subprocess
@@ -132,6 +133,88 @@ class ImageTests(unittest.TestCase):
                 self.images.create(image, self.repo, "HEAD", self.profile)
         self.assertEqual(len(self.clones), before + 1)
         self.assertEqual(sorted(p.name for p in (self.c.home / "tasks").iterdir()), sorted([self.task, finished, task]))
+
+    def test_verification_child_reserves_parent_before_reclamation(self):
+        image = self.images.register(self.task, self.profile)
+        parent = self.images.create(image, self.repo, "HEAD", self.profile)
+        state = self.c.read(parent)
+        state["status"] = "stopped"
+        self.c.save(parent, state)
+        record = self.c.task_dir(parent) / "state.json"
+        os.utime(record, (record.stat().st_mtime - 8 * 3600,) * 2)
+        save = self.c.save
+        def checked_save(task, state):
+            if state.get("parent_task") == parent and state["status"] == "creating":
+                with (self.c.home / "start.lock").open("a") as contender:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(contender, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return save(task, state)
+        with patch.object(self.c, "save", side_effect=checked_save):
+            child = self.images.create(image, self.repo, "HEAD", self.profile,
+                                       purpose="verification", parent_task=parent)
+        self.assertEqual(self.c.read(parent)["status"], "stopped")
+        self.assertIn("mortimer-" + parent, self.vms)
+        self.assertEqual(self.c.read(child)["parent_task"], parent)
+        self.assertEqual(self.c.read(child)["status"], "created")
+
+    def test_validating_session_can_reclaim_unrelated_vm_for_headroom(self):
+        image = self.images.register(self.task, self.profile)
+        parent = self.images.create(image, self.repo, "HEAD", self.profile)
+        session = self.c.home / "sessions" / ("a" * 32)
+        session.mkdir(parents=True)
+        (session / "session.json").write_text(json.dumps(
+            {"id": session.name, "task": parent, "phase": "validating", "updated_at": 0}))
+        finished = "abababab1212"
+        (self.c.home / "tasks" / finished / "input").mkdir(parents=True)
+        self.c.save(finished, {"vm": "mortimer-" + finished, "status": "stopped", "purpose": "verification"})
+        record = self.c.task_dir(finished) / "state.json"
+        os.utime(record, (record.stat().st_mtime - 7200,) * 2)
+        self.vms["mortimer-" + finished] = "stopped"
+        def available(home):
+            return prune.MIN_FREE_BYTES + (1 if "mortimer-" + finished not in self.vms else -1)
+        with (session / "session.lock").open("a") as lock, patch.object(prune, "free_bytes", side_effect=available):
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            child = self.images.create(image, self.repo, "HEAD", self.profile,
+                                       purpose="verification", parent_task=parent)
+        self.assertEqual(self.c.read(finished)["status"], "deleted")
+        self.assertEqual(self.c.read(child)["status"], "created")
+        self.assertIn("mortimer-" + parent, self.vms)
+
+    def test_corrupt_foreign_metadata_does_not_wedge_verification_headroom(self):
+        image = self.images.register(self.task, self.profile)
+        parent = self.images.create(image, self.repo, "HEAD", self.profile)
+        bad = self.c.home / "sessions" / ("b" * 32)
+        bad.mkdir(parents=True)
+        (bad / "session.json").write_text("null")
+        broken = self.c.home / "tasks" / "bbbbcccc1111"
+        broken.mkdir()
+        (broken / "state.json").write_text("[]")
+        finished = "bbbbcccc2222"
+        (self.c.home / "tasks" / finished / "input").mkdir(parents=True)
+        self.c.save(finished, {"vm": "mortimer-" + finished, "status": "stopped", "purpose": "verification"})
+        record = self.c.task_dir(finished) / "state.json"
+        os.utime(record, (record.stat().st_mtime - 7200,) * 2)
+        self.vms["mortimer-" + finished] = "stopped"
+        def available(home):
+            return prune.MIN_FREE_BYTES + (1 if "mortimer-" + finished not in self.vms else -1)
+        with patch.object(prune, "free_bytes", side_effect=available):
+            child = self.images.create(image, self.repo, "HEAD", self.profile,
+                                       purpose="verification", parent_task=parent)
+        self.assertEqual(self.c.read(finished)["status"], "deleted")
+        self.assertEqual(self.c.read(child)["status"], "created")
+        self.assertIn("mortimer-" + parent, self.vms)
+        self.assertEqual((bad / "session.json").read_text(), "null")
+        self.assertEqual((broken / "state.json").read_text(), "[]")
+
+    def test_verification_child_refuses_if_parent_deletion_won(self):
+        image = self.images.register(self.task, self.profile)
+        parent = self.images.create(image, self.repo, "HEAD", self.profile)
+        self.c.destroy(parent)
+        before = list(self.clones)
+        with self.assertRaisesRegex(SandboxError, "parent is no longer available"):
+            self.images.create(image, self.repo, "HEAD", self.profile,
+                               purpose="verification", parent_task=parent)
+        self.assertEqual(self.clones, before)
 
     def test_failed_hydration_stops_and_cannot_be_retried_in_place(self):
         image = self.images.register(self.task, self.profile)

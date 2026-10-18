@@ -24,7 +24,7 @@ def runner_fingerprint() -> str:
     root = Path(__file__).resolve().parent
     digest = hashlib.sha256()
     for name in ["artifacts.py", "control.py", "durable.py", "files.py", "images.py", "profiles.py",
-                 "verify.py", "guest/hydrate.py", "guest/worker.sh", "guest/rpc.py", "guest/static-web-check.mjs",
+                 "verify.py", "prune.py", "guest/hydrate.py", "guest/worker.sh", "guest/rpc.py", "guest/static-web-check.mjs",
                  "guest/desktop-probe.sh"]:
         digest.update(name.encode() + b"\0" + (root / name).read_bytes() + b"\0")
     return digest.hexdigest()

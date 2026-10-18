@@ -1,0 +1,130 @@
+{
+  "recorded_at": "2026-10-18T20:30:20.349250+00:00",
+  "system": "codex",
+  "session": "01a1140b-72bf-76bc-bc11-ac283fa6b0e2/delegated-task-3",
+  "workstream": "WS-28",
+  "branch": "codex/sandbox-cleanup-repair-20261018",
+  "claim_pr": 221,
+  "claim_merge": "afa1dd9b45ac60bfbac0c2b6fbb3fc23c1dbd35d",
+  "runtime_test_diff_sha256": "3d868c56ed8e04c1650eec0e95a24dfb76c6c3fffca7012c0cbad6288bde012f",
+  "runtime_test_paths": [
+    "sandbox/control.py",
+    "sandbox/images.py",
+    "sandbox/prune.py",
+    "sandbox/verify.py",
+    "sandbox/tests/test_images.py",
+    "sandbox/tests/test_prune.py",
+    "sandbox/tests/test_verify.py"
+  ],
+  "host_python": "3.12.13",
+  "baseline": {
+    "tests": 145,
+    "failures": 0,
+    "seconds": 3.574
+  },
+  "candidate": {
+    "tests": 160,
+    "failures": 0
+  },
+  "red_on_unrepaired_main": {
+    "test_methods": 8,
+    "assertion_failures_including_subtests": 9,
+    "exit": 1,
+    "status": "expected failure"
+  },
+  "checks": {
+    "shell_syntax": "passed",
+    "whitespace": "passed"
+  },
+  "logs": {
+    "sandbox-baseline-tests.log": {
+      "sha256": "814494fbdd380c36dd6d16241620ce119a14e42b39cf3c95722e71cc2141a342",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/sandbox-baseline-tests.log"
+    },
+    "sandbox-repair-tests.log": {
+      "sha256": "089d435700987455d3c624126328f0b6ad39020f9f758c5411958d0711aa7366",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/sandbox-repair-tests.log"
+    },
+    "cleanup-red-regressions.log": {
+      "sha256": "4ee6db549a55386c522c00615d325b7c5a9f86108e900da9da1bf35c87b99256",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/cleanup-red-regressions.log"
+    },
+    "cleanup-owner-lease-red.log": {
+      "sha256": "13f245db84d98f0b74f737c6ed9e6bafdf41c5ed9a20398baa528c3f222d6691",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/cleanup-owner-lease-red.log"
+    },
+    "sandbox-repair-owner-tests.log": {
+      "sha256": "9f47d2a8d91011abd41464c188c408d5cc08b53341adb388de120e90a18ec6ce",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/sandbox-repair-owner-tests.log"
+    },
+    "cleanup-corruption-red.log": {
+      "sha256": "b7941e59190eb06b8db4594ba068ac53328e3625c94ff26d34f425846f5888d4",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/cleanup-corruption-red.log"
+    },
+    "cleanup-corruption-tests.log": {
+      "sha256": "245eb402998d453a6b03b1bde9105418dcda4ae1569412ea21cf850f87139bc9",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/cleanup-corruption-tests.log"
+    },
+    "cleanup-atomic-write-tests.log": {
+      "sha256": "3a5d8bc594dd2fd12d685fd5899bc025b495653d0569cd1a7058e14460c6abbf",
+      "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/cleanup-atomic-write-tests.log"
+    }
+  },
+  "independent_review": {
+    "status": "pending final exact-source corruption-policy review"
+  },
+  "release_verification": {
+    "status": "blocked pending independent cleanup review; no real clone/cleanup/verification invoked"
+  },
+  "boundaries": {
+    "test_homes": "temporary only",
+    "tart": "fake missing binary and mocked commands only",
+    "production_writes": false,
+    "production_restart": false,
+    "real_vm_mutation": false,
+    "provider_workload": false,
+    "installation": false,
+    "profile_changes": false,
+    "required_profile_checks": 12,
+    "acceptance_closed": false
+  },
+  "initial_runtime_test_diff_sha256": "143a89f082e9a996648ec79d3560f25e301e05240d262a203c355df9c6ca8a8c",
+  "initial_candidate": {
+    "tests": 153,
+    "failures": 0,
+    "seconds": 3.683
+  },
+  "additional_review_finding": {
+    "source": "24206281fd15fd2bd940da259a72b01b920023e2",
+    "finding": "Guarding every session prevented busy session A from reclaiming unrelated finished VM B, including low-disk child creation. Duplicate target ownership was also not rejected.",
+    "red": {
+      "methods": 3,
+      "failures": 2,
+      "errors": 1
+    },
+    "fix": "Lease only the exact candidate owner; refuse ambiguous or malformed ownership. Shared lifecycle lock still serializes child registration/deletion."
+  },
+  "ownership_refusal_scope": "Invalid JSON, missing/non-string/malformed task identifiers, and duplicate sessions claiming the target. This is not an assertion of full session-record schema validation.",
+  "previous_candidate_156": {
+    "tests": 156,
+    "failures": 0
+  },
+  "corruption_fix": {
+    "design": "Preserve existing independently valid stopped-verification local disposal rule. Unknown owner/child metadata retains development/legacy tasks. No ownership index, migration, new authority or schema.",
+    "reporting": "kept tasks and content-free record issue categories; corrupt records retained",
+    "red_on_241a382": {
+      "methods": 3,
+      "failures": 2,
+      "errors_including_subcases": 14
+    },
+    "coverage": "Invalid JSON, null/scalar/list, missing identity, symlinked files/directories, late corruption, low-disk verification-child creation, and all prior stale-plan/owner/child/probe/fingerprint cases.",
+    "atomic_write_context": "Existing atomic replacement/fsync tests pass; ordinary interrupted writes producing partial final JSON were not established. Corruption handling is still required for preexisting/damaged metadata.",
+    "residual_policy": "This provides partial availability, not automatic deletion of development VMs with unknown ownership. If only uncertain development VMs remain and disk is low, creation still fails closed."
+  },
+  "prior_Claude_review": {
+    "source": "241a382c8ae476d85017bc98b0feb057a6072443",
+    "report_sha256": "dc02d438c8f1df5d78d33795d3cde837a6e069a9df2f993722de45046c26ebae",
+    "finding": "Global malformed-record scan blocks otherwise independently eligible verification VMs.",
+    "status": "Addressed in candidate; requires final exact-source re-review"
+  }
+}

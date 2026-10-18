@@ -1,4 +1,5 @@
 import json
+import fcntl
 import os
 from pathlib import Path
 import subprocess
@@ -156,6 +157,181 @@ class PruneTests(unittest.TestCase):
             with self.assertRaises(SandboxError) as result:
                 prune.require_headroom(self.c)
         self.assertIn("sandbox.prune", str(result.exception))
+
+    def test_stale_plan_revalidates_session_activity(self):
+        task = self.task("aaaabbbb0001", purpose="development")
+        self.session(task, idle=8 * DAY)
+        session = self.root / "sessions" / (task * 3)[:32] / "session.json"
+        original = self.pruner.plan
+        def plan(now=None):
+            result = original(now)
+            data = json.loads(session.read_bytes())
+            data["updated_at"] = int(self.now)
+            session.write_text(json.dumps(data))
+            return result
+        with patch.object(self.pruner, "plan", side_effect=plan):
+            report = self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        self.assertEqual([x["task"] for x in report["failed"]], [task])
+        self.assertEqual(self.c.read(task)["status"], "stopped")
+
+    def test_stale_plan_revalidates_new_verification_child(self):
+        task = self.task("aaaabbbb0002", age=7 * 3600, purpose="development")
+        original = self.pruner.plan
+        def plan(now=None):
+            result = original(now)
+            if not (self.root / "tasks" / "aaaabbbb0003").exists():
+                self.task("aaaabbbb0003", age=1, status="creating", vm_state=None,
+                          purpose="verification", parent_task=task)
+            return result
+        with patch.object(self.pruner, "plan", side_effect=plan):
+            report = self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        self.assertEqual([x["task"] for x in report["failed"]], [task])
+
+    def test_revalidates_task_activity_after_tart_stopped_probe(self):
+        task = self.task("aaaabbbb0004", age=7 * 3600, purpose="development")
+        original = self.command
+        def command(*args, **kwargs):
+            result = original(*args, **kwargs)
+            if args[0] == "list":
+                record = self.root / "tasks" / task / "state.json"
+                os.utime(record, (self.now, self.now))
+            return result
+        with patch.object(self.c, "command", side_effect=command):
+            self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        self.assertEqual(self.c.read(task)["status"], "stopped")
+
+    def test_busy_mutation_locks_retain_old_stopped_tasks(self):
+        task = self.task("aaaabbbb0005", purpose="development")
+        self.session(task, idle=8 * DAY)
+        for path in [self.root / "sessions" / (task * 3)[:32] / "session.lock",
+                     self.root / "tasks" / task / "files.lock"]:
+            with self.subTest(path=path.name), path.open("a") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                report = self.pruner.run(now=self.now)
+                self.assertEqual(self.deleted, [])
+                self.assertEqual([x["task"] for x in report["failed"]], [task])
+
+    def test_busy_foreign_session_does_not_block_finished_vm_cleanup(self):
+        busy = self.task("aaaacccc0001", purpose="development")
+        self.session(busy, idle=8 * DAY)
+        finished = self.task("aaaacccc0002", purpose="verification")
+        path = self.root / "sessions" / (busy * 3)[:32] / "session.lock"
+        with path.open("a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            report = self.pruner.run(now=self.now)
+        self.assertIn("mortimer-" + finished, self.deleted)
+        self.assertNotIn("mortimer-" + busy, self.deleted)
+        self.assertIn(finished, [item["task"] for item in report["destroyed"]])
+
+    def test_ambiguous_target_session_ownership_retains_vm(self):
+        task = self.task("aaaacccc0003", purpose="development")
+        self.session(task, idle=8 * DAY)
+        other = self.root / "sessions" / ("b" * 32)
+        other.mkdir()
+        (other / "session.json").write_text(json.dumps(
+            {"id": other.name, "task": task, "phase": "published", "updated_at": 0}))
+        report = self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        self.assertEqual([item["task"] for item in report["kept"]], [task])
+
+    def test_malformed_ownership_cannot_grant_orphan_cleanup(self):
+        task = self.task("aaaabbbb0006", age=7 * 3600, purpose="development")
+        session = self.root / "sessions" / (task * 3)[:32]
+        session.mkdir(parents=True)
+        (session / "session.json").write_text("invalid json")
+        self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        for owner in [{}, {"task": None}, {"task": "not-a-task"}, {"task": 123}]:
+            with self.subTest(owner=owner):
+                (session / "session.json").write_text(json.dumps(owner))
+                report = self.pruner.run(now=self.now)
+                self.assertEqual(self.deleted, [])
+                self.assertEqual([x["task"] for x in report["kept"]], [task])
+        (session / "session.json").unlink()
+        child = self.root / "tasks" / "aaaabbbb0007"
+        child.mkdir()
+        (child / "state.json").write_text("invalid json")
+        self.pruner.run(now=self.now)
+        self.assertEqual(self.deleted, [])
+        self.assertEqual(self.c.read(task)["status"], "stopped")
+
+    def test_corrupt_metadata_retains_unknown_development_but_not_finished_verification(self):
+        cases = [("session", raw) for raw in ["{invalid", "null", "[]", "false", "0", "{}", '{"task":null}']]
+        cases += [("task", raw) for raw in ["{invalid", "null", "[]", "false", "0", "{}", '{"status":[]}']]
+        for i, (kind, raw) in enumerate(cases):
+            with self.subTest(kind=kind, raw=raw):
+                development = self.task(f"ca00{i:08x}", age=8 * 3600, purpose="development")
+                finished = self.task(f"cb00{i:08x}", purpose="verification")
+                directory = (self.root / "sessions" / f"{i + 1:032x}" if kind == "session"
+                             else self.root / "tasks" / f"cc00{i:08x}")
+                directory.mkdir(parents=True)
+                record = directory / ("session.json" if kind == "session" else "state.json")
+                record.write_text(raw)
+                report = self.pruner.run(now=self.now)
+                self.assertIn("mortimer-" + finished, self.deleted)
+                self.assertNotIn("mortimer-" + development, self.deleted)
+                self.assertEqual(self.c.read(development)["status"], "stopped")
+                self.assertIn(development, [x["task"] for x in report["kept"]])
+                self.assertTrue(report["issues"])
+                self.assertEqual(record.read_text(), raw)  # Never discard corrupt evidence.
+                self.assertTrue((self.root / "prune.log").exists())
+                record.unlink()
+
+    def test_late_corruption_rechecks_development_but_continues_verification(self):
+        development = self.task("ce00eeee0001", age=8 * 3600, purpose="development")
+        finished = self.task("ce00eeee0002", purpose="verification")
+        original = self.pruner.plan
+        injected = False
+        def stale(now=None):
+            nonlocal injected
+            result = original(now)
+            if not injected:
+                injected = True
+                directory = self.root / "sessions" / ("e" * 32)
+                directory.mkdir(parents=True)
+                (directory / "session.json").write_text("null")
+            return result
+        with patch.object(self.pruner, "plan", side_effect=stale):
+            report = self.pruner.run(now=self.now)
+        self.assertNotIn("mortimer-" + development, self.deleted)
+        self.assertIn("mortimer-" + finished, self.deleted)
+        self.assertEqual([x["task"] for x in report["failed"]], [development])
+        self.assertTrue(report["issues"])
+
+    def test_symlinked_metadata_is_not_read_or_a_global_verification_block(self):
+        for i, kind in enumerate(["session_file", "task_file", "session_dir", "task_dir"]):
+            with self.subTest(kind=kind):
+                development = self.task(f"de00{i:08x}", age=8 * 3600, purpose="development")
+                finished = self.task(f"df00{i:08x}", purpose="verification")
+                is_session = kind.startswith("session")
+                root = self.root / ("sessions" if is_session else "tasks")
+                directory = root / (f"{i + 100:032x}" if is_session else f"da00{i:08x}")
+                name = "session.json" if is_session else "state.json"
+                canary = self.root / f"unread-metadata-{i}"
+                if kind.endswith("_dir"):
+                    canary.mkdir()
+                    (canary / name).write_text('{"synthetic": "must not read"}')
+                    directory.symlink_to(canary, target_is_directory=True)
+                else:
+                    directory.mkdir(parents=True)
+                    canary.write_text('{"synthetic": "must not read"}')
+                    (directory / name).symlink_to(canary)
+                original = Path.read_bytes
+                def read(path):
+                    if path.is_symlink() or path.parent.is_symlink():
+                        self.fail("Pruner followed a metadata symlink")
+                    return original(path)
+                with patch.object(Path, "read_bytes", new=read):
+                    report = self.pruner.run(now=self.now)
+                self.assertIn("mortimer-" + finished, self.deleted)
+                self.assertNotIn("mortimer-" + development, self.deleted)
+                self.assertTrue(any(x["category"] == ("session_symlink" if is_session else "task_symlink")
+                                    for x in report["issues"]))
+                self.assertTrue(canary.exists())
+                self.assertNotIn("must not read", (self.root / "prune.log").read_text())
 
     def test_discard_reports_instead_of_raising(self):
         task = self.task("abcdefabcdef", purpose="verification")

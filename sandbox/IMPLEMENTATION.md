@@ -146,3 +146,67 @@ Use this existing lifecycle ledger, temporary-home/fake-Tart regressions and
 independent exact-head review. No real prune/reclaim or affected clone routine
 before reviewed repair; no job installation, production write, restart or
 deployment. Both findings remain unresolved at claim source `b29c7aba`.
+
+## 2026-10-18 — WS-28 cleanup repair candidate and synthetic proof
+
+Claim #221 landed as `afa1dd9b` before code. The repair rechecks cleanup
+eligibility after the stopped-VM probe, under the existing start/delete lock,
+with nonblocking session/file mutation leases held through deletion. Busy or
+malformed ownership retains the VM. New verification-child registration shares
+that lifecycle lock and precedes reclamation; if deletion won first, child
+creation refuses. Ordinary no-parent disk preflight remains unchanged.
+
+`prune.py` is now part of the runner fingerprint; a synthetic mutation changes
+the fingerprint and makes the saved verifier receipt refuse. Eight new test
+methods fail on unrepaired main (nine assertion failures including subtests);
+all 153 controller tests pass on the candidate (baseline 145). Tests use
+temporary homes and fake Tart only. Shell syntax and whitespace pass. See
+`acceptance/2026-10-18-cleanup-regressions.json` for patch/log hashes and limits.
+
+This candidate is not independent review, a real cleanup exercise or release
+verification. Independent exact-head review is pending. No real VM lifecycle,
+job installation, production source/settings write, restart or deployment ran.
+The runtime PR remains separate from claim #221 and requires review before
+merge; the original twelve-check profile, scanner/pins and baseline are intact.
+
+### WS-28 follow-up: target-owner leases and headroom
+
+Additional independent source review found that leasing every session blocked
+unrelated finished clones during active validation. Three new synthetic
+methods reproduce the issue and ambiguous target ownership on `24206281`
+(two assertion failures, one low-headroom error). Lease only the exact
+candidate’s owner; reject malformed/ambiguous ownership. The shared lifecycle
+lock and atomic child reservation remain. All 156 controller tests pass.
+The earlier Claude packet covers `24206281` only; final amended code requires
+its own exact-source cross-review. No real cleanup/clone/VM action occurred.
+
+Ownership refusal is explicitly covered for invalid JSON and valid JSON with
+missing, null, non-string or malformed task IDs, plus duplicate target owners.
+This is ownership validation, not a claim of full session-record schema
+validation. These subcases remain in the 156-test passing suite.
+
+### WS-28 corruption finding: bounded partial availability
+
+Claude’s full report for `241a382` is preserved in
+`acceptance/2026-10-18-cleanup-claude-241a382.md`. The global availability effect
+is real; a corrupt record is not provably unrelated to a development VM.
+The bounded correction therefore preserves the existing local disposal rule
+for independently valid, grace-aged stopped verification VMs while retaining
+development/legacy VMs with unknown owner/child relationships. It adds no
+ownership index, migration or new trust authority. Malformed JSON, valid JSON
+scalars/lists/null, missing binding fields and metadata symlinks cannot abort
+independent candidates. Reports retain task IDs and content-free issue
+categories; corrupt records/evidence are not discarded or repaired silently.
+
+Three new regression methods fail on `241a382` (including corruption-shape
+subcases); the full suite now passes 160 tests. New coverage includes late
+corruption/revalidation, symlinked files/directories, and low-disk verification
+child creation after safe reclamation. Prior owner/child/probe/fingerprint
+protections remain. Atomic replacement/fsync tests show old-or-new JSON for
+ordinary interruptions, so the initial review’s partial-write example was not
+established. Arbitrary corrupt records remain a real condition to handle.
+
+This is partial availability: ambiguous development VMs stay retained and low
+disk may still refuse creation when no independently reclaimable verification
+VM exists. Final exact-source reviewer agreement and current CI remain open.
+No real cleanup, clone, VM verification, installation, merge or deployment.

@@ -97,21 +97,31 @@ class Images:
         task = task_id or uuid.uuid4().hex[:12]
         if not re.fullmatch(r"[0-9a-f]{12}", task):
             raise SandboxError("Invalid allocated task identity")
-        if parent_task is not None:
-            self.controller.read(parent_task)
-        # Every clone is a chance to reclaim finished ones; a full volume
-        # fails here, before a half-written task record exists.
-        reclaim(self.controller)
-        require_headroom(self.controller)
+        # A verification child must reserve its parent before reclamation.
+        # Register under the same lock as cleanup/start, then fail closed if
+        # cleanup already won. Ordinary creation retains its disk preflight.
+        if parent_task is None:
+            reclaim(self.controller)
+            require_headroom(self.controller)
         directory = self.controller.home / "tasks" / task
         inputs = directory / "input"
-        directory.mkdir(parents=True, mode=0o700)
-        inputs.mkdir(mode=0o755)
-        state = {"id": task, "vm": "mortimer-" + task, "image": image_id,
-                 "purpose": purpose, "profile": profile.name, "status": "creating", "prepared": True,
-                 "parent_task": parent_task}
-        self.controller.save(task, state)
+        with (self.controller.home / "start.lock").open("a") as lifecycle:
+            fcntl.flock(lifecycle, fcntl.LOCK_EX)
+            if parent_task is not None:
+                parent = self.controller.read(parent_task)
+                if (parent.get("vm") != "mortimer-" + parent_task
+                        or parent.get("status") in {"deleting", "deleted", "missing"}):
+                    raise SandboxError("Verification parent is no longer available")
+            directory.mkdir(parents=True, mode=0o700)
+            inputs.mkdir(mode=0o755)
+            state = {"id": task, "vm": "mortimer-" + task, "image": image_id,
+                     "purpose": purpose, "profile": profile.name, "status": "creating", "prepared": True,
+                     "parent_task": parent_task}
+            self.controller.save(task, state)
         try:
+            if parent_task is not None:
+                reclaim(self.controller)
+                require_headroom(self.controller)
             state.update(snapshot(repo, ref, inputs / "source.tar"))
             baseline = Candidate.from_snapshot(inputs / "source.tar")
             selected = candidate if candidate is not None else baseline
