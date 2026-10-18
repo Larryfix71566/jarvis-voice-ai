@@ -158,7 +158,9 @@ def repo_read_file(path: str) -> dict:
 
 # A derived presentation of the canonical source, never another status store.
 ROADMAP_SNAPSHOT_MAX_BYTES = 512 * 1024
-ROADMAP_LOG_MAX_FILES = 512
+# One canonical roadmap ref plus each log must fit the existing 256-ref
+# source envelope. Refuse excess history explicitly; never weaken that bound.
+ROADMAP_LOG_MAX_FILES = 255
 ROADMAP_LOG_TOTAL_MAX_BYTES = 4 * 1024 * 1024
 _ROADMAP_STATES = frozenset({"proposed", "claimed", "in-progress", "review", "landed", "accepted", "blocked", "parked"})
 

@@ -109,3 +109,19 @@ def test_roadmap_read_keeps_exact_existing_source_contract_until_extension(tmp_p
     (tmp_path / 'ROADMAP.md').write_text(card('WS-01'))
     result = logic.repo_read_file('ROADMAP.md')
     assert set(result) == {'ok', 'path', 'bytes', 'content'}
+
+
+def test_log_count_and_total_size_refuse_instead_of_partial_snapshot(tmp_path, monkeypatch):
+    import pytest
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    (tmp_path / 'ROADMAP.md').write_text(card('WS-17'))
+    logs = tmp_path / 'docs/roadmap-log'; logs.mkdir(parents=True)
+    for index in range(3):
+        (logs / f'{index}.md').write_text('---\ndate: 2026-10-17\nrows: [WS-17]\nprs: []\n---\n# Test\n')
+    monkeypatch.setattr(logic, 'ROADMAP_LOG_MAX_FILES', 2)
+    with pytest.raises(logic.RepoPathError, match='file limit'):
+        logic._roadmap_snapshot(tmp_path, card('WS-17'))
+    monkeypatch.setattr(logic, 'ROADMAP_LOG_MAX_FILES', 255)
+    monkeypatch.setattr(logic, 'ROADMAP_LOG_TOTAL_MAX_BYTES', 10)
+    with pytest.raises(logic.RepoPathError, match='total byte limit'):
+        logic._roadmap_snapshot(tmp_path, card('WS-17'))
