@@ -26,3 +26,14 @@ otherwise-safe reclamation and could fail low-disk validation. Three new
 regressions fail on initial `24206281` and pass after target-owner leasing and
 ambiguous-owner refusal. The full suite is now 156 tests, zero failures.
 The old Claude packet/result cannot clear this amended exact source.
+
+## Corruption-policy correction
+
+The final `241a382` Claude report identifies global malformed-record blocking.
+Its original report is preserved. Candidate correction keeps unknown-owner/
+child development VMs retained but permits independently valid stopped
+verification VMs under their existing local rule. Initial and final scans
+handle malformed shapes and symlinks without aborting independent candidates;
+reports expose retained task IDs and content-free record categories. No new
+ownership index, migration or authority. Full controller suite: 160 passing.
+Final exact-source re-review and current CI remain pending; no real operations.

@@ -184,3 +184,29 @@ Ownership refusal is explicitly covered for invalid JSON and valid JSON with
 missing, null, non-string or malformed task IDs, plus duplicate target owners.
 This is ownership validation, not a claim of full session-record schema
 validation. These subcases remain in the 156-test passing suite.
+
+### WS-28 corruption finding: bounded partial availability
+
+Claude’s full report for `241a382` is preserved in
+`acceptance/2026-10-18-cleanup-claude-241a382.md`. The global availability effect
+is real; a corrupt record is not provably unrelated to a development VM.
+The bounded correction therefore preserves the existing local disposal rule
+for independently valid, grace-aged stopped verification VMs while retaining
+development/legacy VMs with unknown owner/child relationships. It adds no
+ownership index, migration or new trust authority. Malformed JSON, valid JSON
+scalars/lists/null, missing binding fields and metadata symlinks cannot abort
+independent candidates. Reports retain task IDs and content-free issue
+categories; corrupt records/evidence are not discarded or repaired silently.
+
+Three new regression methods fail on `241a382` (including corruption-shape
+subcases); the full suite now passes 160 tests. New coverage includes late
+corruption/revalidation, symlinked files/directories, and low-disk verification
+child creation after safe reclamation. Prior owner/child/probe/fingerprint
+protections remain. Atomic replacement/fsync tests show old-or-new JSON for
+ordinary interruptions, so the initial review’s partial-write example was not
+established. Arbitrary corrupt records remain a real condition to handle.
+
+This is partial availability: ambiguous development VMs stay retained and low
+disk may still refuse creation when no independently reclaimable verification
+VM exists. Final exact-source reviewer agreement and current CI remain open.
+No real cleanup, clone, VM verification, installation, merge or deployment.

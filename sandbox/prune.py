@@ -45,6 +45,8 @@ import argparse
 from contextlib import contextmanager, ExitStack
 import fcntl
 import json
+import math
+import re
 import os
 from pathlib import Path
 import shutil
@@ -81,44 +83,86 @@ class Pruner:
         self.grace, self.orphan, self.idle = grace, orphan, idle
         self.low_disk, self.low_disk_idle = low_disk, low_disk_idle
 
-    def sessions(self) -> dict:
-        """Development task id -> owning session record, with an ``ended`` flag."""
-        owners = {}
-        for path in (self.controller.home / "sessions").glob("*/session.json"):
+    def _sessions(self):
+        owners, issues, duplicates = {}, [], set()
+        for path in sorted((self.controller.home / "sessions").glob("*/session.json")):
+            category = None
             try:
-                record = json.loads(path.read_bytes())
-            except (OSError, ValueError):
-                continue
-            task = record.get("task")
-            if isinstance(task, str) and TASK_ID.fullmatch(task):
-                record["ended"] = (record.get("phase") in ENDED_PHASES
-                                   or (path.parent / "cancelled.json").exists())
-                owners[task] = record
-        return owners
+                if path.is_symlink() or path.parent.is_symlink():
+                    category = "session_symlink"
+                else:
+                    record = json.loads(path.read_bytes())
+                    if (not isinstance(record, dict) or not isinstance(record.get("task"), str)
+                            or not TASK_ID.fullmatch(record["task"])
+                            or record.get("id") != path.parent.name
+                            or not isinstance(record.get("id"), str)
+                            or not re.fullmatch(r"[0-9a-f]{32}", record["id"])
+                            or not isinstance(record.get("phase"), str)):
+                        category = "session_identity_or_shape"
+                    else:
+                        updated = record.get("updated_at")
+                        if updated is not None and (isinstance(updated, bool) or not math.isfinite(float(updated))):
+                            category = "session_timestamp"
+                        else:
+                            task = record["task"]
+                            if task in owners:
+                                duplicates.add(task)
+                            record["ended"] = (record["phase"] in ENDED_PHASES
+                                               or (path.parent / "cancelled.json").exists())
+                            owners[task] = record
+            except (OSError, ValueError, TypeError, RecursionError):
+                category = "session_unreadable_or_invalid"
+            if category:
+                issues.append({"record": "sessions/" + path.parent.name + "/session.json", "category": category})
+        return owners, issues, duplicates
+
+    def sessions(self) -> dict:
+        """Known development owners only; unknown relationships are not grants."""
+        return self._sessions()[0]
 
     def low_disk_mode(self) -> bool:
         return free_bytes(self.controller.home) < self.low_disk
 
-    def records(self) -> dict:
-        """Task id -> (state, record mtime) for every well-formed task record."""
-        records = {}
+    def _records(self):
+        records, issues = {}, []
+        statuses = {"creating", "created", "running", "provisioning", "stopped", "failed", "deleting", "deleted", "missing"}
         for path in sorted((self.controller.home / "tasks").glob("*/state.json")):
             task = path.parent.name
-            if not TASK_ID.fullmatch(task) or path.parent.is_symlink():
+            if not TASK_ID.fullmatch(task):
                 continue
+            category = None
             try:
-                records[task] = (json.loads(path.read_bytes()), path.stat().st_mtime)
-            except (OSError, ValueError):
-                continue
-        return records
+                if path.is_symlink() or path.parent.is_symlink():
+                    category = "task_symlink"
+                else:
+                    state = json.loads(path.read_bytes())
+                    if (not isinstance(state, dict) or state.get("vm") != "mortimer-" + task
+                            or state.get("id", task) != task
+                            or not isinstance(state.get("status"), str) or state["status"] not in statuses
+                            or state.get("purpose") not in {None, "development", "verification"}
+                            or (state.get("parent_task") is not None and
+                                (not isinstance(state["parent_task"], str) or not TASK_ID.fullmatch(state["parent_task"])))):
+                        category = "task_identity_or_shape"
+                    else:
+                        records[task] = (state, path.stat().st_mtime)
+            except (OSError, ValueError, TypeError, RecursionError):
+                category = "task_unreadable_or_invalid"
+            if category:
+                issues.append({"record": "tasks/" + task + "/state.json", "category": category})
+        return records, issues
+
+    def records(self) -> dict:
+        return self._records()[0]
 
     def plan(self, now: float | None = None) -> list:
         now = time.time() if now is None else now
         low = self.low_disk_mode()
         orphan_limit = self.grace if low else self.orphan
         idle_limit = self.low_disk_idle if low else self.idle
-        owners = self.sessions()
-        records = self.records()
+        owners, session_issues, duplicates = self._sessions()
+        records, task_issues = self._records()
+        self._issues = session_issues + task_issues
+        self._retained = []
         children = {}
         for task, (state, changed) in records.items():
             parent = state.get("parent_task")
@@ -129,6 +173,14 @@ class Pruner:
             if state.get("vm") != "mortimer-" + task or state.get("status") not in DISPOSABLE:
                 continue
             if now - changed < self.grace:
+                continue
+            # Verification VMs are disposable stopped copies with host-retained
+            # evidence (rule 3). Unknown metadata elsewhere cannot own them.
+            # Development/legacy VMs may still have an unreadable owner or
+            # verification child: retain them, never infer an orphan grant.
+            if state.get("purpose") != "verification" and (self._issues or task in duplicates):
+                self._retained.append({"task": task, "vm": state["vm"],
+                                       "reason": "unknown_owner_or_child" if self._issues else "ambiguous_owner"})
                 continue
             reason = self.reason(state, changed, owners.get(task), children.get(task, []),
                                  now, grace=self.grace, orphan=orphan_limit, idle=idle_limit)
@@ -170,22 +222,15 @@ class Pruner:
         """
         with ExitStack() as leases:
             paths = [self.controller.task_dir(task) / "files.lock"]
-            for record in sorted((self.controller.home / "sessions").glob("*/session.json")):
-                if record.is_symlink() or record.parent.is_symlink():
-                    raise SandboxError("Cleanup cannot establish session ownership")
-                # A malformed ownership record must not become an orphan grant.
-                owner = json.loads(record.read_bytes())
-                if not isinstance(owner, dict) or not isinstance(owner.get("task"), str) or not TASK_ID.fullmatch(owner["task"]):
-                    raise SandboxError("Cleanup cannot establish session ownership")
-                if owner["task"] == task:
-                    if len(paths) > 1:
-                        raise SandboxError("Cleanup target has ambiguous session ownership")
-                    paths.append(record.parent / "session.lock")
-            for record in sorted((self.controller.home / "tasks").glob("*/state.json")):
-                if record.is_symlink() or record.parent.is_symlink():
-                    raise SandboxError("Cleanup cannot establish child ownership")
-                if not isinstance(json.loads(record.read_bytes()), dict):
-                    raise SandboxError("Cleanup task record is malformed")
+            state = self.controller.read(task)
+            if state.get("purpose") != "verification":
+                owners, session_issues, duplicates = self._sessions()
+                _, task_issues = self._records()
+                if session_issues or task_issues or task in duplicates:
+                    raise SandboxError("Cleanup development ownership or children are unknown; retaining VM")
+                owner = owners.get(task)
+                if owner is not None:
+                    paths.append(self.controller.home / "sessions" / owner["id"] / "session.lock")
             for path in paths:
                 if path.is_symlink():
                     raise SandboxError("Cleanup mutation lock is not a regular host path")
@@ -203,7 +248,10 @@ class Pruner:
     def run(self, *, dry_run: bool = False, now: float | None = None) -> dict:
         report = {"at": int(time.time()), "dry_run": dry_run, "free_before": free_bytes(self.controller.home),
                   "destroyed": [], "failed": [], "kept": []}
-        for item in self.plan(now):
+        planned = self.plan(now)
+        report["issues"] = list(self._issues)
+        report["kept"].extend(self._retained)
+        for item in planned:
             if dry_run:
                 report["kept"].append(item)
                 continue
@@ -213,8 +261,14 @@ class Pruner:
                 report["destroyed"].append(item)
             except Exception as exc:  # One stuck VM must not keep every other clone.
                 report["failed"].append({**item, "error": str(exc)})
+        for issue in self._issues:
+            if issue not in report["issues"]:
+                report["issues"].append(issue)
+        for item in self._retained:
+            if item not in report["kept"]:
+                report["kept"].append(item)
         report["free_after"] = free_bytes(self.controller.home)
-        if report["destroyed"] or report["failed"]:
+        if not dry_run and (report["destroyed"] or report["failed"] or report["issues"]):
             with (self.controller.home / "prune.log").open("a") as log:
                 log.write(json.dumps(report, sort_keys=True) + "\n")
         return report

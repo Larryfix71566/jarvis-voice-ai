@@ -180,6 +180,32 @@ class ImageTests(unittest.TestCase):
         self.assertEqual(self.c.read(child)["status"], "created")
         self.assertIn("mortimer-" + parent, self.vms)
 
+    def test_corrupt_foreign_metadata_does_not_wedge_verification_headroom(self):
+        image = self.images.register(self.task, self.profile)
+        parent = self.images.create(image, self.repo, "HEAD", self.profile)
+        bad = self.c.home / "sessions" / ("b" * 32)
+        bad.mkdir(parents=True)
+        (bad / "session.json").write_text("null")
+        broken = self.c.home / "tasks" / "bbbbcccc1111"
+        broken.mkdir()
+        (broken / "state.json").write_text("[]")
+        finished = "bbbbcccc2222"
+        (self.c.home / "tasks" / finished / "input").mkdir(parents=True)
+        self.c.save(finished, {"vm": "mortimer-" + finished, "status": "stopped", "purpose": "verification"})
+        record = self.c.task_dir(finished) / "state.json"
+        os.utime(record, (record.stat().st_mtime - 7200,) * 2)
+        self.vms["mortimer-" + finished] = "stopped"
+        def available(home):
+            return prune.MIN_FREE_BYTES + (1 if "mortimer-" + finished not in self.vms else -1)
+        with patch.object(prune, "free_bytes", side_effect=available):
+            child = self.images.create(image, self.repo, "HEAD", self.profile,
+                                       purpose="verification", parent_task=parent)
+        self.assertEqual(self.c.read(finished)["status"], "deleted")
+        self.assertEqual(self.c.read(child)["status"], "created")
+        self.assertIn("mortimer-" + parent, self.vms)
+        self.assertEqual((bad / "session.json").read_text(), "null")
+        self.assertEqual((broken / "state.json").read_text(), "[]")
+
     def test_verification_child_refuses_if_parent_deletion_won(self):
         image = self.images.register(self.task, self.profile)
         parent = self.images.create(image, self.repo, "HEAD", self.profile)
