@@ -2655,3 +2655,24 @@ cross-system reviewer). No workaround or repeat source transmission was tried.
 Historical 900-second timeout remains a separate incomplete attempt. Cleanup
 repair/review, exact-candidate independent verification and all live/release
 gates remain open. No installation, production write, app action or deployment.
+
+### 2026-10-18 — Completed Claude review and caller-context validation
+
+Larry explicitly approved both precise source/test packet transmissions at
+20:34:47 UTC. The tools-disabled existing Claude Code 2.1.291 subscription
+review (`claude-sonnet-5`) completed on `61f701d` at 21:00:28 UTC. The returned
+report raises a first-arrival privacy candidate because two unchanged caller/
+Swift definitions were not in its diff. Full source inspection and 65 focused
+synthetic passes establish that sensitive events lose arguments/results before
+display mapping, while absent policy preserves legacy local rendering without
+a public source grant. No policy label is invented and no review pass is
+claimed from the focused tests. Exact report and hashes are in
+`docs/acceptance/command-console/receipts/ws17-cross-review-2026-10-18.md`
+and its JSON companion. Prior rejection, timeouts and plan-only output remain
+separate historical attempts, not verdicts.
+
+Cleanup source `241a382` has five green checks and 156 controller passes, but
+its Claude review raises global reclamation blockage on unrelated corrupt
+records. Atomic-write contract checks pass; corruption/ownership disposition
+remains unresolved rather than waived. No real VM operation, independent
+release verification, runtime merge, app action or deployment ran.
