@@ -51,3 +51,15 @@ clips at 30,000 characters; simply displaying the full-file response would
 hide later roadmap sections. A dedicated bounded presentation must preserve
 all source workstreams instead. No runtime code or wire identifier is added
 in this claim; runtime implementation waits for the claim on main.
+
+
+## Roadmap filters added to the implementation plan
+
+Larry requested the previously discussed filters. The existing §7.2 roadmap
+view specification now includes blockers, Larry's acceptance/decision items,
+current ownership, topic/open status, named-workstream checklists, completion
+and dated changes. Defined source evidence, prerequisite distinctions, AND/OR
+combination, voice refinement, visible chips/counts, reset, empty states,
+refresh/transfer preservation and filtered sharing. Added fixtures/acceptance
+requirements and the matching WS-17 checklist item. Documentation only; no
+filter runtime, source status or acceptance gate was changed.

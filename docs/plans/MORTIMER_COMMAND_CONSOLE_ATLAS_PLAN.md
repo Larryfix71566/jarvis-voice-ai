@@ -1423,6 +1423,60 @@ Implementation requirements:
   Preserve source classification; roadmap access grants no new external
   sharing permission. Model summaries are not the displayed source of truth.
 
+**Roadmap filters — Larry addition, 2026-10-17:**
+
+Voice and pointer must control the same typed filter state on the existing
+roadmap result. Filter the complete parsed snapshot, not just currently loaded
+or visible cards. Support these requests and their combinations:
+
+| Request | Required behavior / source |
+|---|---|
+| "Show only blockers" | Workstreams explicitly marked blocked or carrying an explicit unresolved blocker in their current-status/next-step or unchecked acceptance requirements. Show the source excerpt supporting each match. Historical mentions of a resolved blocker do not qualify. |
+| "Show items waiting for my acceptance" | Unchecked acceptance/decision items explicitly assigned to Larry. Distinguish ready-for-Larry checks from checks still awaiting implementation, deployment, equipment or other prerequisites; unchecked alone does not mean ready. |
+| "Show Codex's work" / "Show Claude's work" | Match the current Owner field, including shared ownership. Historical Implemented by attribution is a separate explicitly labeled filter, never substituted for current ownership. |
+| "Show interface work still open" | Combine open status with case-insensitive topic search over titles and current workstream fields. Display the interpreted search terms. Do not invent topic tags or silently use a model's guessed category; offer refinement when the requested category has no explicit mapping. |
+| "Show WS-17's remaining checklist" | Focus the exact workstream and its unchecked checklist items; retain parent status, owner and prerequisite context. Completed checklist entries remain accessible by clearing the checklist filter. |
+| "Show completed work" / "Show open work" | Match explicit current completion/acceptance state, not the presence of a merged PR or the word completed in historical prose. Preserve the distinction between landed code and accepted work. Unrecognized lifecycle wording remains visible as unclassified, with the original value. |
+| "What changed this week?" | Select entries from `docs/roadmap-log/` by their front-matter date and associate them only through explicit `rows` IDs. Show linked dated entries alongside the current matching cards; log activity is not proof of code completion. Missing/malformed dates or row metadata are reported, not inferred from file modification time. |
+
+- Across different facets use AND; multiple selections within a facet use OR.
+  A new standalone request replaces the filter set. "Also", "only those" and
+  "narrow that to" refine it; an ambiguous refinement asks for clarification
+  without changing the view. "Show the full roadmap" and Clear filters reset
+  all filters. Focusing a named WS makes it visible even if previously excluded,
+  and visibly clears conflicting filters instead of showing an empty card.
+- Display removable filter chips, matching/total workstream counts and the
+  source snapshot's provenance. If checklist items are filtered, give a separate
+  item count. A zero-match state says so and offers Clear filters; never silently
+  broaden the request. Native and voice acknowledgements reflect the applied
+  filter, not a predicted outcome. Unknown owner/WS/filter values preserve state.
+- Treat free-form blocker/acceptance wording conservatively. Match explicit
+  evidence and include its source excerpt; ambiguous rows are reported as
+  unclassified rather than called blocked, ready, completed or irrelevant.
+  Pin parser/matcher rules with fixtures from the current roadmap before coding
+  the presentation. A model may translate intent to filter fields, but does not
+  classify arbitrary statuses or fabricate the result set.
+- "This week" means Monday 00:00 through now in the user's configured timezone;
+  show the resolved dates. "Last seven days" is a separate rolling interval.
+  Read dated logs through the existing repository path/privacy guards and bind
+  their hashes to the displayed snapshot. This scope adds read-only log access,
+  not another status store or implicit GitHub synchronization.
+- Refresh preserves filters and recomputes matches from the newly read snapshot;
+  failed refresh keeps the prior content visibly stale. Filtering neither creates
+  another result/window nor changes pin, source data, acceptance state or existing
+  placement. Supporting-display transfer preserves filters. Sharing preview shows
+  the active filters and the exact subset being shared, with current approval and
+  source-classification protections intact; hidden rows must not leak into it.
+
+Filter acceptance: fixtures must distinguish shared current ownership from past
+authorship, landed-but-unaccepted from completed, resolved historical failures
+from current blockers, unchecked-but-prerequisite-gated from ready acceptance,
+and unknown fields from known states. Verify combined AND/OR filters, refinements,
+clear/reset, empty matches, named-WS focus, date boundaries/timezone and missing
+log metadata; include a matching card after character 30,000. Prove identical
+voice/pointer results, accessible filter labels/counts, filter-preserving refresh
+and transfer, and a frozen sharing preview containing only its disclosed subset.
+
 Required proof: a fixture larger than 30,000 characters with its final WS and
 checklist still accessible; complete ID/count parity; malformed/missing/path
 refusal behavior; accurate revision/hash/dirty metadata; repeat refresh under
