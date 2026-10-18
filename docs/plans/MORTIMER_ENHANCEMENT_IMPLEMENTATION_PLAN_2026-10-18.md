@@ -2,7 +2,8 @@
 
 **Date:** 2026-10-18 · **Roadmap authority:** [WS-27](../../ROADMAP.md#ws-27)
 **State:** documentation only; proposed implementation and all benchmarks parked.
-**Source baseline:** main `28420af29191716945e55f6aeec1f0fd125ea931`.
+**Source baseline:** main `28420af29191716945e55f6aeec1f0fd125ea931`; refreshed
+to documentation-only main `9ea27c7` after #218/#219 merged during publication.
 **Planning preference:** GPT-6.1 Sol, high effort, as requested by Larry; this is
 not a claim about independently observed model telemetry.
 
@@ -24,17 +25,18 @@ owner/branch/scope, reserve any new identifiers, and preserve existing owners.
 
 | Evidence inspected on 2026-10-18 | Consequence for this plan |
 |---|---|
-| Main `28420af`, merged #216; draft [#218](https://github.com/Larryfix71566/jarvis-voice-ai/pull/218) head `7da4a91` | Source repair is distinct from installed build, deployment and live acceptance. #218 owns its status update; do not rewrite it here. |
-| Draft [#219](https://github.com/Larryfix71566/jarvis-voice-ai/pull/219) head `40c357d` | Its restored WS-23–26 cards are proposals, absent from this main. Reconcile after its review; do not create competing verification/task/commitment/event systems. |
+| Main `28420af`, merged #216; draft [#218](https://github.com/Larryfix71566/jarvis-voice-ai/pull/218) head `7da4a91` | Source repair is distinct from installed build, deployment and live acceptance. #218 merged as `0b49706`; its WS-17 status update is incorporated without changing release gates. |
+| Later merged [#219](https://github.com/Larryfix71566/jarvis-voice-ai/pull/219) head `40c357d` | It merged as `9ea27c7` during publication. The intake, four parked cards and WS-22 dependency note are preserved; do not create competing verification/task/commitment/event systems. |
 | [WS-22 evidence workflow](MORTIMER_EVIDENCE_WORKFLOW_IMPLEMENTATION_PLAN.md) | Reuse investigation, requirement/evidence and handoff contracts; reconcile schemas with proposed WS-24 before code. |
 | [WS-05 model access](MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md), [access config](../../config/model_access.yaml), [route clients](../../jarvis/model_routing.py) | Existing policy/execution boundaries are the integration authority. `local_runtime` is declared but both sync/async clients explicitly refuse with “local model runtime is not configured.” A localhost URL alone does not implement the private route. |
 | [Pipeline](../../jarvis/bot/pipeline.py), [observer](../../jarvis/bot/transcript_log.py), [prior voice bench](MORTIMER_VOICE_MODEL_BENCH_PLAN.md) | Current source separates Deepgram Flux `flux-general-en`, conversational LLM and ElevenLabs Flash TTS. Source supports native Google, native Anthropic (conditional on `native_enabled`) and OpenAI-compatible service paths. Effective installed model/adapter/settings must be observed later. The existing observer measures backend speaking-stop → outbound audio frame, not acoustic end → actual client playback. Preserve historical bench results and locked backend targets; do not treat them as new playback results. |
 | [WS-13 canonical revised mail plan](MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md), [architecture](../ARCHITECTURE.md) | Local bounded IMAP header reader and deterministic protected brief P1–P3 precede optional private model-written P4 and interactive P5. Larry already has mail in his daily report; the actual deployed report path remains unverified. Extend verified gaps only. |
 | [#210 findings](../roadmap-log/2026-10-17-ws-20-codex-three-pr-review.md), [later claim evidence](../roadmap-log/2026-10-17-ws-17-codex-ui2-24-25-repair-claim.md) | #210 merged as `34e5d55` despite the stale deletion-plan race and omitted cleanup runner fingerprint. Diff of its head `8842503` to inspected main for `sandbox/prune.py`/`sandbox/verify.py` is empty. No prune/reclaim or normal clone path that invokes it until independently repaired/reviewed. |
 
-Only #218 and #219 were open in the PR inventory at preparation. This is a dated
-snapshot, not a continuing reservation. This new end section avoids their edits
-to existing rows; active runtime locks remain untouched. No pending Codex
+Only #218 and #219 were open at initial preparation; both merged during
+publication. Main `9ea27c7` is incorporated with both documentation intents
+preserved; only draft #220 remained open at refresh. Active runtime locks remain
+untouched. The source inventory links retain their original commit for stability. No pending Codex
 conflict grants scope here, including WS-04 onboarding (CX-11). Resolve owning
 rows' blockers there; this documentation does not start feature work.
 
@@ -123,7 +125,7 @@ build the harness, install assets, record audio or make billable calls.
 
 | Phase | Implementation tasks after authorization | Acceptance/tests and exit gate |
 |---|---|---|
-| P0 — Reconcile and freeze | Record source, installed artifact/hash, backend PID/config and effective Haiku endpoint/adapter/settings separately; inventory deployed daily report and existing task/run/outbox stores; refresh #218/#219 and cleanup blockers | Exact-source evidence map; no false gate closures. Larry resolves existing acceptance and assigns bounded work. Missing deployed identity stays unknown. |
+| P0 — Reconcile and freeze | Record source, installed artifact/hash, backend PID/config and effective Haiku endpoint/adapter/settings separately; inventory deployed daily report and existing task/run/outbox stores; refresh current main/PRs and cleanup blockers | Exact-source evidence map; no false gate closures. Larry resolves existing acceptance and assigns bounded work. Missing deployed identity stays unknown. |
 | P1 — Sandbox voice measurement and optimization | Standalone harness, isolated test client/config/ports/storage, immutable incumbent baseline. Add acoustic/end/transcript/LLM/tool/TTS/render timing. Optimize shared turn detection, streaming and buffers by one-factor ablations; retest incumbent | Full [protocol](MORTIMER_VOICE_EVALUATION_PROTOCOL_2026-10-18.md): production untouched, attribution proven, pause/correction/barge-in/cancel/duplicate regressions pass. Freeze optimized shared cascade before comparison. |
 | P2 — Newer models and architecture decision | Track A fixed STT/TTS conversational models; bounded per-model dev tuning; held-out comparisons. Separately Track B baseline/winning cascade versus Live/Realtime frontends with same backend; optional fully local Track C | Quality/privacy hard gates, real playback p50/p95, costs and listening preference with uncertainty. Publish no-winner if inconclusive; Larry chooses direction. Jev remains ON HOLD until this resolves. No automatic production switch. |
 | P3 — Agent/workflow contract | Implement §2 in fresh scopes: target/task resolution, host inspect/propose/execute, store selection, truthful states and expected-action routing evals | Stubbed end-to-end allowed/forbidden call graphs; identical user request cannot create duplicate workflow. Unauthorized tools refuse even when directly invoked. Full artifacts survive brief speech. No timeout/concurrency increase without measured budget decision. |
@@ -321,7 +323,7 @@ must document reversible migration or compatible forward recovery before claim.
 
 | Decision still needed | Evidence required before deciding |
 |---|---|
-| Existing release/acceptance closure and #218/#219 disposition | Owning rows' exact-build outcomes; cleanup race/fingerprint repair/review; no gate waiver here |
+| Existing release/acceptance closure after #218/#219 integration | Owning rows' exact-build outcomes; cleanup race/fingerprint repair/review; no gate waiver here |
 | Harness implementer, isolated environment, setup/microphone permission and paid-run scope | Non-destructive sandbox isolation receipt, fixture-only tools, explicit provider access and total/per-session spend cap |
 | Playback/quality targets and candidate promotion rule | Calibrated unchanged baseline and instrumentation uncertainty; approve proposed thresholds before held-out runs |
 | Optimized cascade versus optional Live/Realtime architecture | Paired reliability, useful-audio p50/p95, full cost and blinded preference; retain baseline if inconclusive |

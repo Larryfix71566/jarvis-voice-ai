@@ -1,13 +1,13 @@
 # Command Console / Knowledge Atlas acceptance
 
-**Current acceptance reconciliation, 2026-10-18 (main `28420af`):**
+**Current acceptance reconciliation, 2026-10-18 (refreshed main `9ea27c7`; initial inventory `28420af`):**
 [Current cross-workstream status](../IMPLEMENTATION_STATUS.md) and
 [clearance plan](../../plans/ROADMAP_JOINT_WORKING_PLAN.md#9-acceptance-clearance--current-priority-2026-10-18)
 supersede the historical “current” build/count narratives below. 23 UI2 IDs
 remain open; no parent gate closes from this audit. #216 is merged, source
 reports 563 MortimerHost tests/five skips/zero failures, and missing exact-source
 cross-review, independent release verification, deployment and live acceptance
-remain open. #218/#219 were the only open PRs at preparation, both docs drafts. Preserve historical
+remain open. #218/#219 merged during publication and are incorporated; only draft #220 remained open at refresh. Preserve historical
 OCR failures/accepted subsets by revision; newer local suites require coverage
 review before deciding whether more OCR diagnosis is needed. No run here.
 

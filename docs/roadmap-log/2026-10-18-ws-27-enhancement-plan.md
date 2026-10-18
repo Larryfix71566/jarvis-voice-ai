@@ -69,3 +69,17 @@ was run; no acceptance results, private records or provider workloads fabricated
 Published draft [PR #220](https://github.com/Larryfix71566/jarvis-voice-ai/pull/220).
 The branch is mergeable at publication; GitHub checks were pending. No merge or
 deployment was performed. Final local documentation checks pass.
+
+## Publication-time main refresh
+
+#218/#219 merged while #220 was publishing. Fetched and merged main `9ea27c7`
+into this branch; resolved ROADMAP summary and joint-plan appended-progress
+conflicts by preserving the restored intake, all four parked cards, WS-22
+dependency note, both dated progress records and this newer acceptance audit.
+Updated current statuses: 26 existing product/coordination rows = 14 current
+open-obligation, seven closed, five parked. 112 unchecked workstream bullets
+comprise 97 current obligations plus 15 parked future criteria; eight MAR summary
+bullets remain duplicates. UI2/readiness counts and runtime source are unchanged.
+Only draft #220 remained open at this refresh. All four restored parked blocks
+are byte-identical to current main; all existing checkbox-state sequences match
+current main. No implementation ownership, receipt or acceptance is lost.

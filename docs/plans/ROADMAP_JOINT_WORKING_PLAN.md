@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** FOUNDATION LANDED; current acceptance status and fastest clearance sequence reconciled 2026-10-18 on main `28420af` in §9. #209/#210/#212/#216 are merged; #210 cleanup findings and missing #216 cross-review remain open obligations. At preparation, only #218/#219 were open, both draft documentation. Existing release/live gates and checker-enforcement decision remain open; no product acceptance is granted. Historical progress below retains its dated scope.
+**Status:** FOUNDATION LANDED; current acceptance status and fastest clearance sequence reconciled 2026-10-18, refreshed to main `9ea27c7` in §9 (initial inventory pinned to `28420af`). #209/#210/#212/#216 are merged; #210 cleanup findings and missing #216 cross-review remain open obligations. Both #218/#219 merged during publication; their restored parked cards/intake and progress are preserved. Only draft #220 remained open at refresh. Existing release/live gates and checker-enforcement decision remain open; no product acceptance is granted. Historical progress below retains its dated scope.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -244,6 +244,18 @@ receipts and every checkbox are preserved. See the
 No implementation, gate waiver, merge or deployment is included.
 
 
+### 2026-10-17 — Consolidated enhancement intake (Codex)
+
+At Larry’s request, map all eight supplied items into the shared roadmap.
+Baseline/acceptance stays with existing owners; Mail Reader stays WS-13 P5
+(separate from P4 prose); evidence/handoff stays WS-22. Add proposed, parked
+WS-23 verification within Systems, WS-24 durable tasks, WS-25 Scheduler/Librarian
+commitments and WS-26 event follow-through, with dependencies and acceptance
+checklists. Preserve daily-report behavior as a baseline inventory requirement,
+not an unsupported claim about complete deployed capability. Reconcile WS-22’s
+future lifecycle with WS-24 so it cannot become a competing task authority.
+No implementation is claimed or started; no existing acceptance box changes.
+
 ### 2026-10-17 — Three-PR review and cleanup (Codex)
 
 Larry requested review and cleanup of the three PRs. #212 had already merged
@@ -256,6 +268,11 @@ module is also absent from runner identity. Keep #210 open for scoped repairs
 and re-review. No real VM was pruned, no mailbox contacted, and no deployment
 or acceptance gate changed. Details: [review record](../roadmap-log/2026-10-17-ws-20-codex-three-pr-review.md).
 
+
+### 2026-10-18 — Restore parked enhancement intake after #211 merge (Codex)
+
+The 10-17 `fc9c958` candidate added the eight-item intake and four parked WS-23–26 cards after PR #211’s merged head `98ad864`. The merge therefore did not contain those later additions, although the old right-pane preview showed them. Rebased the exact documentation additions on current main `28420af`, preserving the separate three-PR review note and all intervening WS-17/13/20 source. The restoration creates no implementation claim, deployment or acceptance.
+
 ## 9. Acceptance clearance — current priority, 2026-10-18
 
 Larry requested this concrete clearance plan and an accurate current status
@@ -264,14 +281,16 @@ next-action/PR-status narratives in this plan; it does not change historical
 receipts or product pass criteria. [Roadmap current status](../../ROADMAP.md#acceptance-clearance--next-priority--2026-10-18),
 [current status report](../acceptance/IMPLEMENTATION_STATUS.md) and
 [release checklist](../acceptance/adaptive-interface/RELEASE_READINESS.md)
-use the same source snapshot: main `28420af`, checked 2026-10-18.
+use current main `9ea27c7`, refreshed 2026-10-18 after #218/#219 merged. The 97-obligation inventory source links stay pinned to initial `28420af`; runtime code and these active bullets are unchanged by the two documentation merges.
 
 ### Counts and what they mean
 
-- **22 existing workstreams:** 14 retain acceptance/decision obligations,
-  seven are closed, one (WS-22) is parked. WS-27 is a new documentation row,
-  excluded from this product-backlog baseline; draft #219's parked proposals
-  are absent from main and also excluded.
+- **26 existing workstreams:** 14 retain current acceptance/decision obligations,
+  seven are closed, five (WS-22–26) are parked. #219 merged during publication,
+  restoring four parked cards with 15 future unchecked criteria. There are now
+  **112 unchecked workstream bullets: 97 current obligations + 15 parked criteria**.
+  WS-27 is a new documentation row excluded from these product-backlog counts;
+  the 15 parked criteria are excluded from the runnable clearance queue.
 - **97 unchecked aggregate bullets** across the 14 blocks, not 97 distinct
   tests. Counts by workstream: WS-17 11; WS-13 5; WS-20 2; WS-21 5; WS-05 10;
   WS-01 6; WS-04 7; WS-02 6; WS-03 10; WS-06 7; WS-07 5; WS-09 11;
@@ -305,7 +324,7 @@ UI2 and feature-family maps identify the canonical requirement authorities.
 | Blocked by unimplemented or undecided prerequisite | WS-04 onboarding; WS-13 P2/P3, with P4/P5 later; Skills auth/VM/source/model/eval route; WS-02/05 runtime/source/account/confidential-route; WS-10 staged real-use decisions; WS-06 missing eleven-check map. These are not immediate Larry test chores. |
 | Hardware unavailable | External hardware was unavailable October 17. Current physical availability must be checked before booking B3. Mirrored/three-screen/portrait/non-Retina cases remain blocked unless provided; synthetic virtual displays prove only their subset. |
 | Elapsed observation pending | Five frozen-candidate daily-driver days (UI2-17), distinct earlier native-client attestation, WS-06's week without unsolicited commands, WS-10's approved staged observations. Concurrent observation is reusable only when dates/build/scenarios meet each criterion. Calendar passage alone is not evidence. |
-| Explicitly parked/deferred | WS-22, draft #219 proposals and WS-27 enhancement implementation. Optional remote activation and later private mail/model stages require decisions; deferral is neither a pass nor deletion of an obligation. |
+| Explicitly parked/deferred | WS-22–26 (including proposals restored by merged #219) and WS-27 enhancement implementation. Optional remote activation and later private mail/model stages require decisions; deferral is neither a pass nor deletion of an obligation. |
 
 **Newer evidence matters:** the October 17 campaign's two physical Vision OCR failures
 remain recorded failures at their tested revision. Later #216 source evidence

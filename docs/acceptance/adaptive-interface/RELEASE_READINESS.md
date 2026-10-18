@@ -1,6 +1,6 @@
 # Adaptive interface release readiness
 
-**Current reconciliation: 2026-10-18, inspected main `28420af`.**
+**Current reconciliation: 2026-10-18, refreshed main `9ea27c7` (initial inventory `28420af`).**
 [Roadmap current status](../../../ROADMAP.md#current-acceptance-status--reconciled-2026-10-18),
 [status report](../IMPLEMENTATION_STATUS.md) and
 [clearance plan/inventory](../../plans/ROADMAP_JOINT_WORKING_PLAN.md#9-acceptance-clearance--current-priority-2026-10-18)
