@@ -6,7 +6,7 @@
   "branch": "codex/sandbox-cleanup-repair-20261018",
   "claim_pr": 221,
   "claim_merge": "afa1dd9b45ac60bfbac0c2b6fbb3fc23c1dbd35d",
-  "runtime_test_diff_sha256": "0d6b2673336c485e6bb8968bf3afcfdb0044d67de9242c0d53dc399dde4015aa",
+  "runtime_test_diff_sha256": "a687c2aa7d85944832c06d57e0c87aba97afbd68dfdbe5ddf5eb7bd508d8fd71",
   "runtime_test_paths": [
     "sandbox/control.py",
     "sandbox/images.py",
@@ -54,7 +54,7 @@
       "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/cleanup-owner-lease-red.log"
     },
     "sandbox-repair-owner-tests.log": {
-      "sha256": "101c6d0cb4d26be3c11f27d2d941ca5896c9f842c6ee9d1f8f1a3966918eefb9",
+      "sha256": "9f47d2a8d91011abd41464c188c408d5cc08b53341adb388de120e90a18ec6ce",
       "local_path": "/Users/larryfix/Documents/Codex/2026-10-18/task-3/acceptance-evidence/sandbox-repair-owner-tests.log"
     }
   },
@@ -92,5 +92,6 @@
       "errors": 1
     },
     "fix": "Lease only the exact candidate owner; refuse ambiguous or malformed ownership. Shared lifecycle lock still serializes child registration/deletion."
-  }
+  },
+  "ownership_refusal_scope": "Invalid JSON, missing/non-string/malformed task identifiers, and duplicate sessions claiming the target. This is not an assertion of full session-record schema validation."
 }

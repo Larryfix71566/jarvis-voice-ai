@@ -244,6 +244,12 @@ class PruneTests(unittest.TestCase):
         (session / "session.json").write_text("invalid json")
         self.pruner.run(now=self.now)
         self.assertEqual(self.deleted, [])
+        for owner in [{}, {"task": None}, {"task": "not-a-task"}, {"task": 123}]:
+            with self.subTest(owner=owner):
+                (session / "session.json").write_text(json.dumps(owner))
+                report = self.pruner.run(now=self.now)
+                self.assertEqual(self.deleted, [])
+                self.assertEqual([x["task"] for x in report["failed"]], [task])
         (session / "session.json").unlink()
         child = self.root / "tasks" / "aaaabbbb0007"
         child.mkdir()

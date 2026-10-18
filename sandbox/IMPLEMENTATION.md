@@ -179,3 +179,8 @@ candidate’s owner; reject malformed/ambiguous ownership. The shared lifecycle
 lock and atomic child reservation remain. All 156 controller tests pass.
 The earlier Claude packet covers `24206281` only; final amended code requires
 its own exact-source cross-review. No real cleanup/clone/VM action occurred.
+
+Ownership refusal is explicitly covered for invalid JSON and valid JSON with
+missing, null, non-string or malformed task IDs, plus duplicate target owners.
+This is ownership validation, not a claim of full session-record schema
+validation. These subcases remain in the 156-test passing suite.
