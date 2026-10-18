@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** FOUNDATION LANDED; final acceptance-campaign evidence published via #209 (2026-10-17). The #209 conflict is reconciled with main `f3d5378`; #210 remains open with reproduced review findings, and #212 is merged with a bounded post-merge review. B1–B4, the 72-entry migration and the first ten published post-migration PR/integration merges are verified. Lifecycle-word cleanup is recorded by the bounded WS-20 documentation completion. Strict checker enforcement and the remaining Phase A/B live-evidence closure are still open; no new product acceptance is claimed. The bounded operational summary/decision queue/acceptance navigation is documented via the separate WS-20 PR after claim #192 (`e74f3af`); remaining product acceptance stays open.
+**Status:** FOUNDATION LANDED; current acceptance status and fastest clearance sequence reconciled 2026-10-18 on main `28420af` in §9. #209/#210/#212/#216 are merged; #210 cleanup findings and missing #216 cross-review remain open obligations. Only #218/#219 are open, both draft documentation. Existing release/live gates and checker-enforcement decision remain open; no product acceptance is granted. Historical progress below retains its dated scope.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -255,3 +255,283 @@ after its session began validation and a running child appeared; its cleanup
 module is also absent from runner identity. Keep #210 open for scoped repairs
 and re-review. No real VM was pruned, no mailbox contacted, and no deployment
 or acceptance gate changed. Details: [review record](../roadmap-log/2026-10-17-ws-20-codex-three-pr-review.md).
+
+## 9. Acceptance clearance — current priority, 2026-10-18
+
+Larry requested this concrete clearance plan and an accurate current status
+report before enhancement implementation. This dated addition supersedes older
+next-action/PR-status narratives in this plan; it does not change historical
+receipts or product pass criteria. [Roadmap current status](../../ROADMAP.md#acceptance-clearance--next-priority--2026-10-18),
+[current status report](../acceptance/IMPLEMENTATION_STATUS.md) and
+[release checklist](../acceptance/adaptive-interface/RELEASE_READINESS.md)
+use the same source snapshot: main `28420af`, checked 2026-10-18.
+
+### Counts and what they mean
+
+- **22 existing workstreams:** 14 retain acceptance/decision obligations,
+  seven are closed, one (WS-22) is parked. WS-27 is a new documentation row,
+  excluded from this product-backlog baseline; draft #219's parked proposals
+  are absent from main and also excluded.
+- **97 unchecked aggregate bullets** across the 14 blocks, not 97 distinct
+  tests. Counts by workstream: WS-17 11; WS-13 5; WS-20 2; WS-21 5; WS-05 10;
+  WS-01 6; WS-04 7; WS-02 6; WS-03 10; WS-06 7; WS-07 5; WS-09 11;
+  WS-10 6; WS-11 6. Eight extra MAR summary bullets repeat WS-05 obligations.
+- **34 unchecked / 19 checked** entries in release readiness (the old 30/19
+  prose was stale). The release backbone has **23 unique open UI2 IDs**:
+  02–20 and 22–25. UI2-01, UI2-04a and UI2-21 stay checked. These IDs include
+  compound requirements and cannot be equated to 23 individual executions.
+- **24 P0 compound rows** and **five C8 umbrellas** overlap UI2 coverage;
+  do not add these to the UI2 total. Skills has ten remaining SW gates
+  (A,D,E,F,G,H,I,J,K,L), with B/C accepted. Model access has eight open MAR
+  families (A,D,E,F,G,H,I,J); B/C foundations do not prove enabled workloads.
+- Mail R.12 has **28 source rows** (S1 9, S2 5, S3 14) and **11 Mac rows**
+  (M1 3, M2 2, M3 6). They are a coverage matrix, not 39 currently runnable
+  tests. M1-2/3 retain October 13 bounded passes; M1-1 needs repeat after #212
+  deployment; eight M2/M3 rows and 19 S2/S3 rows wait for P2/P3 implementation.
+
+No audit-only parent checkbox closes. Different source matrices overlap and
+have different scope; there is no defensible single “unique tests remaining”
+number without breaking compound criteria into approved cases. The complete
+97-obligation inventory below is exhaustive at the roadmap-bullet level; the
+UI2 and feature-family maps identify the canonical requirement authorities.
+
+### Current evidence dispositions
+
+| Status category | Current truth and next action |
+|---|---|
+| Accepted with receipt, bounded scope | WS-08/12/14/15/16/18 and WS-19 documentation are closed in the roadmap. Preserve WS-18 switching, Skills B/C and Versions wording, orb, named historical display and bounded conversation/card results. Match build/config/scenario before reuse; a subset never closes a parent. |
+| Runnable after candidate release prerequisites | UI2-24/25 fail-fast first; then 22/23 and dependent 04/09/13, Atlas/graph, selected sharing, enabled voice/accessibility and roadmap controls. Actual device/provider actions still need their established scope. |
+| Blocked by repair/review/deployment | #210 is merged, not open; its stale-prune-plan race and omitted runner fingerprint remain unrepaired in inspected files. #216 is merged, not a draft; its Claude review timed out without verdict. Independent exact-release verification, deployment/loaded identity and live retest remain open. No cleanup runner is safe merely because focused tests passed. |
+| Blocked by unimplemented or undecided prerequisite | WS-04 onboarding; WS-13 P2/P3, with P4/P5 later; Skills auth/VM/source/model/eval route; WS-02/05 runtime/source/account/confidential-route; WS-10 staged real-use decisions; WS-06 missing eleven-check map. These are not immediate Larry test chores. |
+| Hardware unavailable | External hardware was unavailable October 17. Current physical availability must be checked before booking B3. Mirrored/three-screen/portrait/non-Retina cases remain blocked unless provided; synthetic virtual displays prove only their subset. |
+| Elapsed observation pending | Five frozen-candidate daily-driver days (UI2-17), distinct earlier native-client attestation, WS-06's week without unsolicited commands, WS-10's approved staged observations. Concurrent observation is reusable only when dates/build/scenarios meet each criterion. Calendar passage alone is not evidence. |
+| Explicitly parked/deferred | WS-22, draft #219 proposals and WS-27 enhancement implementation. Optional remote activation and later private mail/model stages require decisions; deferral is neither a pass nor deletion of an obligation. |
+
+**Newer evidence matters:** the October 17 campaign's two physical Vision OCR failures
+remain recorded failures at their tested revision. Later #216 source evidence
+reports MortimerHost **563 tests, five skips, zero failures**; reconcile exact
+coverage/configuration before scheduling an OCR investigation. That later local
+suite does not establish independent release or live acceptance. [Latest scoped
+record](../roadmap-log/2026-10-17-ws-17-codex-roadmap-controls.md) and
+[historical campaign](../acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md)
+remain linked rather than overwritten. No runtime tests ran for this audit.
+
+### Shortest practical clearance sequence
+
+Estimates below are planning ranges, not measured promises; stop a batch at its
+first blocking failure. Prepare scripts and expected outcomes before Larry
+sits down. Reuse one manifest and one evidence packet across applicable rows.
+
+| Batch / order | Existing actor; work and dependency | Estimated operator time / elapsed | Exact exit |
+|---|---|---|---|
+| B0 — Evidence and release prerequisites | Existing Codex/Claude owners reconcile receipts, obtain missing exact-source #216 cross-review, repair/re-review both #210 findings under a fresh owning claim, and establish safe verification. Freeze one candidate; perform required independent suite/rollback preparation before separately authorized deployment. No feature/pruning work authorized by this plan. | Documentation/triage 1–2 h agent time; repair/review/VM duration unknown; Larry 10–15 min for concrete decisions once prepared | Source/build/config/hash/profile match; all required checks pass or explicit blockers. No pruning/reclaim while race unresolved. Selected deployment has its own authorization/receipt. |
+| B1 — Fail-fast Recents/reuse | Larry, supported by Codex, on identified candidate after B0. Weather→Atlanta→original; ordinal/subject/stale/ambiguous targeting, refreshed Recents, pin/close/reopen; inspect result IDs and fetch counts. | 10–15 min | UI2-24/25 remaining criteria evidenced. Failure returns to scoped repair; do not spend a longer session on dependent UI. |
+| B2 — One console/results/accessibility session | Larry + recorder, after B1. Finish22/23, dependent 04/09/13; shared actions03, Atlas05, sharing07/inbound08; roadmap completeness/provenance/filters/refresh. Cross-map applicable P0/C8, WS-01/09/11 and ready Skills A/D/I subparts. Use disposable targets and approved public/synthetic payloads. | 35–50 min, optional pause halfway | Exact scenario/expected result/trace for each covered row; ordinary speech stays in Conversation, no duplicate compact transcript; no false shared parent closure. Auth/creator-dependent Skills portions wait. |
+| B3 — One physical display session | Larry + recorder with required hardware and B1/B2 candidate. UI2-06/19/20 + WS-21 transfer/repeat/refusal/disconnect/recovery and matching WS-01/09/11. Pair real display loss with draft/result/graph preservation. | 20–30 min when hardware exists; additional topologies estimate separately | Correct content and screen, real confirmation, identity/fetch/window bounds, latest manual intent and ≤1 s reachable controls where required. Record unavailable topologies individually. |
+| B4 — Automated contracts plus short audible check | Existing implementation/evaluation owners automate03/10/11 contracts/security/menu/compatibility and synthetic failure/reconnect/load; Larry observes12 audio and outstanding physical device/echo cases. Controlled child crashes only in separately approved test scope. | Agent tests 1–3 h estimate; Larry 15–25 min; audio matrix may need more | Fixed denominators, no skip counted as pass; exact build/load/device metrics and audible result, separate WS-18 already accepted switching. |
+| B5 — One shared observation window | After verified frozen release, recorder links UI2-17 five-day sessions and compatible native/WS-06 observations; WS-06 week remains a full week. WS-10 staged use is separate and not activated here. | Five days minimum; WS-06 week where applicable; Larry 2–3 min/day check-in estimate | Daily task/build/config/outcome evidence and Larry attestation; material fixes restart affected frozen observation; no elapsed-only pass. |
+| B6 — Reconcile and close exact scope | Existing acceptance owners publish UI2-14/15/16 receipts where not already satisfied by B0; final UI2-18 and WS-20 exit; Larry signs outcomes/explicit permitted limitations. | 30–60 min agent paperwork; Larry 10–15 min | Every current-release criterion maps to positive evidence, an explicit blocker, or a governing-plan-permitted written limitation. Feature-specific future obligations remain visible. |
+
+B0 static evidence mapping, offline corpus/contract preparation and hardware
+availability planning can proceed independently in separate scopes. B4 offline
+fixtures can run while a reviewer inspects B0; do not concurrently mutate the
+candidate, run competing audio loads, access the same live test resources or
+prune VMs. Existing owners retain claims. This is safe work scheduling, not
+assignment of agents or authorization to start processes.
+
+**Expected Larry time:** roughly 1.5–2.5 hours of batched active checks plus short
+daily observations, excluding unresolved setup/repair, special hardware and
+prerequisite features. The range is an estimate derived from B1–B6, not a promise
+that all 97 aggregate obligations can close in that time.
+
+### Canonical current-release requirement map (23 open UI2 IDs)
+
+Primary categories here classify unique IDs for planning, not runnable atomic
+tests: evidence/reconciliation **2**, automated contracts **3**, release
+verification/rollback/deployment **3**, Larry UX/voice/accessibility **10**,
+physical displays **3**, combined performance/audio **1**, elapsed observation
+**1** = **23**. Per-ID dependencies and evidence:
+
+| Canonical ID | Primary category / batch | Required evidence; shared coverage |
+|---|---|---|
+| UI2-02 | Evidence / B0 | Baseline manifest and exact preservation map; extends P0/C8/T1.3, not an extra full replay. |
+| UI2-03 | Automated / B0/B2 | Owner/schema/action acknowledgments and actual shared UI action; WS-01/09/11 contracts. |
+| UI2-04 | UX / B2 | Conversation/sidecar after 22–25; P0 relevant controls. |
+| UI2-05 | UX / B2 | Atlas/graph source, selection/pins/comparison, partial data and recovery. |
+| UI2-06 | Hardware / B3 | Applicable one/two/three/mirrored topology and real recovery; historical receipt subset only. |
+| UI2-07 | UX / B2 | Selected text/image preview/copy/save/share/cancel, no adjacent private content. |
+| UI2-08 | UX / B2 | Approved inbound preview/provider/bounds/cancel/cleanup; malformed/injection cases automated first. |
+| UI2-09 | Voice / B2 | Every enabled shared action via voice; after 22–25, ambiguity/stale/OS boundary. |
+| UI2-10 | Automated / B4 | Security V2–V6 extension and memory/sink canaries; feature-specific prerequisite isolation. |
+| UI2-11 | Automated / B4 | Routing/menu/schema/capability/old-client parity, current fixed denominator/floor. |
+| UI2-12 | Combined / B4 | Target-Mac load/performance and real audible behavior; no virtual audio proxy. |
+| UI2-13 | UX / B2/B3 | C8/P0/T1.3 visual/accessibility sizes; unavailable physical variants explicitly blocked. |
+| UI2-14 | Release / B0 | Independent full-profile receipt for exact candidate/runner, no mock or historical replacement. |
+| UI2-15 | Release / B0/B6 | Actual authorized rollback preserving drafts/preferences/files and pending-transfer policy. |
+| UI2-16 | Release / B0 | Separately authorized deployment plus loaded app/backend/hash/config/health identity. |
+| UI2-17 | Observation / B5 | Five stable frozen-candidate days with outcomes; not old layout-1 attestation. |
+| UI2-18 | Evidence / B6 | Final coverage and explicit remaining gaps/Larry decisions. |
+| UI2-19 | Hardware / B3 | One renderer per result, repeat reuse, locator/pin and no duplicate fetch/subscription. Current CC7a ordinary speech stays in Conversation. |
+| UI2-20 | Hardware / B3 | Bounded external stage, content roles/pins/topology/recovery; no extra windows. |
+| UI2-22 | UX / B2 | Five full ordered spoken turns/protected turns/read focus; preserve October 17 bounded subset. |
+| UI2-23 | UX / B2 | Requested result arrival versus late/background; preserved reading/selection/display identity. |
+| UI2-24 | UX / B1 | Recents refreshed/ordinal/subject/stale/ambiguous/pin/close/reopen, accepted one-row subpart retained. |
+| UI2-25 | UX / B1 | Two-card weather sequence, ≤15 min reuse no fetch, stale refresh same identity/reference. |
+
+[Canonical full criteria](../acceptance/adaptive-interface/RELEASE_READINESS.md#todo--command-console--knowledge-atlas-implementation-closure)
+remain unchanged except reconciliation of obsolete pre-CC7a answer-routing
+wording. [P0](../acceptance/adaptive-interface/P0-preservation-checklist.md),
+[C8](../acceptance/adaptive-interface/C8-open-items.md),
+[display scope](../acceptance/command-console/DISPLAYS.md) and
+[procedures](../acceptance/ACCEPTANCE_RUNBOOK.md) supply detailed steps. For each
+covered P0 row record exact mode/action and receipt; C8's five umbrellas close
+only from their complete scoped coverage. No summing overlapping test lists.
+
+### Prerequisite and decision queue outside the immediate sessions
+
+| Existing owner/source | Needed decision/work | Disposition and exit |
+|---|---|---|
+| WS-04 Codex/Larry | Select onboarding method, then fresh implementation/disposable proof, then separately authorized live preparation/activation | Unbuilt/undecided, not a ready test; remote mode separately optional. No token/security change here. |
+| WS-02/05 Codex/Larry + cross-reviewer | Exact runtime/source/operator identity, missing reviews, account/overage/budget, eligible confidential route, safe nonempty developer sandbox proof | Blocked until those receipts/decisions; use shared WS-02/05 evidence once. Do not silently substitute paid API or an ineligible catalog model. |
+| WS-03 Codex/Larry | Auth, creator real VM, source/model/eval route, SW-F/G/H | B/C accepted; ten remaining gates retain their own scope. Ready UI subparts can share B2, provider/creator work waits. |
+| WS-10 existing owners/Larry | Eligible memory route, staged approvals, real shadow/admission/benefit evidence | Six aggregate obligations remain; synthetic tests cannot replace first 20 decisions or observation. No enablement here. |
+| WS-13 existing Claude owner/Larry | Preserve D1–D9 already recorded October 10; verify deployed daily-report path without duplicating it. P1 M1-1 after #212 deploy; P2/P3 require fresh implementation scope | Revised R.12 replaces August V1–V10. Do not ask already answered plan questions or schedule eight unbuilt Mac rows. P4/P5 remain later/private-gated. |
+| WS-06 Claude/Larry | Bring missing eleven-check mapping into existing repo plan; tier decision; actual spoken/recovery/probe evidence and one-week behavior | Do not inspect private Claude working folders or guess numbers. Known repo-backed scenarios may share B2/B4; external/runtime scope remains gated. |
+| WS-07 Claude/Larry | Genuine reply-guard precision/false-refusal evidence then log/correct decision | Four historical events insufficient; keep current mode until explicit decision, no automatic activation. |
+| WS-20 Larry | Warn-only checker → blocking decision | Documentation checker passing does not decide enforcement. |
+| WS-01/09/11 and Larry | Missing topology/hardware, old V9 attestation, applicable known-limitations decision | Record not-applicable only with requirement-specific rationale/authority; defer if governing plan permits, otherwise blocked. Neither is a pass. |
+
+Acceptance-first prioritizes current release gates and **scoped prerequisite
+repairs needed for acceptance**. It does not create a circular ban on building
+an unbuilt prerequisite while pretending its acceptance test is runnable. Nor
+does it make every optional/unimplemented feature a new global release gate.
+Keep obligations in their owning rows; Larry decides staged scope/disposition
+under each governing plan. New enhancement implementation remains subsequent
+and requires a fresh dispatch. Sandbox design/document review can proceed.
+
+### Evidence reuse and exit rules
+
+Use one receipt per session containing source/build/config/device identity,
+case IDs, exact steps/expected/observed outcome, timestamp and raw evidence
+references; cross-link it into every genuinely covered row. Reuse accepted
+unchanged subparts after an applicability review. A source/material-config
+change invalidates affected evidence only, with the reason recorded; frozen
+release observation follows its stricter restart rule. Do not repeat a passing
+AirPods switch just to fill a second list, reopen orb/SW-B/C, or replace a
+historical failure with a newer unrelated suite count.
+
+No test count is reduced by deleting rows, changing a denominator, weakening a
+threshold or converting blocked/skipped/unknown into pass. Consolidation changes
+execution scheduling and evidence links, not required behavior. Larry's written
+accepted limitation applies only where the governing plan permits it and to
+its named build/scope; it remains a recorded gap. No parent UI2 gate is closed
+from this read-only audit. At B6 publish true remaining categories and explicit
+feature-specific decisions, rather than an unsupported overall percent complete.
+
+### Complete roadmap obligation inventory (97 aggregate bullets)
+
+Ordinals below identify unchecked bullets in the inspected main block; they are **not new test IDs**. Links pin the inspected revision, so moving rows cannot silently change a reference. Actor names are copied from source, not assigned here. Each row preserves the full linked pass condition; the last columns identify primary disposition, dependencies/batch and required evidence. Categories are exclusive for counting only; an obligation may need several kinds of work. All remain open or prerequisite-blocked unless an explicitly named subpart has bounded prior evidence.
+
+Category key: **A** automated regression; **B** decision/access or unimplemented dependency; **C** explicit code prerequisite; **D** review/release/deployment/evidence; **H** physical hardware; **O** elapsed observation; **S** reproducible system/sandbox test; **U** Larry UX/voice/accessibility.
+
+Primary-category counts: **A 4**, **B 22**, **C 1**, **D 12**, **H 11**, **O 4**, **S 16**, **U 27** = **97**. These are obligation counts, not estimated test counts or unique executions.
+
+| Source / ordinal | Existing actor and requirement | Primary category | Batch / dependency | Current disposition and evidence needed |
+|---|---|---|---|---|
+| [WS-17/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L247) | Larry · current five-turn conversation | U | B2 | Bounded old conversation evidence; finish exact-candidate UI2-22. |
+| [WS-17/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L248) | Larry · current arrival-routing recheck | U | B2 | Partial card evidence; finish UI2-23 including late/background results. |
+| [WS-17/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L249) | Codex / cross-reviewer / Larry · CC7a.3 implementation prerequisite | D | B0/B1 | Implementation merged, including #216; missing exact-source review/independent release proof, not a new CC7a build request. |
+| [WS-17/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L250) | Larry · Recents live tail after CC7a.3 | U | B1 | UI2-24 fail-fast: refreshed inventory, ordinal/subject, ambiguity, pin/close/reopen. |
+| [WS-17/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L251) | Codex / cross-reviewer, then Larry · CC7a.4 implementation and reuse | U | B1 | UI2-25 fail-fast: two cards, same identity on reuse, fetch counts and stale refresh. |
+| [WS-17/06](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L252) | Larry / evidence recorder · dependent closure | U | B2 | Reuse B1/B2 receipts for dependent UI2-04/09/13 only where exact scenarios match. |
+| [WS-17/07](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L256) | Codex · read-only roadmap result | U | B2 | Roadmap complete workstream representation on tested source. |
+| [WS-17/08](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L260) | Codex · provenance and refresh | U | B2 | Checkout/main/deployed distinction; hash/read time/refresh and dirty marker. |
+| [WS-17/09](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L264) | Codex · voice and existing controls | U | B2 | Voice roadmap + existing controls; one shared action/identity. |
+| [WS-17/10](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L268) | Codex / Larry · roadmap filters | U | B2 | All named filters and clear/focus via pointer and voice. |
+| [WS-17/11](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L274) | Cross-reviewer / Larry · acceptance | D | B0/B2 | Exact-source review then actual Mac outcomes; #216 timeout supplies no review verdict. |
+| [WS-13/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L307) | Claude / Codex · prerequisite review | B | P-mail | Reconcile latest revised R scope; use #204/#205/#212 review, no superseded August criteria. |
+| [WS-13/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L308) | Larry · plan decisions | B | P-mail | D1–D9 already answered October 10 (R.0d/R.5); retain choices, only actual outstanding account/setup scope stays pending. |
+| [WS-13/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L309) | Claude / Codex · implementation and security evidence | A | P-mail | P1 synthetic evidence exists; reuse applicable R.12 S1 receipts. P2/P3 S2/S3 wait implementation. |
+| [WS-13/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L310) | Larry · future Mac checks | B | P-mail | M1-2/3 October 13 preserved; repeat M1-1 after fixed #212 deployment. Eight P2/P3 Mac rows unbuilt. |
+| [WS-13/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L311) | Larry / Claude · release | D | P-mail | P1 preflight release proof separate; later P2/P3/P4/P5 require own claim and applicable Mac proof. |
+| [WS-20/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L384) | Larry · decision | B | Decision | Larry decides checker enforcement after warning-period evidence; no test rerun substitutes. |
+| [WS-20/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L385) | Each acceptance owner · evidence | D | B6 | Publish linked exact evidence/limitations and owning decisions; no new product gate. |
+| [WS-21/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L411) | Larry / Codex · real transfer | H | B3 | Physical external display: correct content/screen; confirmation before success. |
+| [WS-21/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L412) | Larry · repeated request | H | B3 | Repeat transfer: already-showing, no duplicate fetch/window. |
+| [WS-21/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L413) | Larry / Codex · rejected destinations/content | H | B3 | Disconnected/stale/protected/unknown targets refuse without side effects. |
+| [WS-21/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L414) | Larry / Codex · disconnect during confirmation | H | B3 | Disconnect/race rollback preserves newer placement and no orphan window. |
+| [WS-21/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L415) | Larry / Codex · placement and inventory | H | B3 | Inventory/content/placement agreement; virtual evidence is subset only. |
+| [WS-05/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L441) | Larry · prerequisites | B | P-model | Source authority/operator identity/test-repair assignments remain decisions, not immediate live tests. |
+| [WS-05/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L442) | Claude · review | B | P-model | Obtain missing cross-system review of exact #177 source; do not infer from merge. |
+| [WS-05/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L443) | Codex / Larry · baseline and release identity (MAR-A) | D | B0/P-model | Freeze actual artifact/configuration and representative baseline, historical unknowns stay unknown. |
+| [WS-05/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L444) | Codex · effective routing and privacy (MAR-B/C/D/G) | S | P-model | Approved enabled-mode source/sink/cancel/budget proof per workload; no route activation here. |
+| [WS-05/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L445) | Codex / Larry · subscriptions (MAR-F; shares WS-02 evidence) | S | P-model | Share accepted exact-runtime subscription/isolation evidence with WS-02. |
+| [WS-05/06](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L446) | Codex / Larry · SAYGM (MAR-E) | B | P-model | Catalog advertises zero confidential models; eligible route/attestation needed before pilot. |
+| [WS-05/07](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L447) | Codex / Larry · representative pilots (MAR-I) | S | P-model | Equivalent research, nonempty developer all-12-check pilot and confidential synthetic workload; no mock substitution. |
+| [WS-05/08](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L448) | Larry, supported by Codex · controls (MAR-H) | U | P-model | Approved native/spoken route controls agree with actual route; stale/refused/cancel. |
+| [WS-05/09](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L449) | Codex / Larry · quality and latency | S | P-model | Cold/warm quality/latency under existing MAR targets; scope/budget prerequisites first. |
+| [WS-05/10](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L450) | Larry / Codex · account and rollout (MAR-J) | B | P-model | Account/allowance/overage decision and staged rollout authorization, then exact release/rollback evidence. |
+| [WS-01/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L479) | Codex / Larry · preparation | D | B0 | One shared candidate manifest, source/app/backend/config/hash/date. |
+| [WS-01/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L480) | Larry, supported by Codex · display recovery | H | B3 | Reuse matching transfer/display recovery receipts; unavailable topology stays blocked. |
+| [WS-01/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L481) | Larry / Codex · Atlas freshness | U | B2 | Atlas auth/freshness/late response/partial failure; no duplicate fetch. |
+| [WS-01/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L482) | Larry / Codex · spoken, sharing and accessibility journeys | U | B2 | Selected sharing/inbound, actual voice and accessibility; reuse matching P0/UI2 cases. |
+| [WS-01/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L483) | Owning systems / Larry · dependencies | B | Owning gates | Feature-specific model/memory/speaker/security dependencies remain under their plans; no blanket new release gate. |
+| [WS-01/06](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L484) | Codex / Larry · release closure | O | B5 | Independent release + rollback first; five stable frozen-candidate daily-driver days. |
+| [WS-04/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L510) | Larry · prerequisite decision | B | P-auth | Larry selects onboarding method; recommendation is not decision. |
+| [WS-04/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L511) | Codex · implementation prerequisite | C | P-auth | Onboarding not built: fresh implementation claim for selected method before acceptance. |
+| [WS-04/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L512) | Codex · disposable acceptance | S | P-auth | Disposable first/repeat/interrupted/failure, flag/socket/auth proof after implementation. |
+| [WS-04/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L513) | Larry / Codex · live preparation | B | P-auth | Separate approved live preparation; no credential work in docs task. |
+| [WS-04/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L514) | Larry / Codex · local activation, if approved | B | P-auth | Local activation only if explicitly chosen, with 401/auth/sockets/revoke/rollback proof. |
+| [WS-04/06](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L515) | Larry · spoken check | U | P-auth/B2 | Actual spoken system_status on frozen authorized setup, share WS-06 exact scenario. |
+| [WS-04/07](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L516) | Larry / Codex · remote mode only if separately chosen | B | P-auth | Remote activation separate optional decision; defer as limitation if chosen, never pass. |
+| [WS-02/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L542) | Codex · runtime identity | S | P-model | Service-resolved runtime/hash/version/model/capability; unverified remains unavailable. |
+| [WS-02/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L543) | Codex · installed-runtime isolation | S | P-model | Actual runtime stdin/env/temp/hooks/plugin/MCP isolation, no credential bleed. |
+| [WS-02/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L544) | Codex · lifecycle | S | P-model | Actual-runtime success/failure/timeout/cancel cleanup and child reaping, no late result. |
+| [WS-02/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L545) | Codex / Larry · authenticated workload | B | P-model | Authenticated supported workload needs provider/source/budget scope; share WS-05. |
+| [WS-02/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L546) | Larry · account evidence | B | P-model | Supported account surfaces for allowance/billing/overage; list prices do not prove zero cost. |
+| [WS-02/06](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L547) | Codex / Larry · release | D | P-model | Exact source/runtime/config and release/activation evidence after prerequisite proof. |
+| [WS-03/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L573) | Codex / Larry · remaining deployed baseline (SW-A) | U | B2 | SW-A remaining baseline on exact release; B/C and Versions wording remain accepted. |
+| [WS-03/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L574) | Codex / Larry · recorded runs (SW-D) | B | P-auth | SW-D recorded-run cases need owner-authenticated inventory, then event/reconnect proof. |
+| [WS-03/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L575) | Codex · privacy and owner boundaries (SW-E) | A | P-auth | SW-E owner/privacy synthetic canaries, SQL/JSONL/log/diagnostic/screenshot/export sinks. |
+| [WS-03/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L576) | Codex / Larry · real sandbox (SW-F) | S | P-auth/P-model | SW-F real offline VM and admitted creator; cleanup blocker first, no host fallback. |
+| [WS-03/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L577) | Codex / Larry · paired quality evaluation (SW-G) | B | P-auth/P-model | SW-G six cases × two repeats × conditions =24 trials; approved route/budget then blinded >=10/12. |
+| [WS-03/06](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L578) | Codex / Larry · lifecycle and activation (SW-H) | S | P-auth/P-model | SW-H idempotency/cancel/restart/exact-diff activation/rollback after F/G. |
+| [WS-03/07](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L579) | Larry / Codex · voice/accessibility (SW-I) | U | B2 | SW-I shared voice actions + real VoiceOver/keyboard/type/contrast; stale target. |
+| [WS-03/08](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L580) | Larry / Codex · physical displays (SW-J) | H | B3 | SW-J physical two-screen creator/research recovery after creator prerequisites. |
+| [WS-03/09](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L581) | Codex / Larry · remaining performance (SW-K) | S | B4 | SW-K exact Mac performance: remaining voice p95 and 10-minute growth; preserve accepted navigation. |
+| [WS-03/10](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L582) | Codex / Larry · release and handoff (SW-L) | D | B0/B6 | SW-L exact source/config/package/readiness and rollback; prerequisites remain feature-specific. |
+| [WS-06/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L610) | Larry / Claude · spoken status | U | B2 | Known spoken #1/#2/#4/#8 counterparts; do not invent missing numbered checklist. |
+| [WS-06/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L611) | Larry / Claude · external status | B | P-model | Exact probe/catalog source/date and changed-only daily notices; provider access required. |
+| [WS-06/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L612) | Larry / Claude · corrected retry | U | B2 | Alfreda→Alpharetta corrected retry, no lockout. |
+| [WS-06/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L613) | Larry / Claude · process recovery | S | B4 | Three-minute disconnect/late result and controlled child recovery in safe test scope. |
+| [WS-06/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L614) | Larry / Claude · graph and remaining source checks | U | B2/B5 | Unknown graph truthful fallback; sports provenance and one-day transport log. |
+| [WS-06/06](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L615) | Larry / Claude · registry split | S | P-model | Registry/env/route parity plus admitted sandbox profile PR proof; no endpoint authority change. |
+| [WS-06/07](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L616) | Claude / Larry · completeness | O | P-map/B5 | Owner supplies eleven-check repository map; separate week without unsolicited commands and tier decision. |
+| [WS-07/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L642) | Claude / Larry · reply-guard evidence | B | Decision | Genuine reply-guard events/precision/false refusals; four events insufficient, startup lines excluded. |
+| [WS-07/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L643) | Larry · guard-mode decision | B | Decision | Larry keeps log or approves correct after evidence; verify no fabricated actions or confirmation bypass. |
+| [WS-07/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L644) | Larry / Claude · remaining workflow live/evaluation record | S | B4 | Remaining workflow enabled/disabled routing/voice and end-run outcomes; source evidence is not live acceptance. |
+| [WS-07/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L645) | Larry · viewer journey | U | B2 | Viewer gallery/buttons/supporting-display, wrapped steps and dashed draft cards. |
+| [WS-07/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L646) | Claude / Larry · closure | D | B6 | Link guard/viewer/live receipts to exact build; full UI2-22 and retry-location retain own authority. |
+| [WS-09/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L675) | Larry / evidence recorder · preparation | D | B0 | One manifest/coverage map; no redundant freeze per row. |
+| [WS-09/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L676) | Larry · console, accessibility and transcript cleanup | U | B2 | Console/accessible transcript-only surface, dependent 04/13 after 24/25. |
+| [WS-09/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L677) | Larry / Codex · Atlas and graph | U | B2 | Atlas/graph provenance/search/partial/stale/auth/reconnect and exact UI2-05. |
+| [WS-09/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L678) | Larry / Codex · display governance | H | B3 | Topology and stage budgets UI2-06/19/20; explicit unavailable hardware. |
+| [WS-09/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L679) | Larry · outward sharing | U | B2 | Outward selected text/image copy/save/share/cancel; picker is not delivery. |
+| [WS-09/06](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L680) | Larry / implementation owner · inbound analysis | U | B2 | Inbound preview/provider/bounds/cancel/cleanup; synthetic refusal cases offline first. |
+| [WS-09/07](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L681) | Larry · complete voice parity | U | B2 | Complete enabled voice/pointer parity UI2-09 after 22–25. |
+| [WS-09/08](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L682) | Implementation/evaluation owner · contracts and compatibility | A | B0/B4 | UI2-03/10/11 schema/owner/menu/compat/security/duplicate contracts and current eval denominator. |
+| [WS-09/09](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L683) | Codex / Larry · combined load and glass | S | B4 | UI2-12 measured graph/panels/attachments during voice + audible observation. |
+| [WS-09/10](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L684) | Verifier / Larry · release closure | D | B0/B5/B6 | UI2-14/15/16/17/18: exact verification, rollback/deploy, observation and closure distinct. |
+| [WS-09/11](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L701) | Single transcript surface (Larry, 2026-09-28) | U | B2 | Single main transcript; supersedes duplicate compact captions, no new parallel test. |
+| [WS-10/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L719) | Codex / Claude / Larry · preparation | B | P-model/P-memory | Eligible dedicated memory route/source/stage baseline before shadow; no live mutation. |
+| [WS-10/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L720) | Larry, supported by the implementation owners · staged use | O | P-memory | Explicit approved shadow day then staged preferences/inferences; not elapsed-only automatic promotion. |
+| [WS-10/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L721) | Larry · first 20 real decisions | U | P-memory | Larry reviews first 20 actual admissions/corrections under approved scope. |
+| [WS-10/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L722) | Codex / Claude · benefit and budgets | S | P-memory | Measured benefit/denominators/latency/daily caps, not synthetic replacement for real use. |
+| [WS-10/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L723) | Codex / Claude / Larry · privacy and voice | A | P-memory | Forget/delete/redaction/canaries, restart/duplicate/privacy/voice boundaries. |
+| [WS-10/06](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L724) | Larry / implementation owners · rollback and receipt | B | P-memory | Rollback/settings/stage receipt and Larry acceptance after benefit/privacy proof. |
+| [WS-11/01](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L753) | Larry / Codex · candidate and coverage | D | B0 | Same exact candidate/fingerprint/coverage map; reconcile old C8 routing header. |
+| [WS-11/02](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L754) | Larry · remaining preservation workflows | U | B2 | Remaining P0 journeys and real task/result lineage; preserve accepted subparts. |
+| [WS-11/03](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L755) | Larry / Codex · visual/accessibility matrix | H | B2/B3 | Viewport/accessibility and physical Retina/portrait/ultrawide conditions; known orb sign-off stays closed. |
+| [WS-11/04](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L756) | Larry / Codex · remaining physical audio | H | B4 | Physical audio/echo/earbud/wake/sleep/mic matrix; reuse WS-18 switch only for matching case. |
+| [WS-11/05](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L757) | Larry / Codex · monitor and rollback tails | H | B3 | Applicable monitor/layout/rollback tails; unsupported topology explicit. |
+| [WS-11/06](https://github.com/Larryfix71566/jarvis-voice-ai/blob/28420af29191716945e55f6aeec1f0fd125ea931/ROADMAP.md#L758) | Verifier / Larry · closure | O | B5/B6 | Exact C5/C8 proof + separate native/redesign daily-driver attestations, shared observations only if criteria match. |

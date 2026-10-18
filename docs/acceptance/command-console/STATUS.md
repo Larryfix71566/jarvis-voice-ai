@@ -1,5 +1,24 @@
 # Command Console / Knowledge Atlas acceptance
 
+**Current acceptance reconciliation, 2026-10-18 (main `28420af`):**
+[Current cross-workstream status](../IMPLEMENTATION_STATUS.md) and
+[clearance plan](../../plans/ROADMAP_JOINT_WORKING_PLAN.md#9-acceptance-clearance--current-priority-2026-10-18)
+supersede the historical “current” build/count narratives below. 23 UI2 IDs
+remain open; no parent gate closes from this audit. #216 is merged, source
+reports 563 MortimerHost tests/five skips/zero failures, and missing exact-source
+cross-review, independent release verification, deployment and live acceptance
+remain open. #218/#219 are the only open PRs, both docs drafts. Preserve historical
+OCR failures/accepted subsets by revision; newer local suites require coverage
+review before deciding whether more OCR diagnosis is needed. No run here.
+
+Ordinary speech stays in **Conversation** with full words from both speakers;
+only requested artifacts create results, and late/background arrival preserves
+reading focus. The older every-answer-card/brief-caption rule is superseded by
+CC7a. Test UI2-24/25 first, then 22/23 and dependent 04/09/13; use one evidence
+packet for matching P0/C8/Atlas/Skills cases. Actual external hardware remains
+unverified here and unavailable in October 17 campaign. Read all dates below as
+historical scope, not a claim of current installed identity or acceptance.
+
 Consolidated requirement matrix: [`../IMPLEMENTATION_STATUS.md`](../IMPLEMENTATION_STATUS.md).
 Remaining Mac procedures: [`../ACCEPTANCE_RUNBOOK.md`](../ACCEPTANCE_RUNBOOK.md).
 
@@ -34,10 +53,7 @@ still open.
 
 ## Automated evidence
 
-- Full Mortimer answers now use one streaming result per user request in layout 2,
-  with brief live captions and supporting-display ownership. Two-screen synthetic
-rendering and return-to-main tests pass. Live voice and reconnect acceptance
-remain open; see [response-routing receipt](receipts/response-routing-2026-09-18/README.md).
+- Historical September 18 response routing used answer cards/captions; CC7a supersedes that rule with the Conversation/result distinction above. Preserve its two-screen synthetic rendering/return evidence only for unchanged scenarios. Live voice/reconnect acceptance remains open; [historical response-routing receipt](receipts/response-routing-2026-09-18/README.md).
 
 - Python console, session, shared-content, vision, memory and plan-manifest
   acceptance tests run with the project virtualenv; the latest full suite is

@@ -254,19 +254,20 @@ private_canary: SYNTHETIC_ONLY_CANARY_01
 ## 6. Staged run counts and analysis
 
 Counts are proposals subject to the approved cap; **no runs are authorized here**.
-Never tune on a held-out screening case. Use a separately sealed 60-case
-screening partition drawn from the 100-case held-out corpus; finalists run the
-full 100 without configuration changes. Screening is selection, so disclose that
-60 were previously evaluated and report the 40 untouched cases separately.
-For strongest final confirmation, prepare a fresh 100-case sealed set after
-selection if the approved budget permits; record this decision before screening.
+Never tune on screening or held-out cases. Prepare a separate 60-case sealed
+screening set in addition to the 20 development and 100 held-out final cases.
+Screening chooses finalists without consuming the final 100; freeze all
+configurations before final evaluation. Record corpus expansion and the resulting
+call estimate in the approved budget before acquisition/runs. If the cap cannot
+cover it, reduce candidate count or report an incomplete comparison; do not
+quietly reuse screening cases as independent final evidence.
 
 | Stage | Proposed count per configuration | Purpose |
 |---|---|---|
 | Offline harness | All deterministic fixture/oracle/isolation tests; no providers | Prove test apparatus before paid calls. |
 | Smoke | 12 dev cases × 1 | API/settings/schema/stream/playback viability; stop incompatible candidates. |
 | Shared ablations | 20 dev cases × 3 paired repetitions per declared ablation | Attribute incumbent improvements; do not search held-out data. |
-| Screening | 60 held-out cases × 3 repetitions | Eliminate unsafe/clearly inferior candidates; freeze settings beforehand. |
+| Screening | 60 separate screening cases × 3 repetitions | Eliminate unsafe/clearly inferior candidates; freeze settings beforehand. |
 | Finalists | 100 held-out cases × 5 repetitions across ≥3 time windows | Reliability/latency distributions and matched comparison; baseline and optimized incumbent paired in each window. |
 | Safety/load stress | Predeclared boundary/race cases, ≥20 repetitions each as budgeted | Rare effects, cancellation/duplicates/retention/coexistence; absence is limited evidence. |
 | Listening | ≥30 blinded paired examples for Larry | Randomized A/B order; candidate identity hidden, record tie/preference and reason. |

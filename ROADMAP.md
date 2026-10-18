@@ -8,73 +8,95 @@ This file is the single record of **who is doing what** in this repository, for 
 
 ---
 
-## Acceptance-first priority — Larry, 2026-10-17
+## Acceptance clearance — next priority · 2026-10-18
 
-Close the existing roadmap acceptance gates before starting any new development.
-The evidence-based investigation/development workflow is documented as
-[WS-22](#ws-22) at the end of this roadmap and remains **parked**. Its former
-parallel-start recommendation is superseded; even isolated core development
-waits for acceptance closure and a fresh implementation dispatch.
+Larry requested clearing the accumulated acceptance backlog first, with an
+accurate status report and the shortest practical Mac sessions. The
+[clearance plan and complete obligation inventory](docs/plans/ROADMAP_JOINT_WORKING_PLAN.md#9-acceptance-clearance--current-priority-2026-10-18)
+are in the existing WS-20 plan; the [current status report](docs/acceptance/IMPLEMENTATION_STATUS.md)
+and [release checklist](docs/acceptance/adaptive-interface/RELEASE_READINESS.md)
+use the same inspected main `28420af`. Existing ownership and acceptance
+criteria remain binding. No checkbox is closed by this audit.
 
-Begin with the [dated acceptance triage](docs/roadmap-log/2026-10-17-ws-20-codex-acceptance-first.md):
-confirm the installed/running candidate, map valid existing receipts, then run
-non-conflicting console/display/audio checks with the required operator.
-A blocked, skipped, untested, or deferred gate is not a pass. Where an existing
-plan permits written known-limitation acceptance, Larry must explicitly record
-it. Missing prerequisite code or activation decisions stay with their existing
-owners and require an explicit decision; this priority grants no new build,
-provider, credential, activation, merge, or deployment authority.
+**Backlog counts:** 22 existing workstreams: 14 with open acceptance/decision
+obligations, seven closed, one parked (WS-22). Their **97 unchecked aggregate
+bullets are not 97 individual tests**; eight extra MAR summary bullets duplicate
+WS-05. The canonical release list has **23 open UI2 IDs** (02–20,22–25), with
+24 compound P0 rows and five C8 umbrellas overlapping that coverage. Release
+readiness is **34 unchecked / 19 checked** entries, correcting stale 30/19 prose.
+New WS-27 documentation and draft #219's unlanded proposals are excluded.
 
-## Current progress — verified 2026-10-17
+The 97 obligations classify by primary next need as **27 Larry UX/voice,
+11 hardware, 16 system/sandbox, four automated regressions, one explicit code
+prerequisite, 22 decisions/access/dependencies, 12 review/release/evidence and
+four observation**. These categories are exclusive for counting only; many
+obligations need several stages. The linked inventory lists every source bullet,
+existing actor, dependency and required evidence. Do not sum overlapping matrices.
 
-Reconciled against main `f3d5378`, the deployment receipts and merged
-#204/#205/#207/#208/#211/#212; final campaign evidence is published via #209,
-and #210 remains open with review findings. This is a status refresh; existing owners and acceptance
-requirements remain in force. The October 7 navigation below is historical.
+| Order | Next action and existing actor | Exit / estimated Larry time |
+|---|---|---|
+| 0 | Existing owners reconcile reusable receipts, repair/re-review #210 cleanup race/fingerprint under its own scope, obtain missing #216 exact-source review, freeze one candidate and complete required independent verification before a separately authorized deployment | One source/app/backend/config/hash manifest; safe verifier and deployment receipt. Setup/repair duration unknown; decisions 10–15 min estimate |
+| 1 | Larry + Codex: fail-fast UI2-24/25 Recents/reuse | Correct two-result identity/fetchcounts, targeting/ambiguity/pin/close/reopen; 10–15 min estimate. Stop on failure |
+| 2 | Larry + recorder:22/23, dependent 04/09/13, Atlas/graph/sharing/inbound/roadmap controls and matching P0/C8/ready Skills subparts | One evidence packet, no redundant parent replay; 35–50 min estimate |
+| 3 | Larry + recorder: physical display transfer/recovery batch; owners automate contracts/security/compatibility and prepare audio/load checks | Display 20–30 min when hardware exists; audible checks 15–25 min estimate. Missing topologies stay blocked |
+| 4 | Existing verifier/owners + Larry: rollback/loaded release proof, frozen daily-driver observations, final evidence reconciliation | Five-day release observation and separate WS-06 week retain their criteria; brief daily notes plus final decisions, no elapsed-only pass |
 
-- **Released baseline:** the last successful deployment receipt is `575cc7b`,
-  October 13 at 20:02 EDT. The October 17 campaign records an unchanged installed
-  artifact with a dirty-source marker: this is a provenance limitation, not a
-  clean new release. The production checkout now points at `8842503` (the #210
-  Tart change); no matching deployment receipt was found. Do not substitute a
-  checkout revision for the installed application or an accepted release.
-- **Completed:** WS-18's named AirPods/Mac output-switch criterion was accepted
-  by Larry and recorded in merged #208. WS-08/12/14/15/16/19 remain closed.
-  Broader echo, wake/device and combined-load audio checks remain open.
-- **Console (WS-17):** implementation and capture repair #198/#203 are merged
-  and included in the recorded deployment. The October 17 live session found
-  stale Recents, incomplete explicit voice selection, and missing fresh-result
-  reopen/reference behavior. UI2-24/25 require repair and retest; bounded
-  five-turn conversation passes do not close all UI2-22/23 cases.
-- **Verification (WS-09/11/20):** final campaign evidence is recorded via
-  [PR #209](https://github.com/Larryfix71566/jarvis-voice-ai/pull/209).
-  Its receipt reports all twelve independent checks passed on `9f9bc71`,
-  but two repeatable physical-Mac Vision OCR exceptions remain. The review
-  confirmed all twelve check hashes match the published log manifest. This
-  is evidence publication, not a full final host-suite pass or acceptance.
-- **Mail (WS-13):** #204 revision 3 merged and deployed; #205 merged as
-  `9f9bc71`. #212 merged as `f3d5378`, fixing the campaign's startup-env
-  replacement and relative-path findings. Codex's post-merge source review
-  found no new blocking issue; all 117 synthetic mail tests passed.
-  Preserve the October 13 M1-1/2/3 results. Deployment of the preflight fix
-  and its formal production M1-1 repeat remain separate, open steps.
-- **Shared roadmap (WS-20):** #172/#174 were closed as superseded; their
-  replacement #207 merged. #206/#208/#211 landed. #209 preserves both sides
-  of the documentation conflict and publishes the final campaign evidence.
-  Acceptance blockers and Larry's checker-enforcement decision remain open.
-- **Still prerequisite-gated:** model/source/account/private-route evidence
-  (WS-02/05), onboarding and authenticated Skills (WS-03/04), workflow/guard
-  evidence and decisions (WS-06/07), and staged memory approval (WS-10).
-  Physical external-display cases in WS-21 remain untested in this campaign.
-- **Pending separate code:** [PR #210](https://github.com/Larryfix71566/jarvis-voice-ai/pull/210)
-  proposes automatic cleanup of finished Tart clones. Review reproduced a
-  stale-plan deletion of a parent with a running verification child, and found
-  cleanup code omitted from the runner fingerprint. Keep it unmerged pending
-  repairs and re-review; no cleanup job was installed by this review. WS-22 remains parked behind existing acceptance.
+Rough total: **1.5–2.5 hours active Larry time**, plus daily observations,
+excluding unresolved repairs/setup, special hardware and prerequisite features.
+These are estimates, not a completion promise. Offline evidence mapping,
+contract preparation and review can proceed independently in separate scopes;
+no concurrent candidate mutation, competing audio tests or VM pruning.
 
-Sources: [merged campaign receipt](docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md),
-[reviewed final receipt at original #209 head](https://github.com/Larryfix71566/jarvis-voice-ai/blob/37b290d049fe4a79ab0830b0282401c3a3090d56/docs/acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md),
-and the [dated reconciliation](docs/roadmap-log/2026-10-17-ws-20-codex-current-status-refresh.md).
+Acceptance-first prioritizes the current release and scoped repairs needed to
+accept it. Unbuilt/undecided onboarding, mail P2/P3, creator/model/private-route
+and memory-stage prerequisites are **not runnable Larry chores or newly imposed
+global release gates**. Keep them in their owning rows with explicit decisions.
+Unavailable hardware may be deferred or accepted as a named limitation only
+where the governing plan permits and Larry records it; never mark it passed.
+New enhancement implementation remains subsequent, parked and freshly dispatched;
+sandbox planning can proceed. See [the new end-of-roadmap plan](#ws-27).
+
+## Current acceptance status — reconciled 2026-10-18
+
+This current report supersedes stale next-action/PR-status prose below while
+preserving every receipt and existing owner's scope. Source is `28420af`, not
+proof of the installed build. Only [#218](https://github.com/Larryfix71566/jarvis-voice-ai/pull/218)
+and [#219](https://github.com/Larryfix71566/jarvis-voice-ai/pull/219) are open, both
+draft docs. #218's WS-17 update and #219's parked proposals keep their branches.
+
+- **Accepted with bounded evidence:** WS-08/12/14/15/16/18 and WS-19 documentation
+  are closed. Preserve the accepted AirPods switch, Skills B/C and Versions
+  wording, orb, named historical displays and bounded 22/23 results; reuse only
+  after candidate/scenario applicability review. No parent UI2 gate closes here.
+- **Current release blocked by review/deployment:** #216 merged as `28420af`
+  with five green checks; Claude review timed out without verdict. Independent
+  exact-release verification, deployment/loaded identity and UI2-24/25 live
+  retest remain open. #210 merged unchanged as `34e5d55`; its stale prune-plan
+  deletion race and omitted runner fingerprint remain. No pruning/reclaim or
+  affected sandbox creation until reviewed repair/safe environment proof.
+- **Newer versus historical tests:** October 17 campaign's physical OCR failures
+  remain failed at their source. Later [#216 scoped evidence](docs/roadmap-log/2026-10-17-ws-17-codex-roadmap-controls.md)
+  records MortimerHost 563 tests, five skips, zero failures. Reconcile exact
+  coverage/configuration before scheduling more OCR diagnosis; that local suite
+  does not replace independent release verification or live acceptance.
+- **Unimplemented/prerequisite-blocked:** WS-04 onboarding; WS-13 P2/P3 (P4/P5
+  later); Skills creator/auth/VM/source/model/eval; WS-02/05 runtime/source/account
+  and eligible confidential route; WS-10 staged real use; WS-06 eleven-check
+  repository map. Feature-specific gates remain separate from runnable release
+  checks; no provider/credential/activation or spend authority is created.
+- **Mail:** D1–D9 were answered October 10; do not reopen superseded questions.
+  R.12 replaces August V1–V10. Preserve October 13 M1-2/3; repeat M1-1 only after
+  fixed #212 deployment. Eight P2/P3 Mac rows wait implementation. Larry's actual
+  deployed daily-report path remains unverified; do not create a duplicate report.
+- **Hardware/observation:** external monitor unavailable October 17; mirrored/three-screen,
+  portrait/non-Retina cases remain hardware-blocked until supplied or properly
+  dispositioned. Five frozen-release days, separate native attestation and WS-06
+  week remain elapsed evidence gates. UI2-14/15/16/17/18, enabled-feature gates,
+  and checker-enforcement decision stay open.
+- **Installed provenance:** latest successful deployment receipt in the roadmap
+  is `575cc7b`, October 13 20:02 EDT. October 17 recorded dirty-source provenance; the
+  production checkout revision alone cannot establish installed artifact identity.
+  This documentation performs no new host probe or deployment.
 
 <details>
 <summary>Historical navigation — October 7 (superseded handoffs; retained for context)</summary>
@@ -997,6 +1019,7 @@ Open means not yet resolved. Each entry names who resolves it.
 
 | ID | Conflict | Resolves | State |
 |---|---|---|---|
+| CX-23 | WS-27 new documentation request expanded by Larry 10-18 to front acceptance clearance/current status; #218/#219 edit neighboring status and joint-plan progress. | Larry explicit documentation dispatch; Codex additive reconciliation on its isolated branch | Resolved documentation boundary: update current roadmap summary and existing status reports, append clearance/inventory to existing WS-20 plan, preserve #218/#219 branches/proposals and all owners/criteria/receipts. No runtime claim or review/deployment waiver. Refresh both PRs before landing and preserve both appendices if a textual conflict arises. |
 | CX-22 | WS-17 roadmap first-arrival display needs the `agent_tool_result` observation projection in `jarvis/agents/base.py`, held by Codex WS-05. | Larry approved the bounded roadmap-only extension 10-17; Codex coordinates both scopes. | Approved and claimed on main through #217 (`ed21d82`): canonical roadmap observation only; preserve other caps, private redaction, model history, logs and source-before-sink guards. No broader Base edits. |
 | CX-21 | WS-13 P1 adds the `mcp-mail` source contract to `jarvis/skills/registry.py`, which WS-05 (Codex, claimed) holds for source classification. WS-13 edits only the `mcp-mail` entries (classification and `EXTERNAL_TOOL_SERVERS`/source-operation sets), not `_invoke` or any existing entry; plan §R.13. | `codex` (WS-05): review those entries in the P1 PR | resolved: Codex revision-3 sign-off recorded in WS-13; #204 merged `575cc7b`. Subsequent mail-preflight/live acceptance remains separate |
 | CX-20 | Larry explicitly reassigns remaining WS-17 from Claude to Codex on 10-07; WS-20 documentation #193 merged concurrently and edits narrow WS-17 state fields, and landed WS-21 shares console/inventory files. | `larry` (10-07): Codex owns remaining WS-17 implementation; `codex` preserves #173 and records this bounded coordination | resolved ownership/scope boundary: WS-17 owns its implementation/plan/evidence and current row; WS-20 retains operational summary/decision grouping and WS-20-specific logs; its landed #193 wording is reconciled to this newer assignment, with WS-17 owning its block/plan/receipts/logs; no edits to the other session’s branch. Preserve WS-21 transfer/screen behavior and its separate physical acceptance. Cross-review and release approvals remain required; no other row is reassigned |
@@ -1263,11 +1286,11 @@ retains its existing release/acceptance status scope.
 - **Owner:** `codex` for this documentation dispatch only; implementation owners unassigned
 - **Status:** landed documentation via this PR; all proposed development and benchmark execution remain parked behind existing acceptance and a fresh dispatch
 - **Implemented by:** Codex authored the plan and technical appendices; no runtime implementation or benchmark results
-- **Remaining work / acceptance:** Review design and unresolved decisions; finish existing acceptance under its owners; separately authorize an isolated harness, setup/access and spend before runs. Compare immutable baseline → sandbox shared optimization/ablations → candidate models → held-out results; separately decide any production migration. Jev is ON HOLD until voice optimization and newer-model comparison resolve.
+- **Remaining work / acceptance:** Prioritize the front acceptance-clearance sequence and current status reconciliation; review design and unresolved decisions; finish existing applicable release acceptance under its owners; separately authorize an isolated harness, setup/access and spend before runs. Compare immutable baseline → sandbox shared optimization/ablations → candidate models → held-out results; separately decide any production migration. Jev is ON HOLD until voice optimization and newer-model comparison resolve.
 - **Model version:** User requested GPT-6.1 Sol with high effort for planning; this entry records the preference, not independently verified execution telemetry or the deployed voice model
 - **Where:** `codex/mortimer-enhancement-plan-20261018`, based on main `28420af`; isolated worktree; no implementation branch
 - **Plan:** [Canonical enhancement plan](docs/plans/MORTIMER_ENHANCEMENT_IMPLEMENTATION_PLAN_2026-10-18.md), with [sandbox voice-model evaluation protocol](docs/plans/MORTIMER_VOICE_EVALUATION_PROTOCOL_2026-10-18.md) and [local-model setup/integration runbook](docs/plans/MORTIMER_PRIVATE_LOCAL_MODEL_RUNBOOK_2026-10-18.md) as appendices of this same row
-- **Scope:** Documentation only: this new end section of `ROADMAP.md`, the three linked documents, and the dated new-row log. Existing source blocks, plans, production receipt, ownership and acceptance checkboxes stay authoritative. No runtime paths, credentials, policy settings, model installations, provider calls, shared config/port/migration/launchd identifiers or deployment are authorized or reserved.
+- **Scope:** Documentation only: the current roadmap acceptance/status summary and this new end section, the three linked enhancement documents, the dated new-row log, and Larry’s added acceptance-clearance/status reconciliation in the existing WS-20 plan and acceptance status/readiness/runbook references (CX-23). Existing source blocks, plans, production receipt, ownership and acceptance checkboxes stay authoritative. No runtime paths, credentials, policy settings, model installations, provider calls, shared config/port/migration/launchd identifiers or deployment are authorized or reserved.
 - **Next step:** larry: review decisions and the sandbox-only test design; existing owners: complete release/acceptance first. Later assigned implementer: refresh main/claims, establish a safe non-destructive sandbox and obtain a bounded implementation/run dispatch. Do not invoke Tart pruning/reclaim while the recorded cleanup race/fingerprint blockers remain unresolved.
 - **Updated:** 10-18 (new documentation request and sandbox optimization/testing constraints; no gate closed)
 

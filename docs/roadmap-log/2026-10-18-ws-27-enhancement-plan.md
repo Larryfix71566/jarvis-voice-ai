@@ -37,3 +37,31 @@ Official-source checks are dated in the appendices. No performance results,
 paid calls, installation, private records, credential/security changes,
 acceptance closure, merge or deployment are claimed. Validation results will
 be recorded below before publication.
+
+## Larry's added acceptance-first/status-report scope
+
+Larry subsequently requested an exhaustive acceptance backlog audit, fastest
+clearance sequence at the front of the roadmap, and actual current status
+updates in Git. Added the clearance design and full 97-source-bullet inventory
+to the existing WS-20 joint plan (no competing acceptance plan), and reconciled
+ROADMAP current summaries, IMPLEMENTATION_STATUS, Command Console status,
+release-readiness counts/CC7a wording and runbook navigation. CX-23 records this
+explicit documentation expansion and the #218/#219 boundary. Their branches,
+implementation claims and parked proposals are unchanged. New enhancement
+implementation remains at the end and gated.
+
+Inspected 22 pre-existing rows: 14 with open obligations, seven closed and one
+parked. 97 aggregate bullets are not 97 tests; 23 unique open UI2 requirement IDs
+form the current release backbone, while 24 P0 rows and five C8 umbrellas overlap.
+Release-readiness actual count is 34 unchecked / 19 checked. All original
+ROADMAP and release-readiness checkbox tokens remain identical. No parent test
+or acceptance gate closes by audit. The later source-only 563-test native
+receipt and earlier physical OCR failures retain their separate applicability.
+Mail D1–D9 already answered; R.12 supersedes old V1–V10; P2/P3 remain unbuilt.
+
+Validation: `python3 scripts/check_roadmap.py --main main` reports zero errors /
+zero warnings; `git diff --check` passes. A documentation link/scope audit found
+all changed files Markdown, all local relative file links present, balanced
+code fences, all 97 inventory rows present with consistent category counts,
+and unchanged existing checkbox-state sequences. No runtime or live API suite
+was run; no acceptance results, private records or provider workloads fabricated.

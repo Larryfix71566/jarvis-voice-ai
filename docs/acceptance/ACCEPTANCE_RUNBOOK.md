@@ -1,5 +1,14 @@
 # Mortimer release acceptance runbook
 
+**2026-10-18 scheduling/status update:** use the
+[acceptance clearance sequence](../plans/ROADMAP_JOINT_WORKING_PLAN.md#9-acceptance-clearance--current-priority-2026-10-18)
+and [current status](IMPLEMENTATION_STATUS.md) before these procedures. Freeze
+one exact candidate; after existing review/verification/deployment prerequisites,
+run24/25 fail-fast before22/23 and dependent 04/09/13. Reuse matching receipts;
+do not schedule unbuilt onboarding/mail/creator/model stages as ready tests.
+The older September baseline link below is historical, not installed identity.
+No run or acceptance closure is performed by this documentation update.
+
 This runbook closes the remaining evidence gates for the automated-memory and
 Command Center plans. It does not change code, enable a provider, or alter the
 database. Run it against the signed candidate whose executable hash is recorded

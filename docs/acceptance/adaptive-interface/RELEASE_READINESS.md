@@ -1,5 +1,22 @@
 # Adaptive interface release readiness
 
+**Current reconciliation: 2026-10-18, inspected main `28420af`.**
+[Roadmap current status](../../../ROADMAP.md#current-acceptance-status--reconciled-2026-10-18),
+[status report](../IMPLEMENTATION_STATUS.md) and
+[clearance plan/inventory](../../plans/ROADMAP_JOINT_WORKING_PLAN.md#9-acceptance-clearance--current-priority-2026-10-18)
+are the current navigation. This file has **34 unchecked / 19 checked** entries;
+**23 unique open UI2 IDs** are 02–20 and 22–25.24 P0 rows/five C8 umbrellas overlap
+coverage. No checkbox is changed by this audit. All older source/deployment/count
+narratives below retain their dates and are superseded as current status.
+#216 merged as `28420af`; missing review verdict, independent release, deployment
+and live acceptance remain open. Newer563-test/five-skip/zero-failure local native
+evidence does not erase historical OCR failures or prove release acceptance.
+
+Use B0 release prerequisites → 24/25 fail-fast → 22/23 and dependent 04/09/13 →
+shared UI/hardware/audio batches → frozen observation → closure. Missing hardware
+and unimplemented/undecided feature prerequisites are explicitly blocked;
+requirements are not removed or marked passed to shorten the list.
+
 Updated 2026-09-18 after the architecture-reference audit and full sandbox
 verification. The
 deployed release is main revision `94a56412f065d7808ca5ad87825fbdd38df9ad36`
@@ -44,8 +61,7 @@ deployment record, not a claim that the proposed redesign is deployed. All 12
 previously open items and all 14 completed items retain their status.
 (Reconciled 2026-09-22 against main `88b206f`: the "remaining items" section
 now holds 11 open and 2 checked entries — ARCH-01 and the timing/focus item
-closed 2026-09-18 — and "Completed items" holds 14; the whole file is 30
-unchecked / 19 checked, as stated under "Coverage and counting rules".)
+closed 2026-09-18 — and "Completed items" holds 14. That historical whole-file 30/19 count is superseded by the current 34/19 audit above.)
 
 The redesign now has sandbox implementation evidence: the Command Console
 composition (shipped as the default layout), Atlas/store primitives, bounded shared-content contracts, memory automation policy and native regression suites are present.
@@ -205,11 +221,10 @@ sandbox evidence; all additions remain open as release-acceptance gates.
   duplicate fetch or subscription work.
   The sandbox renderer reserves a stage tile for pointer-selected content
   and derives main-surface locators from actual visible ownership. The
-  September 18 response-routing update also places full Mortimer answers in
-  results, updating one card per user request across streamed/tool subturns.
-  Brief live captions remain beside the voice visualization; the full Log
-  remains available. Replies join the bounded supporting grid when open and
-  return to the main results area when it closes. Two-screen native rendering
+  September 18 every-answer-card/brief-caption rule is superseded by CC7a:
+  ordinary speech stays in the full Conversation thread; requested artifacts
+  create results, and late/background results preserve reading focus. Apply
+  supporting-grid ownership only to actual results, never every spoken answer. Two-screen native rendering
   tests verify these paths with synthetic text; live provider/voice and
   duplicate-fetch evidence remain open. The physical unplug/rehome path is
   covered by the candidate monitor receipt. See
@@ -318,7 +333,7 @@ sandbox evidence; all additions remain open as release-acceptance gates.
 
 ### Coverage and counting rules
 
-The current file contains 30 unchecked and 19 checked checklist entries. The
+The 2026-10-18 audit counts 34 unchecked and 19 checked checklist entries (23 open UI2 IDs plus 11 other unchecked summary/dependency entries). The
 older 31-open / 15-complete narrative is retained only in historical receipts;
 these are differently sized obligations, not a weighted estimate of project
 effort or completion.
