@@ -59,3 +59,10 @@ repair passes 31 related native cases. SDK upstream tool-result continuation
 provenance remains under validation. Prior `0f2af66` receipts do not clear this
 changed runtime; final-source checks/review must refresh. PR stays draft; no
 merge, deployment or acceptance closure.
+
+SDK continuation checkpoint: four real PipelineWorker/function-result/assistant
+upstream flows reproduce missing provenance (current, deferred, superseded,
+cancelled). Public synchronous causal-frame hooks plus direction-independent
+provider scoping repair the path; 14 provenance tests pass. Source changed;
+full affected checks/new-source review and twelve-check verification remain
+pending. No production, merge/deploy or acceptance change.

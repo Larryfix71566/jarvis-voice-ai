@@ -2993,3 +2993,31 @@ continuations is being validated separately; it is not yet declared repaired.
 The old source's review/VM results are historical evidence. Changed runtime
 requires refreshed affected tests, final-source review and independent checks
 before final readiness; #226 stays draft, unmerged and undeployed.
+
+
+### 2026-10-19 — Actual upstream tool-continuation reproduction and repair
+
+Four actual PipelineWorker flows reproduce the second P2: a real SDK function
+result enters the real assistant aggregator, which creates a fresh UPSTREAM
+LLMContextFrame on its own processing task. The old wrapper scopes DOWNSTREAM
+only, so the second inference/tool gets no origin. Failures reproduce for the
+current request, a bot-speaking deferred flush, a newer accepted user request
+and an explicitly cancelled original request. These are not manual downstream
+continuation probes; original failed runs remain local.
+
+The repair retains bounded immutable dispatch bindings beyond the handler's
+return and uses the SDK's public synchronous assistant before/after-process and
+before-push hooks. Accepted in-progress/result frames establish causal pending
+ownership, including the real BotStoppedSpeaking deferred flush. A fresh
+upstream frame carries that ownership; the existing provider wrapper scopes
+LLMContextFrame in either direction. Conflicting reused call IDs and mixed or
+unknown pending ownership fail closed instead of adopting the newest shared
+user context. Handler/cancellation scope stays immutable. No SDK private-field
+patch, new pipeline node/order, model/provider setting or source-policy change.
+
+All fourteen provenance tests pass after repair (four new red→green real SDK
+flows plus ten existing cases). Native winner follow-up remains the separately
+committed 31-pass slice. Broader/full affected checks, final-source independent
+review and a fresh unchanged twelve-check VM comparison must follow this new
+source freeze; historical `0f2af66` evidence is not promoted to final clearance.
+No merge, deployment, production action or acceptance closure.

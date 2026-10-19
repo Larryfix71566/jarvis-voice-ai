@@ -308,3 +308,124 @@ async def test_one_accepted_input_cannot_mint_authority_for_a_copied_boundary():
     assert owner.calls["copied"] is None
     assert owner.current == origin
     assert [m["state"] for m in transport.messages] == ["started"]
+
+
+@pytest.mark.parametrize(("mode", "deferred"), [
+    ("current", False), ("current", True), ("superseded", False), ("cancelled", False),
+])
+async def test_actual_tool_result_assistant_upstream_round_keeps_original_request(mode, deferred):
+    from pipecat.frames.frames import (
+        StartFrame, UserStoppedSpeakingFrame, FunctionCallResultFrame,
+        LLMFullResponseStartFrame, LLMFullResponseEndFrame,
+        BotStartedSpeakingFrame, BotStoppedSpeakingFrame,
+    )
+    from pipecat.pipeline.pipeline import Pipeline
+    from pipecat.pipeline.worker import PipelineWorker, PipelineParams
+    from pipecat.workers.runner import WorkerRunner
+    from pipecat.turns.user_start import ExternalUserTurnStartStrategy
+
+    transport = Transport()
+    owner = ForegroundRequests(transport, "synthetic-session", "synthetic-generation")
+    ready, first_entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    second_done, new_inference, first_result = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    observed = []
+
+    class Source(FrameProcessor):
+        async def process_frame(self, frame, direction):
+            await super().process_frame(frame, direction)
+            await self.push_frame(frame, direction)
+            if isinstance(frame, StartFrame):
+                ready.set()
+
+    class InferenceProbe(LLMService):
+        def __init__(self):
+            super().__init__()
+            self.downstream = 0
+            self.upstream = 0
+
+        async def process_frame(self, frame, direction):
+            await super().process_frame(frame, direction)
+            if not isinstance(frame, LLMContextFrame):
+                await self.push_frame(frame, direction)
+                return
+            observed.append((direction, _foreground_request.get()))
+            await self.push_frame(LLMFullResponseStartFrame())
+            if direction == FrameDirection.DOWNSTREAM:
+                self.downstream += 1
+                if self.downstream == 1:
+                    await self.run_function_calls([FunctionCallFromLLM(
+                        function_name="first_round", tool_call_id="real-first-round",
+                        arguments={}, context=frame.context)])
+                else:
+                    new_inference.set()
+            else:
+                self.upstream += 1
+                if self.upstream == 1:
+                    await self.run_function_calls([FunctionCallFromLLM(
+                        function_name="second_round", tool_call_id="real-second-round",
+                        arguments={}, context=frame.context)])
+            await self.push_frame(LLMFullResponseEndFrame())
+
+    async def first_handler(_arguments):
+        first_entered.set()
+        await release.wait()
+        return {"public": "Synthetic first tool result"}
+
+    async def second_handler(_arguments):
+        await send_app_message(transport, {"type": "display", "display": {
+            "kind": "markdown", "title": "Synthetic continuation answer"}})
+        second_done.set()
+        return {"public": "Synthetic second tool result"}
+
+    context = LLMContext([])
+    pair = LLMContextAggregatorPair(context, user_params=LLMUserAggregatorParams(
+        user_turn_strategies=UserTurnStrategies(start=[ExternalUserTurnStartStrategy()],
+                                               stop=[ExternalUserTurnStopStrategy()])))
+    source = Source()
+    service = request_bound_service(InferenceProbe, owner)()
+    owner.install(source, pair.user(), pair.assistant())
+    service.register_function("first_round", adapt_to_pipecat(
+        "first_round", first_handler, foreground_requests=owner), cancel_on_interruption=False)
+    service.register_function("second_round", adapt_to_pipecat(
+        "second_round", second_handler, foreground_requests=owner))
+
+    async def after_assistant(_source, frame):
+        if isinstance(frame, FunctionCallResultFrame) and frame.tool_call_id == "real-first-round":
+            first_result.set()
+    pair.assistant().add_event_handler("on_after_process_frame", after_assistant)
+    worker = PipelineWorker(Pipeline([source, pair.user(), service, pair.assistant()]),
+                            params=PipelineParams())
+    runner = WorkerRunner(handle_sigint=False, handle_sigterm=False)
+    running = asyncio.create_task(runner.run(worker))
+    try:
+        await asyncio.wait_for(ready.wait(), timeout=5)
+        await worker.queue_frames([UserStartedSpeakingFrame(), TranscriptionFrame(
+            "Synthetic original question", "synthetic-user", "actual-input-1", finalized=True),
+            UserStoppedSpeakingFrame()])
+        await asyncio.wait_for(first_entered.wait(), timeout=5)
+        original = owner.current
+        assert original is not None
+        if mode == "superseded":
+            await worker.queue_frames([UserStartedSpeakingFrame(), TranscriptionFrame(
+                "Synthetic newer question", "synthetic-user", "actual-input-2", finalized=True),
+                UserStoppedSpeakingFrame()])
+            await asyncio.wait_for(new_inference.wait(), timeout=5)
+            assert owner.current is not None and owner.current != original
+        elif mode == "cancelled":
+            await owner.cancel(original)
+        if deferred:
+            await worker.queue_frame(BotStartedSpeakingFrame())
+        release.set()
+        await asyncio.wait_for(first_result.wait(), timeout=5)
+        if deferred:
+            assert not second_done.is_set(), "The real assistant must defer until bot-stopped."
+            await worker.queue_frame(BotStoppedSpeakingFrame())
+        await asyncio.wait_for(second_done.wait(), timeout=5)
+        upstream = [binding for direction, binding in observed if direction == FrameDirection.UPSTREAM]
+        assert upstream and upstream[0] == original, "Fresh upstream SDK context retains its actual tool's request, including after newer input."
+        display = next(m["display"] for m in transport.messages if m["type"] == "display")
+        assert display.get("origin_request_id") == original.request_id
+    finally:
+        release.set()
+        await worker.stop_when_done()
+        await asyncio.wait_for(running, timeout=5)

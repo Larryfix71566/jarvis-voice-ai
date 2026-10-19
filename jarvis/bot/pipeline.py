@@ -42,7 +42,8 @@ from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import (OutputTransportMessageUrgentFrame, LLMContextFrame,
     LLMFullResponseStartFrame, LLMFullResponseEndFrame, InterruptionFrame,
-    TranscriptionFrame, UserStartedSpeakingFrame)
+    TranscriptionFrame, UserStartedSpeakingFrame, BotStoppedSpeakingFrame,
+    FunctionCallInProgressFrame, FunctionCallResultFrame, FunctionCallCancelFrame)
 from pipecat.observers.base_observer import BaseObserver
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.pipeline.pipeline import Pipeline
@@ -243,13 +244,53 @@ class ForegroundRequests:
         self.calls: dict[str, ForegroundRequest | None] = {}
         self.seen_starts: list[int] = []
         self.aggregator_starts: list[int] = []
+        self.assistant_aggregator: Any = None
+        # Retain bounded immutable dispatch ownership after the handler has
+        # returned; the SDK processes its result on another persistent task.
+        self.continuation_calls: dict[str, ForegroundRequest | None] = {}
+        self.assistant_running: dict[str, ForegroundRequest | None] = {}
+        self.assistant_pending: dict[str, ForegroundRequest | None] = {}
+        self.assistant_frame: ContextVar[Any] = ContextVar("foreground_assistant_frame", default=None)
 
-    def install(self, input_source: Any, user_aggregator: Any) -> None:
+    def install(self, input_source: Any, user_aggregator: Any, assistant_aggregator: Any = None) -> None:
         self.input_source, self.user_aggregator = input_source, user_aggregator
         # Unlike worker observers and function lifecycle events, this public
         # SDK hook is awaited synchronously before downstream frame delivery.
         input_source.add_event_handler("on_before_push_frame", self.before_push)
         user_aggregator.add_event_handler("on_before_push_frame", self.before_push)
+        if assistant_aggregator is not None:
+            self.assistant_aggregator = assistant_aggregator
+            # These are public synchronous SDK hooks. Observe the actual
+            # result-processing task before it creates a fresh UPSTREAM
+            # context, including a deferred bot-stopped flush.
+            assistant_aggregator.add_event_handler("on_before_process_frame", self.before_assistant_frame)
+            assistant_aggregator.add_event_handler("on_after_process_frame", self.after_assistant_frame)
+            assistant_aggregator.add_event_handler("on_before_push_frame", self.before_push)
+
+    async def before_assistant_frame(self, _source, frame) -> None:
+        self.assistant_frame.set(frame)
+        if isinstance(frame, FunctionCallInProgressFrame):
+            self.assistant_running[frame.tool_call_id] = self.continuation_calls.get(frame.tool_call_id)
+            while len(self.assistant_running) > 256:
+                self.assistant_running.pop(next(iter(self.assistant_running)))
+        elif isinstance(frame, FunctionCallCancelFrame):
+            self.assistant_running.pop(frame.tool_call_id, None)
+            self.assistant_pending.pop(frame.tool_call_id, None)
+        elif isinstance(frame, FunctionCallResultFrame) and frame.tool_call_id in self.assistant_running:
+            request = self.assistant_running[frame.tool_call_id]
+            properties = frame.properties
+            if properties is None or properties.is_final:
+                self.assistant_running.pop(frame.tool_call_id, None)
+            # Respect the public result callback's explicit no-continuation
+            # contract. Queue/group and bot-speaking decisions stay SDK-owned.
+            run_llm = properties.run_llm if properties and properties.run_llm is not None else frame.run_llm
+            if frame.result and run_llm is not False:
+                self.assistant_pending[frame.tool_call_id] = request
+                while len(self.assistant_pending) > 256:
+                    self.assistant_pending.pop(next(iter(self.assistant_pending)))
+
+    async def after_assistant_frame(self, _source, _frame) -> None:
+        self.assistant_frame.set(None)
 
     async def announce(self, request: ForegroundRequest, state: str) -> None:
         try:
@@ -303,7 +344,23 @@ class ForegroundRequests:
                 self.input_chars += len(text)
                 self.input_identity = (timestamp, user_id)
             return
-        if not isinstance(frame, LLMContextFrame) or source is not self.user_aggregator:
+        if not isinstance(frame, LLMContextFrame):
+            return
+        if source is self.assistant_aggregator:
+            cause = self.assistant_frame.get()
+            actual_result = isinstance(cause, FunctionCallResultFrame) and cause.tool_call_id in self.assistant_pending
+            deferred_result = isinstance(cause, BotStoppedSpeakingFrame)
+            request = None
+            if actual_result or deferred_result:
+                owners = set(self.assistant_pending.values())
+                # Bundled results from different/unknown requests have no
+                # single owner. Never infer the newest user from shared context.
+                if len(owners) == 1 and None not in owners:
+                    request = next(iter(owners))
+                self.assistant_pending.clear()
+            frame.metadata[_FOREGROUND_FRAME_KEY] = request
+            return
+        if source is not self.user_aggregator:
             return
         messages = frame.context.get_messages()
         boundary = next((m for m in reversed(messages) if is_real_user_message(m)), None)
@@ -328,9 +385,16 @@ class ForegroundRequests:
     def bind_calls(self, calls) -> None:
         request = _foreground_request.get()
         for call in calls:
-            self.calls[str(call.tool_call_id)] = request
+            call_id = str(call.tool_call_id)
+            binding = request
+            if call_id in self.continuation_calls and self.continuation_calls[call_id] != request:
+                binding = None  # Conflicting reused IDs cannot borrow a newer request.
+            self.calls[call_id] = binding
+            self.continuation_calls[call_id] = binding
         while len(self.calls) > 256:
             self.calls.pop(next(iter(self.calls)))
+        while len(self.continuation_calls) > 256:
+            self.continuation_calls.pop(next(iter(self.continuation_calls)))
 
 
 def request_bound_service(service_class, requests: ForegroundRequests):
@@ -344,7 +408,7 @@ def request_bound_service(service_class, requests: ForegroundRequests):
             return await super().run_function_calls(calls)
 
         async def process_frame(self, frame, direction):
-            if isinstance(frame, LLMContextFrame) and direction == FrameDirection.DOWNSTREAM:
+            if isinstance(frame, LLMContextFrame):
                 request = frame.metadata.get(_FOREGROUND_FRAME_KEY)
                 token = _foreground_request.set(request if isinstance(request, ForegroundRequest) else None)
                 try:
@@ -1787,7 +1851,7 @@ def build_pipeline(
     # the conversations table (the memory sweep folds that table into
     # long-term memory — observed live 2026-08-21: TV dialogue persisted).
     runtime.speaker_gate = speaker_transcript_gate
-    runtime.foreground_requests.install(speaker_transcript_gate or stt, aggregators.user())
+    runtime.foreground_requests.install(speaker_transcript_gate or stt, aggregators.user(), aggregators.assistant())
 
     transcript = TranscriptLogger(session_id=runtime.session_id)
 
