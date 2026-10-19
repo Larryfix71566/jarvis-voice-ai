@@ -2859,3 +2859,15 @@ final-source full suite. No raw production logs enter source/review packets.
 Next: freeze this source, run full Python/JarvisKit/MortimerHost checks, obtain
 exact-source independent cross-review and publish a reviewable runtime PR.
 Runtime merge, deployment and live acceptance remain Larry's separate decisions.
+
+
+### 2026-10-19 — Compatibility marker reserved before code
+
+An older native client's closed weather-reuse argument schema rejects the new
+optional origin field even though its underlying cache remains valid. Reserve
+`foreground_request_version = 1` in native inventory before implementing the
+capability check. Send the origin argument only when that exact native marker
+is present, and keep it outside model-facing inventory. Legacy clients retain
+their existing cache schema/behavior; current release clients still enforce
+exact current-request foreground. No action, permission, source-policy,
+configuration or account expansion is involved.

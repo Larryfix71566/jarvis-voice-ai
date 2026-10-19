@@ -1202,6 +1202,14 @@ unknown, cancelled or superseded origin remains ineligible for foreground;
 legacy content can still be retained as a card. The native store admits one
 foreground result per request and preserves supporting-display ownership.
 No configuration key, port, launchd label, migration or persistent task state.
+**Compatibility marker reserved before its code, 2026-10-19:** optional
+`console/inventory.data.foreground_request_version = 1` advertises support for
+`origin_request_id` on internal weather-cache requests. The backend forwards
+that argument only after this native capability is observed; older clients
+retain their existing closed argument schema and cache behavior. The marker
+is host metadata, omitted from model-disclosed inventory, and grants no source
+or action permission. No action enum, config key or protocol version changes.
+
 
 
 **Existing cleanup label reservation, WS-28 (2026-10-18):** `com.mortimer.sandbox-prune` is already emitted by merged #210 (`scripts/launchd_gen.py`, existing 04:20 job). Record Codex repair ownership here; no new label, schedule, installed job, privilege or activation is created. Job installation/activation is outside this claim.
