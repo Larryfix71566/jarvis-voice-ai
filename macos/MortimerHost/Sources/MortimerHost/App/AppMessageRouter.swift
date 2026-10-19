@@ -179,8 +179,11 @@ final class AppMessageRouter {
                         let now = Date()
                         let origin = request.args["origin_request_id"]?.stringValue.flatMap(UUID.init(uuidString:))
                         let answers = currentRequests.canPresent(origin, tool: request.args["tool"]?.stringValue)
+                        let answersOnMain = request.target.flatMap(UUID.init(uuidString:)).map {
+                            Self.canSelectMainAnswer(answers, ownerID: $0, in: workspace, display: displayWindow)
+                        } ?? false
                         if let result = consoleCoordinator.executeWeatherReuse(request, now: now,
-                            answersCurrentRequest: answers) {
+                            answersCurrentRequest: answersOnMain) {
                             if answers, result.status == "ok", result.code == "cache_hit",
                                let id = request.target.flatMap(UUID.init(uuidString:)), let workspace,
                                let retained = workspace.results.first(where: { $0.id == id }),
@@ -329,6 +332,8 @@ final class AppMessageRouter {
                     // result that answers what Larry just asked may open on
                     // the conversation. See ArrivalIntent.
                     let answers = currentRequests.canPresent(payload.originRequestID, tool: payload.tool)
+                    let answersOnMain = Self.canSelectMainAnswer(answers, ownerID: result.id,
+                        in: workspace, display: displayWindow)
                     var presentedOwnerID = result.id
                     var presentedContent: SupportingDisplayContent = .result(result.id)
                     defer {
@@ -350,7 +355,7 @@ final class AppMessageRouter {
                     // supporting display or waiting unread behind the
                     // spoken reply (G-2 found both).
                     if Self.showsInMainWindowOnly(payload) {
-                        workspace?.receive(result, answersCurrentRequest: answers)
+                        workspace?.receive(result, answersCurrentRequest: answersOnMain)
                         // Only the attested current answer may use the main
                         // fallback. Quiet upserts and cached owners follow the
                         // same actual-renderer rule; other arrivals stay cards.
@@ -367,7 +372,7 @@ final class AppMessageRouter {
                         // display store. This check must precede both
                         // DisplayWindowStore.apply and any display handoff.
                         if payload.isProtectedLocal {
-                            workspace?.receive(result, answersCurrentRequest: answers)
+                            workspace?.receive(result, answersCurrentRequest: answersOnMain)
                             if answers, let workspace {
                                 Self.presentRequestedMainFallback(result.id, in: workspace, display: displayWindow)
                             }
@@ -397,7 +402,7 @@ final class AppMessageRouter {
                         // review of #169); the card is in the thread.
                         if existingID == nil {
                             workspace?.receive(result,
-                                answersCurrentRequest: answers && !displayWindow.isWindowOpen)
+                                answersCurrentRequest: answersOnMain && !displayWindow.isWindowOpen)
                         }
                         guard let panelID = displayWindow.apply(payload, workspaceID: workspaceID) else {
                             // The display store can reject protected content at
@@ -425,7 +430,7 @@ final class AppMessageRouter {
                             }
                         }
                     case .drawer:
-                        workspace?.receive(result, answersCurrentRequest: answers)
+                        workspace?.receive(result, answersCurrentRequest: answersOnMain)
                         if answers, let workspace {
                             Self.presentRequestedMainFallback(result.id, in: workspace, display: displayWindow)
                         }
@@ -484,6 +489,16 @@ final class AppMessageRouter {
             && !workspace.showsAtlas && !workspace.showsSkills && !workspace.showsWorkflows
             && !workspace.showsMemoryGraph && !supporting
         return (main, supporting)
+    }
+
+    /// Protect every actually visible panel before the store can select.
+    /// The supporting selection can name B while A is also in the stage.
+    /// Keep the original request eligibility for later winner accounting.
+    private static func canSelectMainAnswer(_ answers: Bool, ownerID: UUID,
+                                            in workspace: WorkspaceStore?, display: DisplayWindowStore) -> Bool {
+        guard answers, let workspace else { return false }
+        return !arrivalPresentation(of: .result(ownerID), ownerID: ownerID,
+            in: workspace, display: display).supporting
     }
 
     /// The caller must already attest the current request and retain its

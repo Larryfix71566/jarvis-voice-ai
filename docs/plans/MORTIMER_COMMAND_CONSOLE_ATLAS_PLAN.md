@@ -3146,3 +3146,39 @@ all six original findings NON-BLOCKING with documented coverage caveats and
 finds the concrete sibling-renderer gap addressed here. Final changed-source
 review, full affected native/CI and one fresh twelve-check VM run remain open.
 No live acceptance, merge, deployment, restart or production change.
+
+
+### 2026-10-19 — Multi-panel ownership must gate store selection first
+
+The executor resumes and the corrected reference-kind tests pass (59 affected
+cases). The preceding frozen `0deeb30` full native run passes 577 tests, five
+explicit display/activation prerequisite skips, zero failures, including capture
+and actual visibility. Both failing test files match main `c244963` exactly;
+its focused run reproduces three visibility assertions with inactive fixture,
+while baseline capture passes. The earlier five candidate failures are retained
+as host-session failures; none is rewritten as a pass or waived.
+
+A bounded independent static review identifies one reachable multi-panel case
+not covered by pointer-equals-owner fixtures. Layout 2's actual visible stage
+can render both weather A and B while `supportingContent` names B. Fresh or
+cached A reaches Store.receive/queryWeatherReuse first; its equality-only
+comparison may select A on main before the later helper observes the real
+supporting renderer. The native router regression exercises structured fresh,
+legacy fresh and cached A from both Conversation and a third reader result,
+asserts both panels are actually presented, and reproduces 12 main-state
+assertion failures on `0deeb30`. No physical topology is claimed by this fixture.
+
+The minimal repair computes main-selection eligibility from actual supporting
+visibility before any store receive/cache invocation. Every admitted receive
+exit uses that main-only flag; original host request eligibility remains
+separate for common winner accounting. A visible supporting A therefore
+consumes the winner without changing main or the B pointer. Closed-window
+fallback behavior remains in the shared helper. Store/source/cache/TTL/panel
+logic is unchanged. All 60 affected native tests pass, including the six real
+multi-panel scenarios and previous same-owner/open/closed/fresh/cache cases.
+
+The completed prior native pass and running prior-source Claude/CI outcomes
+remain scoped to `0deeb30`; new-source full native/review/CI and the single
+fresh twelve-check VM run follow this repair. No new VM has been started for
+these superseded source freezes. No merge, deployment, restart, production or
+acceptance change; cleanup job remains paused.

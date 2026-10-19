@@ -496,6 +496,52 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         XCTAssertTrue(f.workspace.showsConversation)
     }
 
+    func testAlreadyVisibleWeatherPanelPreservesMainWhenSelectionNamesAnotherPanel() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        for mode in ["cache", "fresh", "legacy-fresh"] {
+            for readingResult in [false, true] {
+                let f = try await fixture(); defer { f.router.stop() }
+                let fetched = Date().timeIntervalSince1970 - 30
+                let structured = mode != "legacy-fresh"
+                let a = try await deliver(f, weather(aKey, city: "Folly Beach", ts: fetched, structured: structured))
+                let b = try await deliver(f, weather(bKey, city: "Atlanta", ts: fetched))
+                let reader = try await deliver(f, weather("weather:named:reader", city: "Reader", ts: fetched))
+                XCTAssertNotNil(f.display.apply(a.payload, workspaceID: a.id))
+                XCTAssertNotNil(f.display.apply(b.payload, workspaceID: b.id))
+                f.display.setWindowOpen(true)
+                XCTAssertTrue(f.workspace.sendToDisplay(.result(b.id)))
+                XCTAssertTrue(f.display.isPresented(.result(a.id), selection: f.workspace.supportingContent))
+                XCTAssertTrue(f.display.isPresented(.result(b.id), selection: f.workspace.supportingContent))
+                if readingResult { f.workspace.select(reader.id) }
+                else { f.workspace.returnToConversation() }
+                let previousActive = f.workspace.activeID
+                let previousConversation = f.workspace.showsConversation
+                f.coordinator.publishInventory()
+                try await user(f, "Folly Beach weather again")
+                if mode == "cache" {
+                    let reply = try await reuse(f, key: aKey)
+                    XCTAssertEqual(reply.code, "cache_hit")
+                    XCTAssertTrue(f.conversation.cachedReferences.isEmpty, "Visible supporting cache ownership is not a main reopen.")
+                } else {
+                    let refreshed = try await deliver(f, weather(aKey, city: "Folly Beach", ts: fetched + 1, structured: structured))
+                    XCTAssertEqual(refreshed.id, a.id)
+                    XCTAssertEqual(f.conversation.cachedReferences.count, 1)
+                    XCTAssertTrue(f.conversation.cachedReferences.first?.text.hasPrefix("Updated ") == true)
+                }
+                XCTAssertEqual(f.workspace.activeID, previousActive, "Already visible panel A must be protected before store selection, even when the pointer names B.")
+                XCTAssertEqual(f.workspace.showsConversation, previousConversation)
+                XCTAssertEqual(f.workspace.supportingContent, .result(b.id))
+                let panels = f.display.panels
+                let later = try await ordinaryWindow(f, title: "Later answer after visible panel A")
+                XCTAssertEqual(f.workspace.activeID, previousActive)
+                XCTAssertEqual(f.workspace.showsConversation, previousConversation)
+                XCTAssertEqual(f.workspace.supportingContent, .result(b.id))
+                XCTAssertEqual(f.display.panels, panels, "The actual supporting answer consumed this request's winner.")
+                XCTAssertTrue(f.workspace.unreadIDs.contains(later.id))
+            }
+        }
+    }
+
     func testFreshQuietWeatherUpsertUsesActualRendererAndConsumesOneWinner() async throws {
         let restore = try configureDefaults(); defer { restore() }
         for structured in [false, true] {

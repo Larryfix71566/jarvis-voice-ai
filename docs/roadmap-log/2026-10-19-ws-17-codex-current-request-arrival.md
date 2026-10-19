@@ -100,3 +100,12 @@ are retained. Earlier `2d619d6` capture/visibility failures remain pending
 unchanged-baseline classification and full repeat. Claude confirms six original
 items NON-BLOCKING; concrete sibling-renderer finding awaits final-source
 review. Python/cache/source-policy unchanged; no acceptance or production action.
+
+Prior-source `0deeb30` full native passes 577 / five prerequisite skips / zero
+failures; baseline visibility reproduces independently and baseline/final
+capture passes, with historical failures retained. Multi-panel static concern
+reproduces 12 real-router main-state assertions across six fresh/cache cases.
+Pre-store actual-visibility eligibility prevents early main selection while
+original request eligibility consumes the visible winner. All 60 affected tests
+pass. Final changed-source native/review/CI/VM refresh remains required; no
+production, cleanup-job, merge, deployment or acceptance change.
