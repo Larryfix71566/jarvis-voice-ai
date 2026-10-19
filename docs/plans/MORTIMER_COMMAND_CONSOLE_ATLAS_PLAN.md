@@ -2971,3 +2971,25 @@ Publication-only contract check: 95 existing roadmap reader/console/event,
 repository-map and coordination-checker tests pass; roadmap checker reports
 zero errors/warnings and diff whitespace checks pass. No runtime/test change
 after `0f2af66` is introduced by this evidence commit.
+
+
+### 2026-10-19 — Additional read-only review: ordinary-window winner defect
+
+Draft #226 published `639edd5`, whose runtime/tests equal reviewed `0f2af66`.
+Further review identifies a P2 not covered by its weather-only winner scenario:
+a closed supporting window queues a pointer but renders the answer on main;
+the defer incorrectly treats that pointer as an external renderer. Exact
+ordinary-window repeats also resolve an existing workspace owner while the
+defer checks the provisional new UUID. Both allow another same-request result
+to take focus. Two synthetic real SDK/router tests reproduce nine failed
+assertions, including repeated-owner cases with the display closed and open.
+
+The bounded repair uses the same `isPresented` predicate as WorkspaceView's
+return locator, the resolved displayed workspace owner and actual main view.
+It preserves display/store/source guards and does not change result identity.
+All 31 affected router/conversation regressions pass. Original failures remain
+local. A second P2 concerning real SDK assistant-aggregator upstream tool
+continuations is being validated separately; it is not yet declared repaired.
+The old source's review/VM results are historical evidence. Changed runtime
+requires refreshed affected tests, final-source review and independent checks
+before final readiness; #226 stays draft, unmerged and undeployed.

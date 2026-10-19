@@ -52,3 +52,10 @@ Claude's final bounded reconciliation reports no blocking findings: 1 INVALID,
 The publication adds documentation/evidence only; runtime/test identity is
 checked against `0f2af66`. Final-head CI, merge, deployment and live acceptance
 remain open; no production operation or checkbox closure.
+
+Additional #226 review checkpoint: ordinary-window winner accounting reproduces
+nine failed assertions in two real-router tests. Actual-renderer/resolved-owner
+repair passes 31 related native cases. SDK upstream tool-result continuation
+provenance remains under validation. Prior `0f2af66` receipts do not clear this
+changed runtime; final-source checks/review must refresh. PR stays draft; no
+merge, deployment or acceptance closure.

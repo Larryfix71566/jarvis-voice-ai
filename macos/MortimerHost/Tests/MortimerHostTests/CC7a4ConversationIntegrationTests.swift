@@ -192,6 +192,17 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         return result
     }
 
+    private func ordinaryWindow(_ f: Fixture, title: String) async throws -> WorkspaceResult {
+        let before = f.transport.inventories.count
+        var fields: [String: Any] = ["kind": "markdown", "title": title,
+            "body": "Public synthetic report: \(title)", "tool": "public_report", "surface": "window",
+            "data_policy": "approved_external"]
+        if let origin = f.requests.current { fields["origin_request_id"] = origin.uuidString }
+        try f.transport.emit(["type": "display", "display": fields])
+        try await wait("ordinary window routed and inventory published") { f.transport.inventories.count > before }
+        return try XCTUnwrap(f.workspace.results.first { $0.payload.title == title })
+    }
+
     private func action(_ f: Fixture, _ action: ConsoleAction, target: UUID,
                         args: [String: JSONValue] = [:]) async throws -> ConsoleResult {
         let observed = try XCTUnwrap(f.transport.inventories.last)
@@ -300,6 +311,48 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         let current = try await deliver(f, weather("weather:named:current", city: "Current", ts: ts, runID: "current-run"))
         XCTAssertEqual(f.workspace.activeID, current.id)
         XCTAssertTrue(f.conversation.cachedReferences.isEmpty)
+    }
+
+    func testClosedSupportingWindowFallbackConsumesTheFirstOrdinaryWinner() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        let f = try await fixture(); defer { f.router.stop() }
+        XCTAssertFalse(f.display.isWindowOpen)
+        let reader = try await deliver(f, weather("weather:named:reader", city: "Reader", ts: Date().timeIntervalSince1970 - 30))
+        f.workspace.select(reader.id)
+        try await user(f, "Show the two public reports")
+        let first = try await ordinaryWindow(f, title: "Public report A")
+        XCTAssertEqual(f.workspace.activeID, first.id)
+        XCTAssertFalse(f.workspace.showsConversation)
+        XCTAssertEqual(f.workspace.supportingContent, .result(first.id))
+        XCTAssertFalse(f.display.isPresented(.result(first.id), selection: f.workspace.supportingContent))
+        let panels = f.display.panels
+        let second = try await ordinaryWindow(f, title: "Public report B")
+        XCTAssertEqual(f.workspace.activeID, first.id, "Main fallback already presented the request's first answer.")
+        XCTAssertTrue(f.workspace.unreadIDs.contains(second.id))
+        XCTAssertEqual(f.display.panels, panels, "A second same-request arrival cannot change the queued display renderer.")
+    }
+
+    func testRepeatedOrdinaryWindowConsumesWinnerUsingTheExistingOwner() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        for displayOpen in [false, true] {
+            let f = try await fixture(); defer { f.router.stop() }
+            f.display.setWindowOpen(displayOpen)
+            try await user(f, "Show public report A")
+            let original = try await ordinaryWindow(f, title: "Public report A")
+            XCTAssertEqual(f.display.presentedWorkspaceID(for: original.payload), original.id)
+            try await user(f, "Show public report A again")
+            let repeated = try await ordinaryWindow(f, title: "Public report A")
+            XCTAssertEqual(repeated.id, original.id)
+            XCTAssertEqual(f.workspace.results.count, 1)
+            XCTAssertEqual(f.display.isPresented(.result(original.id), selection: f.workspace.supportingContent), displayOpen)
+            if !displayOpen { XCTAssertEqual(f.workspace.activeID, original.id) }
+            let panels = f.display.panels
+            let second = try await ordinaryWindow(f, title: "Public report B")
+            XCTAssertEqual(f.workspace.supportingContent, .result(original.id), "Reused renderer owner consumes this request's winner.")
+            XCTAssertEqual(f.display.panels, panels)
+            XCTAssertTrue(f.workspace.unreadIDs.contains(second.id))
+            if !displayOpen { XCTAssertEqual(f.workspace.activeID, original.id) }
+        }
     }
 
     func testFirstEligibleArrivalWinsAndDuplicateCannotReclaimUserFocus() async throws {

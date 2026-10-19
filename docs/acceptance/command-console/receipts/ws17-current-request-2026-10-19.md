@@ -1,5 +1,9 @@
 # WS-17 current-request foreground: reviewed candidate evidence
 
+**Historical source receipt:** Additional #226 review found native winner and
+SDK upstream-continuation P2 follow-ups. This receipt applies to `0f2af66` only;
+it does not clear subsequent runtime repairs. Final-source evidence must refresh.
+
 Implementation source: `0f2af668028fe75827bb061ba32e5f22a86e6598`, based on
 merged claim #225 (`c244963`). The publication adds documentation/evidence only
 after that freeze; the runtime/test manifest in the [scrubbed receipt](ws17-current-request-2026-10-19.json)

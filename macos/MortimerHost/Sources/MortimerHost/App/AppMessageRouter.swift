@@ -322,12 +322,28 @@ final class AppMessageRouter {
                     // result that answers what Larry just asked may open on
                     // the conversation. See ArrivalIntent.
                     let answers = currentRequests.canPresent(payload.originRequestID, tool: payload.tool)
+                    var presentedOwnerID = result.id
+                    var presentedContent: SupportingDisplayContent = .result(result.id)
                     defer {
-                        let main = workspace?.activeID == result.id && workspace?.showsConversation == false
-                            && workspace?.supportingContent != .result(result.id)
-                        let supporting = displayWindow.isWindowOpen && workspace?.supportingContent == .result(result.id)
-                        if answers && (main || supporting) {
-                            currentRequests.didPresent(payload.originRequestID, resultID: result.id)
+                        if let workspace {
+                            let rawLayout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
+                            // Use the same actual-renderer predicate as the main
+                            // return locator. A queued pointer cannot hide the
+                            // main fallback while the display window is closed.
+                            let supporting = displayWindow.isPresented(presentedContent,
+                                selection: workspace.supportingContent,
+                                layoutVersion: InterfaceLayoutVersion.resolve(rawLayout))
+                            let main: Bool
+                            if case .memoryGraph = presentedContent {
+                                main = workspace.showsMemoryGraph && !supporting
+                            } else {
+                                main = workspace.activeID == presentedOwnerID && !workspace.showsConversation
+                                    && !workspace.showsAtlas && !workspace.showsSkills && !workspace.showsWorkflows
+                                    && !workspace.showsMemoryGraph && !supporting
+                            }
+                            if answers && (main || supporting) {
+                                currentRequests.didPresent(payload.originRequestID, resultID: presentedOwnerID)
+                            }
                         }
                     }
                     // Window-routed content has one renderer at a time. Keep
@@ -377,6 +393,8 @@ final class AppMessageRouter {
                         let existingID = displayWindow.presentedWorkspaceID(for: payload)
                             .flatMap { id in workspace?.containsResult(id) == true ? id : nil }
                         let workspaceID = existingID ?? result.id
+                        presentedOwnerID = workspaceID
+                        presentedContent = .result(workspaceID)
                         // While the supporting display is open it renders
                         // this result, and the main stage would show only a
                         // placeholder, so the conversation stays (Codex
@@ -391,8 +409,14 @@ final class AppMessageRouter {
                             // local workspace only.
                             break
                         }
+                        // An exact repeated payload or appended Developer
+                        // section may be rendered by an existing workspace
+                        // identity rather than the provisional arrival UUID.
+                        presentedOwnerID = displayWindow.presentedWorkspaceID(for: payload) ?? workspaceID
+                        presentedContent = .result(presentedOwnerID)
                         if let workspace {
                             if Self.isMemoryGraphPayload(payload) {
+                                presentedContent = .memoryGraph
                                 workspace.openMemoryGraph()
                                 _ = workspace.sendToDisplay(.memoryGraph)
                             } else if let ownerID = displayWindow.workspaceID(for: panelID) {
