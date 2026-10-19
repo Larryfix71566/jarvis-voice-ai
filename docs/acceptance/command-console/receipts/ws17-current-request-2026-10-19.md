@@ -2,7 +2,8 @@
 
 **Historical source receipt:** Additional #226 review found native winner and
 SDK upstream-continuation P2 follow-ups. This receipt applies to `0f2af66` only;
-it does not clear subsequent runtime repairs. Final-source evidence must refresh.
+it does not clear subsequent runtime repairs. See the separate
+[final `fbfb669` receipt](ws17-current-request-final-2026-10-19.md) for refreshed evidence.
 
 Implementation source: `0f2af668028fe75827bb061ba32e5f22a86e6598`, based on
 merged claim #225 (`c244963`). The publication adds documentation/evidence only

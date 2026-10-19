@@ -118,3 +118,18 @@ selection acknowledges current selected-owner read state without moving any
 owner. All 61 related tests pass; final changed-source native/review/CI/VM
 verification remains required. Original reports/failures preserved; no live
 acceptance or production action.
+
+
+Final frozen-source checkpoint: `fbfb669` completes all twelve original ordered
+independent VM checks; candidate backend 6,612/11 skipped,
+native 579/8 prerequisite skips/zero failures. Frozen source
+and existing assets are unchanged; newly owned resources removed. Exact-source
+Claude follow-up: No blocking findings, static/tools-disabled; original six
+items NON-BLOCKING with preserved full review and bounded follow-ups. All five
+source CI checks PASS. Host native 579/five skips/zero failures, 61 focused
+native and 88 roadmap contracts PASS; full host Python 6,809/15 skipped applies
+through byte-identical candidate Python/tests. Scrubbed final receipt:
+`docs/acceptance/command-console/receipts/ws17-current-request-final-2026-10-19.md`.
+Publication changes ROADMAP/docs only; runtime/test identity and final-head CI
+are checked separately. No acceptance checkbox, owner, production, cleanup-job,
+merge or deployment change; exact-release/live/physical/observation gates remain.

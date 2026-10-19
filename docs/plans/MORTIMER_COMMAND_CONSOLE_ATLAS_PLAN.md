@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** Current-request source `0f2af66` is statically reviewed with no blocking findings and passes all twelve independent checks; the publication adds documentation/evidence only, with final-head CI and separate release/live gates retained. [Scrubbed receipt](../acceptance/command-console/receipts/ws17-current-request-2026-10-19.md). Historical status follows: Claim #225 merged as `c244963` at 00:08:12 UTC on 2026-10-19; current-request implementation is claimed on `codex/ws17-current-request-arrival-20261018`, with wire reservation committed before code. Historical status follows: Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
+**Status:** Frozen current-request implementation `fbfb669` has completed all twelve original independent checks, exact-source Claude follow-up with **No blocking findings**, and all five source CI checks. [Final scrubbed evidence](../acceptance/command-console/receipts/ws17-current-request-final-2026-10-19.md). Documentation-only publication, publication-head CI and separate merge/release/live gates are distinguished below. Historical status follows: Claim #225 merged as `c244963` at 00:08:12 UTC on 2026-10-19; current-request implementation is claimed on `codex/ws17-current-request-arrival-20261018`, with wire reservation committed before code. Historical status follows: Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -3209,3 +3209,47 @@ CI and original twelve-check VM verification refresh next. Prior-source
 verdicts, failed runs and green CI remain scoped to their original revisions.
 No VM started for these superseded freezes; no merge/deployment/production or
 acceptance change.
+
+
+### 2026-10-19 — Final frozen-source verification complete; documentation publication
+
+Frozen implementation `fbfb669c9e30ceee1845097b1bca1c3fb935ac93` completes
+all twelve original ordered independent checks against protected baseline
+`08c0635`, unchanged image/profile/runner, and candidate fingerprint
+`bbe9d25c39ee472a69e2fa01c4b2ebc371e6e895785487e784f6c8da1ba81f96`. Candidate backend:
+6,612 passed / 11 skipped. Candidate native:
+579 executed / 8 explicit prerequisite skips / zero failures.
+Both newly owned VM resources were removed, frozen source remained unchanged,
+and existing assets were preserved. No global prune, cleanup-job activation,
+production mutation or deployment occurred.
+
+Host native on exact source: 579 executed / five display/activation prerequisite
+skips / zero failures. All 61 affected native and 88 roadmap/source/event cases
+pass; strict frozen-source roadmap drift is zero errors/warnings. Full host
+Python is 6,809 passed / 15 skipped on `e29973d`; Python/tests and JarvisKit are
+byte-identical to that tested source. The current VM repeats its original
+candidate checks independently. All five frozen-source GitHub checks pass.
+
+Claude Code 2.1.291 / `claude-sonnet-5` completes the bounded final-source
+follow-up with **No blocking findings**, tools/MCP/hooks/persistence disabled,
+no reviewer-executed tests. The report composes with preserved full `e29973d`
+review and intervening bounded dispositions; it is not a new whole-repository
+audit. All six original findings remain NON-BLOCKING. Validated native
+renderer/cache/roadmap/multi-panel/read-state findings are repaired with actual
+red/green witnesses. The fresh selected-owner read-state defect reproduces;
+the reviewer's symmetric cache generalization does not. Historical failed runs,
+test-fixture corrections and host-session classification remain in prior entries.
+The interrupted `e29973d` VM stays non-passing; `0f2af66` evidence is historical.
+
+[Final scrubbed receipt](../acceptance/command-console/receipts/ws17-current-request-final-2026-10-19.md)
+records full fingerprints, all original commands/durations/log hashes,
+source/test manifest and review hashes/limits without raw logs, private installed
+metadata or reviewer reasoning. This publication changes ROADMAP/docs only;
+program/test bytes must remain identical to frozen `fbfb669`. Publication-head
+CI is checked independently on PR226. No acceptance checkbox or owner changes.
+
+Larry retains separate merge and deployment decisions. Exact release/rollback
+and loaded-build proof precede the short fail-fast UI2-24/25 session, then
+affected UI2-23/22 and dependent UI2-04/09/13. Missing physical prerequisites,
+five-day release observation and the separate WS-06 week remain real evidence
+requirements, with no calendar-only or test-total closure.
