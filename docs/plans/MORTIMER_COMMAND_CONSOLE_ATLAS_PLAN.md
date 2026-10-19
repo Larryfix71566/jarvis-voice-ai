@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** Claim #225 merged as `c244963` at 00:08:12 UTC on 2026-10-19; current-request implementation is claimed on `codex/ws17-current-request-arrival-20261018`, with wire reservation committed before code. Historical status follows: Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
+**Status:** Current-request source `0f2af66` is statically reviewed with no blocking findings and passes all twelve independent checks; the publication adds documentation/evidence only, with final-head CI and separate release/live gates retained. [Scrubbed receipt](../acceptance/command-console/receipts/ws17-current-request-2026-10-19.md). Historical status follows: Claim #225 merged as `c244963` at 00:08:12 UTC on 2026-10-19; current-request implementation is claimed on `codex/ws17-current-request-arrival-20261018`, with wire reservation committed before code. Historical status follows: Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -2938,3 +2938,36 @@ The prepared `6d777eb` source-review packet is explicitly withheld and has not
 been transmitted. A new exact-source packet will replace it after verification.
 Required independent review/verification, runtime PR and Larry's separate
 merge/deployment/live acceptance remain open.
+
+
+### 2026-10-19 — Reviewed frozen source and complete independent comparison
+
+Frozen `0f2af66` passes full local Python (6,803 passed / 15 existing skips),
+207 focused checks, and all twelve original ordered independent VM checks
+against approved `08c0635`. Candidate unit suite: 6,606 passed / 11 skips; native
+app: 572 executed / eight prerequisite skips / zero failures; library: 235 passed.
+Local native source/tests are byte-identical to tested `6d777eb` (572 app cases /
+five prerequisite skips / zero failures). Source/receipt/log fingerprints were
+verified, newly owned clones removed and preexisting assets preserved. No
+production source, installed artifact, settings or running service was changed.
+
+Claude Code 2.1.291 / `claude-sonnet-5` completed an approved tools-disabled full
+static source/test review and bounded same-source finding reconciliation. Final
+verdict: no blocking findings; original Finding 1 INVALID, 2–4 NON-BLOCKING.
+The source-only packets and synthetic contract probes contain no production
+records. The conservative uncorrelatable-final revocation, mixed-version
+foreground limitation and historical test helpers remain explicit tradeoffs.
+Reviewer test execution is not claimed; no full second review is inferred.
+
+[Scrubbed verification/review receipt](../acceptance/command-console/receipts/ws17-current-request-2026-10-19.md)
+records all twelve actual commands and hashes, source identity, baseline witness,
+original findings and limits without private runtime records or raw reasoning.
+This publication adds only documentation/evidence after the freeze; verify every
+runtime/test blob still matches `0f2af66`. Final-head CI is a separate gate.
+Runtime merge, deployment and affected UI2-23/24/25 acceptance remain separate
+Larry decisions; no acceptance checkbox closes.
+
+Publication-only contract check: 95 existing roadmap reader/console/event,
+repository-map and coordination-checker tests pass; roadmap checker reports
+zero errors/warnings and diff whitespace checks pass. No runtime/test change
+after `0f2af66` is introduced by this evidence commit.

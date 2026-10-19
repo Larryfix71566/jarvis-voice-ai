@@ -42,3 +42,13 @@ upstream SDK probe finds a provenance defect despite those passes. Both linked
 broadcast and copied-boundary red cases are repaired; 207 focused checks pass.
 The old review packet is withheld; full Python repeat/new packet/review pending.
 No production, credential, deployment or live-acceptance change.
+
+Publication checkpoint: exact implementation `0f2af66` has 6,803 local Python
+passes and all twelve independent VM checks passed. Candidate native: 572
+executed / eight prerequisite skips / zero failures; local native: five skips.
+Claude's final bounded reconciliation reports no blocking findings: 1 INVALID,
+2–4 NON-BLOCKING, with original reports/limits preserved. Scrubbed evidence:
+`docs/acceptance/command-console/receipts/ws17-current-request-2026-10-19.md`.
+The publication adds documentation/evidence only; runtime/test identity is
+checked against `0f2af66`. Final-head CI, merge, deployment and live acceptance
+remain open; no production operation or checkbox closure.
