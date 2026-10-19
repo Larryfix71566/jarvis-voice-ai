@@ -44,7 +44,14 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
     private let bKey = "weather:named:atlanta"
 
     private final class Probe { var copies: [String] = [] }
+    private final class Requests {
+        var sequence = 0
+        var current: UUID?
+        var runs: [String: UUID] = [:]
+    }
     private struct Fixture {
+        let requests: Requests
+
         let transport: ReuseIntegrationTransport
         let client: JarvisClient
         let session: UUID
@@ -100,7 +107,7 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         try await wait("negotiated console identity") {
             client.consoleSessionID == session && client.consoleGeneration == generation && !transport.inventories.isEmpty
         }
-        return Fixture(transport: transport, client: client, session: session, generation: generation,
+        return Fixture(requests: Requests(), transport: transport, client: client, session: session, generation: generation,
             router: router, workspace: workspace, conversation: conversation, output: output,
             coordinator: coordinator, sharing: sharing, probe: probe)
     }
@@ -119,11 +126,21 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
 
     private func user(_ f: Fixture, _ text: String) async throws {
         let before = f.conversation.entries.count
-        try f.transport.emit(["type": "user-transcription", "data": ["text": text, "final": true]])
+        f.requests.sequence += 1
+        let id = UUID(), timestamp = "synthetic-input-\(f.requests.sequence)"
+        f.requests.current = id
+        try f.transport.emit(["type": "user-started-speaking"])
+        try f.transport.emit(["type": "user-transcription", "data": ["text": text, "final": true,
+            "timestamp": timestamp, "user_id": "synthetic-user"]])
+        try f.transport.emit(["type": "console/turn", "version": 1,
+            "session_id": f.session.uuidString, "generation": f.generation.uuidString,
+            "request_id": id.uuidString, "sequence": f.requests.sequence, "state": "started",
+            "input_timestamp": timestamp, "input_user_id": "synthetic-user"])
         try await wait("user transcript") { f.conversation.entries.count == before + 1 }
     }
 
     private func run(_ f: Fixture, _ id: String) async throws {
+        f.requests.runs[id] = f.requests.current
         try f.transport.emit(["type": "agent", "state": "working", "name": "analyst", "run_id": id, "task": "weather"])
         // This event precedes subsequent requests on the same real stream.
         for _ in 0..<100 { await Task.yield() }
@@ -149,6 +166,10 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
 
     @discardableResult
     private func deliver(_ f: Fixture, _ fields: [String: Any]) async throws -> WorkspaceResult {
+        var fields = fields
+        let origin = (fields["run_id"] as? String).flatMap { f.requests.runs[$0] }
+            ?? (fields["run_id"] == nil ? f.requests.current : nil)
+        if let origin { fields["origin_request_id"] = origin.uuidString }
         let key = fields["subject_key"] as! String
         let expected = try JSONDecoder().decode(DisplayPayload.self,
             from: JSONSerialization.data(withJSONObject: fields))
@@ -186,6 +207,8 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         var args: [String: JSONValue] = ["subject_key": .string(key), "tool": .string(tool),
             "days": .number(7), "units": .string("imperial"), "ordinary_turn": .bool(true)]
         if let runID { args["run_id"] = .string(runID) }
+        let origin = runID.flatMap { f.requests.runs[$0] } ?? (runID == nil ? f.requests.current : nil)
+        if let origin { args["origin_request_id"] = .string(origin.uuidString) }
         return try await action(f, .weatherReuse, target: target, args: args)
     }
 
@@ -195,10 +218,10 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         let fetched = Date().timeIntervalSince1970 - 90
         try await user(f, "Weather for Folly Beach")
         let a = try await deliver(f, weather(aKey, city: "Folly Beach", ts: fetched))
-        f.workspace.returnToConversation(); f.coordinator.publishInventory()
+        XCTAssertEqual(f.workspace.activeID, a.id); XCTAssertFalse(f.workspace.showsConversation)
         try await user(f, "Weather for Atlanta")
         let b = try await deliver(f, weather(bKey, city: "Atlanta", ts: fetched + 1))
-        f.workspace.returnToConversation(); f.coordinator.publishInventory()
+        XCTAssertEqual(f.workspace.activeID, b.id); XCTAssertFalse(f.workspace.showsConversation)
         try await user(f, "Folly Beach again")
         try await run(f, "current-reuse")
         let reply = try await reuse(f, key: aKey, runID: "current-reuse")
@@ -218,7 +241,7 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         XCTAssertFalse(reference.text.contains(Self.sourceCanary)); XCTAssertEqual(f.transport.connectionAttempts, 0)
     }
 
-    func testDirectCacheHitWhileReadingPreservesFocusAndShowsNew() async throws {
+    func testCurrentDirectCacheHitWhileReadingOpensExistingIdentity() async throws {
         let restore = try configureDefaults(); defer { restore() }
         let f = try await fixture(); defer { f.router.stop() }
         let fetched = Date().timeIntervalSince1970 - 30
@@ -227,8 +250,8 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         f.workspace.select(b.id); f.coordinator.publishInventory()
         try await user(f, "Folly Beach again")
         let reply = try await reuse(f, key: aKey)
-        XCTAssertEqual(reply.code, "cache_hit"); XCTAssertEqual(f.workspace.activeID, b.id)
-        XCTAssertEqual(f.workspace.arrivalNoticeID, a.id); XCTAssertTrue(f.workspace.unreadIDs.contains(a.id))
+        XCTAssertEqual(reply.code, "cache_hit"); XCTAssertEqual(f.workspace.activeID, a.id)
+        XCTAssertNil(f.workspace.arrivalNoticeID); XCTAssertFalse(f.workspace.unreadIDs.contains(a.id))
         XCTAssertEqual(f.conversation.cachedReferences.count, 1)
         XCTAssertEqual(f.workspace.results.map(\.id), [a.id, b.id]); XCTAssertEqual(f.transport.connectionAttempts, 0)
     }
@@ -247,7 +270,7 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         XCTAssertEqual(reply.code, "cache_hit"); XCTAssertEqual(reply.data?["ts"], .number(fetched))
         XCTAssertTrue(f.workspace.showsConversation); XCTAssertEqual(f.workspace.activeID, b.id)
         XCTAssertTrue(f.workspace.unreadIDs.contains(a.id)); XCTAssertEqual(f.workspace.results.map(\.id), [a.id, b.id])
-        XCTAssertEqual(f.conversation.cachedReferences.first?.resultID, a.id)
+        XCTAssertTrue(f.conversation.cachedReferences.isEmpty, "A superseded cache hit was not reopened.")
     }
 
     func testWeatherAndRadarInOneOriginatingRunAppendOnlyOneReference() async throws {

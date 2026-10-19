@@ -19,6 +19,7 @@ final class AppMessageRouter {
     private var transcriptSink: AnyCancellable?
     private let responseRouter = ResponseResultRouter()
     private let runClock = ArrivalRunClock()
+    private let currentRequests = CurrentRequestArrivals()
     private var stateSink: AnyCancellable?
     private var audioOutputSink: AnyCancellable?
     private var audioInputSink: AnyCancellable?
@@ -66,6 +67,8 @@ final class AppMessageRouter {
                 self.lastState = next
                 if case .connecting = prev, case .connected = next { Sounds.play(.boot) }
                 if case .failed = next { Sounds.play(.fail) }
+                if next == .offline || next == .connecting { self.currentRequests.reset() }
+                if case .failed = next { self.currentRequests.reset() }
                 // A reconnect (ours or the user's) makes the audio-output
                 // notice moot — playout re-opens on the current device.
                 if case .connecting = next { notices?.clearAudioOutputNotice() }
@@ -97,6 +100,7 @@ final class AppMessageRouter {
         let messageStream = client.messageStream()
         let locator = self.locator
         let runClock = self.runClock
+        let currentRequests = self.currentRequests
         task = Task {
             for await message in messageStream {
                 switch message {
@@ -129,6 +133,9 @@ final class AppMessageRouter {
                     // only after validating the same request locally.
                     notices?.showConsoleResult(result)
                 case .consoleHello(let hello):
+                    if client.consoleSessionID != hello.sessionID || client.consoleGeneration != hello.generation {
+                        currentRequests.reset()
+                    }
                     // Capability negotiation is explicit. The client echoes
                     // only the bounded operations it understands and never
                     // treats a server advertisement as user authority.
@@ -170,19 +177,19 @@ final class AppMessageRouter {
                     if request.action == .weatherReuse {
                         let runID = request.args["run_id"]?.stringValue
                         let now = Date()
-                        let answers = ArrivalIntent.answersCurrentRequest(tool: request.args["tool"]?.stringValue,
-                            runID: runID,
-                            runStartedAt: runClock.startedAt(runID),
-                            lastUserTurnAt: conversation?.entries.last(where: { $0.role == "user" })
-                                .map { Date(timeIntervalSince1970: $0.createdAt) }, now: now)
+                        let origin = request.args["origin_request_id"]?.stringValue.flatMap(UUID.init(uuidString:))
+                        let answers = currentRequests.canPresent(origin, tool: request.args["tool"]?.stringValue)
                         if let result = consoleCoordinator.executeWeatherReuse(request, now: now,
                             answersCurrentRequest: answers) {
-                            if result.status == "ok", result.code == "cache_hit",
+                            if answers, result.status == "ok", result.code == "cache_hit",
                                let id = request.target.flatMap(UUID.init(uuidString:)),
+                               workspace?.activeID == id, workspace?.showsConversation == false,
+                               workspace?.supportingContent != .result(id),
                                let retained = workspace?.results.first(where: { $0.id == id }),
                                let fetchedAt = result.data?["ts"]?.doubleValue {
+                                currentRequests.didPresent(origin, resultID: id)
                                 conversation?.recordCachedResult(retained, fetchedAt: fetchedAt,
-                                    requestID: request.requestID, runID: runID, now: now)
+                                    requestID: origin ?? request.requestID, runID: runID, now: now)
                             }
                             client.send(.consoleResult(result))
                             consoleCoordinator.publishInventory()
@@ -307,14 +314,16 @@ final class AppMessageRouter {
                     // CC7a.2b (Larry 10-03; Codex review of #169): only a
                     // result that answers what Larry just asked may open on
                     // the conversation. See ArrivalIntent.
-                    let runID = payload.runID.flatMap { $0.isEmpty ? nil : $0 }
-                    let answers = ArrivalIntent.answersCurrentRequest(
-                        tool: payload.tool,
-                        runID: runID,
-                        runStartedAt: runClock.startedAt(runID),
-                        lastUserTurnAt: conversation?.entries.last(where: { $0.role == "user" })
-                            .map { Date(timeIntervalSince1970: $0.createdAt) },
-                        now: Date())
+                    let answers = currentRequests.canPresent(payload.originRequestID, tool: payload.tool)
+                    defer {
+                        if answers,
+                           (workspace?.activeID == result.id && workspace?.showsConversation == false
+                            && workspace?.supportingContent != .result(result.id))
+                            || (answers && displayWindow.isWindowOpen
+                                && workspace?.supportingContent == .result(result.id)) {
+                            currentRequests.didPresent(payload.originRequestID, resultID: result.id)
+                        }
+                    }
                     // Window-routed content has one renderer at a time. Keep
                     // the workspace as the fallback when no supporting
                     // display is open; while the display is live its view
@@ -331,7 +340,8 @@ final class AppMessageRouter {
                         // (WorkspaceStore.receive): it opens when the
                         // conversation is on the stage (Larry, 10-03) and
                         // raises a "New" notice over anything else.
-                        if workspace?.quietArrivals != true { workspace?.select(result.id) }
+                        if answers, workspace?.quietArrivals != true,
+                           workspace?.supportingContent != .result(result.id) { workspace?.select(result.id) }
                         consoleCoordinator?.publishInventory()
                         break
                     }
@@ -403,6 +413,15 @@ final class AppMessageRouter {
                     if gate.nearThreshold == true {
                         notices?.showSpeakerGateNotice("Voice not recognized — try again")
                     }
+                case .unknown(let type, let raw):
+                    switch type {
+                    case "user-started-speaking", "bot-interrupted": currentRequests.userStarted()
+                    case "user-transcription": currentRequests.transcription(raw)
+                    case "console/turn":
+                        currentRequests.receiveTurn(raw, sessionID: client.consoleSessionID,
+                                                    generation: client.consoleGeneration)
+                    default: break
+                    }
                 default:
                     break
                 }
@@ -422,6 +441,7 @@ final class AppMessageRouter {
     }
 
     func stop() {
+        currentRequests.reset()
         task?.cancel()
         task = nil
         transcriptSink = nil

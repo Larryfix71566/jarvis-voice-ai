@@ -578,6 +578,95 @@ final class ArrivalRunClock {
     }
 }
 
+/// WS-17, Larry 10-18: a foreground answer needs an exact host request,
+/// not a recent timestamp or the agent that happened to start last.
+@MainActor
+final class CurrentRequestArrivals {
+    private struct Input: Hashable {
+        let timestamp: String
+        let userID: String
+    }
+    private struct Binding {
+        let id: UUID
+        let sequence: Int
+        let input: Input
+    }
+    private var input: Input?
+    private var seenInputs: [Input] = []
+    private var pending: Binding?
+    private var current: Binding?
+    private var highestSequence = 0
+    private var revokedThrough = 0
+    private var winner: UUID?
+
+    func reset() {
+        input = nil; seenInputs = []; pending = nil; current = nil
+        highestSequence = 0; revokedThrough = 0; winner = nil
+    }
+
+    func userStarted() {
+        input = nil; pending = nil; current = nil; winner = nil
+        revokedThrough = highestSequence
+    }
+
+    func transcription(_ raw: [String: JSONValue]) {
+        guard let data = raw["data"]?.objectValue, data["final"] == .bool(true) else { return }
+        let waiting = pending
+        pending = nil; current = nil; winner = nil; input = nil
+        guard let timestamp = data["timestamp"]?.stringValue, !timestamp.isEmpty,
+              timestamp.count <= 128, let text = data["text"]?.stringValue,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let userID = data["user_id"]?.stringValue ?? ""
+        guard userID.count <= 128 else { return }
+        let candidate = Input(timestamp: timestamp, userID: userID)
+        // Reused/missing input identity cannot attest a different request.
+        guard !seenInputs.contains(candidate) else { return }
+        seenInputs = Array((seenInputs + [candidate]).suffix(64))
+        input = candidate
+        if let waiting, waiting.input == candidate, waiting.sequence > revokedThrough {
+            current = waiting
+        }
+    }
+
+    func receiveTurn(_ raw: [String: JSONValue], sessionID: UUID?, generation: UUID?) {
+        guard raw["version"] == .number(1),
+              let sessionID, let generation,
+              raw["session_id"]?.stringValue.flatMap(UUID.init(uuidString:)) == sessionID,
+              raw["generation"]?.stringValue.flatMap(UUID.init(uuidString:)) == generation,
+              let id = raw["request_id"]?.stringValue.flatMap(UUID.init(uuidString:)),
+              let sequence = raw["sequence"]?.doubleValue, sequence.isFinite,
+              sequence > 0, sequence <= Double(Int32.max), sequence.rounded(.towardZero) == sequence,
+              let state = raw["state"]?.stringValue else { return }
+        let number = Int(sequence)
+        if state == "cancelled" {
+            // Cancel-before-start also tombstones that sequence.
+            highestSequence = max(highestSequence, number)
+            revokedThrough = max(revokedThrough, number)
+            if current?.id == id { current = nil; winner = nil }
+            if pending?.id == id { pending = nil }
+            return
+        }
+        guard state == "started", number > highestSequence,
+              let timestamp = raw["input_timestamp"]?.stringValue, !timestamp.isEmpty,
+              timestamp.count <= 128, let userID = raw["input_user_id"]?.stringValue,
+              userID.count <= 128 else { return }
+        let binding = Binding(id: id, sequence: number, input: Input(timestamp: timestamp, userID: userID))
+        highestSequence = number; current = nil; winner = nil; pending = binding
+        if input == binding.input && number > revokedThrough { current = binding; pending = nil }
+    }
+
+    func canPresent(_ origin: UUID?, tool: String?) -> Bool {
+        guard let origin, let current, current.id == origin,
+              current.sequence > revokedThrough, winner == nil else { return false }
+        return !ArrivalIntent.backgroundTools.contains(tool ?? "")
+    }
+
+    func didPresent(_ origin: UUID?, resultID: UUID) {
+        guard let origin, current?.id == origin, winner == nil else { return }
+        winner = resultID
+    }
+}
+
 /// CC7a.2 approved design "New result while reading": while something
 /// other than the conversation is on the stage, an arrival shows
 /// "New: … Show / Dismiss" above it instead of taking the stage. On the

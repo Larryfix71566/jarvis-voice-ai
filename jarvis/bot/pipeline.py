@@ -41,7 +41,8 @@ from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import (OutputTransportMessageUrgentFrame, LLMContextFrame,
-    LLMFullResponseStartFrame, LLMFullResponseEndFrame, InterruptionFrame)
+    LLMFullResponseStartFrame, LLMFullResponseEndFrame, InterruptionFrame,
+    TranscriptionFrame, UserStartedSpeakingFrame)
 from pipecat.observers.base_observer import BaseObserver
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.pipeline.pipeline import Pipeline
@@ -206,6 +207,115 @@ from jarvis.usage_ledger import provider_from_base_url, record_call
 from jarvis.vision import execution_route_summary, resolve_vision_execution_route
 
 _logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ForegroundRequest:
+    request_id: str
+    sequence: int
+    input_timestamp: str
+    input_user_id: str
+
+
+_foreground_request: ContextVar[ForegroundRequest | None] = ContextVar(
+    "foreground_request", default=None)
+_FOREGROUND_FRAME_KEY = "mortimer_foreground_request"
+
+
+class ForegroundRequests(BaseObserver):
+    """Session-local input provenance; no transcript persistence or time heuristic.
+
+    Bind at the actual user-aggregator output, before a mutable context can
+    acquire another turn. Each LLM frame and tool call retains that immutable
+    binding, including sequential runners and detached delegation children.
+    """
+    def __init__(self, transport: Any, session_id: str, generation: str) -> None:
+        super().__init__()
+        self.transport, self.session_id, self.generation = transport, session_id, generation
+        self.input_source: Any = None
+        self.user_aggregator: Any = None
+        self.parts: list[str] = []
+        self.input_identity: tuple[str, str] | None = None
+        self.sequence = 0
+        self.current: ForegroundRequest | None = None
+        self.boundaries: list[tuple[dict, ForegroundRequest]] = []
+        self.calls: dict[str, ForegroundRequest | None] = {}
+        self.seen_starts: list[int] = []
+
+    async def announce(self, request: ForegroundRequest, state: str) -> None:
+        await send_app_message(self.transport, {
+            "type": "console/turn", "version": 1, "session_id": self.session_id,
+            "generation": self.generation, "request_id": request.request_id,
+            "sequence": request.sequence, "state": state,
+            "input_timestamp": request.input_timestamp, "input_user_id": request.input_user_id,
+        })
+
+    async def cancel(self, request: ForegroundRequest | None) -> None:
+        if request is not None:
+            if self.current == request:
+                self.current = None
+            await self.announce(request, "cancelled")
+
+    async def on_push_frame(self, data) -> None:
+        if data.direction != FrameDirection.DOWNSTREAM:
+            return
+        frame = data.frame
+        if isinstance(frame, UserStartedSpeakingFrame):
+            # The same frame crosses several processors. A later hop must
+            # not erase the accepted transcription accumulated in between.
+            if frame.id not in self.seen_starts:
+                self.seen_starts = (self.seen_starts + [frame.id])[-64:]
+                self.parts = []
+                self.input_identity = None
+                await self.cancel(self.current)
+            return
+        if isinstance(frame, TranscriptionFrame) and data.source is self.input_source:
+            text = frame.text.strip()
+            timestamp, user_id = str(frame.timestamp or ""), str(frame.user_id or "")
+            if (getattr(frame, "finalized", True) and text and timestamp
+                    and len(timestamp) <= 128 and len(user_id) <= 128):
+                self.parts.append(text)
+                self.input_identity = (timestamp, user_id)
+            return
+        if not isinstance(frame, LLMContextFrame) or data.source is not self.user_aggregator:
+            return
+        messages = frame.context.get_messages()
+        boundary = next((m for m in reversed(messages) if is_real_user_message(m)), None)
+        request = next((r for m, r in self.boundaries if m is boundary), None)
+        if request is None and boundary is not None and self.input_identity is not None:
+            # Exact accepted-input equality is correlation, never semantic
+            # classification or a model's claim to own a newer request.
+            normalized = lambda value: " ".join(value.split())
+            if normalized(boundary["content"]) == normalized(" ".join(self.parts)):
+                self.sequence += 1
+                request = ForegroundRequest(str(uuid.uuid4()), self.sequence, *self.input_identity)
+                self.boundaries = (self.boundaries + [(boundary, request)])[-64:]
+                self.current = request
+                await self.announce(request, "started")
+        # Even a later continuation of an old context keeps its old token.
+        frame.metadata[_FOREGROUND_FRAME_KEY] = request
+
+    async def calls_started(self, _service, calls) -> None:
+        request = _foreground_request.get()
+        for call in calls:
+            self.calls[str(call.tool_call_id)] = request
+        while len(self.calls) > 256:
+            self.calls.pop(next(iter(self.calls)))
+
+
+def request_bound_service(service_class):
+    """Keep provider/model construction unchanged; scope its real frame call."""
+    class RequestBoundService(service_class):
+        async def process_frame(self, frame, direction):
+            if isinstance(frame, LLMContextFrame) and direction == FrameDirection.DOWNSTREAM:
+                request = frame.metadata.get(_FOREGROUND_FRAME_KEY)
+                token = _foreground_request.set(request if isinstance(request, ForegroundRequest) else None)
+                try:
+                    return await super().process_frame(frame, direction)
+                finally:
+                    _foreground_request.reset(token)
+            return await super().process_frame(frame, direction)
+    return RequestBoundService
 
 
 # Only successful weather tool execution marks a request. No task-text or
@@ -445,6 +555,7 @@ class Runtime:
     # the inbound content transfer. Set by build_pipeline for this session.
     console_generation: str = ""
     weather_context: Any = field(default_factory=WeatherContextMinimizer)
+    foreground_requests: Any = None
     # Command Console state is created per pipeline in build_pipeline() and
     # read by run_session()'s message handlers. It lives here because the
     # two functions share no scope: #80 read these as build_pipeline locals
@@ -546,6 +657,7 @@ def connection_greeting_note(timezone: str, now: datetime | None = None) -> str:
 def adapt_to_pipecat(
     name: str, dict_handler, *, runlog_enabled: bool = False,
     session_id: str | None = None, weather_context: WeatherContextMinimizer | None = None,
+    foreground_requests: ForegroundRequests | None = None,
 ):
     """Adapt a jarvis tool handler to pipecat's calling convention.
 
@@ -566,6 +678,8 @@ def adapt_to_pipecat(
     async def wrapper(params):
         _logger.info("supervisor_tool tool=%s", name)
         tool_call_id = str(getattr(params, "tool_call_id", "") or "")
+        request = foreground_requests.calls.get(tool_call_id) if foreground_requests is not None else None
+        foreground_token = _foreground_request.set(request)
         runlog = RunLogger(
             str(uuid.uuid4()), "supervisor", "Mortimer",
             "supervisor direct tool execution", session_id=session_id,
@@ -598,6 +712,8 @@ def adapt_to_pipecat(
             await params.result_callback(result)
             runlog.finish("supervisor tool completed")
         except asyncio.CancelledError:
+            if foreground_requests is not None:
+                await foreground_requests.cancel(request)
             if not result_known:
                 runlog.tool_outcome_unknown(
                     name, tool_call_id, reason_code="cancelled_after_return",
@@ -615,6 +731,9 @@ def adapt_to_pipecat(
             runlog.finish(f"FAILED: supervisor tool raised ({error_type}).")
             raise
         finally:
+            if foreground_requests is not None:
+                foreground_requests.calls.pop(tool_call_id, None)
+            _foreground_request.reset(foreground_token)
             if weather_token is not None:
                 _weather_context_call.reset(weather_token)
 
@@ -624,6 +743,7 @@ def adapt_to_pipecat(
 def register_supervisor_tool(
     llm, name: str, dict_handler, *, runlog_enabled: bool = False,
     session_id: str | None = None, weather_context: WeatherContextMinimizer | None = None,
+    foreground_requests: ForegroundRequests | None = None,
 ) -> None:
     """Register one direct Supervisor tool under a single spelling of its
     name — passing it twice invites a handler registered under the wrong
@@ -633,6 +753,7 @@ def register_supervisor_tool(
         adapt_to_pipecat(
             name, dict_handler, runlog_enabled=runlog_enabled,
             session_id=session_id, weather_context=weather_context,
+            foreground_requests=foreground_requests,
         ),
     )
 
@@ -937,6 +1058,7 @@ def build_pipeline(
     pusher = pusher or FramePusher()
     console_generation = str(uuid.uuid4())
     runtime.console_generation = console_generation
+    runtime.foreground_requests = ForegroundRequests(transport, runtime.session_id, console_generation)
     console_ready = runtime.console_ready
     console_inventory_revision = runtime.console_inventory_revision
     # One bounded acknowledgement future per request. The console tool waits
@@ -1132,6 +1254,8 @@ def build_pipeline(
                     return refused("invalid_reply")
                 args = {"subject_key": subject_key, "tool": tool, "days": days,
                         "units": units, "ordinary_turn": True}
+                if (origin := _foreground_request.get()) is not None:
+                    args["origin_request_id"] = origin.request_id
                 if run_id is not None:
                     args["run_id"] = run_id
                 reply = await request("weather_reuse", args, target, observed_revision=revision)
@@ -1368,7 +1492,7 @@ def build_pipeline(
     # non-Google deployment must not need it installed.
     if "generativelanguage.googleapis.com" in (settings.openai_base_url or ""):
         from pipecat.services.google.llm import GoogleLLMService
-        llm = GoogleLLMService(
+        llm = request_bound_service(GoogleLLMService)(
             api_key=settings.openai_api_key,
             model=settings.openai_model,
         )
@@ -1396,7 +1520,7 @@ def build_pipeline(
         # fixed there applies here too), so a future non-default
         # Anthropic-compatible base_url is honoured on Path A the same
         # way it already is on Path B, not by accident.
-        llm = AnthropicLLMService(
+        llm = request_bound_service(AnthropicLLMService)(
             api_key=settings.openai_api_key,
             client=AsyncAnthropic(
                 api_key=settings.openai_api_key,
@@ -1410,17 +1534,20 @@ def build_pipeline(
         _logger.info("supervisor_llm_service service=anthropic model=%s prompt_caching=on",
                      settings.openai_model)
     else:
-        llm = OpenAILLMService(
+        llm = request_bound_service(OpenAILLMService)(
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
             model=settings.openai_model,
         )
+    llm.add_event_handler("on_function_calls_started", runtime.foreground_requests.calls_started)
+
     def register_voice_tool(name: str, handler: Any) -> None:
         register_supervisor_tool(
             llm, name, handler,
             runlog_enabled=bool(getattr(settings, "jarvis_runlog_enabled", False)),
             session_id=runtime.session_id,
             weather_context=runtime.weather_context if name in {"delegate_task", "local_weather"} else None,
+            foreground_requests=runtime.foreground_requests,
         )
 
     register_voice_tool("delegate_task", weather_delegate_handler if command_console_enabled else delegate_handler)
@@ -1621,6 +1748,8 @@ def build_pipeline(
     # the conversations table (the memory sweep folds that table into
     # long-term memory — observed live 2026-08-21: TV dialogue persisted).
     runtime.speaker_gate = speaker_transcript_gate
+    runtime.foreground_requests.input_source = speaker_transcript_gate or stt
+    runtime.foreground_requests.user_aggregator = aggregators.user()
 
     transcript = TranscriptLogger(session_id=runtime.session_id)
 
@@ -1714,6 +1843,12 @@ async def send_app_message(transport: Any, message: dict) -> None:
     way -- this is the one sender, and parity between the two client
     paths rests on it (docs/acceptance/adaptive-interface/C6-parity.md).
     """
+    if message.get("type") == "display" and isinstance(message.get("display"), dict):
+        payload = dict(message["display"])
+        payload.pop("origin_request_id", None)
+        if (request := _foreground_request.get()) is not None:
+            payload["origin_request_id"] = request.request_id
+        message = {**message, "display": payload}
     await transport.output().send_message(
         OutputTransportMessageUrgentFrame(message=_wrap_rtvi(message)))
 
@@ -1933,6 +2068,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             enabled=settings.jarvis_late_result_neutralize_enabled,
         )
         observers = [
+            runtime.foreground_requests,
             TranscriptObserver(runtime.session_id, only_from=runtime.speaker_gate,
                                on_consent=handle_voice_consent),
             InterruptionNotifier(

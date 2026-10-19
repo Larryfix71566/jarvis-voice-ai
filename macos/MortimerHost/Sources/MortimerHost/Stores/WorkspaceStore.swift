@@ -336,7 +336,7 @@ final class WorkspaceStore {
         inventoryRevision += 1
         if quietly {
             hasReceivedResult = true
-            if showsConversation && answersCurrentRequest {
+            if answersCurrentRequest && supportingContent != .result(result.id) {
                 select(result.id)
             } else {
                 if activeID == nil { activeID = result.id }
@@ -416,7 +416,9 @@ final class WorkspaceStore {
         guard Self.weatherSourceIsComplete(source, tool: tool, days: days, units: units) else {
             return .miss("cache_incomplete")
         }
-        arrangeWeatherArrival(target, answersCurrentRequest: answersCurrentRequest)
+        if answersCurrentRequest || activeID != target || showsConversation {
+            arrangeWeatherArrival(target, answersCurrentRequest: answersCurrentRequest)
+        }
         return .hit(source: source, ts: ts, freshUntil: expiry, revision: inventoryRevision)
     }
 
@@ -453,7 +455,7 @@ final class WorkspaceStore {
         hasReceivedResult = true
         // A supporting display owns its sole renderer until the router's
         // confirmed yield path releases it. Never open a duplicate here.
-        if showsConversation && answersCurrentRequest && supportingContent != .result(id) {
+        if answersCurrentRequest && supportingContent != .result(id) {
             select(id)
         } else {
             unreadIDs.insert(id)

@@ -125,6 +125,9 @@ struct ConsoleActionRegistry: Sendable {
             guard let target = request.target, UUID(uuidString: target) != nil else { return false }
         }
         if request.action == .weatherReuse {
+            if let origin = request.args["origin_request_id"] {
+                guard let text = origin.stringValue, UUID(uuidString: text) != nil else { return false }
+            }
             guard let key = request.args["subject_key"]?.stringValue,
                   !key.isEmpty, key.unicodeScalars.count <= 200,
                   let tool = request.args["tool"]?.stringValue,
@@ -148,7 +151,7 @@ struct ConsoleActionRegistry: Sendable {
     private static let argumentFields: [ConsoleAction: Set<String>] = [
         .roadmapControl: ["operation", "owners", "authors", "states", "topics", "workstreams", "checklist", "blockers", "period"],
         .inventory: ["scope", "cursor"],
-        .weatherReuse: ["subject_key", "tool", "days", "units", "run_id", "ordinary_turn"],
+        .weatherReuse: ["subject_key", "tool", "days", "units", "run_id", "ordinary_turn", "origin_request_id"],
         .viewSet: ["mode"], .resultMode: ["mode"], .compareSide: ["side"],
         .contentScroll: ["panel", "direction", "viewport"],
         .sourceSelect: ["source", "index"], .sourceOpen: ["source", "index"],

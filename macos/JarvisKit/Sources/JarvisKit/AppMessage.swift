@@ -252,6 +252,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         chars = nil; truncated = nil; dataPolicy = nil; opaqueRef = nil
         weather = nil; roadmap = nil; roadmapTimezone = nil
         subjectKey = nil; freshUntil = nil; weatherSource = nil
+        originRequestID = nil
     }
 
     public let kind: String?
@@ -264,6 +265,8 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
     /// Agent run that produced this payload. Used only for presentation
     /// grouping; it is never treated as content identity.
     public let runID: String?
+    /// Host-issued foreground request identity; never content/cache identity.
+    public let originRequestID: UUID?
     /// Epoch SECONDS, not ms (displayResults.ts:28).
     public let ts: Double?
     /// Absent/unrecognised -> .drawer (display.py:60-92, App.tsx:238-240).
@@ -302,6 +305,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         case kind, title, body, images
         case basemapImages = "basemap_images"
         case links, agent, runID = "run_id", ts, surface, tool, commands, note
+        case originRequestID = "origin_request_id"
         case expectOutput = "expect_output"
         case content, chars, truncated
         case dataPolicy = "data_policy", opaqueRef = "opaque_ref"
@@ -321,6 +325,8 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         links = try c.decodeIfPresent([DisplayLink].self, forKey: .links)
         agent = try c.decodeIfPresent(String.self, forKey: .agent)
         runID = try c.decodeIfPresent(String.self, forKey: .runID)
+        // Invalid/legacy provenance may render as a card but cannot focus it.
+        originRequestID = try? c.decodeIfPresent(UUID.self, forKey: .originRequestID)
         ts = try c.decodeIfPresent(Double.self, forKey: .ts)
         // Two decoder rules (§3 N7): unrecognised keys (incl. a nested
         // "type") are ignored by construction (Codable only reads the

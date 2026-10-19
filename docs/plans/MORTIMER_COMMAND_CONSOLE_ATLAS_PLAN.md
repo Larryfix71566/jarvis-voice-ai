@@ -2798,3 +2798,35 @@ Preserve legacy rendering as unread cards and WS-21 sole-renderer ownership.
 This reservation commit changes documentation only. Required caller-chain,
 reorder, cancellation, supersession and multiple-arrival witnesses precede
 source review; no provider call, install or production action is part of it.
+
+
+### 2026-10-19 — Implementation checkpoint; native verification unresolved
+
+On the registered isolated branch, the candidate binds accepted input identity
+at the actual user-aggregator frame, captures immutable tool-call ownership
+(including reused sequential runners/detached tasks), adds host-only origin
+to display/cache messages, and admits one native foreground winner. Native
+selection uses exact input/request identity and cancellation/supersession,
+without changing weather content IDs, source fetch times or cache expiry.
+No model/endpoint setting, credential, production source/history or service
+was changed. Wire reservation `b587cd5` precedes code; claim metadata was
+reconciled in `9f83788` (roadmap checker zero errors/warnings).
+
+Existing focused Python selection: 51 passed, zero failures. Five new public
+synthetic real-frame/callback/transport provenance tests pass, covering exact
+old/new tool ownership, detached event preservation, cancellation, missing
+host identity and repeated-input continuation. An initial synthetic frame
+used Pipecat's default `finalized=False`; the fixture was corrected to the
+installed Flux emitter's actual `finalized=True` shape. No assertion weakened.
+
+Native compilation completed in 28.08 seconds using an isolated copy of the
+existing locked WebRTC 120.0.0 dependency (revision matches Package.resolved);
+no dependency download/install or production write. SwiftPM's nested sandbox
+was unavailable inside the execution sandbox; compilation used its temporary
+subprocess-sandbox-disable option within the outer filesystem sandbox. The
+first focused XCTest execution aborts with signal 6, "freed pointer was not
+the last allocation", after one case passes. This is unresolved, not a skip
+or native pass. Next: reproduce the abort against baseline/isolated cases,
+complete native caller-chain race/cancellation/multiple-arrival regressions,
+then full required checks, exact-source independent review and a runtime PR.
+No runtime PR, source-review transmission, merge, deployment or restart yet.
