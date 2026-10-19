@@ -269,7 +269,12 @@ class ForegroundRequests:
 
     async def before_assistant_frame(self, _source, frame) -> None:
         self.assistant_frame.set(frame)
-        if isinstance(frame, FunctionCallInProgressFrame):
+        if isinstance(frame, InterruptionFrame):
+            # The SDK resets its deferred bot-stopped flush on interruption.
+            # Retire only that abandoned batch; still-running/late calls keep
+            # their immutable original dispatch ownership.
+            self.assistant_pending.clear()
+        elif isinstance(frame, FunctionCallInProgressFrame):
             self.assistant_running[frame.tool_call_id] = self.continuation_calls.get(frame.tool_call_id)
             while len(self.assistant_running) > 256:
                 self.assistant_running.pop(next(iter(self.assistant_running)))

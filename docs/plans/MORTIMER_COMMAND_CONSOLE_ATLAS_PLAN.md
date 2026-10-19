@@ -3021,3 +3021,27 @@ committed 31-pass slice. Broader/full affected checks, final-source independent
 review and a fresh unchanged twelve-check VM comparison must follow this new
 source freeze; historical `0f2af66` evidence is not promoted to final clearance.
 No merge, deployment, production action or acceptance closure.
+
+
+### 2026-10-19 — Deferred interruption lifecycle follow-up
+
+A bounded caller review identified stale `assistant_pending` ownership after the
+real assistant aggregator resets its deferred bot-stopped flush on
+`InterruptionFrame`. A deterministic real PipelineWorker regression waits for
+the actual BotStartedSpeaking processing event, completes result A while
+speaking, processes interruption, then dispatches request B. On unchanged
+`c5c5b45`, B's fresh upstream context has no request binding (one failing
+regression); this is a valid P2 availability/focus defect, not a source grant.
+An earlier fixture run exposed a bot-speaking scheduling race; its failed log
+is retained locally and is not treated as product evidence.
+
+The repair retires only the abandoned pending batch on the public synchronous
+interruption hook. Immutable dispatch and still-running ownership remain. All
+16 provenance tests pass, including actual interruption while an uncancelled
+old tool still runs and the existing superseded/cancelled/deferred cases.
+Preceding `c5c5b45` full host evidence: Python 6,807 passed / 15 skipped;
+MortimerHost 574 executed / five prerequisite skips / zero failures; JarvisKit
+235 passed. Native source is unchanged by this follow-up; full backend, final
+exact-source review and twelve-check independent verification refresh next.
+Historical receipts do not clear this changed runtime. No merge, deployment,
+restart, production change or live acceptance closure.

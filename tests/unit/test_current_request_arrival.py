@@ -312,12 +312,13 @@ async def test_one_accepted_input_cannot_mint_authority_for_a_copied_boundary():
 
 @pytest.mark.parametrize(("mode", "deferred"), [
     ("current", False), ("current", True), ("superseded", False), ("cancelled", False),
+    ("interrupted-deferred", True), ("interrupted-running", False),
 ])
 async def test_actual_tool_result_assistant_upstream_round_keeps_original_request(mode, deferred):
     from pipecat.frames.frames import (
         StartFrame, UserStoppedSpeakingFrame, FunctionCallResultFrame,
         LLMFullResponseStartFrame, LLMFullResponseEndFrame,
-        BotStartedSpeakingFrame, BotStoppedSpeakingFrame,
+        BotStartedSpeakingFrame, BotStoppedSpeakingFrame, InterruptionFrame,
     )
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.worker import PipelineWorker, PipelineParams
@@ -328,6 +329,7 @@ async def test_actual_tool_result_assistant_upstream_round_keeps_original_reques
     owner = ForegroundRequests(transport, "synthetic-session", "synthetic-generation")
     ready, first_entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
     second_done, new_inference, first_result = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    interrupted, bot_speaking = asyncio.Event(), asyncio.Event()
     observed = []
 
     class Source(FrameProcessor):
@@ -357,6 +359,10 @@ async def test_actual_tool_result_assistant_upstream_round_keeps_original_reques
                         function_name="first_round", tool_call_id="real-first-round",
                         arguments={}, context=frame.context)])
                 else:
+                    if mode == "interrupted-deferred":
+                        await self.run_function_calls([FunctionCallFromLLM(
+                            function_name="first_round", tool_call_id="real-new-round",
+                            arguments={}, context=frame.context)])
                     new_inference.set()
             else:
                 self.upstream += 1
@@ -390,6 +396,10 @@ async def test_actual_tool_result_assistant_upstream_round_keeps_original_reques
         "second_round", second_handler, foreground_requests=owner))
 
     async def after_assistant(_source, frame):
+        if isinstance(frame, BotStartedSpeakingFrame):
+            bot_speaking.set()
+        if isinstance(frame, InterruptionFrame):
+            interrupted.set()
         if isinstance(frame, FunctionCallResultFrame) and frame.tool_call_id == "real-first-round":
             first_result.set()
     pair.assistant().add_event_handler("on_after_process_frame", after_assistant)
@@ -413,18 +423,34 @@ async def test_actual_tool_result_assistant_upstream_round_keeps_original_reques
             assert owner.current is not None and owner.current != original
         elif mode == "cancelled":
             await owner.cancel(original)
+        elif mode == "interrupted-running":
+            await worker.queue_frame(InterruptionFrame())
+            await asyncio.wait_for(interrupted.wait(), timeout=5)
         if deferred:
             await worker.queue_frame(BotStartedSpeakingFrame())
+            await asyncio.wait_for(bot_speaking.wait(), timeout=5)
         release.set()
         await asyncio.wait_for(first_result.wait(), timeout=5)
         if deferred:
             assert not second_done.is_set(), "The real assistant must defer until bot-stopped."
+            if mode == "interrupted-deferred":
+                await worker.queue_frame(InterruptionFrame())
+                await asyncio.wait_for(interrupted.wait(), timeout=5)
             await worker.queue_frame(BotStoppedSpeakingFrame())
+            if mode == "interrupted-deferred":
+                await worker.queue_frames([UserStartedSpeakingFrame(), TranscriptionFrame(
+                    "Synthetic post-interruption question", "synthetic-user", "actual-input-3", finalized=True),
+                    UserStoppedSpeakingFrame()])
+                await asyncio.wait_for(new_inference.wait(), timeout=5)
+                assert owner.current is not None and owner.current != original
         await asyncio.wait_for(second_done.wait(), timeout=5)
         upstream = [binding for direction, binding in observed if direction == FrameDirection.UPSTREAM]
-        assert upstream and upstream[0] == original, "Fresh upstream SDK context retains its actual tool's request, including after newer input."
+        expected = owner.current if mode == "interrupted-deferred" else original
+        assert upstream and upstream[0] == expected, "The actual continuation keeps its request; abandoned deferred ownership cannot suppress the next request."
+        if mode == "interrupted-deferred":
+            assert len(upstream) == 1, "Interruption abandons the original deferred SDK flush."
         display = next(m["display"] for m in transport.messages if m["type"] == "display")
-        assert display.get("origin_request_id") == original.request_id
+        assert display.get("origin_request_id") == expected.request_id
     finally:
         release.set()
         await worker.stop_when_done()

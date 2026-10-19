@@ -66,3 +66,11 @@ cancelled). Public synchronous causal-frame hooks plus direction-independent
 provider scoping repair the path; 14 provenance tests pass. Source changed;
 full affected checks/new-source review and twelve-check verification remain
 pending. No production, merge/deploy or acceptance change.
+
+Deferred-interruption follow-up: actual SDK bot-speaking→result A→interruption
+→new request B reproduces B's lost binding on `c5c5b45`. Retire only the
+abandoned pending flush; preserve immutable still-running/late call ownership.
+All 16 provenance tests pass. Preceding full host checks: Python 6,807 / 15
+skips; native 574 / five prerequisite skips / zero failures; JarvisKit 235.
+New-source full backend/review/twelve-check verification pending; no acceptance
+checkbox, production, merge or deployment change.
