@@ -203,6 +203,22 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         return try XCTUnwrap(f.workspace.results.first { $0.payload.title == title })
     }
 
+    private func roadmap(_ f: Fixture, revision: String) async throws -> WorkspaceResult {
+        let before = f.transport.inventories.count
+        var fields: [String: Any] = ["kind": "markdown", "title": "Synthetic roadmap",
+            "body": "Public synthetic roadmap", "tool": "repo_read_file", "surface": "window",
+            "data_policy": "approved_external", "roadmap_timezone": "Etc/UTC",
+            "roadmap": ["schema": "mortimer.roadmap.v1", "provenance": [
+                "path": "ROADMAP.md", "repository_id": String(repeating: "d", count: 64),
+                "revision": String(repeating: revision, count: 40), "sha256": String(repeating: "b", count: 64),
+                "read_at": "2026-10-19T00:00:00Z", "dirty": false, "source_kind": "local_checkout"],
+                "cards": [], "logs": [], "issues": []]]
+        if let origin = f.requests.current { fields["origin_request_id"] = origin.uuidString }
+        try f.transport.emit(["type": "display", "display": fields])
+        try await wait("roadmap routed and inventory published") { f.transport.inventories.count > before }
+        return try XCTUnwrap(f.workspace.results.first { $0.payload.roadmap != nil })
+    }
+
     private func action(_ f: Fixture, _ action: ConsoleAction, target: UUID,
                         args: [String: JSONValue] = [:]) async throws -> ConsoleResult {
         let observed = try XCTUnwrap(f.transport.inventories.last)
@@ -350,6 +366,32 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
             let second = try await ordinaryWindow(f, title: "Public report B")
             XCTAssertEqual(f.workspace.supportingContent, .result(original.id), "Reused renderer owner consumes this request's winner.")
             XCTAssertEqual(f.display.panels, panels)
+            XCTAssertTrue(f.workspace.unreadIDs.contains(second.id))
+            if !displayOpen { XCTAssertEqual(f.workspace.activeID, original.id) }
+        }
+    }
+
+    func testRefreshedRoadmapConsumesWinnerAtItsActualRenderer() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        for displayOpen in [false, true] {
+            let f = try await fixture(); defer { f.router.stop() }
+            f.display.setWindowOpen(displayOpen)
+            try await user(f, "Show the roadmap")
+            let original = try await roadmap(f, revision: "a")
+            XCTAssertEqual(f.workspace.supportingContent, .result(original.id))
+            if !displayOpen { f.workspace.returnToConversation() }
+            try await user(f, "Read the roadmap again")
+            let refreshed = try await roadmap(f, revision: "f")
+            XCTAssertEqual(refreshed.id, original.id)
+            XCTAssertEqual(refreshed.payload.roadmap?.provenance.revision, String(repeating: "f", count: 40))
+            if !displayOpen {
+                XCTAssertEqual(f.workspace.activeID, original.id)
+                XCTAssertFalse(f.workspace.showsConversation, "A queued display pointer cannot hide the current main fallback answer.")
+            }
+            let panels = f.display.panels
+            let second = try await ordinaryWindow(f, title: "Public report after roadmap refresh")
+            XCTAssertEqual(f.workspace.supportingContent, .result(original.id))
+            XCTAssertEqual(f.display.panels, panels, "The refreshed roadmap already consumed this request's winner.")
             XCTAssertTrue(f.workspace.unreadIDs.contains(second.id))
             if !displayOpen { XCTAssertEqual(f.workspace.activeID, original.id) }
         }

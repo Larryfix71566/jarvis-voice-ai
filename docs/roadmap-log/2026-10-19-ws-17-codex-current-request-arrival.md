@@ -74,3 +74,11 @@ All 16 provenance tests pass. Preceding full host checks: Python 6,807 / 15
 skips; native 574 / five prerequisite skips / zero failures; JarvisKit 235.
 New-source full backend/review/twelve-check verification pending; no acceptance
 checkbox, production, merge or deployment change.
+
+Roadmap-refresh follow-up: seven actual-router assertions reproduce queued
+pointer/main fallback and winner-consumption failure. Existing actual-renderer
+predicate repairs the early branch; 39 related native cases pass. The prior
+`e29973d` VM attempt is deliberately stopped/superseded; owned resources removed,
+preexisting assets unchanged. Six Claude findings await bounded source/policy
+reconciliation; full affected native/new-source review/twelve-check verification
+refresh next. No production, acceptance, merge or deployment change.

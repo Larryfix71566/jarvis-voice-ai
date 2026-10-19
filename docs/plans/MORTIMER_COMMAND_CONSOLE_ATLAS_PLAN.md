@@ -3045,3 +3045,34 @@ MortimerHost 574 executed / five prerequisite skips / zero failures; JarvisKit
 exact-source review and twelve-check independent verification refresh next.
 Historical receipts do not clear this changed runtime. No merge, deployment,
 restart, production change or live acceptance closure.
+
+
+### 2026-10-19 — Existing roadmap refresh renderer/winner follow-up
+
+The current-request roadmap-refresh early branch retained the old queued
+`supportingContent` check. A real SDK/router regression covers open and closed
+supporting windows, refreshed stable roadmap identity, then a second same-token
+ordinary result. On unchanged `e29973d` runtime it fails seven assertions:
+closed-window fallback remains on Conversation and later arrivals take over
+the renderer. This is the same approved one-winner contract, not a new feature.
+The minimal repair uses the existing actual-renderer predicate: an already
+visible supporting answer consumes the winner; otherwise the existing roadmap
+owner can open on the main fallback while independent navigation is preserved.
+No panel is reopened or moved. All 39 affected actual-router/roadmap/provenance
+native tests pass.
+
+The offline `e29973d` verification was deliberately stopped at its exact owned
+child after reproduction. The owner runner reached terminal, retained its
+partial logs/receipt, deleted its newly owned VMs and verified all preexisting
+assets unchanged. It is superseded/source-changed, not passed. The full Python
+6,809/15-skip pass remains exact `e29973d` evidence; Python is unchanged by this
+native repair. Full affected native checks, new exact-source review and a fresh
+original twelve-check VM comparison follow the new freeze.
+
+Claude's completed exact `e29973d` source report contains six findings requiring
+bounded disposition: conservative final-input revocation, chunk correlation,
+background supporting behavior, pinned SDK echo assumptions, old heuristic
+helpers and theoretical repeated UUIDs. Original report is preserved. Native
+and Python contract probes confirm multi-chunk final-timestamp correlation and
+conservative revocation/recovery; policy/remaining caller reconciliation stays
+open pending the actual reviewer verdict. No acceptance, merge or deployment.

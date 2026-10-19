@@ -291,16 +291,27 @@ final class AppMessageRouter {
                 case .display(let payload):
                     let existingID = workspace?.reuseExistingIdentity(for: payload)
                     if payload.roadmap != nil, let existingID {
-                        // A repeated repository read refreshes its existing
-                        // owner without selecting, moving or reopening it.
+                        // Refresh the existing owner. Only a proven current
+                        // request may present it through its actual renderer.
                         let applied = workspace?.refreshRoadmap(existingID, payload: payload) == true
                         if !applied { workspace?.setRoadmapRefreshStatus(existingID, "Refresh failed; previous snapshot is stale.") }
-                        if applied, currentRequests.canPresent(payload.originRequestID, tool: payload.tool),
-                           workspace?.supportingContent != .result(existingID),
-                           workspace?.showsAtlas == false, workspace?.showsSkills == false,
-                           workspace?.showsWorkflows == false, workspace?.showsMemoryGraph == false {
-                            workspace?.select(existingID)
-                            currentRequests.didPresent(payload.originRequestID, resultID: existingID)
+                        if applied, let workspace,
+                           currentRequests.canPresent(payload.originRequestID, tool: payload.tool) {
+                            let rawLayout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
+                            let supporting = displayWindow.isPresented(.result(existingID),
+                                selection: workspace.supportingContent,
+                                layoutVersion: InterfaceLayoutVersion.resolve(rawLayout))
+                            if supporting {
+                                // The existing renderer already shows this
+                                // request's refreshed answer; consume its winner.
+                                currentRequests.didPresent(payload.originRequestID, resultID: existingID)
+                            } else if !workspace.showsAtlas && !workspace.showsSkills
+                                        && !workspace.showsWorkflows && !workspace.showsMemoryGraph {
+                                // A queued pointer is not a live renderer. Use
+                                // the main fallback without reopening a panel.
+                                workspace.select(existingID)
+                                currentRequests.didPresent(payload.originRequestID, resultID: existingID)
+                            }
                         }
                         consoleCoordinator?.publishInventory()
                         break
