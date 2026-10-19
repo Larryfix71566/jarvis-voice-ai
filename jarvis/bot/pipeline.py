@@ -242,6 +242,7 @@ class ForegroundRequests:
         self.boundaries: list[tuple[dict, ForegroundRequest]] = []
         self.calls: dict[str, ForegroundRequest | None] = {}
         self.seen_starts: list[int] = []
+        self.aggregator_starts: list[int] = []
 
     def install(self, input_source: Any, user_aggregator: Any) -> None:
         self.input_source, self.user_aggregator = input_source, user_aggregator
@@ -271,8 +272,15 @@ class ForegroundRequests:
 
     async def before_push(self, source, frame) -> None:
         if isinstance(frame, UserStartedSpeakingFrame):
-            if source is not self.input_source:
-                return  # The user aggregator may emit a second start after final text.
+            if source is self.user_aggregator:
+                # The real aggregator broadcasts both directions. Its upstream
+                # instance subsequently crosses the accepted source too; record
+                # exact frame identity before SDK delivery so that echo cannot
+                # erase an already accepted final transcript or cancel its turn.
+                self.aggregator_starts = (self.aggregator_starts + [frame.id])[-64:]
+                return
+            if source is not self.input_source or frame.id in self.aggregator_starts:
+                return
             # The same frame crosses several processors. A later hop must
             # not erase the accepted transcription accumulated in between.
             if frame.id not in self.seen_starts:
@@ -309,6 +317,10 @@ class ForegroundRequests:
                 request = ForegroundRequest(str(uuid.uuid4()), self.sequence, *self.input_identity)
                 self.boundaries = (self.boundaries + [(boundary, request)])[-64:]
                 self.current = request
+                # One accepted input grants one boundary. A copied context or
+                # repeated injected text cannot mint a second foreground token.
+                self.input_identity = None
+                self.parts = []; self.input_chars = 0
                 await self.announce(request, "started")
         # Even a later continuation of an old context keeps its old token.
         frame.metadata[_FOREGROUND_FRAME_KEY] = request

@@ -245,6 +245,10 @@ async def test_real_sdk_synchronous_frame_hook_binds_before_downstream_delivery(
         def _check_started(self, frame):
             return True  # Only the start/clock scheduler is omitted, not push dispatch.
 
+        async def queue_frame(self, frame, direction=FrameDirection.DOWNSTREAM, **kwargs):
+            # Keep the actual upstream propagation through the accepted source.
+            await self.push_frame(frame, direction)
+
     class Consumer(FrameProcessor):
         async def queue_frame(self, frame, direction=FrameDirection.DOWNSTREAM, **kwargs):
             if isinstance(frame, LLMContextFrame):
@@ -259,7 +263,12 @@ async def test_real_sdk_synchronous_frame_hook_binds_before_downstream_delivery(
     user = pair.user()
     user._check_started = lambda _frame: True
     source = Sender()
-    source.link(Consumer()); user.link(Consumer())
+    # Inference/turn scheduling is omitted; public push/broadcast dispatch and
+    # the real source -> aggregator -> sink links run in both directions.
+    async def no_inference(*_args, **_kwargs):
+        pass
+    user.queue_frame = no_inference
+    source.link(user); user.link(Consumer())
     owner.install(source, user)
     await source.broadcast_frame(UserStartedSpeakingFrame)
     await source.push_frame(TranscriptionFrame(
@@ -286,3 +295,16 @@ async def test_blocked_ui_sender_is_bounded_and_does_not_break_request_capture(m
     await bind_call(owner, frame, "call-1")
     assert owner.calls["call-1"] is not None
     assert cancelled.is_set(), "The real UI-send deadline must cancel the blocked sender."
+
+
+async def test_one_accepted_input_cannot_mint_authority_for_a_copied_boundary():
+    owner, transport = fixture()
+    frame = await user_context(owner, "Weather here", "input-1")
+    await bind_call(owner, frame, "original")
+    origin = owner.calls["original"]
+    copied = LLMContextFrame(LLMContext([dict(m) for m in frame.context.get_messages()]))
+    await push(owner, owner.user_aggregator, copied)
+    await bind_call(owner, copied, "copied")
+    assert owner.calls["copied"] is None
+    assert owner.current == origin
+    assert [m["state"] for m in transport.messages] == ["started"]

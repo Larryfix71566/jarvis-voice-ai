@@ -33,3 +33,12 @@ assertions and passes the candidate; its test-only baseline overlay was removed.
 The 36 affected native regression/private-capture cases pass with all privacy
 assertions intact. Original full-run failures are preserved and classified in
 the existing plan; final-source full clean-host suites and review remain open.
+
+Full `6d777eb` results: Python 6,802 passed / 15 skipped; JarvisKit 235 passed;
+MortimerHost 572 executed / five prerequisite skips / zero failures. Python
+dotenv contamination reproduces all five failures on unchanged baseline;
+process-only isolation resolves them without assertion changes. A later actual
+upstream SDK probe finds a provenance defect despite those passes. Both linked
+broadcast and copied-boundary red cases are repaired; 207 focused checks pass.
+The old review packet is withheld; full Python repeat/new packet/review pending.
+No production, credential, deployment or live-acceptance change.

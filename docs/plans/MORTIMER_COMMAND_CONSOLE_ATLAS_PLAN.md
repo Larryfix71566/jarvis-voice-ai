@@ -2900,3 +2900,41 @@ The 36 affected cases pass; original private capture/no-outbound assertions
 remain intact. Full clean-host Python, JarvisKit and MortimerHost checks will
 run on the frozen source before independent review/PR. Failed runs remain local
 and are not replaced by focused results. No live requirement is closed here.
+
+
+### 2026-10-19 — Full-suite results retained; upstream broadcast repair
+
+Frozen `6d777eb` completes normal-host MortimerHost: 572 executed, five existing
+prerequisite skips, zero failures (138.108 s); JarvisKit: 235 passed, zero
+failures (6.649 s). Three native skips need external displays and two need the
+test host active in WindowServer. None close physical acceptance.
+
+The clean Python attempt finishes 6,797 passed / 15 skipped / five failures.
+All five reproduce on unchanged baseline (81 other cases pass): the installed
+Pipecat runner calls `load_dotenv(override=True)` during collection and discovers
+settings above its interpreter. A test-process-only `PYTHON_DOTENV_DISABLED=1`
+prevents that external file discovery while keeping explicit Settings parsing
+and every assertion active. With credential environment excluded and RUN_LIVE=0,
+full Python completes 6,802 passed / 15 skipped / zero failures, two subtests
+passed (246.27 s). The original failed logs/baseline reproduction and frozen
+source hashes remain local; no product settings/file was changed for isolation.
+
+Review preparation then exposes a real candidate defect outside the original
+test seam: the aggregator broadcasts a generic speaking start upstream as well
+as downstream. That upstream instance crosses the accepted input processor,
+erasing accepted final input. Linking the actual SDK processors reproduces it;
+the strengthened test fails before repair. A second negative case shows copied
+context text could mint another token from the same accepted input.
+
+The repair records bounded exact aggregator-origin frame IDs before SDK delivery
+and ignores their upstream echoes at the accepted source. It consumes accepted
+input when granting its one boundary; original boundary continuations retain
+their immutable token, while copied/injected boundaries acquire none. Both red
+cases now pass and all 207 focused Python checks pass. No new wire identifier,
+processor, permission or model/setting change is needed. Native source/tests
+are byte-identical to tested `6d777eb`; full Python must repeat on this repair.
+
+The prepared `6d777eb` source-review packet is explicitly withheld and has not
+been transmitted. A new exact-source packet will replace it after verification.
+Required independent review/verification, runtime PR and Larry's separate
+merge/deployment/live acceptance remain open.
