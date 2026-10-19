@@ -509,7 +509,11 @@ final class AppMessageRouter {
         guard workspace.containsResult(id), !workspace.showsAtlas && !workspace.showsSkills
                 && !workspace.showsWorkflows && !workspace.showsMemoryGraph else { return }
         let presentation = arrivalPresentation(of: .result(id), ownerID: id, in: workspace, display: display)
-        if !presentation.main && !presentation.supporting { workspace.select(id) }
+        // A validated current update of the already-selected owner is read.
+        // Reselecting that same ID clears its own notice without moving main
+        // or changing the supporting owner; other readers remain untouched.
+        let alreadySelected = workspace.activeID == id && !workspace.showsConversation
+        if alreadySelected || (!presentation.main && !presentation.supporting) { workspace.select(id) }
     }
 
     private static func isMemoryGraphPayload(_ payload: DisplayPayload) -> Bool {

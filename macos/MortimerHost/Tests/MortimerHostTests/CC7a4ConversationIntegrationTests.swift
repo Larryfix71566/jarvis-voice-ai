@@ -496,6 +496,32 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         XCTAssertTrue(f.workspace.showsConversation)
     }
 
+    func testCurrentVisibleActiveWeatherOwnerDoesNotBecomeItsOwnUnreadNotice() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        for mode in ["cache", "fresh", "legacy-fresh"] {
+            let f = try await fixture(); defer { f.router.stop() }
+            let fetched = Date().timeIntervalSince1970 - 30
+            let structured = mode != "legacy-fresh"
+            let a = try await deliver(f, weather(aKey, city: "Folly Beach", ts: fetched, structured: structured))
+            let b = try await deliver(f, weather(bKey, city: "Atlanta", ts: fetched))
+            XCTAssertNotNil(f.display.apply(a.payload, workspaceID: a.id))
+            XCTAssertNotNil(f.display.apply(b.payload, workspaceID: b.id))
+            f.display.setWindowOpen(true)
+            XCTAssertTrue(f.workspace.sendToDisplay(.result(b.id)))
+            f.workspace.select(a.id); f.coordinator.publishInventory()
+            XCTAssertFalse(f.workspace.unreadIDs.contains(a.id)); XCTAssertNil(f.workspace.arrivalNoticeID)
+            try await user(f, "Folly Beach weather again")
+            if mode == "cache" {
+                let reply = try await reuse(f, key: aKey)
+                XCTAssertEqual(reply.code, "cache_hit")
+            } else { _ = try await deliver(f, weather(aKey, city: "Folly Beach", ts: fetched + 1, structured: structured)) }
+            XCTAssertEqual(f.workspace.activeID, a.id); XCTAssertFalse(f.workspace.showsConversation)
+            XCTAssertEqual(f.workspace.supportingContent, .result(b.id))
+            XCTAssertFalse(f.workspace.unreadIDs.contains(a.id), "A current update of the already-selected owner is read: \(mode)")
+            XCTAssertNil(f.workspace.arrivalNoticeID, "The active current owner must not offer Show for itself: \(mode)")
+        }
+    }
+
     func testAlreadyVisibleWeatherPanelPreservesMainWhenSelectionNamesAnotherPanel() async throws {
         let restore = try configureDefaults(); defer { restore() }
         for mode in ["cache", "fresh", "legacy-fresh"] {

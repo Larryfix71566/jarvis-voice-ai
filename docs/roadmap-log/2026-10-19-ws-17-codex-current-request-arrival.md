@@ -109,3 +109,12 @@ Pre-store actual-visibility eligibility prevents early main selection while
 original request eligibility consumes the visible winner. All 60 affected tests
 pass. Final changed-source native/review/CI/VM refresh remains required; no
 production, cleanup-job, merge, deployment or acceptance change.
+
+`7b530c5` full native passes 578 / five skips / zero failures, all five CI
+checks green. Claude clears functional multi-panel fix but a cosmetic active-A
+self-unread notice reproduces four assertions on fresh updates; cache control
+passes and that generalization is not treated as valid. Existing same-ID
+selection acknowledges current selected-owner read state without moving any
+owner. All 61 related tests pass; final changed-source native/review/CI/VM
+verification remains required. Original reports/failures preserved; no live
+acceptance or production action.

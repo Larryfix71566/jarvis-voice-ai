@@ -3182,3 +3182,30 @@ remain scoped to `0deeb30`; new-source full native/review/CI and the single
 fresh twelve-check VM run follow this repair. No new VM has been started for
 these superseded source freezes. No merge, deployment, restart, production or
 acceptance change; cleanup job remains paused.
+
+
+### 2026-10-19 — Already-selected current owner read-state follow-up
+
+Exact `7b530c5` full native verification passes 578 tests, five prerequisite
+skips, zero failures; all five exact-commit GitHub checks pass. Its bounded
+Claude review confirms the multi-panel functional repair and all six original
+items NON-BLOCKING, then reports a narrower cosmetic self-unread/arrival-notice
+case when main has already selected A and A/B are both visible externally.
+
+The actual-router control proves fresh structured and legacy updates mark the
+already-selected A unread and offer Show for itself (four failed assertions).
+The alleged symmetric cache case does not reproduce: with A already active,
+queryWeatherReuse skips its arrival mutation. Both outcomes are preserved; the
+new test also retains the passing cache control. An initial test-only async
+XCTest compile error is retained separately and not counted as product failure.
+
+The bounded repair keeps strict pre-store supporting visibility suppression.
+After validated current retention, the shared helper may reselect only the same
+already-selected owner, using existing select(id) read/notice acknowledgement.
+It changes no owner, comparison, panel, independent navigation or source/cache
+guard. Other readers and Conversation still follow actual supporting ownership.
+All 61 affected tests pass. New-source full native, bounded exact-source review,
+CI and original twelve-check VM verification refresh next. Prior-source
+verdicts, failed runs and green CI remain scoped to their original revisions.
+No VM started for these superseded freezes; no merge/deployment/production or
+acceptance change.
