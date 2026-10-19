@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
+**Status:** Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -2691,3 +2691,84 @@ remain separate. Timezone consistency is unconfirmed, not a validated defect.
 The missing source-review verdict and its primary candidate are therefore
 resolved; cleanup review, full independent release verification and all
 deployment/live acceptance gates remain open. No parent checkbox closes.
+
+
+### 2026-10-18 — Proposed current-request foreground exception (CX-25)
+
+Current main `d38c886` and the open PR inventory were refreshed before this
+proposal. Only #224 (independent-verification documentation) was open; this
+proposal does not alter its branch or receipts. WS-28 owns cleanup only.
+WS-17 owns the arrival files, but its current registered branch is reserved
+for review/verification. The proposed implementation branch is
+`codex/ws17-current-request-arrival-20261018`; it remains inactive until Larry
+approves this claim and it lands on main.
+
+The approved §7.2 table says a new result while reading raises a New notice
+without taking the stage. The UI2-23 checklist explicitly includes weather
+requested while reading. Selecting a requested answer from that stage is
+therefore a design amendment requiring Larry's decision, rather than an
+unconditional bug fix under the existing rule. This proposal preserves that
+rule and all acceptance checkboxes until the decision is recorded.
+
+**Proposed policy for approval:** A result proven to complete the still-active
+explicit request may open from the results stage, including native fresh-cache
+reuse. A newer user request, explicit cancellation, stale/unknown request
+identity or an unrelated/background completion removes foreground eligibility.
+Define a deterministic single foreground winner for duplicate/multiple arrivals;
+never infer current ownership from recency alone. Preserve the sole supporting-
+display renderer and explicit display-transfer ownership. Do not introduce a
+second durable task system for this bounded UI repair.
+
+**Required synthetic verification after approval:** Exercise actual router,
+conversation/run binding, store and native weather-reuse paths for
+Spartanburg → Atlanta → cached Spartanburg. Assert two stable UUIDs, correct
+active result at each requested completion, unchanged fetch/expiry on a cache
+hit and one reference. Add controlled races for a newer turn before completion,
+late/background and unknown-run arrivals, cancel-before-completion,
+duplicate/multiple arrivals and display ownership. The witness must fail on
+the original caller chain where the proposed behavior differs; isolated store
+assumptions are insufficient. No paid provider call, live history fixture or
+production logs are needed.
+
+No source/test edit, acceptance waiver, new wire identifier, credential,
+installation, merge, deployment or restart is authorized by this claim-only
+proposal. If caller analysis requires WS-05-owned paths or a new wire field,
+obtain the precise coordination/reservation first. Existing exact-source
+cross-review and release gates still apply to any eventual repair.
+
+
+### 2026-10-18 — Larry approves the foreground exception; claim awaits main
+
+Larry approved the proposed current-request foreground behavior and publication
+of this roadmap/ownership update to `Larryfix71566/jarvis-voice-ai` for review
+at 23:44 UTC. This approves the policy described immediately above. It does
+not approve merging the claim or a runtime PR, deployment, restart or changes
+to live history. The proposed implementation branch remains inactive until the
+claim is on main. The current UI2-23 checklist reflects the approved exception;
+its original no-jump rule is retained in §7.2 and the preceding dated history.
+
+Classification correction: an unread named-city arrival while another result
+was active matched the prior no-jump rule. That observation alone did not
+prove a UI2-24 failure; the earlier diagnostic classification was too broad.
+UI2-24 actions remain untested and UI2-25 has only partial identity/cache
+proof, with full reopen/stale-refresh acceptance still open. No observation
+is erased and no parent acceptance checkbox closes. This entry contains no
+production log, transcript, service metadata or private operational receipt.
+
+The exact originally prepared documentation commit `6102f01` was published
+once after Larry's explicit consent. Current main remains `d38c886`; only
+draft #224 was open at refresh. Subsequent source changes require the main
+claim, actual caller-chain regressions, exact-source cross-review and the
+existing independent release gates. No implementation or runtime operation
+ran during claim publication.
+
+
+### 2026-10-18 — Canonical unchecked UI2-23 criterion aligned
+
+Claim review found that the roadmap described the approved exception while
+`docs/acceptance/adaptive-interface/RELEASE_READINESS.md` still required the
+prior unconditional weather-while-reading no-jump behavior. The authorized
+policy-docs correction aligns that canonical unchecked criterion with the
+active-request exception and background/cancellation/focus protections. It
+links back to the dated approval and preserves the old rule in plan history.
+No checkbox state changes or implementation/live pass are claimed.
