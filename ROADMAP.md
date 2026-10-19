@@ -1190,6 +1190,20 @@ Source: [native-audio plan, WS-18 progress](docs/plans/MORTIMER_NATIVE_AUDIO_TRA
 
 ## 3. Reserved shared numbers
 
+**WS-17 current-request wire reservation, 2026-10-19 (before implementation):**
+`console/turn` version 1 is a host-generated session/generation-bound envelope
+using existing `request_id`, `state` (`started`/`cancelled`) and a positive
+`sequence`, with bounded `input_timestamp` and `input_user_id` copied from the
+already delivered accepted RTVI final transcription. Optional
+`origin_request_id` on DisplayPayload and internal `weather_reuse` arguments
+binds a result/cache query to that exact request. These fields are never
+model-supplied tool arguments or source-policy grants. Missing, malformed,
+unknown, cancelled or superseded origin remains ineligible for foreground;
+legacy content can still be retained as a card. The native store admits one
+foreground result per request and preserves supporting-display ownership.
+No configuration key, port, launchd label, migration or persistent task state.
+
+
 **Existing cleanup label reservation, WS-28 (2026-10-18):** `com.mortimer.sandbox-prune` is already emitted by merged #210 (`scripts/launchd_gen.py`, existing 04:20 job). Record Codex repair ownership here; no new label, schedule, installed job, privilege or activation is created. Job installation/activation is outside this claim.
 
 **DB migrations** (`jarvis/db.py`, `MIGRATIONS`). Migrations are tracked by id string and applied in list order. Never rename an id that may already be applied in production.

@@ -2772,3 +2772,29 @@ policy-docs correction aligns that canonical unchecked criterion with the
 active-request exception and background/cancellation/focus protections. It
 links back to the dated approval and preserves the old rule in plan history.
 No checkbox state changes or implementation/live pass are claimed.
+
+
+### 2026-10-19 — Claim landed; current-request protocol reserved before code
+
+Larry explicitly approved marking ready and merging documentation-only #225
+at 00:07:29 UTC. Verified exact head `d8fd399`, five successful checks and no
+conflict; normal merge completed at 00:08:12 UTC as `c244963`. Refreshed main
+and started registered branch `codex/ws17-current-request-arrival-20261018` in
+an isolated worktree. #224 remains separate; no runtime PR merge or production
+change is authorized.
+
+Caller inspection found that timestamps/run-start ordering alone cannot prove
+current ownership for direct and detached results. Reserve §3's bounded
+`console/turn` and optional `origin_request_id` before code. The host binds an
+accepted final transcription's existing timestamp/user ID to an immutable
+request at the actual user-aggregator context frame; the native client matches
+that input identity instead of a recency window. A later user start/final,
+cancellation, missing identity or old sequence invalidates foreground authority.
+Tool-call and detached-task bindings must retain the original request, and
+only the first eligible result for a request may change foreground. Cache
+identity/fetch/expiry remain owned by the existing native weather store.
+Preserve legacy rendering as unread cards and WS-21 sole-renderer ownership.
+
+This reservation commit changes documentation only. Required caller-chain,
+reorder, cancellation, supersession and multiple-arrival witnesses precede
+source review; no provider call, install or production action is part of it.
