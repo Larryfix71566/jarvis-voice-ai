@@ -3104,3 +3104,45 @@ started for `8ac4f30`; the superseded `e29973d` attempt stays non-passing. New
 source review/full affected native/twelve-check verification remain required.
 The six original source findings and bounded disposition review are preserved;
 no production, acceptance, merge, deployment or restart change.
+
+
+### 2026-10-19 — Complete bounded arrival-exit inventory and shared renderer repair
+
+After executor recovery, main remains `c244963` and WS-17 ownership/branch is
+unchanged. Every arrival exit in the claimed router was checked once against
+the same attested-current-request/single-winner contract:
+
+| Existing exit | Retention/presentation and winner rule | Bounded evidence |
+|---|---|---|
+| Valid cache hit | Keep all store cache/source guards; show stable owner on main fallback or consume its actual supporting renderer; record cache reference only for actual main reopen | Open/closed supporting-window cache regression, TTL/privacy/identity suite |
+| Applied roadmap refresh | Same stable owner; actual supporting renderer or permitted main fallback consumes winner | Open/closed roadmap refresh regression |
+| Fresh structured weather | Retain/upsert first, then use shared fallback; preserve actual supporting ownership and independent navigation | Structured fresh quiet-upsert in both window states |
+| Legacy weather/generic drawer | Retain and keep Output behavior; same fallback and common presentation accounting | Legacy fresh quiet-upsert in both window states and existing drawer/privacy tests |
+| Ordinary window/new/repeated owner | Keep existing display apply/owner resolution; when closed, exact repeated owner can reopen from Conversation; consume only actual renderer | New/fallback/repeated owner regressions, strengthened return-to-Conversation case |
+| Protected-local window | Keep local-only receive and sink boundary; same main fallback if attested, never supporting apply | Existing protected-local/actual-router tests |
+| Graph window | Keep existing graph route; common actual `.memoryGraph` presentation accounting | Existing graph and privacy/source contracts; physical presentation remains separate |
+| Unknown/late/cancelled, refused cache/failed refresh | Retain or reject under existing guards; no fallback promotion and no fabricated winner | Existing negative, cancellation, replay and policy tests |
+
+A red run on unchanged `2d619d6` runtime reported 19 assertions across fresh
+quiet upserts and exact ordinary reuse from Conversation. Fifteen are real
+presentation/winner failures. Four were an incorrect new fixture expectation
+that the shared reference list was empty: established fresh fetches already
+append an Updated reference there. The corrected test requires exactly one
+reference for the stable result ID, an Updated prefix and no Reopened prefix;
+it preserves the distinction between fresh-update and cache reuse. Raw runs
+remain local. All 59 affected native caller/cache/TTL/privacy/roadmap cases pass.
+
+One shared router helper now computes actual main/supporting presentation and
+one guarded helper selects the permitted main fallback. The store's source
+validation, cache query, TTL, UUID/fetch timestamps, panel ownership and wire
+contracts are unchanged. Python and JarvisKit bytes remain unchanged.
+
+The preceding `2d619d6` full run has five failures retained explicitly:
+ScreenCaptureKit -3811 audio/video capture failure and four window-visibility
+assertions. Both failing test files are byte-identical to `c244963`; unchanged
+baseline classification and final-source full repeat are pending. No permission
+or assertion relaxation is used. Claude's bounded `8ac4f30` report confirms
+all six original findings NON-BLOCKING with documented coverage caveats and
+finds the concrete sibling-renderer gap addressed here. Final changed-source
+review, full affected native/CI and one fresh twelve-check VM run remain open.
+No live acceptance, merge, deployment, restart or production change.

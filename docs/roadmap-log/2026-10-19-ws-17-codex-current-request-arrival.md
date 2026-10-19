@@ -90,3 +90,13 @@ router, roadmap and provenance tests. Cache/source guards, TTL, fetch timestamps
 and UUIDs unchanged. Preceding `8ac4f30` full native: 575 executed / six explicit
 display/activation skips / zero failures; no VM started for that source. New
 source review/full native/independent verification and CI remain open.
+
+Executor recovery preserves the worktree. Complete bounded router-exit inventory
+finds fresh quiet-upsert and exact reuse-from-Conversation presentation gaps.
+Shared actual-renderer/fallback helpers plus corrected fresh-update reference
+assertions pass 59 related native cases. The red run's 19 assertions include 15
+real renderer failures and four incorrect new fixture assertions; both raw runs
+are retained. Earlier `2d619d6` capture/visibility failures remain pending
+unchanged-baseline classification and full repeat. Claude confirms six original
+items NON-BLOCKING; concrete sibling-renderer finding awaits final-source
+review. Python/cache/source-policy unchanged; no acceptance or production action.

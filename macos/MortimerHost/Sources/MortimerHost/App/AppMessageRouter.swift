@@ -185,23 +185,13 @@ final class AppMessageRouter {
                                let id = request.target.flatMap(UUID.init(uuidString:)), let workspace,
                                let retained = workspace.results.first(where: { $0.id == id }),
                                let fetchedAt = result.data?["ts"]?.doubleValue {
-                                let rawLayout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
-                                let supporting = displayWindow.isPresented(.result(id),
-                                    selection: workspace.supportingContent,
-                                    layoutVersion: InterfaceLayoutVersion.resolve(rawLayout))
-                                let independent = workspace.showsAtlas || workspace.showsSkills
-                                    || workspace.showsWorkflows || workspace.showsMemoryGraph
-                                if !supporting && !independent && workspace.supportingContent == .result(id) {
-                                    // A closed window's queued owner can render
-                                    // on main without reopening or moving it.
-                                    workspace.select(id)
-                                }
-                                let main = workspace.activeID == id && !workspace.showsConversation
-                                    && !independent && !supporting
-                                if main || supporting {
+                                Self.presentRequestedMainFallback(id, in: workspace, display: displayWindow)
+                                let presentation = Self.arrivalPresentation(of: .result(id), ownerID: id,
+                                    in: workspace, display: displayWindow)
+                                if presentation.main || presentation.supporting {
                                     currentRequests.didPresent(origin, resultID: id)
                                 }
-                                if main {
+                                if presentation.main {
                                     conversation?.recordCachedResult(retained, fetchedAt: fetchedAt,
                                         requestID: origin ?? request.requestID, runID: runID, now: now)
                                 }
@@ -312,19 +302,10 @@ final class AppMessageRouter {
                         if !applied { workspace?.setRoadmapRefreshStatus(existingID, "Refresh failed; previous snapshot is stale.") }
                         if applied, let workspace,
                            currentRequests.canPresent(payload.originRequestID, tool: payload.tool) {
-                            let rawLayout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
-                            let supporting = displayWindow.isPresented(.result(existingID),
-                                selection: workspace.supportingContent,
-                                layoutVersion: InterfaceLayoutVersion.resolve(rawLayout))
-                            if supporting {
-                                // The existing renderer already shows this
-                                // request's refreshed answer; consume its winner.
-                                currentRequests.didPresent(payload.originRequestID, resultID: existingID)
-                            } else if !workspace.showsAtlas && !workspace.showsSkills
-                                        && !workspace.showsWorkflows && !workspace.showsMemoryGraph {
-                                // A queued pointer is not a live renderer. Use
-                                // the main fallback without reopening a panel.
-                                workspace.select(existingID)
+                            Self.presentRequestedMainFallback(existingID, in: workspace, display: displayWindow)
+                            let presentation = Self.arrivalPresentation(of: .result(existingID), ownerID: existingID,
+                                in: workspace, display: displayWindow)
+                            if presentation.main || presentation.supporting {
                                 currentRequests.didPresent(payload.originRequestID, resultID: existingID)
                             }
                         }
@@ -352,22 +333,9 @@ final class AppMessageRouter {
                     var presentedContent: SupportingDisplayContent = .result(result.id)
                     defer {
                         if let workspace {
-                            let rawLayout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
-                            // Use the same actual-renderer predicate as the main
-                            // return locator. A queued pointer cannot hide the
-                            // main fallback while the display window is closed.
-                            let supporting = displayWindow.isPresented(presentedContent,
-                                selection: workspace.supportingContent,
-                                layoutVersion: InterfaceLayoutVersion.resolve(rawLayout))
-                            let main: Bool
-                            if case .memoryGraph = presentedContent {
-                                main = workspace.showsMemoryGraph && !supporting
-                            } else {
-                                main = workspace.activeID == presentedOwnerID && !workspace.showsConversation
-                                    && !workspace.showsAtlas && !workspace.showsSkills && !workspace.showsWorkflows
-                                    && !workspace.showsMemoryGraph && !supporting
-                            }
-                            if answers && (main || supporting) {
+                            let presentation = Self.arrivalPresentation(of: presentedContent, ownerID: presentedOwnerID,
+                                in: workspace, display: displayWindow)
+                            if answers && (presentation.main || presentation.supporting) {
                                 currentRequests.didPresent(payload.originRequestID, resultID: presentedOwnerID)
                             }
                         }
@@ -383,13 +351,12 @@ final class AppMessageRouter {
                     // spoken reply (G-2 found both).
                     if Self.showsInMainWindowOnly(payload) {
                         workspace?.receive(result, answersCurrentRequest: answers)
-                        // CC7a.2 (WS-17, plan §7.2): with the conversation
-                        // thread on, weather arrives like every other result
-                        // (WorkspaceStore.receive): it opens when the
-                        // conversation is on the stage (Larry, 10-03) and
-                        // raises a "New" notice over anything else.
-                        if answers, workspace?.quietArrivals != true,
-                           workspace?.supportingContent != .result(result.id) { workspace?.select(result.id) }
+                        // Only the attested current answer may use the main
+                        // fallback. Quiet upserts and cached owners follow the
+                        // same actual-renderer rule; other arrivals stay cards.
+                        if answers, let workspace {
+                            Self.presentRequestedMainFallback(result.id, in: workspace, display: displayWindow)
+                        }
                         consoleCoordinator?.publishInventory()
                         break
                     }
@@ -401,6 +368,9 @@ final class AppMessageRouter {
                         // DisplayWindowStore.apply and any display handoff.
                         if payload.isProtectedLocal {
                             workspace?.receive(result, answersCurrentRequest: answers)
+                            if answers, let workspace {
+                                Self.presentRequestedMainFallback(result.id, in: workspace, display: displayWindow)
+                            }
                             consoleCoordinator?.publishInventory()
                             break
                         }
@@ -450,9 +420,15 @@ final class AppMessageRouter {
                             } else {
                                 _ = workspace.sendToDisplay(.result(result.id))
                             }
+                            if !Self.isMemoryGraphPayload(payload) && !displayWindow.isWindowOpen {
+                                Self.presentRequestedMainFallback(presentedOwnerID, in: workspace, display: displayWindow)
+                            }
                         }
                     case .drawer:
                         workspace?.receive(result, answersCurrentRequest: answers)
+                        if answers, let workspace {
+                            Self.presentRequestedMainFallback(result.id, in: workspace, display: displayWindow)
+                        }
                         displayResults.apply(payload, workspaceID: result.id)
                         // D31's three-case auto-open rule (App.tsx:247-254),
                         // drawer-routed results only: closed → open on
@@ -493,6 +469,34 @@ final class AppMessageRouter {
         }
     }
 
+    /// Match the actual WorkspaceView locator for every arrival exit.
+    /// A queued supporting pointer is not a renderer while its window is shut.
+    private static func arrivalPresentation(of content: SupportingDisplayContent, ownerID: UUID,
+                                            in workspace: WorkspaceStore, display: DisplayWindowStore)
+        -> (main: Bool, supporting: Bool) {
+        let rawLayout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
+        let supporting = display.isPresented(content, selection: workspace.supportingContent,
+            layoutVersion: InterfaceLayoutVersion.resolve(rawLayout))
+        if case .memoryGraph = content {
+            return (workspace.showsMemoryGraph && !supporting, supporting)
+        }
+        let main = workspace.activeID == ownerID && !workspace.showsConversation
+            && !workspace.showsAtlas && !workspace.showsSkills && !workspace.showsWorkflows
+            && !workspace.showsMemoryGraph && !supporting
+        return (main, supporting)
+    }
+
+    /// The caller must already attest the current request and retain its
+    /// accepted payload. Keep independent navigation and any real supporting
+    /// renderer; otherwise show the stable owner once on the main fallback.
+    private static func presentRequestedMainFallback(_ id: UUID, in workspace: WorkspaceStore,
+                                                      display: DisplayWindowStore) {
+        guard workspace.containsResult(id), !workspace.showsAtlas && !workspace.showsSkills
+                && !workspace.showsWorkflows && !workspace.showsMemoryGraph else { return }
+        let presentation = arrivalPresentation(of: .result(id), ownerID: id, in: workspace, display: display)
+        if !presentation.main && !presentation.supporting { workspace.select(id) }
+    }
+
     private static func isMemoryGraphPayload(_ payload: DisplayPayload) -> Bool {
         let values = [payload.kind, payload.title, payload.tool]
             .compactMap { $0?.lowercased() }
@@ -518,8 +522,8 @@ final class AppMessageRouter {
 
 extension AppMessageRouter {
     /// WS-15 PR 2: payloads that render only in the main window. They are
-    /// selected on arrival only while `WorkspaceStore.quietArrivals` is off
-    /// (CC7a.2). Pure; unit-tested (AppMessageRouterWeatherTests).
+    /// classified here; current-request eligibility and actual-renderer
+    /// selection are owned by the router. Pure; unit-tested (AppMessageRouterWeatherTests).
     nonisolated static func showsInMainWindowOnly(_ payload: DisplayPayload) -> Bool {
         payload.kind == "weather" && payload.weather != nil && !payload.isProtectedLocal
     }

@@ -356,12 +356,16 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
             try await user(f, "Show public report A")
             let original = try await ordinaryWindow(f, title: "Public report A")
             XCTAssertEqual(f.display.presentedWorkspaceID(for: original.payload), original.id)
+            if !displayOpen { f.workspace.returnToConversation() }
             try await user(f, "Show public report A again")
             let repeated = try await ordinaryWindow(f, title: "Public report A")
             XCTAssertEqual(repeated.id, original.id)
             XCTAssertEqual(f.workspace.results.count, 1)
             XCTAssertEqual(f.display.isPresented(.result(original.id), selection: f.workspace.supportingContent), displayOpen)
-            if !displayOpen { XCTAssertEqual(f.workspace.activeID, original.id) }
+            if !displayOpen {
+                XCTAssertEqual(f.workspace.activeID, original.id)
+                XCTAssertFalse(f.workspace.showsConversation, "An exact repeated owner still opens from Conversation on the main fallback.")
+            }
             let panels = f.display.panels
             let second = try await ordinaryWindow(f, title: "Public report B")
             XCTAssertEqual(f.workspace.supportingContent, .result(original.id), "Reused renderer owner consumes this request's winner.")
@@ -490,6 +494,37 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         XCTAssertEqual(f.workspace.supportingContent, .result(a.id))
         XCTAssertEqual(f.display.panels, before)
         XCTAssertTrue(f.workspace.showsConversation)
+    }
+
+    func testFreshQuietWeatherUpsertUsesActualRendererAndConsumesOneWinner() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        for structured in [false, true] {
+            for displayOpen in [false, true] {
+                let f = try await fixture(); defer { f.router.stop() }
+                let fetched = Date().timeIntervalSince1970 - 30
+                let a = try await deliver(f, weather(aKey, city: "Folly Beach", ts: fetched, structured: structured))
+                XCTAssertNotNil(f.display.apply(a.payload, workspaceID: a.id))
+                f.display.setWindowOpen(displayOpen)
+                XCTAssertTrue(f.workspace.sendToDisplay(.result(a.id)))
+                f.workspace.returnToConversation(); f.coordinator.publishInventory()
+                try await user(f, "Fetch updated Folly Beach weather")
+                let refreshed = try await deliver(f, weather(aKey, city: "Folly Beach", ts: fetched + 1, structured: structured))
+                XCTAssertEqual(refreshed.id, a.id)
+                XCTAssertEqual(f.workspace.supportingContent, .result(a.id))
+                XCTAssertEqual(f.workspace.showsConversation, displayOpen, "Only an actual supporting renderer prevents the main fallback from opening.")
+                XCTAssertEqual(f.conversation.cachedReferences.count, 1, "A fresh upsert records one update reference.")
+                let reference = try XCTUnwrap(f.conversation.cachedReferences.first)
+                XCTAssertEqual(reference.resultID, a.id)
+                XCTAssertTrue(reference.text.hasPrefix("Updated "), "A fresh fetch records an update, not a cached reopen.")
+                XCTAssertFalse(reference.text.hasPrefix("Reopened "))
+                let panels = f.display.panels
+                let later = try await ordinaryWindow(f, title: "Second answer after fresh weather")
+                XCTAssertEqual(f.workspace.supportingContent, .result(a.id))
+                XCTAssertEqual(f.display.panels, panels)
+                XCTAssertTrue(f.workspace.unreadIDs.contains(later.id))
+                if !displayOpen { XCTAssertEqual(f.workspace.activeID, a.id) }
+            }
+        }
     }
 
     func testCacheHitConsumesWinnerAtItsActualSupportingOrMainRenderer() async throws {
