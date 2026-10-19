@@ -2830,3 +2830,32 @@ or native pass. Next: reproduce the abort against baseline/isolated cases,
 complete native caller-chain race/cancellation/multiple-arrival regressions,
 then full required checks, exact-source independent review and a runtime PR.
 No runtime PR, source-review transmission, merge, deployment or restart yet.
+
+
+### 2026-10-19 — Baseline comparison resolves the XCTest environment blocker
+
+The exact baseline `c244963`, same Swift 6.4 compiler, dependency cache and
+focused command, reproduces the identical signal-6 abort at the same async
+XCTest boundary under the execution sandbox. The identical command on the
+normal host passes all eight baseline cases. Candidate focused verification
+on the host subsequently passes 41 tests, including actual SDK/router cache,
+foreground, late/cancelled, duplicate-winner and supporting-owner workflows.
+Crash and failed assertion runs remain in local evidence; no skip, assertion
+waiver, memory/runtime-check disable or production change resolved the abort.
+
+Real SDK inspection exposed two races absent from the initial manual probes:
+worker observers are queued asynchronously, and function lifecycle events are
+also asynchronous. The candidate now uses the public synchronous
+`on_before_push_frame` hooks on the accepted input/user aggregator and captures
+call ownership before the real SDK's function dispatcher. It ignores duplicate
+generic speaking signals after final input; exact host cancellation carries
+a request/sequence fence. Actual SDK frame/aggregator/dispatch tests cover those
+boundaries. The final focused Python selection passes 135 tests. Input retention
+is bounded to 64 segments/64 KiB and 64 request boundaries; failed UI delivery
+cannot stall voice indefinitely. Additional native malformed/foreign session,
+cancel-before-start and independent Atlas navigation cases are ready for the
+final-source full suite. No raw production logs enter source/review packets.
+
+Next: freeze this source, run full Python/JarvisKit/MortimerHost checks, obtain
+exact-source independent cross-review and publish a reviewable runtime PR.
+Runtime merge, deployment and live acceptance remain Larry's separate decisions.

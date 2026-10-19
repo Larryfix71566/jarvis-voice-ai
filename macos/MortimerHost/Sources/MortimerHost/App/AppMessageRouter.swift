@@ -295,6 +295,13 @@ final class AppMessageRouter {
                         // owner without selecting, moving or reopening it.
                         let applied = workspace?.refreshRoadmap(existingID, payload: payload) == true
                         if !applied { workspace?.setRoadmapRefreshStatus(existingID, "Refresh failed; previous snapshot is stale.") }
+                        if applied, currentRequests.canPresent(payload.originRequestID, tool: payload.tool),
+                           workspace?.supportingContent != .result(existingID),
+                           workspace?.showsAtlas == false, workspace?.showsSkills == false,
+                           workspace?.showsWorkflows == false, workspace?.showsMemoryGraph == false {
+                            workspace?.select(existingID)
+                            currentRequests.didPresent(payload.originRequestID, resultID: existingID)
+                        }
                         consoleCoordinator?.publishInventory()
                         break
                     }
@@ -316,11 +323,10 @@ final class AppMessageRouter {
                     // the conversation. See ArrivalIntent.
                     let answers = currentRequests.canPresent(payload.originRequestID, tool: payload.tool)
                     defer {
-                        if answers,
-                           (workspace?.activeID == result.id && workspace?.showsConversation == false
-                            && workspace?.supportingContent != .result(result.id))
-                            || (answers && displayWindow.isWindowOpen
-                                && workspace?.supportingContent == .result(result.id)) {
+                        let main = workspace?.activeID == result.id && workspace?.showsConversation == false
+                            && workspace?.supportingContent != .result(result.id)
+                        let supporting = displayWindow.isWindowOpen && workspace?.supportingContent == .result(result.id)
+                        if answers && (main || supporting) {
                             currentRequests.didPresent(payload.originRequestID, resultID: result.id)
                         }
                     }
@@ -354,6 +360,12 @@ final class AppMessageRouter {
                         if payload.isProtectedLocal {
                             workspace?.receive(result, answersCurrentRequest: answers)
                             consoleCoordinator?.publishInventory()
+                            break
+                        }
+                        // A late/unknown result remains a card. It must not
+                        // select a panel on an already-open supporting display.
+                        guard answers else {
+                            workspace?.receive(result, answersCurrentRequest: false)
                             break
                         }
                         // An exact repeat is already represented by the same
@@ -415,7 +427,9 @@ final class AppMessageRouter {
                     }
                 case .unknown(let type, let raw):
                     switch type {
-                    case "user-started-speaking", "bot-interrupted": currentRequests.userStarted()
+                    // These generic observer signals can be duplicated after
+                    // final text. Exact host turn cancellation is authoritative.
+                    case "user-started-speaking", "bot-interrupted": break
                     case "user-transcription": currentRequests.transcription(raw)
                     case "console/turn":
                         currentRequests.receiveTurn(raw, sessionID: client.consoleSessionID,

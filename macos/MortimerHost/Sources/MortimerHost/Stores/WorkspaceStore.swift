@@ -297,23 +297,19 @@ final class WorkspaceStore {
 
     /// `answersCurrentRequest`: the caller has established that this result
     /// answers what Larry just asked and belongs on the main stage (see
-    /// `ArrivalIntent`). Defaults to false, so an arrival nobody vouched
+    /// `CurrentRequestArrivals`). Defaults to false, so an arrival nobody vouched
     /// for never opens by itself.
     @discardableResult
     func receive(_ result: WorkspaceResult, answersCurrentRequest: Bool = false) -> UUID {
         receive(result, quietly: quietArrivals, answersCurrentRequest: answersCurrentRequest)
     }
 
-    /// `quietly` (CC7a.2, conversation thread on): the result never
-    /// interrupts something being read. On the conversation, a result that
-    /// answers what Larry just asked opens, like Open on its card (Larry,
-    /// 10-03, after the UI2-23 run: "when I requested the weather ... it
-    /// didn't focus on the weather card, that should happen
-    /// automatically"); anything else, such as a background job finishing
-    /// later (Codex review of #169), stays a card in the thread. While
-    /// another result or view is shown, it joins unread and raises the
-    /// "New" notice. If no result is active yet it becomes the active one
-    /// without being shown. Off: the pre-CC7a behaviour.
+    /// Quiet arrivals preserve the reader unless the router has established
+    /// the still-active explicit request (Larry's 10-18 foreground exception).
+    /// That one answer opens from Conversation or another result; unrelated,
+    /// cancelled and superseded completions remain unread with the existing
+    /// notice. A supporting-display owner retains its sole renderer. Off:
+    /// retain the pre-CC7a presentation behavior.
     @discardableResult
     func receive(_ result: WorkspaceResult, quietly: Bool, answersCurrentRequest: Bool = false) -> UUID {
         if let id = reuseExistingIdentity(for: result.payload), result.payload.roadmap != nil {
@@ -336,7 +332,7 @@ final class WorkspaceStore {
         inventoryRevision += 1
         if quietly {
             hasReceivedResult = true
-            if answersCurrentRequest && supportingContent != .result(result.id) {
+            if answersCurrentRequest && canOpenRequestedAnswer && supportingContent != .result(result.id) {
                 select(result.id)
             } else {
                 if activeID == nil { activeID = result.id }
@@ -455,13 +451,19 @@ final class WorkspaceStore {
         hasReceivedResult = true
         // A supporting display owns its sole renderer until the router's
         // confirmed yield path releases it. Never open a duplicate here.
-        if answersCurrentRequest && supportingContent != .result(id) {
+        if answersCurrentRequest && canOpenRequestedAnswer && supportingContent != .result(id) {
             select(id)
         } else {
             unreadIDs.insert(id)
             if !showsConversation { arrivalNoticeID = id }
             inventoryRevision += 1
         }
+    }
+
+    /// The approved exception covers Conversation and reading another
+    /// result. Independent Atlas/Skills/Workflow navigation keeps its owner.
+    private var canOpenRequestedAnswer: Bool {
+        !showsAtlas && !showsSkills && !showsWorkflows && !showsMemoryGraph
     }
 
     /// Streaming replaces the body under the same identity, preserving the

@@ -604,11 +604,6 @@ final class CurrentRequestArrivals {
         highestSequence = 0; revokedThrough = 0; winner = nil
     }
 
-    func userStarted() {
-        input = nil; pending = nil; current = nil; winner = nil
-        revokedThrough = highestSequence
-    }
-
     func transcription(_ raw: [String: JSONValue]) {
         guard let data = raw["data"]?.objectValue, data["final"] == .bool(true) else { return }
         let waiting = pending
@@ -629,7 +624,9 @@ final class CurrentRequestArrivals {
     }
 
     func receiveTurn(_ raw: [String: JSONValue], sessionID: UUID?, generation: UUID?) {
-        guard raw["version"] == .number(1),
+        let fields: Set<String> = ["type", "version", "session_id", "generation", "request_id",
+                                   "sequence", "state", "input_timestamp", "input_user_id"]
+        guard Set(raw.keys).isSubset(of: fields), raw["version"] == .number(1),
               let sessionID, let generation,
               raw["session_id"]?.stringValue.flatMap(UUID.init(uuidString:)) == sessionID,
               raw["generation"]?.stringValue.flatMap(UUID.init(uuidString:)) == generation,

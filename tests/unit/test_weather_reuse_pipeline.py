@@ -16,10 +16,10 @@ import uuid
 import pytest
 
 from jarvis.bot.console_actions import _disclosed_inventory, build_console_action_tool
-from jarvis.bot.console_protocol import MAX_MESSAGE, validate_inventory, validate_request
+from jarvis.bot.console_protocol import ALLOWED_ACTIONS, MAX_MESSAGE, validate_inventory, validate_request
 from jarvis.bot.console_session import ConsoleSession
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
-from jarvis.bot.pipeline import _mark_weather_context
+from jarvis.bot.pipeline import _mark_weather_context, _foreground_request
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn, is_sensitive
 from jarvis.bot.weather_reuse import WeatherReuseBridge, current_weather_reuse, weather_reuse_scope
 
@@ -95,6 +95,7 @@ class Harness:
             _log_console_validation_failure=lambda *_: None,
             _logger=SimpleNamespace(info=lambda *_: None), bot_event_log=lambda *_: None,
             _mark_weather_context=_mark_weather_context,
+            ALLOWED_ACTIONS=ALLOWED_ACTIONS, _foreground_request=_foreground_request,
             WeatherReuseBridge=WeatherReuseBridge, WeatherReportMerger=WeatherReportMerger,
             build_display_payload=build_display_payload, current_weather_reuse=current_weather_reuse,
             weather_reuse_scope=weather_reuse_scope)

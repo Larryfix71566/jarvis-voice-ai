@@ -222,7 +222,7 @@ _foreground_request: ContextVar[ForegroundRequest | None] = ContextVar(
 _FOREGROUND_FRAME_KEY = "mortimer_foreground_request"
 
 
-class ForegroundRequests(BaseObserver):
+class ForegroundRequests:
     """Session-local input provenance; no transcript persistence or time heuristic.
 
     Bind at the actual user-aggregator output, before a mutable context can
@@ -230,11 +230,12 @@ class ForegroundRequests(BaseObserver):
     binding, including sequential runners and detached delegation children.
     """
     def __init__(self, transport: Any, session_id: str, generation: str) -> None:
-        super().__init__()
         self.transport, self.session_id, self.generation = transport, session_id, generation
         self.input_source: Any = None
         self.user_aggregator: Any = None
         self.parts: list[str] = []
+        self.input_chars = 0
+        self.input_overflow = False
         self.input_identity: tuple[str, str] | None = None
         self.sequence = 0
         self.current: ForegroundRequest | None = None
@@ -242,13 +243,25 @@ class ForegroundRequests(BaseObserver):
         self.calls: dict[str, ForegroundRequest | None] = {}
         self.seen_starts: list[int] = []
 
+    def install(self, input_source: Any, user_aggregator: Any) -> None:
+        self.input_source, self.user_aggregator = input_source, user_aggregator
+        # Unlike worker observers and function lifecycle events, this public
+        # SDK hook is awaited synchronously before downstream frame delivery.
+        input_source.add_event_handler("on_before_push_frame", self.before_push)
+        user_aggregator.add_event_handler("on_before_push_frame", self.before_push)
+
     async def announce(self, request: ForegroundRequest, state: str) -> None:
-        await send_app_message(self.transport, {
-            "type": "console/turn", "version": 1, "session_id": self.session_id,
-            "generation": self.generation, "request_id": request.request_id,
-            "sequence": request.sequence, "state": state,
-            "input_timestamp": request.input_timestamp, "input_user_id": request.input_user_id,
-        })
+        try:
+            await asyncio.wait_for(send_app_message(self.transport, {
+                "type": "console/turn", "version": 1, "session_id": self.session_id,
+                "generation": self.generation, "request_id": request.request_id,
+                "sequence": request.sequence, "state": state,
+                "input_timestamp": request.input_timestamp, "input_user_id": request.input_user_id,
+            }), timeout=0.25)
+        except Exception:
+            # A broken UI channel cannot stall voice or grant foreground.
+            # Without the exact start envelope the native sink stays closed.
+            _logger.info("foreground_request_delivery_unconfirmed")
 
     async def cancel(self, request: ForegroundRequest | None) -> None:
         if request is not None:
@@ -256,28 +269,33 @@ class ForegroundRequests(BaseObserver):
                 self.current = None
             await self.announce(request, "cancelled")
 
-    async def on_push_frame(self, data) -> None:
-        if data.direction != FrameDirection.DOWNSTREAM:
-            return
-        frame = data.frame
+    async def before_push(self, source, frame) -> None:
         if isinstance(frame, UserStartedSpeakingFrame):
+            if source is not self.input_source:
+                return  # The user aggregator may emit a second start after final text.
             # The same frame crosses several processors. A later hop must
             # not erase the accepted transcription accumulated in between.
             if frame.id not in self.seen_starts:
                 self.seen_starts = (self.seen_starts + [frame.id])[-64:]
                 self.parts = []
+                self.input_chars = 0
+                self.input_overflow = False
                 self.input_identity = None
                 await self.cancel(self.current)
             return
-        if isinstance(frame, TranscriptionFrame) and data.source is self.input_source:
+        if isinstance(frame, TranscriptionFrame) and source is self.input_source:
             text = frame.text.strip()
             timestamp, user_id = str(frame.timestamp or ""), str(frame.user_id or "")
             if (getattr(frame, "finalized", True) and text and timestamp
                     and len(timestamp) <= 128 and len(user_id) <= 128):
+                if self.input_overflow or len(self.parts) >= 64 or self.input_chars + len(text) > 65536:
+                    self.parts = []; self.input_identity = None; self.input_overflow = True
+                    return
                 self.parts.append(text)
+                self.input_chars += len(text)
                 self.input_identity = (timestamp, user_id)
             return
-        if not isinstance(frame, LLMContextFrame) or data.source is not self.user_aggregator:
+        if not isinstance(frame, LLMContextFrame) or source is not self.user_aggregator:
             return
         messages = frame.context.get_messages()
         boundary = next((m for m in reversed(messages) if is_real_user_message(m)), None)
@@ -295,7 +313,7 @@ class ForegroundRequests(BaseObserver):
         # Even a later continuation of an old context keeps its old token.
         frame.metadata[_FOREGROUND_FRAME_KEY] = request
 
-    async def calls_started(self, _service, calls) -> None:
+    def bind_calls(self, calls) -> None:
         request = _foreground_request.get()
         for call in calls:
             self.calls[str(call.tool_call_id)] = request
@@ -303,9 +321,16 @@ class ForegroundRequests(BaseObserver):
             self.calls.pop(next(iter(self.calls)))
 
 
-def request_bound_service(service_class):
+def request_bound_service(service_class, requests: ForegroundRequests):
     """Keep provider/model construction unchanged; scope its real frame call."""
     class RequestBoundService(service_class):
+        async def run_function_calls(self, calls):
+            # Pipecat's event handlers run in detached tasks. Binding there
+            # races its function runner; do this synchronously before the
+            # real SDK dispatch (including a reused sequential runner).
+            requests.bind_calls(calls)
+            return await super().run_function_calls(calls)
+
         async def process_frame(self, frame, direction):
             if isinstance(frame, LLMContextFrame) and direction == FrameDirection.DOWNSTREAM:
                 request = frame.metadata.get(_FOREGROUND_FRAME_KEY)
@@ -1204,6 +1229,7 @@ def build_pipeline(
         def refused(code: str) -> dict:
             return {"status": "refused", "code": code}
 
+        origin = _foreground_request.get()
         if _voice_is_sensitive():
             return refused("protected_turn")
         if not console_ready["value"]:
@@ -1254,7 +1280,7 @@ def build_pipeline(
                     return refused("invalid_reply")
                 args = {"subject_key": subject_key, "tool": tool, "days": days,
                         "units": units, "ordinary_turn": True}
-                if (origin := _foreground_request.get()) is not None:
+                if origin is not None:
                     args["origin_request_id"] = origin.request_id
                 if run_id is not None:
                     args["run_id"] = run_id
@@ -1492,7 +1518,7 @@ def build_pipeline(
     # non-Google deployment must not need it installed.
     if "generativelanguage.googleapis.com" in (settings.openai_base_url or ""):
         from pipecat.services.google.llm import GoogleLLMService
-        llm = request_bound_service(GoogleLLMService)(
+        llm = request_bound_service(GoogleLLMService, runtime.foreground_requests)(
             api_key=settings.openai_api_key,
             model=settings.openai_model,
         )
@@ -1520,7 +1546,7 @@ def build_pipeline(
         # fixed there applies here too), so a future non-default
         # Anthropic-compatible base_url is honoured on Path A the same
         # way it already is on Path B, not by accident.
-        llm = request_bound_service(AnthropicLLMService)(
+        llm = request_bound_service(AnthropicLLMService, runtime.foreground_requests)(
             api_key=settings.openai_api_key,
             client=AsyncAnthropic(
                 api_key=settings.openai_api_key,
@@ -1534,13 +1560,11 @@ def build_pipeline(
         _logger.info("supervisor_llm_service service=anthropic model=%s prompt_caching=on",
                      settings.openai_model)
     else:
-        llm = request_bound_service(OpenAILLMService)(
+        llm = request_bound_service(OpenAILLMService, runtime.foreground_requests)(
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
             model=settings.openai_model,
         )
-    llm.add_event_handler("on_function_calls_started", runtime.foreground_requests.calls_started)
-
     def register_voice_tool(name: str, handler: Any) -> None:
         register_supervisor_tool(
             llm, name, handler,
@@ -1748,8 +1772,7 @@ def build_pipeline(
     # the conversations table (the memory sweep folds that table into
     # long-term memory — observed live 2026-08-21: TV dialogue persisted).
     runtime.speaker_gate = speaker_transcript_gate
-    runtime.foreground_requests.input_source = speaker_transcript_gate or stt
-    runtime.foreground_requests.user_aggregator = aggregators.user()
+    runtime.foreground_requests.install(speaker_transcript_gate or stt, aggregators.user())
 
     transcript = TranscriptLogger(session_id=runtime.session_id)
 
@@ -2068,7 +2091,6 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             enabled=settings.jarvis_late_result_neutralize_enabled,
         )
         observers = [
-            runtime.foreground_requests,
             TranscriptObserver(runtime.session_id, only_from=runtime.speaker_gate,
                                on_consent=handle_voice_consent),
             InterruptionNotifier(

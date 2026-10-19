@@ -44,7 +44,7 @@ final class CC7a4ReuseTests: XCTestCase {
                                 answersCurrentRequest: answersCurrentRequest)
     }
 
-    func testWeatherAtlantaWeatherHitKeepsTwoCardsAndReadingFocus() {
+    func testRequestedWeatherHitKeepsTwoCardsAndOpensOriginalIdentity() {
         let store = WorkspaceStore()
         let a = weather(title: "Folly Beach")
         let b = weather(bKey, title: "Atlanta")
@@ -57,10 +57,19 @@ final class CC7a4ReuseTests: XCTestCase {
                                    freshUntil: 1_900, revision: store.consoleRevision))
         XCTAssertGreaterThan(store.consoleRevision, revision)
         XCTAssertEqual(store.results.map(\.id), [a.id, b.id])
-        XCTAssertEqual(store.activeID, b.id)
-        XCTAssertEqual(store.arrivalNoticeID, a.id)
-        XCTAssertTrue(store.unreadIDs.contains(a.id))
+        XCTAssertEqual(store.activeID, a.id)
+        XCTAssertNil(store.arrivalNoticeID)
+        XCTAssertFalse(store.unreadIDs.contains(a.id))
         XCTAssertEqual(store.results[0].payload, a.payload, "A hit does not fabricate another fetch timestamp")
+    }
+
+    func testUnrequestedWeatherHitKeepsReaderFocusAndShowsNotice() {
+        let store = WorkspaceStore()
+        let a = weather(title: "Folly Beach"), b = weather(bKey, title: "Atlanta")
+        store.receive(a, quietly: true); store.receive(b, quietly: true); store.select(b.id)
+        guard case .hit = query(store, a, answersCurrentRequest: false) else { return XCTFail("Expected source hit") }
+        XCTAssertEqual(store.activeID, b.id); XCTAssertEqual(store.arrivalNoticeID, a.id)
+        XCTAssertTrue(store.unreadIDs.contains(a.id)); XCTAssertEqual(store.results.map(\.id), [a.id, b.id])
     }
 
     func testExpiredRefreshRetainsIdentityPinComparisonInspectorScrollAndOutputPointer() {

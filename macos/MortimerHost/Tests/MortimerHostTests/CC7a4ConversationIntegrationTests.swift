@@ -60,6 +60,7 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         let workspace: WorkspaceStore
         let conversation: ConversationStore
         let output: DisplayResultStore
+        let display: DisplayWindowStore
         let coordinator: ConsoleActionCoordinator
         let sharing: ShareCoordinator
         let probe: Probe
@@ -108,7 +109,7 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
             client.consoleSessionID == session && client.consoleGeneration == generation && !transport.inventories.isEmpty
         }
         return Fixture(requests: Requests(), transport: transport, client: client, session: session, generation: generation,
-            router: router, workspace: workspace, conversation: conversation, output: output,
+            router: router, workspace: workspace, conversation: conversation, output: output, display: display,
             coordinator: coordinator, sharing: sharing, probe: probe)
     }
 
@@ -169,8 +170,10 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         var fields = fields
         let origin = (fields["run_id"] as? String).flatMap { f.requests.runs[$0] }
             ?? (fields["run_id"] == nil ? f.requests.current : nil)
-        if let origin { fields["origin_request_id"] = origin.uuidString }
+        if let origin, fields["origin_request_id"] == nil { fields["origin_request_id"] = origin.uuidString }
         let key = fields["subject_key"] as! String
+        let publicWeather = fields["kind"] as? String == "weather"
+            || ["weather_report", "local_weather", "get_weather", "get_weather_radar"].contains(fields["tool"] as? String ?? "")
         let expected = try JSONDecoder().decode(DisplayPayload.self,
             from: JSONSerialization.data(withJSONObject: fields))
         try f.transport.emit(["type": "display", "display": fields])
@@ -181,7 +184,8 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         try await wait("published weather identity/freshness") {
             f.transport.inventories.last?.revision == f.workspace.consoleRevision
                 && f.transport.inventories.last?.data["results"]?.arrayValue?.contains {
-                    $0["id"]?.stringValue == result.id.uuidString && $0["subject_key"]?.stringValue == key
+                    $0["id"]?.stringValue == result.id.uuidString
+                        && (!publicWeather || $0["subject_key"]?.stringValue == key)
                 } == true
         }
         return result
@@ -212,19 +216,20 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         return try await action(f, .weatherReuse, target: target, args: args)
     }
 
-    func testWeatherAtlantaWeatherUsesPublishedIdentityAndOneOrderedReference() async throws {
+    func testSpartanburgAtlantaCachedSpartanburgUsesPublishedIdentityAndOneOrderedReference() async throws {
         let restore = try configureDefaults(); defer { restore() }
         let f = try await fixture(); defer { f.router.stop() }
+        let localKey = "weather:local:device:0:34.9500:-81.9100"
         let fetched = Date().timeIntervalSince1970 - 90
-        try await user(f, "Weather for Folly Beach")
-        let a = try await deliver(f, weather(aKey, city: "Folly Beach", ts: fetched))
+        try await user(f, "What is the weather?")
+        let a = try await deliver(f, weather(localKey, city: "Spartanburg", ts: fetched))
         XCTAssertEqual(f.workspace.activeID, a.id); XCTAssertFalse(f.workspace.showsConversation)
         try await user(f, "Weather for Atlanta")
         let b = try await deliver(f, weather(bKey, city: "Atlanta", ts: fetched + 1))
         XCTAssertEqual(f.workspace.activeID, b.id); XCTAssertFalse(f.workspace.showsConversation)
-        try await user(f, "Folly Beach again")
+        try await user(f, "What is the weather again?")
         try await run(f, "current-reuse")
-        let reply = try await reuse(f, key: aKey, runID: "current-reuse")
+        let reply = try await reuse(f, key: localKey, runID: "current-reuse", tool: "local_weather")
         XCTAssertEqual(reply.code, "cache_hit"); XCTAssertEqual(reply.data?["weather_source"], a.payload.weatherSource)
         XCTAssertEqual(reply.data?["ts"], .number(fetched)); XCTAssertEqual(reply.data?["fresh_until"], .number(fetched + 900))
         XCTAssertEqual(f.workspace.results.map(\.id), [a.id, b.id]); XCTAssertEqual(f.workspace.activeID, a.id)
@@ -271,6 +276,165 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         XCTAssertTrue(f.workspace.showsConversation); XCTAssertEqual(f.workspace.activeID, b.id)
         XCTAssertTrue(f.workspace.unreadIDs.contains(a.id)); XCTAssertEqual(f.workspace.results.map(\.id), [a.id, b.id])
         XCTAssertTrue(f.conversation.cachedReferences.isEmpty, "A superseded cache hit was not reopened.")
+    }
+
+    func testCancelledAndSupersededArrivalsCannotTakeReadingFocus() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        let f = try await fixture(); defer { f.router.stop() }
+        let ts = Date().timeIntervalSince1970 - 30
+        let reader = try await deliver(f, weather("weather:named:reader", city: "Reader", ts: ts))
+        f.workspace.select(reader.id)
+        try await user(f, "Weather for Atlanta"); try await run(f, "cancelled-run")
+        let cancelled = try XCTUnwrap(f.requests.current)
+        try f.transport.emit(["type": "console/turn", "version": 1,
+            "session_id": f.session.uuidString, "generation": f.generation.uuidString,
+            "request_id": cancelled.uuidString, "sequence": f.requests.sequence, "state": "cancelled"])
+        let late = try await deliver(f, weather(bKey, city: "Atlanta", ts: ts, runID: "cancelled-run"))
+        XCTAssertEqual(f.workspace.activeID, reader.id); XCTAssertTrue(f.workspace.unreadIDs.contains(late.id))
+        // A new real request gets its own token, not a revival of the old one.
+        try await user(f, "Weather for Folly Beach"); try await run(f, "superseded-run")
+        try await user(f, "A newer weather question"); try await run(f, "current-run")
+        let old = try await deliver(f, weather(aKey, city: "Folly Beach", ts: ts, runID: "superseded-run"))
+        XCTAssertEqual(f.workspace.activeID, reader.id); XCTAssertTrue(f.workspace.unreadIDs.contains(old.id))
+        let current = try await deliver(f, weather("weather:named:current", city: "Current", ts: ts, runID: "current-run"))
+        XCTAssertEqual(f.workspace.activeID, current.id)
+        XCTAssertTrue(f.conversation.cachedReferences.isEmpty)
+    }
+
+    func testFirstEligibleArrivalWinsAndDuplicateCannotReclaimUserFocus() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        let f = try await fixture(); defer { f.router.stop() }
+        let ts = Date().timeIntervalSince1970 - 30
+        let reader = try await deliver(f, weather("weather:named:reader", city: "Reader", ts: ts))
+        f.workspace.select(reader.id)
+        try await user(f, "Compare public weather"); try await run(f, "same-request")
+        let first = try await deliver(f, weather(aKey, city: "Folly Beach", ts: ts, runID: "same-request"))
+        XCTAssertEqual(f.workspace.activeID, first.id)
+        f.workspace.select(reader.id) // explicit pointer intent after the answer opened
+        let duplicate = try await deliver(f, weather(aKey, city: "Folly Beach", ts: ts,
+            runID: "same-request", body: "A later update from the same request"))
+        let second = try await deliver(f, weather(bKey, city: "Atlanta", ts: ts, runID: "same-request"))
+        XCTAssertEqual(duplicate.id, first.id); XCTAssertNotEqual(second.id, first.id)
+        XCTAssertEqual(f.workspace.activeID, reader.id, "Only the first eligible completion may select.")
+        try await user(f, "Folly Beach again")
+        let reply = try await reuse(f, key: aKey)
+        XCTAssertEqual(reply.code, "cache_hit"); XCTAssertEqual(f.workspace.activeID, first.id)
+        XCTAssertEqual(f.workspace.results.count, 3)
+        XCTAssertEqual(f.workspace.results.first { $0.id == first.id }?.payload.ts, ts)
+        XCTAssertEqual(f.conversation.cachedReferences.count, 1)
+    }
+
+    func testUnknownAndBackgroundArrivalsDoNotConsumeCurrentRequest() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        let f = try await fixture(); defer { f.router.stop() }
+        let ts = Date().timeIntervalSince1970 - 30
+        let reader = try await deliver(f, weather("weather:named:reader", city: "Reader", ts: ts))
+        f.workspace.select(reader.id)
+        try await user(f, "Weather for Atlanta")
+        var unknown = weather(aKey, city: "Folly Beach", ts: ts)
+        unknown["origin_request_id"] = UUID().uuidString
+        let unowned = try await deliver(f, unknown)
+        var background = weather("weather:named:background", city: "Background", ts: ts)
+        background["tool"] = "research_report"
+        let job = try await deliver(f, background)
+        XCTAssertEqual(f.workspace.activeID, reader.id)
+        XCTAssertTrue(f.workspace.unreadIDs.contains(unowned.id)); XCTAssertTrue(f.workspace.unreadIDs.contains(job.id))
+        let current = try await deliver(f, weather(bKey, city: "Atlanta", ts: ts))
+        XCTAssertEqual(f.workspace.activeID, current.id)
+    }
+
+    func testTurnBeforeMatchingTranscriptionCanOpenButReorderedOldTurnCannot() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        let f = try await fixture(); defer { f.router.stop() }
+        let origin = UUID(), timestamp = "synthetic-reordered-input"
+        let turn: [String: Any] = ["type": "console/turn", "version": 1,
+            "session_id": f.session.uuidString, "generation": f.generation.uuidString,
+            "request_id": origin.uuidString, "sequence": 1, "state": "started",
+            "input_timestamp": timestamp, "input_user_id": "synthetic-user"]
+        try f.transport.emit(["type": "user-started-speaking"])
+        try f.transport.emit(turn) // independent observer delivery can precede final transcript
+        try f.transport.emit(["type": "user-transcription", "data": ["text": "Weather", "final": true,
+            "timestamp": timestamp, "user_id": "synthetic-user"]])
+        // The actual aggregator can emit another generic speaking signal
+        // after final text. It is not a new input identity or cancellation.
+        try f.transport.emit(["type": "user-started-speaking"])
+        try f.transport.emit(["type": "bot-interrupted"])
+        var payload = weather(aKey, city: "Folly Beach", ts: Date().timeIntervalSince1970 - 30)
+        payload["origin_request_id"] = origin.uuidString
+        let a = try await deliver(f, payload)
+        XCTAssertEqual(f.workspace.activeID, a.id); XCTAssertFalse(f.workspace.showsConversation)
+        f.requests.sequence = 1
+        try await user(f, "Weather for Atlanta")
+        try f.transport.emit(turn) // old sequence cannot rebind after a later input
+        let b = try await deliver(f, weather(bKey, city: "Atlanta", ts: Date().timeIntervalSince1970 - 30))
+        XCTAssertEqual(f.workspace.activeID, b.id)
+        try f.transport.emit(turn)
+        _ = try await deliver(f, payload)
+        XCTAssertEqual(f.workspace.activeID, b.id, "An old token must not steal the newer request's stage.")
+    }
+
+    func testCacheReuseAndBackgroundWindowPreserveSupportingDisplayOwner() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        let f = try await fixture(); defer { f.router.stop() }
+        let ts = Date().timeIntervalSince1970 - 30
+        let a = try await deliver(f, weather(aKey, city: "Folly Beach", ts: ts))
+        XCTAssertNotNil(f.display.apply(a.payload, workspaceID: a.id))
+        f.display.setWindowOpen(true)
+        XCTAssertTrue(f.workspace.sendToDisplay(.result(a.id)))
+        f.workspace.returnToConversation(); f.coordinator.publishInventory()
+        try await user(f, "Folly Beach again")
+        let reply = try await reuse(f, key: aKey)
+        XCTAssertEqual(reply.code, "cache_hit"); XCTAssertTrue(f.workspace.showsConversation)
+        XCTAssertEqual(f.workspace.supportingContent, .result(a.id))
+        XCTAssertTrue(f.conversation.cachedReferences.isEmpty, "The sole external renderer was not reopened on main.")
+        let before = f.display.panels
+        var late = weather(bKey, city: "Atlanta", ts: ts, structured: false)
+        late["surface"] = "window"; late["tool"] = "research_report"
+        _ = try await deliver(f, late)
+        XCTAssertEqual(f.workspace.supportingContent, .result(a.id))
+        XCTAssertEqual(f.display.panels, before)
+        XCTAssertTrue(f.workspace.showsConversation)
+    }
+
+    func testCancelBeforeStartAndForeignEnvelopeNeverAcquireForeground() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        let f = try await fixture(); defer { f.router.stop() }
+        let ts = Date().timeIntervalSince1970 - 30
+        let reader = try await deliver(f, weather("weather:named:reader", city: "Reader", ts: ts))
+        f.workspace.select(reader.id)
+        let cancelled = UUID(), timestamp = "cancel-before-start-input"
+        try f.transport.emit(["type": "user-transcription", "data": ["text": "Weather", "final": true,
+            "timestamp": timestamp, "user_id": "synthetic-user"]])
+        var turn: [String: Any] = ["type": "console/turn", "version": 1,
+            "session_id": f.session.uuidString, "generation": f.generation.uuidString,
+            "request_id": cancelled.uuidString, "sequence": 1, "state": "cancelled"]
+        try f.transport.emit(turn)
+        turn["state"] = "started"; turn["input_timestamp"] = timestamp; turn["input_user_id"] = "synthetic-user"
+        try f.transport.emit(turn)
+        var payload = weather(aKey, city: "Folly Beach", ts: ts)
+        payload["origin_request_id"] = cancelled.uuidString
+        _ = try await deliver(f, payload)
+        XCTAssertEqual(f.workspace.activeID, reader.id)
+        f.requests.sequence = 1
+        try await user(f, "Weather for Atlanta")
+        turn["sequence"] = 100; turn["request_id"] = UUID().uuidString
+        turn["session_id"] = UUID().uuidString
+        try f.transport.emit(turn) // authenticated console session must match
+        turn["session_id"] = f.session.uuidString; turn["unexpected_authority"] = true
+        try f.transport.emit(turn) // unknown authority fields cannot revoke a good request
+        let current = try await deliver(f, weather(bKey, city: "Atlanta", ts: ts))
+        XCTAssertEqual(f.workspace.activeID, current.id)
+    }
+
+    func testCurrentAnswerDoesNotReplaceIndependentAtlasNavigation() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        let f = try await fixture(); defer { f.router.stop() }
+        f.workspace.openAtlas()
+        try await user(f, "Weather for Atlanta")
+        let current = try await deliver(f, weather(bKey, city: "Atlanta", ts: Date().timeIntervalSince1970 - 30))
+        XCTAssertTrue(f.workspace.showsAtlas)
+        XCTAssertTrue(f.workspace.unreadIDs.contains(current.id))
+        XCTAssertEqual(f.workspace.arrivalNoticeID, current.id)
     }
 
     func testWeatherAndRadarInOneOriginatingRunAppendOnlyOneReference() async throws {
@@ -366,7 +530,7 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         XCTAssertEqual(f.output.results, output)
     }
 
-    func testStaleRefreshThroughRouterRetainsReaderStateAndOutputOwnership() async throws {
+    func testCurrentStaleRefreshOpensSameIdentityAndRetainsReaderStateAndOutputOwnership() async throws {
         let restore = try configureDefaults(); defer { restore() }
         let f = try await fixture(); defer { f.router.stop() }
         let oldFetch = Date().timeIntervalSince1970 - 1_000
@@ -387,13 +551,13 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         let refreshed = try await deliver(f, weather(aKey, city: "Folly Beach", ts: fresh, structured: false,
             runID: "stale-refresh-origin", body: "Refreshed public weather"))
         XCTAssertEqual(refreshed.id, a.id); XCTAssertEqual(f.workspace.results.map(\.id), [a.id, b.id])
-        XCTAssertEqual(f.workspace.activeID, b.id); XCTAssertEqual(f.workspace.comparisonID, a.id)
+        XCTAssertEqual(f.workspace.activeID, a.id); XCTAssertEqual(f.workspace.comparisonID, b.id)
         XCTAssertTrue(f.workspace.pinnedIDs.contains(a.id)); XCTAssertEqual(f.workspace.scrollOffsets[a.id], 240)
         XCTAssertTrue(f.workspace.presentation(for: refreshed) === presentation)
         XCTAssertEqual(presentation.mode, .sources); XCTAssertTrue(presentation.showsInspector)
         XCTAssertEqual(f.output.results.count, oldOutput.count + 1)
         XCTAssertEqual(f.output.results.first?.workspaceID, a.id); XCTAssertEqual(Array(f.output.results.dropFirst()), oldOutput)
-        XCTAssertEqual(f.output.results.first?.payload.ts, fresh); XCTAssertEqual(f.workspace.arrivalNoticeID, a.id)
+        XCTAssertEqual(f.output.results.first?.payload.ts, fresh); XCTAssertNil(f.workspace.arrivalNoticeID)
         XCTAssertEqual(f.conversation.cachedReferences.count, 1, "D2: stale refresh adds one Updated reference")
         for reference in f.conversation.cachedReferences {
             XCTAssertEqual(reference.resultID, a.id); XCTAssertEqual(reference.runID, "stale-refresh-origin")
@@ -402,8 +566,10 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
                           "Reference uses the actual source-fetch time")
             XCTAssertFalse(reference.text.contains(Self.sourceCanary))
         }
-        // A second valid arrival from this originating run still has only
-        // its one ordered reference; it never retargets the reader.
+        // After the first current answer opens, an explicit reader choice
+        // wins over any later update from the same originating request.
+        f.workspace.select(b.id)
+        // A second valid arrival still has only its one ordered reference.
         _ = try await deliver(f, weather(aKey, city: "Folly Beach", ts: fresh + 1, structured: false,
             runID: "stale-refresh-origin", body: "Same-run refreshed weather"))
         XCTAssertEqual(f.conversation.cachedReferences.count, 1)

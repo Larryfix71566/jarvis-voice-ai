@@ -10,6 +10,12 @@ import pytest
 from pipecat.frames.frames import LLMContextFrame, TranscriptionFrame, UserStartedSpeakingFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection
+from pipecat.processors.frame_processor import FrameProcessor
+from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair, LLMUserAggregatorParams
+from pipecat.turns.user_turn_strategies import UserTurnStrategies
+from pipecat.turns.user_start import MinWordsUserTurnStartStrategy
+from pipecat.turns.user_stop import ExternalUserTurnStopStrategy
+from pipecat.services.llm_service import LLMService, FunctionCallFromLLM, FunctionCallParams
 
 from jarvis.bot.pipeline import (
     ForegroundRequests, _foreground_request, adapt_to_pipecat,
@@ -45,8 +51,7 @@ def fixture():
 
 
 async def push(owner, source, frame):
-    await owner.on_push_frame(SimpleNamespace(
-        source=source, frame=frame, direction=FrameDirection.DOWNSTREAM))
+    await owner.before_push(source, frame)
 
 
 async def user_context(owner, text, timestamp):
@@ -61,8 +66,11 @@ async def user_context(owner, text, timestamp):
 async def bind_call(owner, frame, call_id):
     class InferenceProbe:
         async def process_frame(self, received, direction):
-            await owner.calls_started(self, [SimpleNamespace(tool_call_id=call_id)])
-    await request_bound_service(InferenceProbe)().process_frame(frame, FrameDirection.DOWNSTREAM)
+            await self.run_function_calls([SimpleNamespace(tool_call_id=call_id)])
+
+        async def run_function_calls(self, calls):
+            pass
+    await request_bound_service(InferenceProbe, owner)().process_frame(frame, FrameDirection.DOWNSTREAM)
 
 
 async def test_actual_frame_and_callback_scope_survives_new_turn_and_sequential_runner():
@@ -171,3 +179,104 @@ async def test_repeated_phrase_has_distinct_input_and_old_continuation_keeps_its
     await bind_call(owner, continuation, "old-continuation")
     assert owner.calls["old-continuation"] == old
     assert [m["state"] for m in transport.messages] == ["started", "cancelled", "started"]
+
+
+async def test_real_sdk_dispatch_binds_before_async_events_and_reused_runner():
+    owner, transport = fixture()
+    frame = await user_context(owner, "Synthetic direct tool", "sdk-input-1")
+    origin = transport.messages[-1]["request_id"]
+    seen = []
+
+    class DispatchProbe(LLMService):
+        async def process_frame(self, received, direction):
+            await self.run_function_calls([FunctionCallFromLLM(
+                function_name="local_weather", tool_call_id="sdk-call", arguments={}, context=received.context)])
+
+        async def broadcast_frame(self, *_args, **_kwargs):
+            pass  # No audio pipeline is started in this synthetic dispatch.
+
+        async def _run_parallel_function_calls(self, items):
+            # Use SDK-created registry/runner items and real FunctionCallParams;
+            # the scheduler seam deliberately has no inference ContextVar.
+            token = _foreground_request.set(None)
+            try:
+                for item in items:
+                    async def callback(result):
+                        seen.append(result)
+                    await item.registry_item.handler(FunctionCallParams(
+                        function_name=item.function_name, tool_call_id=item.tool_call_id,
+                        arguments=item.arguments, context=item.context, llm=self,
+                        pipeline_worker=None, result_callback=callback))
+            finally:
+                _foreground_request.reset(token)
+
+    async def handler(_):
+        await send_app_message(transport, {"type": "display", "display": {"kind": "markdown"}})
+        return "synthetic result"
+
+    service = request_bound_service(DispatchProbe, owner)()
+    service.register_function("local_weather", adapt_to_pipecat(
+        "local_weather", handler, foreground_requests=owner))
+    await service.process_frame(frame, FrameDirection.DOWNSTREAM)
+    assert seen == ["synthetic result"]
+    assert transport.messages[-1]["display"]["origin_request_id"] == origin
+    assert not owner.calls
+
+
+async def test_aggregator_duplicate_start_after_final_does_not_erase_accepted_input():
+    owner, transport = fixture()
+    await push(owner, owner.input_source, UserStartedSpeakingFrame())
+    await push(owner, owner.input_source, TranscriptionFrame(
+        "Synthetic weather", "synthetic-user", "input-1", finalized=True))
+    await push(owner, owner.user_aggregator, UserStartedSpeakingFrame())
+    frame = LLMContextFrame(LLMContext([{"role": "user", "content": "Synthetic weather"}]))
+    await push(owner, owner.user_aggregator, frame)
+    await bind_call(owner, frame, "call-1")
+    assert owner.calls["call-1"] is not None
+    assert [m["state"] for m in transport.messages] == ["started"]
+
+
+async def test_real_sdk_synchronous_frame_hook_binds_before_downstream_delivery():
+    transport = Transport()
+    owner = ForegroundRequests(transport, "session", "generation")
+    received = []
+
+    class Sender(FrameProcessor):
+        def _check_started(self, frame):
+            return True  # Only the start/clock scheduler is omitted, not push dispatch.
+
+    class Consumer(FrameProcessor):
+        async def queue_frame(self, frame, direction=FrameDirection.DOWNSTREAM, **kwargs):
+            if isinstance(frame, LLMContextFrame):
+                received.append(frame)
+                assert transport.messages[-1]["state"] == "started"
+
+    context = LLMContext([])
+    # No audio/model/turn analyzer is loaded. Stop detection is not exercised.
+    pair = LLMContextAggregatorPair(context, user_params=LLMUserAggregatorParams(
+        user_turn_strategies=UserTurnStrategies(start=[MinWordsUserTurnStartStrategy(min_words=2)],
+                                               stop=[ExternalUserTurnStopStrategy()])))
+    user = pair.user()
+    user._check_started = lambda _frame: True
+    source = Sender()
+    source.link(Consumer()); user.link(Consumer())
+    owner.install(source, user)
+    await source.broadcast_frame(UserStartedSpeakingFrame)
+    await source.push_frame(TranscriptionFrame(
+        "Synthetic current question", "synthetic-user", "hook-input-1", finalized=True))
+    user.add_messages([{"role": "user", "content": "Synthetic current question"}])
+    await user.broadcast_frame(UserStartedSpeakingFrame) # the real post-transcript duplicate
+    await user.push_context_frame()
+    assert len(received) == 1
+    await bind_call(owner, received[0], "hook-call")
+    assert owner.calls["hook-call"].input_timestamp == "hook-input-1"
+
+
+async def test_blocked_ui_sender_is_bounded_and_does_not_break_request_capture(monkeypatch):
+    owner, _transport = fixture()
+    async def blocked(*_args):
+        raise TimeoutError("synthetic UI channel")
+    monkeypatch.setattr("jarvis.bot.pipeline.send_app_message", blocked)
+    frame = await user_context(owner, "Synthetic weather", "input-1")
+    await bind_call(owner, frame, "call-1")
+    assert owner.calls["call-1"] is not None
