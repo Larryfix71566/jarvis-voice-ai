@@ -82,3 +82,11 @@ predicate repairs the early branch; 39 related native cases pass. The prior
 preexisting assets unchanged. Six Claude findings await bounded source/policy
 reconciliation; full affected native/new-source review/twelve-check verification
 refresh next. No production, acceptance, merge or deployment change.
+
+Cache-hit follow-up: eight real-router assertions reproduce closed supporting
+window main-fallback failure and unconsumed visible-winner ownership. Minimal
+router-only actual-renderer accounting passes all 58 related cache/TTL/privacy,
+router, roadmap and provenance tests. Cache/source guards, TTL, fetch timestamps
+and UUIDs unchanged. Preceding `8ac4f30` full native: 575 executed / six explicit
+display/activation skips / zero failures; no VM started for that source. New
+source review/full native/independent verification and CI remain open.

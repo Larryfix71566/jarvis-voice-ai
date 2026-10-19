@@ -492,6 +492,36 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         XCTAssertTrue(f.workspace.showsConversation)
     }
 
+    func testCacheHitConsumesWinnerAtItsActualSupportingOrMainRenderer() async throws {
+        let restore = try configureDefaults(); defer { restore() }
+        for displayOpen in [false, true] {
+            let f = try await fixture(); defer { f.router.stop() }
+            let a = try await deliver(f, weather(aKey, city: "Folly Beach", ts: Date().timeIntervalSince1970 - 30))
+            XCTAssertNotNil(f.display.apply(a.payload, workspaceID: a.id))
+            f.display.setWindowOpen(displayOpen)
+            XCTAssertTrue(f.workspace.sendToDisplay(.result(a.id)))
+            f.workspace.returnToConversation(); f.coordinator.publishInventory()
+            try await user(f, "Folly Beach again")
+            let reply = try await reuse(f, key: aKey)
+            XCTAssertEqual(reply.code, "cache_hit")
+            XCTAssertEqual(f.workspace.supportingContent, .result(a.id))
+            if displayOpen {
+                XCTAssertTrue(f.workspace.showsConversation)
+                XCTAssertTrue(f.conversation.cachedReferences.isEmpty, "No main reopen while the sole supporting renderer is visible.")
+            } else {
+                XCTAssertFalse(f.workspace.showsConversation, "A closed supporting window must allow the current cache answer's main fallback.")
+                XCTAssertEqual(f.workspace.activeID, a.id)
+                XCTAssertEqual(f.conversation.cachedReferences.count, 1)
+            }
+            let panels = f.display.panels
+            let later = try await ordinaryWindow(f, title: "Second answer after cache hit")
+            XCTAssertEqual(f.workspace.supportingContent, .result(a.id), "The actual cached-answer renderer already consumed this request's winner.")
+            XCTAssertEqual(f.display.panels, panels)
+            XCTAssertTrue(f.workspace.unreadIDs.contains(later.id))
+            if !displayOpen { XCTAssertEqual(f.workspace.activeID, a.id) }
+        }
+    }
+
     func testCancelBeforeStartAndForeignEnvelopeNeverAcquireForeground() async throws {
         let restore = try configureDefaults(); defer { restore() }
         let f = try await fixture(); defer { f.router.stop() }

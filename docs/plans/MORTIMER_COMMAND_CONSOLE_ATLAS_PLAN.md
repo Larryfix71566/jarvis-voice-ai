@@ -3076,3 +3076,31 @@ helpers and theoretical repeated UUIDs. Original report is preserved. Native
 and Python contract probes confirm multi-chunk final-timestamp correlation and
 conservative revocation/recovery; policy/remaining caller reconciliation stays
 open pending the actual reviewer verdict. No acceptance, merge or deployment.
+
+
+### 2026-10-19 — Cache-hit renderer/winner follow-up
+
+Before starting another VM comparison, the same early-branch audit checked a
+retained public weather owner queued to the supporting display. A real
+SDK/router regression covers both actual window states, a valid current cache
+hit and a later ordinary result from the same request. On `8ac4f30` runtime it
+fails eight assertions: a closed window leaves the cache answer off main with
+no reopen reference; both states leave the winner unconsumed so the later
+answer changes renderer ownership. This is the same current-request contract.
+
+The minimal router-only repair uses the existing actual-renderer predicate
+after the fully validated cache hit. A visible supporting answer consumes the
+winner without a duplicate main renderer/reference. A queued owner with its
+window closed can select the existing main fallback when independent
+navigation permits; only actual main presentation records the cache reference.
+No source/cache guard, TTL, fetch timestamp, UUID, store query or display panel
+changes. All 58 affected cache/TTL/privacy/router/roadmap/provenance tests pass.
+
+Full preceding `8ac4f30` native suite: 575 executed, six environment/prerequisite
+skips, zero failures. Three missing-display skips and three activation skips
+remain open; no blanket reuse of the earlier five-skip count. Python and
+JarvisKit remain unchanged from their passing exact-source checks. No VM was
+started for `8ac4f30`; the superseded `e29973d` attempt stays non-passing. New
+source review/full affected native/twelve-check verification remain required.
+The six original source findings and bounded disposition review are preserved;
+no production, acceptance, merge, deployment or restart change.

@@ -182,14 +182,29 @@ final class AppMessageRouter {
                         if let result = consoleCoordinator.executeWeatherReuse(request, now: now,
                             answersCurrentRequest: answers) {
                             if answers, result.status == "ok", result.code == "cache_hit",
-                               let id = request.target.flatMap(UUID.init(uuidString:)),
-                               workspace?.activeID == id, workspace?.showsConversation == false,
-                               workspace?.supportingContent != .result(id),
-                               let retained = workspace?.results.first(where: { $0.id == id }),
+                               let id = request.target.flatMap(UUID.init(uuidString:)), let workspace,
+                               let retained = workspace.results.first(where: { $0.id == id }),
                                let fetchedAt = result.data?["ts"]?.doubleValue {
-                                currentRequests.didPresent(origin, resultID: id)
-                                conversation?.recordCachedResult(retained, fetchedAt: fetchedAt,
-                                    requestID: origin ?? request.requestID, runID: runID, now: now)
+                                let rawLayout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
+                                let supporting = displayWindow.isPresented(.result(id),
+                                    selection: workspace.supportingContent,
+                                    layoutVersion: InterfaceLayoutVersion.resolve(rawLayout))
+                                let independent = workspace.showsAtlas || workspace.showsSkills
+                                    || workspace.showsWorkflows || workspace.showsMemoryGraph
+                                if !supporting && !independent && workspace.supportingContent == .result(id) {
+                                    // A closed window's queued owner can render
+                                    // on main without reopening or moving it.
+                                    workspace.select(id)
+                                }
+                                let main = workspace.activeID == id && !workspace.showsConversation
+                                    && !independent && !supporting
+                                if main || supporting {
+                                    currentRequests.didPresent(origin, resultID: id)
+                                }
+                                if main {
+                                    conversation?.recordCachedResult(retained, fetchedAt: fetchedAt,
+                                        requestID: origin ?? request.requestID, runID: runID, now: now)
+                                }
                             }
                             client.send(.consoleResult(result))
                             consoleCoordinator.publishInventory()
