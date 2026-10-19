@@ -188,6 +188,7 @@ def _resolve_observed_reference(reference: str, snapshot: dict) -> tuple[str | N
 
 def _disclosed_inventory(data: dict, *, scope: str | None = None) -> tuple[dict, str] | None:
     """Keep exactly what is returned, without saving an undisclosed truncated tail."""
+    data = {key: value for key, value in data.items() if key != "foreground_request_version"}
     if type(data.get("revision")) is not int or data["revision"] < 0:
         return None
     try:

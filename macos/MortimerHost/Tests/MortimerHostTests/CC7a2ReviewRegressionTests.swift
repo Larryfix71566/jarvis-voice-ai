@@ -69,10 +69,11 @@ private final class ReviewTransport: RTVITransport {
                         XCTAssertEqual(workspace.arrivalNoticeID, initial == "conversation" ? nil : result.id)
                     } else {
                         XCTAssertNil(workspace.arrivalNoticeID)
-                        let weather = payload["kind"] as? String == "weather"
-                        XCTAssertEqual(workspace.showsAtlas, initial == "atlas" && !weather)
+                        // None of these historical fixtures has a host request
+                        // origin. Weather cannot steal an existing reader/Atlas.
+                        XCTAssertEqual(workspace.showsAtlas, initial == "atlas")
                         XCTAssertFalse(workspace.showsConversation)
-                        XCTAssertEqual(workspace.activeID, weather ? result.id : (oldID ?? result.id))
+                        XCTAssertEqual(workspace.activeID, oldID ?? result.id)
                     }
                     if payload["surface"] as? String == "drawer" {
                         XCTAssertTrue(drawer.isOpen); XCTAssertEqual(drawer.activeTab, "output")

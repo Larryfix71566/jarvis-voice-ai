@@ -15,11 +15,12 @@ private final class ThreadAcceptanceTransport: RTVITransport {
     func send(_ data: Data) throws { sentFrames += 1 }
     func setMicEnabled(_ enabled: Bool) {}
 
-    func emit(_ type: String, text: String? = nil, final: Bool? = nil) throws {
+    func emit(_ type: String, text: String? = nil, final: Bool? = nil, timestamp: String? = nil) throws {
         var message: [String: Any] = ["type": type]
         if let text {
             var data: [String: Any] = ["text": text]
             if let final { data["final"] = final }
+            if let timestamp { data["timestamp"] = timestamp; data["user_id"] = "synthetic-user" }
             message["data"] = data
         }
         try emitPayload(message)
@@ -43,6 +44,9 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
         var displayOpens = 0
         var displayAssignments: [String] = []
         var clock: TimeInterval = 0
+        let session = UUID(), generation = UUID()
+        var requestSequence = 0
+        var requestID: UUID?
     }
 
     private struct Fixture {
@@ -122,6 +126,9 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
         router.start(client: client, agentRuns: AgentRunStore(), displayResults: output,
             displayWindow: display, workspace: workspace, conversation: conversation,
             drawer: drawer, consoleCoordinator: coordinator)
+        // Set only the fake client's negotiated identity; no outbound
+        // handshake/transport action is needed for this privacy fixture.
+        client.setConsoleIdentity(sessionID: probe.session, generation: probe.generation)
         return Fixture(transport: transport, client: client, router: router,
             conversation: conversation, workspace: workspace, display: display,
             output: output, drawer: drawer, sharing: sharing, coordinator: coordinator, probe: probe)
@@ -246,8 +253,15 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
 
     private func emitPublicReply(_ fixture: Fixture, user: String, answer: String) async throws {
         let before = fixture.conversation.entries.count
-        try fixture.transport.emit("user-transcription", text: user, final: true)
+        fixture.probe.requestSequence += 1
+        let requestID = UUID(), timestamp = "synthetic-input-\(fixture.probe.requestSequence)"
+        fixture.probe.requestID = requestID
+        try fixture.transport.emit("user-transcription", text: user, final: true, timestamp: timestamp)
         try await waitUntil("public user row") { fixture.conversation.entries.count == before + 1 }
+        try fixture.transport.emitPayload(["type": "console/turn", "version": 1,
+            "session_id": fixture.probe.session.uuidString, "generation": fixture.probe.generation.uuidString,
+            "request_id": requestID.uuidString, "sequence": fixture.probe.requestSequence, "state": "started",
+            "input_timestamp": timestamp, "input_user_id": "synthetic-user"])
         try fixture.transport.emit("bot-llm-started")
         try fixture.transport.emit("bot-llm-text", text: answer)
         try fixture.transport.emit("bot-llm-stopped")
@@ -264,7 +278,9 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
     }
 
     private func emitProtected(_ fixture: Fixture) async throws -> WorkspaceResult {
-        try fixture.transport.emitPayload(["type": "display", "display": protectedFields(body: Self.privateBody)])
+        var fields = protectedFields(body: Self.privateBody)
+        if let origin = fixture.probe.requestID { fields["origin_request_id"] = origin.uuidString }
+        try fixture.transport.emitPayload(["type": "display", "display": fields])
         try await waitUntil("protected result in local workspace") { fixture.workspace.results.count == 1 }
         return try XCTUnwrap(fixture.workspace.results.first)
     }

@@ -26,3 +26,10 @@ skip list, budget or timeout was weakened. No source-policy, model, endpoint,
 credential, installation, production/history, deployment or live-acceptance
 change occurred. Only source/synthetic tests may enter the review packet;
 raw production logs and operational metadata remain local.
+
+00:54 UTC checkpoint: 206 final focused Python tests pass. The same single
+SDK/transport/router/store second-city witness fails two baseline foreground
+assertions and passes the candidate; its test-only baseline overlay was removed.
+The 36 affected native regression/private-capture cases pass with all privacy
+assertions intact. Original full-run failures are preserved and classified in
+the existing plan; final-source full clean-host suites and review remain open.

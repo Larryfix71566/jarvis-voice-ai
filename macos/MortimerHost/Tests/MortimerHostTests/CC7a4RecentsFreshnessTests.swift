@@ -40,7 +40,7 @@ final class CC7a4RecentsFreshnessTests: XCTestCase {
                        "Clarification choices must match the menu's source age", file: file, line: line)
     }
 
-    func testStoreRefreshUpdatesAllAgeLabelsWithoutMovingCardOrRecentsNumber() throws {
+    func testStoreRequestedRefreshUpdatesAllAgeLabelsWithoutMovingCardOrRecentsNumber() throws {
         let store = WorkspaceStore()
         let a = try weather("Folly Beach", ts: 1_000, receivedAt: 1_000)
         let b = try weather("Atlanta", ts: 1_500, receivedAt: 1_500)
@@ -60,7 +60,7 @@ final class CC7a4RecentsFreshnessTests: XCTestCase {
         XCTAssertEqual(after.entries.map(\.id), before.entries.map(\.id))
         XCTAssertEqual(after.entries.map(\.number), before.entries.map(\.number))
         XCTAssertEqual(after.pinned.map(\.id), [pinned.id])
-        XCTAssertEqual(store.activeID, b.id); XCTAssertEqual(store.comparisonID, a.id)
+        XCTAssertEqual(store.activeID, a.id); XCTAssertEqual(store.comparisonID, b.id)
         XCTAssertEqual(store.scrollOffsets[a.id], 240)
         let retained = try XCTUnwrap(store.results.first { $0.id == a.id })
         let entry = try XCTUnwrap(after.entries.first { $0.id == a.id })

@@ -108,6 +108,7 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
         try await wait("negotiated console identity") {
             client.consoleSessionID == session && client.consoleGeneration == generation && !transport.inventories.isEmpty
         }
+        XCTAssertEqual(transport.inventories.last?.data["foreground_request_version"], .number(1))
         return Fixture(requests: Requests(), transport: transport, client: client, session: session, generation: generation,
             router: router, workspace: workspace, conversation: conversation, output: output, display: display,
             coordinator: coordinator, sharing: sharing, probe: probe)

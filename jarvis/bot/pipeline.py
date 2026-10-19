@@ -548,7 +548,10 @@ def _weather_candidate_inventory(data: dict, subject_key: str) -> dict | None:
         except (KeyError, ValueError, TypeError, AttributeError):
             return None
         matches.append({"id": identity, "subject_key": subject_key})
-    return {"revision": data["revision"], "results": matches}
+    projected = {"revision": data["revision"], "results": matches}
+    if type(data.get("foreground_request_version")) is int and data["foreground_request_version"] == 1:
+        projected["foreground_request_version"] = 1
+    return projected
 
 
 def _log_best_effort_failure(
@@ -1280,7 +1283,7 @@ def build_pipeline(
                     return refused("invalid_reply")
                 args = {"subject_key": subject_key, "tool": tool, "days": days,
                         "units": units, "ordinary_turn": True}
-                if origin is not None:
+                if origin is not None and data.get("foreground_request_version") == 1:
                     args["origin_request_id"] = origin.request_id
                 if run_id is not None:
                     args["run_id"] = run_id

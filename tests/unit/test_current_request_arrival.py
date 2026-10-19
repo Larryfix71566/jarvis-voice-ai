@@ -274,9 +274,15 @@ async def test_real_sdk_synchronous_frame_hook_binds_before_downstream_delivery(
 
 async def test_blocked_ui_sender_is_bounded_and_does_not_break_request_capture(monkeypatch):
     owner, _transport = fixture()
+    cancelled = asyncio.Event()
     async def blocked(*_args):
-        raise TimeoutError("synthetic UI channel")
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
     monkeypatch.setattr("jarvis.bot.pipeline.send_app_message", blocked)
-    frame = await user_context(owner, "Synthetic weather", "input-1")
+    frame = await asyncio.wait_for(user_context(owner, "Synthetic weather", "input-1"), timeout=1.0)
     await bind_call(owner, frame, "call-1")
     assert owner.calls["call-1"] is not None
+    assert cancelled.is_set(), "The real UI-send deadline must cancel the blocked sender."

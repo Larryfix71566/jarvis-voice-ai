@@ -2871,3 +2871,32 @@ is present, and keep it outside model-facing inventory. Legacy clients retain
 their existing cache schema/behavior; current release clients still enforce
 exact current-request foreground. No action, permission, source-policy,
 configuration or account expansion is involved.
+
+
+### 2026-10-19 — Baseline witness and final-source verification restart
+
+At 00:54 UTC main remains `c244963`; only unrelated verification documentation
+PR #224 is open. The same public synthetic SDK/transport/router/store witness
+(`CurrentRequestForegroundWitnessTests`, SHA-256
+`2ae7515a675f4dc9cf9d164af9420924fe2fe7d7cb008d119b072be5e3b96551`)
+fails the baseline runtime's two second-city foreground assertions and passes
+the candidate. Baseline used a temporary test-only overlay, removed afterward;
+its tracked source is unchanged. This proves the requested policy difference,
+not a deployed/live acceptance pass.
+
+The first full Python run under the execution sandbox retained 126 failures,
+6,668 passes, 15 skips and four errors. Local socket/process restrictions account
+for the permission failures; a clean normal-host baseline selection passes all
+182 representative cases. Two fake STT fixtures lacked the real FrameProcessor
+event API and now inherit that API. No product fallback or assertion waiver was
+added. The final clean focused selection passes 206 tests, including real blocked
+UI-send timeout and old/new-client cache compatibility without exposing the
+host capability marker to the model.
+
+The first full native run retained 571 tests, six skips and nine failed
+assertions in six cases. Those old foreground expectations and synthetic
+private-input provenance fixtures now follow the approved request policy.
+The 36 affected cases pass; original private capture/no-outbound assertions
+remain intact. Full clean-host Python, JarvisKit and MortimerHost checks will
+run on the frozen source before independent review/PR. Failed runs remain local
+and are not replaced by focused results. No live requirement is closed here.

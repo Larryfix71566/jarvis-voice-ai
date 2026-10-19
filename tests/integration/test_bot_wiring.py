@@ -14,6 +14,7 @@ import re
 from types import SimpleNamespace
 
 import pytest
+from pipecat.processors.frame_processor import FrameProcessor
 
 import jarvis.bot.pipeline as bp
 from jarvis.bot.pipeline import (
@@ -47,12 +48,13 @@ class FakeTransport:
         return deco
 
 
-class FakeSTT:
+class FakeSTT(FrameProcessor):
     class Settings:
         def __init__(self, model):
             self.model = model
 
     def __init__(self, api_key, settings, **kwargs):
+        super().__init__()
         self.api_key = api_key
         self.settings = settings
 

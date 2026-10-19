@@ -268,6 +268,7 @@ final class WorkspaceStore {
         ])
         let actions: [JSONValue] = ConsoleAction.allCases.map { action in .string(action.rawValue) }
         let payload: [String: JSONValue] = [
+            "foreground_request_version": .number(1),
             "revision": .number(Double(inventoryRevision)),
             "mode": .string(mode),
             "active_result_id": activeValue,
