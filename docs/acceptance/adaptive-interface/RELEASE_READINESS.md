@@ -324,8 +324,10 @@ sandbox evidence; all additions remain open as release-acceptance gates.
   supersedes the earlier weather-while-reading no-jump criterion; the original
   rule and decision history are retained in the [Command Console plan's dated
   amendment](../../plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md#2026-10-18--larry-approves-the-foreground-exception-claim-awaits-main).
-  Implementation and exact-build live acceptance remain open; this unchecked
-  criterion records the target behavior, not a demonstrated pass.
+  Draft #226 implements this policy; frozen `fbfb669` completes source review
+  and all twelve independent checks ([scrubbed evidence](../command-console/receipts/ws17-current-request-final-2026-10-19.md)).
+  Merge/release and exact-build live acceptance remain open; this unchecked
+  criterion is not a physical or release pass.
 - [ ] **UI2-24 — Recents replaces tabs (CC7a.1b, CC7a.3).** One console row and
   nothing below it in any view (CC7a.1b); no tab strip; Recents lists
   results pinned first; `result_select/close/pin/unpin` and "show the Folly

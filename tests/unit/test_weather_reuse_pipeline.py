@@ -16,10 +16,10 @@ import uuid
 import pytest
 
 from jarvis.bot.console_actions import _disclosed_inventory, build_console_action_tool
-from jarvis.bot.console_protocol import MAX_MESSAGE, validate_inventory, validate_request
+from jarvis.bot.console_protocol import ALLOWED_ACTIONS, MAX_MESSAGE, validate_inventory, validate_request
 from jarvis.bot.console_session import ConsoleSession
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
-from jarvis.bot.pipeline import _mark_weather_context
+from jarvis.bot.pipeline import _mark_weather_context, _foreground_request, ForegroundRequest
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn, is_sensitive
 from jarvis.bot.weather_reuse import WeatherReuseBridge, current_weather_reuse, weather_reuse_scope
 
@@ -95,6 +95,7 @@ class Harness:
             _log_console_validation_failure=lambda *_: None,
             _logger=SimpleNamespace(info=lambda *_: None), bot_event_log=lambda *_: None,
             _mark_weather_context=_mark_weather_context,
+            ALLOWED_ACTIONS=ALLOWED_ACTIONS, _foreground_request=_foreground_request,
             WeatherReuseBridge=WeatherReuseBridge, WeatherReportMerger=WeatherReportMerger,
             build_display_payload=build_display_payload, current_weather_reuse=current_weather_reuse,
             weather_reuse_scope=weather_reuse_scope)
@@ -406,3 +407,33 @@ async def test_actual_event_handler_consumes_provenance_and_flushes_each_request
     displays = [frame["display"] for frame in h.frames if frame.get("type") == "display"]
     assert [payload["subject_key"] for payload in displays] == [KEY, "weather:named:alpha"]
     assert all(payload["ts"] == 0 and payload["data_policy"] == "approved_external" for payload in displays)
+
+
+@pytest.mark.parametrize('capable', [False, True])
+async def test_origin_argument_is_bound_only_for_capable_native_inventory(capable):
+    h = Harness()
+    if capable:
+        h.inventory['foreground_request_version'] = 1
+    request = ForegroundRequest(str(uuid.uuid4()), 1, 'synthetic-input', 'synthetic-user')
+    token = _foreground_request.set(request)
+    try:
+        result = await h.lookup()
+    finally:
+        _foreground_request.reset(token)
+    assert result.status == 'hit' and result.source == SOURCE
+    assert result.ts == 0 and result.fresh_until == 900
+    args = h.frames[1]['args']
+    if capable:
+        assert args['origin_request_id'] == request.request_id
+    else:
+        assert 'origin_request_id' not in args, 'An older closed native schema must still accept cache reuse.'
+    await h.settled()
+
+
+@pytest.mark.parametrize('scope', [None, 'results'])
+def test_request_capability_remains_host_metadata_and_not_model_inventory(scope):
+    native = {'revision': 1, 'results': [row()], 'foreground_request_version': 1}
+    disclosed, encoded = _disclosed_inventory(native, scope=scope)
+    assert 'foreground_request_version' not in disclosed
+    assert 'foreground_request_version' not in encoded
+    assert native['foreground_request_version'] == 1

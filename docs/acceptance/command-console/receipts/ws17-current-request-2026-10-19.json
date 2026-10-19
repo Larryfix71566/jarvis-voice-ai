@@ -1,0 +1,375 @@
+{
+  "version": 1,
+  "candidate": "1055551a180438004174512325ab3e0e7196e10f7c224e414ba7b63ca5adc917",
+  "baseline": "1cb637d1ad2667fb040715a9ba54f43b6216b1cf8b7c943d77649afc70e67711",
+  "source_commit": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+  "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+  "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+  "runner": "62019da52862d37e1e9c12b521849171440d27c57846a156c3e6994ee71d4b39",
+  "checks": [
+    {
+      "name": "backend-imports",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/python/bin/python",
+        "-c",
+        "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 1.791,
+      "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "name": "baseline-backend",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/python/bin/python",
+        "-m",
+        "pytest",
+        "/Users/admin/mortimer/verification/tests/unit",
+        "-q"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 432.67,
+      "log_sha256": "0250996590b1314c1e3cbb750ed64d2c0731a2ad4ee7da99b0d7fc41ec835f9a"
+    },
+    {
+      "name": "backend",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/python/bin/python",
+        "-m",
+        "pytest",
+        "tests/unit",
+        "-q"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 453.872,
+      "log_sha256": "107011f9b0fd5af8a37084d0444ae87886706e74b53cae778959664d20c6ddf4"
+    },
+    {
+      "name": "scripted-evals",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/python/bin/python",
+        "-m",
+        "pytest",
+        "/Users/admin/mortimer/verification/tests/evals/sub_agent_evals.py",
+        "-q"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 1.474,
+      "log_sha256": "f735f716bc9e56e0be9dce0711264dae34bc4fe761dbd619f43d7fd55c629fca"
+    },
+    {
+      "name": "latency",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/python/bin/python",
+        "scripts/latency_probe.py",
+        "--budget",
+        "tests/fixtures/latency_sample.log"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 1.054,
+      "log_sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a"
+    },
+    {
+      "name": "knowledge-base",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+        "-m",
+        "pytest",
+        "services/mortimer-vault/tests",
+        "-q"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 3.311,
+      "log_sha256": "608a45403ff2f34227b2758d71c85b7a14a9b732be3ac661c2ca63d57e0b5c7c"
+    },
+    {
+      "name": "baseline-knowledge-base",
+      "argv": [
+        "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+        "-m",
+        "pytest",
+        "/Users/admin/mortimer/verification/services/mortimer-vault/tests",
+        "-q"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 5.889,
+      "log_sha256": "5809a7aa54f97f98c8d8b5684048aae11ea59e2bfcfe0dc98ebb77488afc2cf0"
+    },
+    {
+      "name": "web",
+      "argv": [
+        "npm",
+        "--prefix",
+        "web",
+        "run",
+        "build"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 30.847,
+      "log_sha256": "44a804987449992a6e1653b344266f224f60d85e558663e839b616cf59a3468a"
+    },
+    {
+      "name": "native-library",
+      "argv": [
+        "swift",
+        "test",
+        "--package-path",
+        "macos/JarvisKit"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 91.884,
+      "log_sha256": "6468935a611b1f057fa6e5cd7ce538fb8a3fb42460530bea8f25c96ccf5c6ba8"
+    },
+    {
+      "name": "native-app",
+      "argv": [
+        "swift",
+        "test",
+        "--package-path",
+        "macos/MortimerHost"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 209.011,
+      "log_sha256": "fc9c9721d21d724a7aad6b82979113296e934a3228e0ea27129e101d313fee65"
+    },
+    {
+      "name": "baseline-native-library",
+      "argv": [
+        "swift",
+        "test",
+        "--package-path",
+        "/Users/admin/mortimer/verification/macos/JarvisKit"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 23.291,
+      "log_sha256": "25cfc0e10026b332e99de111ba8980789d7ab49b6c03c6d70e5c938e68fa01a9"
+    },
+    {
+      "name": "baseline-native-app",
+      "argv": [
+        "swift",
+        "test",
+        "--package-path",
+        "/Users/admin/mortimer/verification/macos/MortimerHost"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "seconds": 189.448,
+      "log_sha256": "ffa05c89b2a3e695516a6af8384dbfd52de4a100b28b92a73861755599c6b304"
+    }
+  ],
+  "passed": true,
+  "status": "passed",
+  "source_unchanged": true,
+  "candidate_source_commit": "0f2af668028fe75827bb061ba32e5f22a86e6598",
+  "source_commit_semantics": "source_commit is the protected baseline revision in the supported verifier; candidate_source_commit identifies the reviewed implementation.",
+  "raw_local_receipt_sha256": "afef0f771622d98d900712ca20f0693e4e877ce8024e35ed092b927d1753f73d",
+  "scrubbed_fields": [
+    "attempt",
+    "development_task",
+    "verification_task",
+    "desktop_probe",
+    "cleanup"
+  ],
+  "program_and_test_manifest_sha256": "c9d5e8bf4214c5ac516becfe1a9b08d23ebbbd938994d5dc087d1956346a6f43",
+  "program_and_test_files": [
+    {
+      "path": "jarvis/bot/console_actions.py",
+      "bytes": 22046,
+      "sha256": "16e9da9a64e7b0033457cbf77abe417cfd9391f710ebf292b23231eb53ed63f1"
+    },
+    {
+      "path": "jarvis/bot/console_protocol.py",
+      "bytes": 21826,
+      "sha256": "47e3f3b7c4bc99d3e1a75bab6c1d82bed19b1a5258b31b6602eb4be89485f6ed"
+    },
+    {
+      "path": "jarvis/bot/pipeline.py",
+      "bytes": 146406,
+      "sha256": "3ad5ca6090426b6659e0b13147828fd55144837757d5bff5f0a6cf1b3f92758e"
+    },
+    {
+      "path": "macos/JarvisKit/Sources/JarvisKit/AppMessage.swift",
+      "bytes": 28591,
+      "sha256": "2d393639ba89af3e43b76c0ffd881d30c672dbbd336c7ad36f96a9bbc0057883"
+    },
+    {
+      "path": "macos/MortimerHost/Sources/MortimerHost/App/AppMessageRouter.swift",
+      "bytes": 29825,
+      "sha256": "93542a0205d96cefb71e32d6c87fc80e397646137133f8066ac2763d81427af7"
+    },
+    {
+      "path": "macos/MortimerHost/Sources/MortimerHost/App/ConsoleActionRegistry.swift",
+      "bytes": 13467,
+      "sha256": "82f4b87b8b9fea23b5f2f997e61fcff051712b3bfb9174dd346a3e953a0f551e"
+    },
+    {
+      "path": "macos/MortimerHost/Sources/MortimerHost/Console/ConversationThreadView.swift",
+      "bytes": 34734,
+      "sha256": "7f84fd8409dbe8ea3e526900bb24fda2130a3298017c1ee8c445d8e34c470fcf"
+    },
+    {
+      "path": "macos/MortimerHost/Sources/MortimerHost/Stores/WorkspaceStore.swift",
+      "bytes": 35978,
+      "sha256": "253b1d478aaee2bc2f29f13d62fe8ca9280ee1dedb74ed55574b3b7f3fec81b2"
+    },
+    {
+      "path": "macos/MortimerHost/Tests/MortimerHostTests/CC7a2ReviewRegressionTests.swift",
+      "bytes": 7691,
+      "sha256": "b1e6fca6ee389f2ddb5fe075ef027392c857a69f18969fc48cf19409482000a2"
+    },
+    {
+      "path": "macos/MortimerHost/Tests/MortimerHostTests/CC7a2bArrivalRouteTests.swift",
+      "bytes": 10858,
+      "sha256": "02c6661e7de95fcff46c1cecf990bb5dcadf7475da94155a4a94bb9cec1f3ff6"
+    },
+    {
+      "path": "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ConversationIntegrationTests.swift",
+      "bytes": 47391,
+      "sha256": "faec834b8884e2edc956511d7c8d68e37da243f553f0751506ba9b7f70080eb7"
+    },
+    {
+      "path": "macos/MortimerHost/Tests/MortimerHostTests/CC7a4RecentsFreshnessTests.swift",
+      "bytes": 9462,
+      "sha256": "e640cb59ae3888971331580cdfa3ece3a8562b0fbcadaa9edb1416d9ff639b66"
+    },
+    {
+      "path": "macos/MortimerHost/Tests/MortimerHostTests/CC7a4ReuseTests.swift",
+      "bytes": 21701,
+      "sha256": "5e68652d3e0207ca8db90a59721c30e29c591ddbf71cad0bf609bd3ad7ec94de"
+    },
+    {
+      "path": "macos/MortimerHost/Tests/MortimerHostTests/CC7aThreadAcceptanceTests.swift",
+      "bytes": 36138,
+      "sha256": "9cf37910f6bf5bac6425164fd2fa2f8e11fbdf1ea1b59e553bf71f0bb20b134b"
+    },
+    {
+      "path": "macos/MortimerHost/Tests/MortimerHostTests/CurrentRequestForegroundWitnessTests.swift",
+      "bytes": 4175,
+      "sha256": "2ae7515a675f4dc9cf9d164af9420924fe2fe7d7cb008d119b072be5e3b96551"
+    },
+    {
+      "path": "macos/MortimerHost/Tests/MortimerHostTests/WorkspaceStoreTests.swift",
+      "bytes": 18722,
+      "sha256": "e412e984d1093dd5d7662bbe9f6651b40d199d7780b6912367aff82e576054e4"
+    },
+    {
+      "path": "tests/integration/test_bot_wiring.py",
+      "bytes": 76966,
+      "sha256": "ac8e3b7552a21586ee7bf24ede228001b730f1fa0ded9184954fbc6d4187704c"
+    },
+    {
+      "path": "tests/unit/test_current_request_arrival.py",
+      "bytes": 13858,
+      "sha256": "9d88b8295e954ed5340ffc789d3659681eb87f7417fad24a05bbdfe5c1b14c1b"
+    },
+    {
+      "path": "tests/unit/test_speaker_gate.py",
+      "bytes": 27928,
+      "sha256": "0a0296fbd10aa2ca66e5d7d3117863d3311b52eeb669efe5a4daa04106c1d076"
+    },
+    {
+      "path": "tests/unit/test_weather_reuse_pipeline.py",
+      "bytes": 20756,
+      "sha256": "0d893a242b0d3825edb357ef6608d6a91f7ea8deb145c5d90eaa4507447ccd78"
+    }
+  ],
+  "local_full_python": {
+    "passed": 6803,
+    "skipped": 15,
+    "failures": 0,
+    "source_commit": "0f2af668028fe75827bb061ba32e5f22a86e6598",
+    "test_process_isolation": "RUN_LIVE=0, inherited provider credentials excluded, PYTHON_DOTENV_DISABLED=1 to prevent the installed SDK runner discovering an unrelated environment file; product settings and assertions unchanged."
+  },
+  "native": {
+    "candidate_vm": {
+      "executed": 572,
+      "skipped": 8,
+      "failures": 0
+    },
+    "candidate_library": {
+      "executed": 235,
+      "failures": 0
+    },
+    "host": {
+      "executed": 572,
+      "skipped": 5,
+      "failures": 0,
+      "tested_source": "6d777ebb9b6537773b57503b91fc22496ffc10b6",
+      "native_source_tests_and_manifests_identical_to_candidate": true
+    },
+    "skip_limits": "VM capture/display/activation prerequisites and host display/activation prerequisites remain open; no physical acceptance is inferred."
+  },
+  "baseline_witness": {
+    "baseline_source_commit": "c24496325c8c587c38c485e889db87f28fd14f7b",
+    "test": "CurrentRequestForegroundWitnessTests.testSecondRequestedCityOpensFromTheFirstResultThroughActualCallerChain",
+    "test_file_sha256": "2ae7515a675f4dc9cf9d164af9420924fe2fe7d7cb008d119b072be5e3b96551",
+    "baseline": "Two expected assertion failures: the newly requested second city stays unread while reading the first. Temporary test-only overlay removed; baseline runtime unchanged.",
+    "candidate": "Pass through actual SDK decoding, transport, router and store. Demonstrates the newly approved foreground exception, not a defect against the former no-jump rule.",
+    "additional_coverage": "Spartanburg \u2192 Atlanta \u2192 cached Spartanburg; immutable old/new ownership, upstream speaking echo, copied boundary, detached child, sequential runner, cancellation/supersession, reordering, duplicate winner, independent navigation and supporting ownership."
+  },
+  "review": {
+    "system": "Claude Code 2.1.291",
+    "model": "claude-sonnet-5",
+    "tools": [],
+    "tool_uses": 0,
+    "verdict": "No blocking findings",
+    "original_report_sha256": "dfebc9d15584dd2fa468739177808170885d19d2e0df0aa33223cf122f58345b",
+    "reconciliation_report_sha256": "5bde64b1217f918edea2dd5367a06f7bdaa8d0a970dafafab37986d8c5247bec",
+    "packets": [
+      {
+        "bytes": 496048,
+        "sha256": "2dcb96adfc3b29a50d157578ad54a495deb75bc27d5653a7d87e4dad5688370b"
+      },
+      {
+        "bytes": 26544,
+        "sha256": "3d3f67b756e49839d52b43c1b3e7a111af4ffb9be195d8bbd3f88049b9bbc331"
+      }
+    ],
+    "findings": [
+      {
+        "id": 1,
+        "disposition": "INVALID",
+        "required_fix": "none",
+        "reason": "Existing string-only user-message predicate excludes the alleged non-string split path; actual helper/pipeline probe corroborates."
+      },
+      {
+        "id": 2,
+        "disposition": "NON-BLOCKING",
+        "required_fix": "none",
+        "reason": "Conservative revocation on uncorrelatable final is consistent with the stated foreground authority contract; reduced auto-open availability remains a UX tradeoff."
+      },
+      {
+        "id": 3,
+        "disposition": "NON-BLOCKING",
+        "required_fix": "none",
+        "reason": "New foreground attestation needs matching backend/native; mixed versions retain legacy/card behavior without a source-policy grant. Wire direction corrected."
+      },
+      {
+        "id": 4,
+        "disposition": "NON-BLOCKING",
+        "required_fix": "none",
+        "reason": "Historic heuristic test helpers are not used for current router eligibility; optional cleanup."
+      }
+    ],
+    "coverage_limits": [
+      "Original full source/test static review followed by bounded same-source reconciliation of four findings.",
+      "Reviewer did not execute probes/builds/tests; provided synthetic results are implementer evidence.",
+      "No full second review of unchanged source, no live UI/release acceptance."
+    ]
+  },
+  "acceptance_closed": [],
+  "release_state": "Implemented, statically reviewed and offline verified; PR CI, merge, deployment and live acceptance remain separate.",
+  "privacy": "No production logs, installed-machine records, credentials, personal data, VM identities or raw review reasoning are included. Original failed runs and complete raw receipts/reports remain local."
+}

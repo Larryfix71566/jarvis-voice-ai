@@ -38,7 +38,7 @@ ALLOWED_ACTIONS = frozenset({
 ACTION_ARG_FIELDS: dict[str, frozenset[str]] = {
     "roadmap_control": frozenset({"operation", "owners", "authors", "states", "topics", "workstreams", "checklist", "blockers", "period"}),
     "inventory": frozenset({"scope", "cursor"}),
-    "weather_reuse": frozenset({"subject_key", "tool", "days", "units", "run_id", "ordinary_turn"}),
+    "weather_reuse": frozenset({"subject_key", "tool", "days", "units", "run_id", "ordinary_turn", "origin_request_id"}),
     "view_set": frozenset({"mode"}),
     "result_mode": frozenset({"mode"}),
     "compare_side": frozenset({"side"}),
@@ -110,7 +110,7 @@ STRING_ARGUMENTS = frozenset({
     "scope", "cursor", "mode", "side", "panel", "direction", "source", "relation",
     "name", "group", "query", "kind", "screen_id", "key", "format", "question",
     "state", "category", "tab", "operation", "preview_id", "skill_id", "task_brief",
-    "subject_key", "tool", "units", "run_id",
+    "subject_key", "tool", "units", "run_id", "origin_request_id",
 })
 NUMBER_ARGUMENTS = frozenset({"viewport", "points", "x", "y", "value"})
 BOOLEAN_ARGUMENTS = frozenset({"open", "visible", "collapsed", "enabled", "expanded", "confirmed", "ordinary_turn"})
@@ -219,6 +219,8 @@ def validate_request(message: dict[str, Any]) -> dict[str, Any]:
     if action in {"weather_reuse", "result_reopen"}:
         _uuid(message.get("target"), "target")
     if action == "weather_reuse":
+        if "origin_request_id" in args:
+            _uuid(args["origin_request_id"], "origin_request_id")
         if not isinstance(args.get("subject_key"), str) or not 1 <= len(args["subject_key"]) <= 200:
             raise ValueError("weather_reuse requires a bounded subject_key")
         if args.get("tool") not in {"local_weather", "get_weather", "get_weather_radar"}:

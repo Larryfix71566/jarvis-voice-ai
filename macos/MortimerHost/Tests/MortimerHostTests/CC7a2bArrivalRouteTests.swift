@@ -20,7 +20,14 @@ private final class ArrivalTransport: RTVITransport {
 
 @MainActor
 final class CC7a2bArrivalRouteTests: XCTestCase {
+    private final class Requests {
+        let session = UUID(), generation = UUID()
+        var sequence = 0
+        var current: UUID?
+        var runs: [String: UUID] = [:]
+    }
     private struct Fixture {
+        let requests: Requests
         let transport: ArrivalTransport
         let workspace: WorkspaceStore
         let conversation: ConversationStore
@@ -42,22 +49,34 @@ final class CC7a2bArrivalRouteTests: XCTestCase {
         router.start(client: client, agentRuns: AgentRunStore(), displayResults: DisplayResultStore(),
                      displayWindow: display, workspace: workspace, conversation: conversation,
                      drawer: DrawerState())
-        return Fixture(transport: transport, workspace: workspace, conversation: conversation,
+        let requests = Requests()
+        try! transport.emit(["type": "console/hello", "version": 1,
+            "session_id": requests.session.uuidString, "generation": requests.generation.uuidString,
+            "actions": [], "input_types": []])
+        return Fixture(requests: requests, transport: transport, workspace: workspace, conversation: conversation,
                        display: display, router: router)
     }
 
-    /// Larry spoke at `secondsAgo`; set after `start`, whose transcript sink
-    /// first mirrors the client's empty transcript.
+    /// The synthetic host attests the same accepted input the real SDK sees.
+    /// The old timing argument remains in historical tests to show that
+    /// request identity, rather than a recency window, controls foreground.
     private func larrySpoke(_ f: Fixture, secondsAgo: Double = 2) throws {
-        let entry = try JSONDecoder().decode(ConversationEntry.self, from: JSONSerialization.data(withJSONObject: [
-            "id": "u-\(UUID().uuidString)", "role": "user", "text": "What's the weather?",
-            "createdAt": Date().timeIntervalSince1970 - secondsAgo]))
-        f.conversation.set([entry])
+        f.requests.sequence += 1
+        let id = UUID(), timestamp = "synthetic-input-\(f.requests.sequence)"
+        f.requests.current = id
+        try f.transport.emit(["type": "user-started-speaking"])
+        try f.transport.emit(["type": "user-transcription", "data": ["text": "What's the weather?", "final": true,
+            "timestamp": timestamp, "user_id": "synthetic-user"]])
+        try f.transport.emit(["type": "console/turn", "version": 1,
+            "session_id": f.requests.session.uuidString, "generation": f.requests.generation.uuidString,
+            "request_id": id.uuidString, "sequence": f.requests.sequence, "state": "started",
+            "input_timestamp": timestamp, "input_user_id": "synthetic-user"])
     }
 
     private func settle() async { for _ in 0..<200 { await Task.yield() } }
 
     private func runStarted(_ f: Fixture, _ runID: String) async throws {
+        f.requests.runs[runID] = f.requests.current
         try f.transport.emit(["type": "agent", "state": "working", "name": "analyst",
                               "run_id": runID, "task": "weather"])
         await settle()
@@ -71,6 +90,10 @@ final class CC7a2bArrivalRouteTests: XCTestCase {
     }
 
     private func deliver(_ f: Fixture, _ payload: [String: Any]) async throws -> WorkspaceResult {
+        var payload = payload
+        if let run = payload["run_id"] as? String, let origin = f.requests.runs[run] {
+            payload["origin_request_id"] = origin.uuidString
+        }
         try f.transport.emit(["type": "display", "display": payload])
         await settle()
         return try XCTUnwrap(f.workspace.results.last)

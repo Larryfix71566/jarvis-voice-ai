@@ -18,6 +18,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.frames.frames import (
     InterimTranscriptionFrame,
     TranscriptionFrame,
@@ -577,12 +578,13 @@ class _FakeVAD:
         self.vad_analyzer = vad_analyzer
 
 
-class _FakeSTT:
+class _FakeSTT(FrameProcessor):
     class Settings:
         def __init__(self, model):
             self.model = model
 
     def __init__(self, api_key, settings, **kwargs):
+        super().__init__()
         self.api_key = api_key
 
 
