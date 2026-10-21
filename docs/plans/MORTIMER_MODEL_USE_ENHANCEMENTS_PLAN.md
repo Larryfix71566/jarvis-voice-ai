@@ -985,3 +985,15 @@ clipboard, unclassified voice input or protected tool content to subscriptions.
 Those inputs still block the approved-external route. Remaining decisions are
 eligible private/local routing and bounded synthetic/live account acceptance;
 ordinary whole-context approval is not assumed. Production guard remains.
+
+
+The first full provenance run at `d0f18c3` finished 6,675 passed / one failed:
+the clipboard contract requires an explicit `add_messages` in its injector.
+The helper had preserved silent-append behavior, but moved that call out of
+the checked region. Restored the explicit append with source binding directly
+before it, without editing the test. The combined preview `df75f80` of
+`d0f18c3` + acceptance `d242ba4` passes 327 focused tests; its one runtime
+merge conflict preserves the stop-turn refusal inside the source/runlog scope
+before invoking any handler. Two roadmap conflicts preserve WS-05 history and
+both handoffs. Acceptance's candidate remains unchanged. Final repaired-head
+full local/CI results will be recorded on PR #232.
