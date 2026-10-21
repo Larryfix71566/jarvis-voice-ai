@@ -3380,3 +3380,21 @@ retain its stack/log/deadline evidence and run an isolated actual-capture
 control. No skips or security settings are changed. Freeze the repaired source,
 repeat full backend/original independent profile and regenerate the static
 source packet. Parent owns pending external-review consent; no transmission.
+
+
+### 2026-10-21 — Stop-turn dispatch backstop and native diagnostic limits
+
+`b1db9a9` full backend passes 6,856 tests/15 skips/two subtests. Two synthetic
+adapter failures prove fresh delegation was possible on an explicit stop turn.
+The accepted immutable request now refuses that dispatch with the same bounded
+parser used for cancellation; ordinary speech interruption retains its behavior.
+The 901-test affected group passes. No new tool, wire field or durable state.
+
+The complete one-worker isolated native diagnostic schedules 580 cases and
+fails: two actual ScreenCaptureKit capture cases (`-3811`) and two per-test
+VoiceDisplayAudit processes crashing at unchanged nil-NSApp WindowLookup.
+The fresh capture control fails despite permission preflight. Preserve all
+original non-passing host runs; do not relabel them as passes or change tests,
+permissions or production. Refresh final frozen source backend/CI/original
+independent profile and exact source review. Parent owns pending transmission
+consent and provider integration. Live/physical criteria remain open.

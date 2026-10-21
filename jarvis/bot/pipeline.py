@@ -73,6 +73,7 @@ from jarvis.agents.delegate import (
     build_delegate_tool,
     drain_detached,
     foreground_delegation_count,
+    task_stop_command,
 )
 from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.connect_greeting import ConnectGreeting  # noqa: E402
@@ -218,6 +219,7 @@ class ForegroundRequest:
     input_timestamp: str
     input_user_id: str
     weather_intent: WeatherIntent | None = None
+    task_stop: bool = False
 
 
 _foreground_request: ContextVar[ForegroundRequest | None] = ContextVar(
@@ -394,7 +396,7 @@ class ForegroundRequests:
                 self.sequence += 1
                 intent = accepted_weather_intent(boundary["content"], self.previous_weather_intent)
                 request = ForegroundRequest(str(uuid.uuid4()), self.sequence, *self.input_identity,
-                    weather_intent=intent)
+                    weather_intent=intent, task_stop=task_stop_command(boundary["content"]) is not None)
                 self.previous_weather_intent = intent
                 self.boundaries = (self.boundaries + [(boundary, request)])[-64:]
                 self.current = request
@@ -822,7 +824,10 @@ def adapt_to_pipecat(
                          if weather_context is not None else None)
         try:
             with run_logger_scope(runlog):
-                result = await dict_handler(params.arguments)
+                if name == "delegate_task" and request is not None and request.task_stop:
+                    result = "REFUSED: this is an explicit task cancellation turn. No new delegated work was started."
+                else:
+                    result = await dict_handler(params.arguments)
             task = asyncio.current_task()
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError

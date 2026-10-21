@@ -44,6 +44,17 @@ DEFAULT_MAX_PARALLEL_DELEGATIONS = 3
 PROTECTED_TASK_EVENT = "<protected task>"
 
 
+def task_stop_command(text: str) -> str | None:
+    """Only explicit task-stop input carries cancellation authority."""
+    command = " ".join(text.casefold().split()).strip(" .?!")
+    if command in {"stop this task", "stop the task", "cancel this task",
+                   "cancel the task", "stop this job", "cancel this job"}:
+        return "one"
+    if command in {"stop all tasks", "cancel all tasks", "stop all jobs", "cancel all jobs"}:
+        return "all"
+    return None
+
+
 def _task_for_event(agent_name: str, task: str) -> str:
     """Return no prompt text to the activity/status surface.
 
@@ -493,10 +504,8 @@ def build_delegate_tool(
     orphaned: set[asyncio.Task] = set()
 
     def control_input(text: str) -> str | None:
-        command = " ".join(text.casefold().split()).strip(" .?!")
-        one = command in {"stop this task", "stop the task", "cancel this task",
-                          "cancel the task", "stop this job", "cancel this job"}
-        all_tasks = command in {"stop all tasks", "cancel all tasks", "stop all jobs", "cancel all jobs"}
+        command = task_stop_command(text)
+        one, all_tasks = command == "one", command == "all"
         pending = [record for record in active.values() if not record[0].done()]
         if one or all_tasks:
             if not pending:
@@ -508,7 +517,7 @@ def build_delegate_tool(
                 logger.info("delegate_cancel_requested run_id=%s elapsed_ms=%d",
                             run_id, int((time.monotonic() - started) * 1000))
             return (f"Cancellation requested for {len(pending)} running task(s). "
-                    "Do not claim completion until its terminal result. Cancellation cannot undo actions already performed.")
+                    "Do not start another delegation or claim completion until its terminal result. Cancellation cannot undo actions already performed.")
         survivors = [r for r in pending if r[0] in orphaned]
         if survivors:
             return (f"{len(survivors)} prior delegated task(s) continues after speech interruption. "

@@ -163,3 +163,31 @@ Parent owns the pending explicit cross-system review consent request. The
 locally prepared `30bbcea` source packet is obsolete; no packet was transmitted.
 Regenerate exact source/fingerprints for the repaired commit before review.
 No canonical human/visual checkbox, owner, service or deployment change.
+
+
+## Stop-turn dispatch authority and native terminal diagnostics
+
+Full host backend on `b1db9a9`: 6,856 passed, 15 skipped, two subtests passed,
+19 warnings, 244.64 seconds. Two further actual-adapter cases prove a model
+could start a fresh delegation on an explicit task-stop turn; the ordinary
+speech-stop control passes. An immutable accepted-request task-stop flag now
+refuses new delegate dispatch on that same turn, using the identical bounded
+command parser as existing cancellation. It does not infer control from a
+newer mutable voice turn or add a tool/wire privilege. The affected group now
+passes 901 tests, ten warnings, in 11.91 seconds.
+
+The full native diagnostic with one isolated worker schedules all 580 cases
+and exits nonzero after 164.07 seconds. Two actual capture tests fail through
+ScreenCaptureKit (`-3811`; audio/video capture startup failure), including the
+independent fresh capture control. Its existing permission preflight passes;
+missing authorization is not established. Two VoiceDisplayAuditRegression test
+processes also crash at unchanged `WindowLookup.swift:38` with nil `NSApp`
+under per-test isolation. These diagnostics do not replace the original full
+profile or waive any assertion. Original host stalls, deadline timeout, two
+capture failures and isolation crashes remain non-passing evidence. No native
+runtime/test source, Screen Recording setting or production process is changed
+by these diagnostics. Final native/privacy/physical acceptance remains open.
+
+Freeze this stop-turn correction, refresh complete backend/CI and original
+independent twelve-check verification, and regenerate the source-only review
+packet. Parent owns pending review consent and provider release coordination.
