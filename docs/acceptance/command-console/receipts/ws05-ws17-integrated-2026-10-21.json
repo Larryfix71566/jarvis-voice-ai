@@ -301,13 +301,12 @@
   "earlier_evidence": "Standalone WS17 source d242ba4, docs61e5e8f and provider b1f07a2 remain separate; this receipt does not replace earlier non-passing/interrupted host/VM runs. Both publication heads had five CI passes; no unrun integrated-CI or source-review verdict is inferred.",
   "remaining_gates": {
     "host_ui_capture": {
-      "status": "blocked on an unlocked awake interactive Mac desktop before meaningful recheck",
-      "previous_results": "SCK-3811 despite permission preflight; original stalls/timeout/isolation failures remain non-passing",
-      "no_permission_grant_requested": true,
-      "historical_cause_established": false
+      "status": "resumed actual-window control and full original host native suite PASS; human/physical criteria remain open",
+      "earlier_failures": "preserved; historical cause unproven",
+      "no_permission_grant_requested": true
     },
     "cross_system_review": {
-      "status": "parent-managed source-transmission consent/review pending",
+      "status": "review approved; required exact revised-source verdict still missing",
       "source_transmitted": false,
       "verdict": null
     },
@@ -319,6 +318,10 @@
     "live_runtime_and_billing": {
       "status": "bounded live consent/runtime/auth/latency/overage confirmation pending",
       "inference_performed": false
+    },
+    "selective_direct_api_guard": {
+      "status": "provider owner actively repairing old subscription_only guard to preserve OpenRouter under latest user scope",
+      "required_before_merge": "immutable revised provider head, regression/CI evidence, exact combined-source cross-review"
     }
   },
   "release": {
@@ -353,5 +356,73 @@
     "checkbox_lines_preserved": 144,
     "owner_lines_preserved": 29,
     "runtime_test_bytes": "unchanged from d242ba4"
+  },
+  "host_native_resumed": {
+    "at": "2026-10-21T11:31:57.462554+00:00",
+    "source": "f3aa78babacd1f1bb0b99cce53a7118b3207f29b",
+    "native_bytes_identical_to_preview": "794a298e3498d1b6e3e4fa47519449f35c06bb3d",
+    "actual_window_capture": {
+      "source": "f3aa78babacd1f1bb0b99cce53a7118b3207f29b",
+      "returncode": 0,
+      "timed_out": false,
+      "duration_s": 7.342,
+      "head_unchanged": true,
+      "argv": [
+        "swift",
+        "test",
+        "--disable-sandbox",
+        "--disable-automatic-resolution",
+        "--skip-update",
+        "--package-path",
+        "macos/MortimerHost",
+        "--cache-path",
+        "/tmp/task3-arrival-spm-cache",
+        "--scratch-path",
+        "../acceptance-artifacts/current-request-native-offline",
+        "--filter",
+        "ProtectedDisplayContentTests/testProtectedContentInActualWindowCaptureMatchesBodyOnlyReference"
+      ],
+      "timeout_s": 120,
+      "log_sha256": "b3d7046a0434fc96dc6bb382c37c73d67043daa26752506d693b8b47272213fb",
+      "test_summary": "Executed 1 test, with 0 failures (0 unexpected) in 5.284 (5.286) seconds",
+      "prerequisite_skip_reasons": []
+    },
+    "full_original_host_native": {
+      "source": "f3aa78babacd1f1bb0b99cce53a7118b3207f29b",
+      "returncode": 0,
+      "timed_out": false,
+      "duration_s": 138.065,
+      "head_unchanged": true,
+      "argv": [
+        "swift",
+        "test",
+        "--disable-sandbox",
+        "--disable-automatic-resolution",
+        "--skip-update",
+        "--package-path",
+        "macos/MortimerHost",
+        "--cache-path",
+        "/tmp/task3-arrival-spm-cache",
+        "--scratch-path",
+        "../acceptance-artifacts/current-request-native-offline"
+      ],
+      "timeout_s": 600,
+      "log_sha256": "ed3039c539e4ba67f97e9b4fcb675791f18da31efb7f085931b42ee552142c25",
+      "test_summary": "Executed 580 tests, with 5 tests skipped and 0 failures (0 unexpected) in 137.116 (137.146) seconds",
+      "prerequisite_skip_reasons": [
+        "requires at least two non-mirrored displays",
+        "requires two connected displays",
+        "requires two connected displays",
+        "the test host cannot become the active app in this WindowServer session",
+        "the test host cannot become the active app in this WindowServer session"
+      ]
+    },
+    "settings_changed": false,
+    "permission_changed": false,
+    "production_service_started": false,
+    "provider_inference": false,
+    "earlier_failed_evidence": "preserved; resumed run is a separate later PASS, historical cause not proven",
+    "human_visual_checkbox_closures": 0,
+    "provider_update": "Immediate direct OpenAI/Anthropic shutdown owned by provider; no acceptance restart. Selective guard repair to preserve OpenRouter is active; revised source/review/CI required before merge."
   }
 }

@@ -3444,3 +3444,20 @@ checkbox closure. One focused session follows release gates, then actual release
 and WS-06 observation. This docs publication keeps runtime/test bytes at `d242ba4`.
 
 Validation: strict combined-source roadmap against explicit main `3061408` has zero errors/warnings (no warn-only flag); missing origin/main in the handoff was resolved by the full hash. Publication contracts pass 57 tests/two warnings/3.58s; all 144 checkbox and29 owner lines and standalone runtime/test bytes remain unchanged.
+
+
+### 2026-10-21 — Host native verification resumed and passed
+
+On `f3aa78b` (native bytes identical to combined `794a298`), actual-window
+capture passes one test/zero failures; full original host native passes
+580 executed/five prerequisite skips/zero failures in138.065s. Both exact-head
+PR CI sets were green. The [updated receipt](../acceptance/command-console/receipts/ws05-ws17-integrated-2026-10-21.md)
+records commands/hashes and preserves earlier non-passing attempts. No security,
+production-service or provider change by acceptance; no human checkbox closes.
+
+Larry explicitly authorizes both merges. Provider selective direct-API guard is
+being revised to preserve OpenRouter after immediate shutdown; require immutable
+new source/checks/exact cross-system review before merge. Interface confirmation,
+private route and live runtime/latency/overage are separate deployment/activation
+gates. No legacy service restart or subscription inference before cost gate.
+Prepared old-preview review packet remains local/untransmitted.

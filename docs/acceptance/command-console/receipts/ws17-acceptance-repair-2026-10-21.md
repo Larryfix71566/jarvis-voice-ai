@@ -90,3 +90,35 @@ to frozen `d242ba4`; publication-head CI is separate. Raw production records,
 operational installed metadata and reviewer reasoning remain local.
 
 Subsequent integrated verification: [preview794a298 receipt](ws05-ws17-integrated-2026-10-21.md) records all twelve original combined-source checks passing. This later evidence resolves the offline integration-verification next step above; source review, host capture, protected route, live and release gates remain open. Earlier results are preserved.
+
+
+## Resumed host native gate — 2026-10-21 11:30 UTC
+
+Larry approved continuing both workstreams and explicitly merging both PRs,
+subject to repository review/check gates. Both #232 `b1f07a2` and #233 `f3aa78b`
+had all five exact-head CI checks green before resumed tests. Read-only desktop
+preflight found the console active with no lock flag; connection alone was not
+used as readiness proof. One bounded actual synthetic-window capture control
+passed (one test, zero failures;7.342s). The full original host native suite then
+passed: **580 executed, five prerequisite skips, zero failures**,138.065s,exit0.
+Native source/test bytes at `f3aa78b` match verified preview `794a298`. Both actual
+capture cases pass. Remaining skips require external displays or active-app
+prerequisites; no physical/human acceptance is inferred.
+
+Exact commands, limits, summaries and log hashes are appended in the JSON
+receipt. Prior stalls/timeouts/SCK/isolation failures remain historical,
+non-passing evidence; their cause is not proven by the later pass. No test,
+permission/security setting, production service or provider route was changed.
+No inference or live user acceptance test occurred. Local native tests are
+terminal; no acceptance test process remains active.
+
+The current merge blocker is revised provider source plus required exact-source
+cross-review, not pending interface sign-off or subscription activation. Larry
+separately ordered immediate direct OpenAI/Anthropic API shutdown; provider owns
+that reversible disable and is correcting the selective guard to preserve
+OpenRouter. Do not restart legacy services or merge the old guard contrary to
+that scope. Prepared `794a298` review packet remains local/untransmitted and is
+historical pending the revised immutable handoff. No live inference before cost
+verification. New-source checks/review and exact-head CI precede coordinated
+merge; deployment, private route, live runtime/account/latency/overage and Larry's
+interface confirmation remain separate gates. No checkbox closure or deployment.
