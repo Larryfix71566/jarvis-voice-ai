@@ -486,6 +486,36 @@ def build_delegate_tool(
     # quitting on a timer.
     handoff_depth: dict[str, int] = {}
 
+    # Session-local lifecycle only: no durable queue, model-authored control,
+    # or cross-session cancellation authority. Exact accepted user input is
+    # supplied by the pipeline's correlated transcript boundary.
+    active: dict[tuple, tuple[asyncio.Task, str, float]] = {}
+    orphaned: set[asyncio.Task] = set()
+
+    def control_input(text: str) -> str | None:
+        command = " ".join(text.casefold().split()).strip(" .?!")
+        one = command in {"stop this task", "stop the task", "cancel this task",
+                          "cancel the task", "stop this job", "cancel this job"}
+        all_tasks = command in {"stop all tasks", "cancel all tasks", "stop all jobs", "cancel all jobs"}
+        pending = [record for record in active.values() if not record[0].done()]
+        if one or all_tasks:
+            if not pending:
+                return "No delegated task is still running; no cancellation was performed."
+            if one and len(pending) > 1:
+                return "There is more than one running task. Ask which one to stop, or whether to cancel all tasks. No cancellation was performed."
+            for task, run_id, started in pending:
+                task.cancel()
+                logger.info("delegate_cancel_requested run_id=%s elapsed_ms=%d",
+                            run_id, int((time.monotonic() - started) * 1000))
+            return (f"Cancellation requested for {len(pending)} running task(s). "
+                    "Do not claim completion until its terminal result. Cancellation cannot undo actions already performed.")
+        survivors = [r for r in pending if r[0] in orphaned]
+        if survivors:
+            return (f"{len(survivors)} prior delegated task(s) continues after speech interruption. "
+                    "Interrupting speech does not cancel work. Do not start it again; await its result. "
+                    "An explicit 'stop this task' can request cancellation of a single running task.")
+        return None
+
     async def handler(arguments: dict) -> str:
         agent_name = str(arguments.get("agent_name", ""))
         task = str(arguments.get("task", ""))
@@ -622,6 +652,18 @@ def build_delegate_tool(
         # this is the unit a human reviews, and generating it before the
         # semaphore below means a queued-but-not-yet-running delegation
         # still has an identity in the UI and the run log.
+        # Never restart the exact same pending operation after speech barge-in.
+        # Include all execution choices: a different input/profile/skill remains
+        # independent. No fuzzy overlap suppression for legitimate sibling work.
+        operation = (agent_name, task, model_profile, explicit_skill_id,
+                     findings_path, continuation)
+        prior = active.get(operation)
+        if prior is not None and not prior[0].done():
+            elapsed = max(0, int(time.monotonic() - prior[2]))
+            logger.info("delegate_duplicate_pending run_id=%s elapsed_s=%d", prior[1], elapsed)
+            return (f"ALREADY RUNNING: the same delegated operation is still pending "
+                    f"(elapsed {elapsed}s). No duplicate was started. Await its original result.")
+
         run_id = str(uuid.uuid4())
         terminal_emitted = False
 
@@ -754,6 +796,14 @@ def build_delegate_tool(
         # delegate_done, all of it). The finished result is then handed to
         # late_delivery so the next thing Mortimer says can include it.
         run_task = asyncio.create_task(_execute())
+        active[operation] = (run_task, run_id, time.monotonic())
+
+        def forget(task: asyncio.Task) -> None:
+            orphaned.discard(task)
+            if active.get(operation, (None,))[0] is task:
+                active.pop(operation, None)
+
+        run_task.add_done_callback(forget)
 
         def _ensure_terminal(task: asyncio.Task) -> None:
             """Close the UI lifecycle even if the detached runner exits abnormally."""
@@ -782,10 +832,11 @@ def build_delegate_tool(
             return await asyncio.shield(run_task)
         except asyncio.CancelledError:
             if run_task.cancelled():
-                # The work itself was cancelled (session shutdown), not
+                # The work itself was cancelled (explicit stop or teardown), not
                 # just this await — nothing survives to deliver.
                 _emit_terminal(False)
                 raise
+            orphaned.add(run_task)
             logger.info(
                 "delegate_orphaned_by_interruption agent=%s run_id=%s — "
                 "work continues; result will be delivered when it lands",
@@ -937,4 +988,5 @@ def build_delegate_tool(
     # The attribute is private to the bot-owned dispatcher closure. The
     # Supervisor never receives this function as an exposed model tool.
     handler.run_skill_creator = run_skill_creator
+    handler.control_input = control_input
     return schema, handler

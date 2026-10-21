@@ -38,10 +38,10 @@ class WeatherIntent:
 
 current_weather_intent: ContextVar[WeatherIntent | None] = ContextVar("weather_intent", default=None)
 
-_WEATHER = re.compile(r"\b(?:weather|forecast)\b", re.I)
+_WEATHER = re.compile(r"\b(?:weather|forecast|rain|umbrella)\b", re.I)
 _PREFIX = re.compile(r"^(?:(?:please|can you|could you|would you|show me|show|give me|tell me|"
     r"pull up|check|get|what is|what's|what’s|how is|how's|how’s|the)\s+)+", re.I)
-_AFTER = re.compile(r"\b(?:weather|forecast)(?:\s+(?:forecast|conditions))?\s+(?:in|for|at)\s+([^?!;]+)", re.I)
+_AFTER = re.compile(r"\b(?:weather|forecast|rain|umbrella)(?:\s+(?:forecast|conditions))?\s+(?:in|for|at)\s+([^?!;]+)", re.I)
 _TAIL = re.compile(r"\s+(?:weather|forecast)\b.*$", re.I)
 _TIME = re.compile(r"\s+(?:again|now|please|today|tonight|tomorrow|this week|this weekend|"
     r"for (?:today|tonight|tomorrow|the week)|right now)\b.*$", re.I)
@@ -64,6 +64,11 @@ def accepted_weather_intent(text: str, previous: WeatherIntent | None = None) ->
     text = " ".join(unicodedata.normalize("NFKC", text).split()).strip()
     if len(text) > 4096:
         return WeatherIntent("unclear")
+    local_question = canonical_place(text.strip(" ?.！!"))
+    if local_question in {"is it going to rain", "will it rain", "do i need an umbrella",
+                          "should i bring an umbrella", "what's the week look like",
+                          "what’s the week look like"}:
+        return WeatherIntent("local")
     if not _WEATHER.search(text):
         follow = _FOLLOWUP.fullmatch(text)
         if follow and previous and previous.kind in {"local", "named"}:

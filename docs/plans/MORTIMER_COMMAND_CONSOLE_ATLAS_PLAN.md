@@ -3318,3 +3318,18 @@ The [dated log](../roadmap-log/2026-10-21-ws-17-codex-acceptance-repair.md)
 records limits and outstanding gates. No human/visual closure or production
 change. Continue explicit cancellation/deduplication and evidence/reporting
 repairs, then freeze an integrated candidate for full verification/review/CI.
+
+
+### 2026-10-21 — Explicit task control and duplicate suppression
+
+Weather commit `5286327` is published in draft #233; its exact-source focused
+repeat passes 208 tests. Four task-control cases reproduce before repair.
+Existing delegation ownership now tracks pending operations per session,
+refuses exact duplicate starts, preserves speech-barge-in survival, and accepts
+bounded explicit task-stop commands only from the correlated accepted-input
+boundary. Multiple pending tasks require a choice unless the user explicitly
+says all. Cancellation requests do not claim rollback or completed work;
+cancelled orphaned tasks produce no late success. Notes expire at the next
+accepted turn. Combined focused verification: 223 passed, eight deprecation
+warnings. No new wire/tool/config or durable task framework. Continue truthful
+roadmap/build/acceptance/test reporting, then full integrated gates.

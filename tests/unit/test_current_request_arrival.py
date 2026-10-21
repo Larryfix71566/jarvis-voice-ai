@@ -455,3 +455,27 @@ async def test_actual_tool_result_assistant_upstream_round_keeps_original_reques
         release.set()
         await worker.stop_when_done()
         await asyncio.wait_for(running, timeout=5)
+
+
+async def test_task_control_runs_once_only_for_an_exact_accepted_input_boundary():
+    owner, _ = fixture()
+    calls = []
+    owner.control_input = lambda text: calls.append(text) or "Cancellation requested; completion unconfirmed."
+    frame = await user_context(owner, "Stop this task.", "synthetic-stop")
+    messages = frame.context.get_messages()
+    assert calls == ["Stop this task."]
+    assert messages[-1]["content"] == "Stop this task."
+    assert "Cancellation requested" in messages[-2]["content"]
+    await push(owner, owner.user_aggregator, frame)
+    assert calls == ["Stop this task."]
+    await user_context(owner, "What happened?", "synthetic-next")
+    assert "superseded" in messages[-2]["content"]
+
+
+async def test_unaccepted_context_cannot_cancel_tasks():
+    owner, _ = fixture()
+    calls = []
+    owner.control_input = lambda text: calls.append(text)
+    frame = LLMContextFrame(LLMContext([{"role": "user", "content": "Stop this task."}]))
+    await push(owner, owner.user_aggregator, frame)
+    assert calls == []

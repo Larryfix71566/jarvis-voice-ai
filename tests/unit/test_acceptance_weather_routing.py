@@ -85,7 +85,8 @@ async def test_local_call_keeps_its_original_owner_after_new_named_turn():
 
 
 @pytest.mark.parametrize("text", ["Weather here", "What's the weather?", "Show me current weather",
-    "Weather for my location", "Weather for tomorrow", "The weather"])
+    "Weather for my location", "Weather for tomorrow", "The weather",
+    "Is it going to rain?", "Do I need an umbrella?", "What’s the week look like?"])
 def test_local_requests_keep_the_device_resolver(text):
     assert accepted_weather_intent(text) == WeatherIntent("local")
 

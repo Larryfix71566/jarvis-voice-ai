@@ -243,6 +243,8 @@ class ForegroundRequests:
         self.sequence = 0
         self.current: ForegroundRequest | None = None
         self.previous_weather_intent: WeatherIntent | None = None
+        self.control_input: Callable[[str], str | None] | None = None
+        self.control_note: dict | None = None
         self.boundaries: list[tuple[dict, ForegroundRequest]] = []
         self.calls: dict[str, ForegroundRequest | None] = {}
         self.seen_starts: list[int] = []
@@ -378,6 +380,17 @@ class ForegroundRequests:
             # classification or a model's claim to own a newer request.
             normalized = lambda value: " ".join(value.split())
             if normalized(boundary["content"]) == normalized(" ".join(self.parts)):
+                if self.control_note is not None:
+                    self.control_note["content"] = "[system] Prior task status superseded."
+                    self.control_note = None
+                if self.control_input is not None:
+                    note = self.control_input(boundary["content"])
+                    if note:
+                        # Keep the actual user message last for existing voice
+                        # workflow tracking. The note contains lifecycle facts,
+                        # not task text or private output, and expires next turn.
+                        self.control_note = {"role": "user", "content": "[system] " + note}
+                        messages.insert(next(i for i, m in enumerate(messages) if m is boundary), self.control_note)
                 self.sequence += 1
                 intent = accepted_weather_intent(boundary["content"], self.previous_weather_intent)
                 request = ForegroundRequest(str(uuid.uuid4()), self.sequence, *self.input_identity,
@@ -1228,6 +1241,7 @@ def build_pipeline(
         user_text=lambda: runtime.voice_state.user_text,
     )
     creator_dispatcher = delegate_handler.run_skill_creator
+    runtime.foreground_requests.control_input = delegate_handler.control_input
     # MORTIMER_VOICE_WORKFLOWS_PLAN.md D16 — getattr with the production
     # defaults, because tests build this pipeline from SimpleNamespace
     # settings that predate these two fields.

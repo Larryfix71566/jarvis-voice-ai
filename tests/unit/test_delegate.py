@@ -1440,3 +1440,61 @@ def test_subagent_exposes_api_key_env_read_only():
 
     prop = SubAgent.__dict__["api_key_env"]
     assert isinstance(prop, property) and prop.fset is None
+
+
+class TestExplicitTaskLifecycle:
+    async def test_same_pending_delegation_is_not_started_twice(self):
+        agent = SlowFakeSubAgent("developer", delay=0.05)
+        _, handler = build_delegate_tool({"developer": agent})
+        args = {"agent_name": "developer", "task": "Inspect invented fixture"}
+        first = asyncio.create_task(handler(args))
+        await asyncio.sleep(0.01)
+        duplicate = await handler(dict(args))
+        assert duplicate.startswith("ALREADY RUNNING:")
+        assert "elapsed" in duplicate
+        assert len(agent.tasks) == 1
+        await first
+
+    async def test_explicit_stop_cancels_work_but_plain_stop_does_not(self):
+        agent = SlowFakeSubAgent("developer", delay=30)
+        events = []
+        _, handler = build_delegate_tool({"developer": agent}, on_event=events.append)
+        turn = asyncio.create_task(handler({"agent_name": "developer", "task": "Inspect fixture"}))
+        await asyncio.sleep(0.01)
+        assert handler.control_input("Stop.") is None
+        assert not turn.done()
+        note = handler.control_input("Stop this task.")
+        assert "requested" in note and "cannot undo" in note
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+        assert len([e for e in events if e["type"] == "delegate_done"]) == 1
+        assert agent.finished_at is None
+
+    async def test_multiple_pending_tasks_require_choice_unless_all_are_explicit(self):
+        agent = SlowFakeSubAgent("developer", delay=30)
+        _, handler = build_delegate_tool({"developer": agent})
+        turns = [asyncio.create_task(handler({"agent_name": "developer", "task": task}))
+                 for task in ("Inspect first fixture", "Inspect second fixture")]
+        await asyncio.sleep(0.01)
+        assert "more than one" in handler.control_input("Cancel this task")
+        assert not any(t.done() for t in turns)
+        assert "2" in handler.control_input("Cancel all tasks")
+        for turn in turns:
+            with pytest.raises(asyncio.CancelledError):
+                await turn
+
+    async def test_cancellation_of_orphaned_work_suppresses_late_success(self):
+        agent = SlowFakeSubAgent("developer", delay=30)
+        delivered = []
+        async def deliver(note):
+            delivered.append(note)
+        _, handler = build_delegate_tool({"developer": agent}, late_delivery={"fn": deliver})
+        turn = asyncio.create_task(handler({"agent_name": "developer", "task": "Inspect fixture"}))
+        await asyncio.sleep(0.01)
+        turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await turn
+        assert "continues" in handler.control_input("What is happening?")
+        assert "requested" in handler.control_input("Cancel the task")
+        await asyncio.sleep(0.01)
+        assert delivered == [] and agent.finished_at is None
