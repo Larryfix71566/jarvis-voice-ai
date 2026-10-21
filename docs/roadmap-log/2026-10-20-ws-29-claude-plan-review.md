@@ -2,7 +2,7 @@
 date: 2026-10-20
 system: codex
 rows: [WS-29]
-prs: [228]
+prs: [228, 229]
 ---
 
 # WS-29 — Claude implementation-readiness review
