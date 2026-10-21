@@ -45,5 +45,6 @@ aliases:
   Grok: or-grok-4.6
   DeepSeek: or-deepseek-v4-pro
   GPT: or-gpt-5.1
-  Codex: or-codex-max
+  Codex: codex-subscription
+  Codex via OpenRouter: or-codex-max
   Gemini: or-gemini-flash

@@ -881,6 +881,10 @@ async def execute_chat(request: ModelExecutionRequest,
     owned by their existing agent boundary.
     """
     entry_loop_time = asyncio.get_running_loop().time()
+    # A retained/injected legacy client cannot bypass the operator's billing
+    # policy, even if the route was resolved before retirement was selected.
+    from jarvis.provider_access import require_route_access
+    require_route_access(resolved.route.name)
     started_at = time.monotonic()
     budget_started_at = time.time()
     if task_budget is not None and child_budget is not None:

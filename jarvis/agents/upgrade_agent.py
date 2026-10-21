@@ -1254,6 +1254,9 @@ class UpgradeAgent:
         failed this session, and anything whose key is absent. Returns the
         resolved profile dict, or None when nothing is left to try.
         """
+        from jarvis.provider_access import subscription_only
+        if subscription_only():
+            return None
         try:
             registry = load_model_registry(self._registry_path)
         except Exception:  # noqa: BLE001 — failover must never itself raise

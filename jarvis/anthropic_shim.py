@@ -356,6 +356,8 @@ class _ChatCompletionsShim:
         self._model_holder = model_holder
 
     def create(self, **kwargs: Any) -> Any:
+        from jarvis.provider_access import require_api_access
+        require_api_access()
         request = _build_request(**kwargs)
         if kwargs.get("stream"):
             return self._stream(request, model=kwargs["model"])
@@ -379,6 +381,8 @@ class _AsyncChatCompletionsShim:
         self._client = client
 
     async def create(self, **kwargs: Any) -> Any:
+        from jarvis.provider_access import require_api_access
+        require_api_access()
         request = _build_request(**kwargs)
         if kwargs.get("stream"):
             return self._stream(request, model=kwargs["model"])
@@ -546,6 +550,8 @@ class AnthropicChatShim(_ChatShimBase):
 
     def __init__(self, *, api_key: str, base_url: str | None = None,
                  timeout: float | None = None, max_retries: int | None = None) -> None:
+        from jarvis.provider_access import require_api_access
+        require_api_access()
         super().__init__(base_url)
         client_kwargs: dict[str, Any] = {"api_key": api_key}
         resolved_base_url = native_base_url(base_url)
@@ -565,6 +571,8 @@ class AsyncAnthropicChatShim(_ChatShimBase):
 
     def __init__(self, *, api_key: str, base_url: str | None = None,
                  timeout: float | None = None, max_retries: int | None = None) -> None:
+        from jarvis.provider_access import require_api_access
+        require_api_access()
         super().__init__(base_url)
         client_kwargs: dict[str, Any] = {"api_key": api_key}
         resolved_base_url = native_base_url(base_url)

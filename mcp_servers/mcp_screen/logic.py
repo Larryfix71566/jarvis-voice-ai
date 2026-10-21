@@ -331,6 +331,8 @@ def _default_vision_client(profile: dict[str, Any]) -> tuple[Any, str]:
     profiles (jarvis/agents/base.py) — one client-construction pattern,
     not a second one. Sync client (screen_view is a sync MCP tool,
     matching mcp_web's convention)."""
+    from jarvis.provider_access import require_api_access
+    require_api_access()
     from openai import OpenAI
 
     key_env = profile.get("api_key_env", "OPENAI_API_KEY")

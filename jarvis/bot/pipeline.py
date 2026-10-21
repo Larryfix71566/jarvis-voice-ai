@@ -1164,6 +1164,10 @@ def build_pipeline(
     WebRTC case passes None and keeps its connection-level handler.
     """
     settings = runtime.settings
+    # This adapter has no verified native subscription streaming/tool path.
+    # Refuse before constructing any voice resource, without an API fallback.
+    from jarvis.provider_access import require_voice_readiness
+    require_voice_readiness(getattr(settings, "jarvis_llm_access_mode", None))
     pusher = pusher or FramePusher()
     console_generation = str(uuid.uuid4())
     runtime.console_generation = console_generation
