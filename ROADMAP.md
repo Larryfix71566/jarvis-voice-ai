@@ -8,14 +8,32 @@ This file is the single record of **who is doing what** in this repository, for 
 
 ---
 
-## Acceptance clearance — next priority · 2026-10-18
+## Current acceptance source status — 2026-10-21
+
+The current WS-17 source milestone supersedes the older PR/review status prose
+below. Provider/acceptance repairs #232/#233 and verifier correction #234 are
+merged. Narrow native-version compatibility #235 is merged as `63c5cde`; frozen
+source `e9c30b0` passed independent static review, all five exact-head CI checks
+and all twelve original independent-profile checks. The
+[source verification receipt](docs/acceptance/command-console/receipts/ws17-native291-source-verification-2026-10-21.md)
+records exact fingerprints, coverage and limits. Original evidence, owners and
+checkboxes are preserved; no live acceptance follows from source test totals.
+
+The Production line is a historical documented receipt, not a current loaded
+build attestation. Source identity, installed application/backend identity,
+canonical host verification, eligible private routes and live/human/observation
+criteria remain separate. Actual operational records stay local. The following
+October18 inventory and reconciliation preserve their recorded source/date;
+their old open-PR and missing-review statements are historical.
+
+## Acceptance clearance — priority inventory · 2026-10-18
 
 Larry requested clearing the accumulated acceptance backlog first, with an
 accurate status report and the shortest practical Mac sessions. The
 [clearance plan and complete obligation inventory](docs/plans/ROADMAP_JOINT_WORKING_PLAN.md#9-acceptance-clearance--current-priority-2026-10-18)
 are in the existing WS-20 plan; the [current status report](docs/acceptance/IMPLEMENTATION_STATUS.md)
 and [release checklist](docs/acceptance/adaptive-interface/RELEASE_READINESS.md)
-use current main `9ea27c7` after the documentation-only #218/#219 merges; the detailed inventory links pin initial source `28420af`. Existing ownership and acceptance
+record then-current main `9ea27c7` after the documentation-only #218/#219 merges; the detailed inventory links pin initial source `28420af`. Existing ownership and acceptance
 criteria remain binding. No checkbox is closed by this audit.
 
 **Backlog counts:** 26 existing workstreams: 14 with open acceptance/decision
@@ -56,9 +74,9 @@ where the governing plan permits and Larry records it; never mark it passed.
 New enhancement implementation remains subsequent, parked and freshly dispatched;
 sandbox planning can proceed. See [the new end-of-roadmap plan](#ws-27).
 
-## Current acceptance status — reconciled 2026-10-18
+## Historical acceptance reconciliation — 2026-10-18
 
-This current report supersedes stale next-action/PR-status prose below while
+At its recorded date, this report superseded stale next-action/PR-status prose below while
 preserving every receipt and existing owner's scope. Source is `9ea27c7`, not
 proof of the installed build. [#218](https://github.com/Larryfix71566/jarvis-voice-ai/pull/218)
 merged as `0b49706`; [#219](https://github.com/Larryfix71566/jarvis-voice-ai/pull/219)
