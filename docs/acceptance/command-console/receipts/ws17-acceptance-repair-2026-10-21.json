@@ -1,0 +1,335 @@
+{
+  "version": 1,
+  "created_at": "2026-10-21T04:35:47.872389+00:00",
+  "row": "WS-17",
+  "pr": 233,
+  "candidate_source_commit": "d242ba405915aec9c12af4c2553ef1b42cf1079e",
+  "protected_baseline_commit": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+  "candidate": "8acff7746a353ad5ada562fb1893a60312a29ff6fa81292e202daaed197e1014",
+  "baseline": "1cb637d1ad2667fb040715a9ba54f43b6216b1cf8b7c943d77649afc70e67711",
+  "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+  "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+  "runner": "62019da52862d37e1e9c12b521849171440d27c57846a156c3e6994ee71d4b39",
+  "source_manifest_sha256": {
+    "jarvis/agents/delegate.py": "6edd3132f52d07d9bcb70216cc44612a6f7454da778c5ed6da79f93bb90fec30",
+    "jarvis/bot/console_actions.py": "c943f025e8dda5acb1d2e82974ab7ed15ee0eeccf052bac3986abaea65589f4e",
+    "jarvis/bot/pipeline.py": "ceb211e0db0daf9d838fbd9f275b0ebd4ef4398995713c046bfe082171e8a110",
+    "jarvis/bot/voice_guidance.py": "64eeaea9d07a8c9bdb068dcbadaa63761ef49561c71b5064fad882507204755a",
+    "jarvis/bot/weather_intent.py": "f572c2584a2f8d9cd71b1334f6854298ae5f57f874450d389b524459dacfacb8",
+    "jarvis/bot/weather_reuse.py": "e97ae1fd41e064591a0714079b54b3b5ad19afe2435e6645f2b3fed9bd8801ab",
+    "jarvis/bot/weather_tool.py": "9eaf9971298eb6077c0f4ba412772c6f8d884adb00eac40d7bba20edbef1fef4",
+    "jarvis/prompts.py": "9a8369c0f460aa58bf9a355f41c9cc0b232a821a645b81c41094fc8f2325cd83",
+    "macos/MortimerHost/Tests/MortimerHostTests/CurrentRequestForegroundWitnessTests.swift": "b37c592d7c497a23b8cf0e12204339eba537058bed158f9d0d3f87cc2647477d",
+    "tests/unit/test_acceptance_weather_routing.py": "8c716e8ff74eb5ed6904321b604a1fd1a86336f393851e0ca63dc0560b730d92",
+    "tests/unit/test_current_request_arrival.py": "fa1643cbb9b39fae1e96336504b5246baccb8008172c05d29276eeddbdf240ce",
+    "tests/unit/test_delegate.py": "06b30518da6874db0b4568a254b0fd73a989964a56bdbb66922bdbf1440260b7",
+    "tests/unit/test_voice_guidance.py": "68511b184b0de0ef48167a871a3134a05ea45dcea63229d988bff6e60e06b604"
+  },
+  "independent": {
+    "passed": true,
+    "status": "passed",
+    "source_unchanged": true,
+    "checks": [
+      {
+        "name": "backend-imports",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-c",
+          "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 2.051,
+        "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "observed_test_summary": null,
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "baseline-backend",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/unit",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 437.472,
+        "log_sha256": "a5bc586f0d4bf32b1ae37940f23c0adbf812408cb40f8f254534019614dfc0ca",
+        "observed_test_summary": "6280 passed, 11 skipped, 54 warnings, 2 subtests passed in 435.03s (0:07:15)",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "backend",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "tests/unit",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 486.086,
+        "log_sha256": "f4922b08f1a577e54ffdbd539f01f91e4afdd285ca674306c823d986f6610fbd",
+        "observed_test_summary": "6662 passed, 11 skipped, 59 warnings, 2 subtests passed in 484.22s (0:08:04)",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "scripted-evals",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/evals/sub_agent_evals.py",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 1.367,
+        "log_sha256": "1442154f0176fe376acf7ce6f1489bb10abcfc2ae008016b6c23b8b08428d39a",
+        "observed_test_summary": "13 passed, 1 warning in 0.89s",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "latency",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "scripts/latency_probe.py",
+          "--budget",
+          "tests/fixtures/latency_sample.log"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 0.117,
+        "log_sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a",
+        "observed_test_summary": null,
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "knowledge-base",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "services/mortimer-vault/tests",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 3.357,
+        "log_sha256": "36d0d975ad07c14e98c5de8034b72bb0c6e0045c3c60802d31a718b409b78095",
+        "observed_test_summary": "17 passed, 5 warnings in 2.99s",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "baseline-knowledge-base",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/services/mortimer-vault/tests",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 5.754,
+        "log_sha256": "d4c63f609526ddf51d8f9fd3d6a13f481882f3dfec122479d13271da3f8e8f00",
+        "observed_test_summary": "17 passed, 6 warnings in 4.51s",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "web",
+        "argv": [
+          "npm",
+          "--prefix",
+          "web",
+          "run",
+          "build"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 30.998,
+        "log_sha256": "1eae799df088a7de0c8b1088add4b33796f21916ed67b6c3c5982cff9cb0f032",
+        "observed_test_summary": null,
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "native-library",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/JarvisKit"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 91.953,
+        "log_sha256": "6c46d03c10b59be4735dd34a495ff257ea106403569558de46a428a77aab9e0a",
+        "observed_test_summary": "Executed 235 tests, with 0 failures (0 unexpected) in 9.906 (9.932) seconds",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "native-app",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/MortimerHost"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 232.163,
+        "log_sha256": "051530d232a83183f675eb31da3033dfd05e0c629fcdef9d937db8443926df6e",
+        "observed_test_summary": "Executed 580 tests, with 8 tests skipped and 0 failures (0 unexpected) in 180.313 (180.350) seconds",
+        "prerequisite_skip_reasons": [
+          "Thread window capture requires Screen Recording and an interactive WindowServer; no acceptance is inferred",
+          "Grant Screen Recording to the test runner to exercise real window capture",
+          "requires at least two non-mirrored displays",
+          "requires two connected displays",
+          "requires two connected displays",
+          "the test host cannot become the active app in this WindowServer session",
+          "the test host cannot become the active app in this WindowServer session",
+          "the test host cannot become the active app in this WindowServer session"
+        ]
+      },
+      {
+        "name": "baseline-native-library",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/JarvisKit"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 31.736,
+        "log_sha256": "db9fc1e2d50d2140cac7f34bbcd2131becbc46d3b4453b3961143166791c1459",
+        "observed_test_summary": "Executed 227 tests, with 0 failures (0 unexpected) in 9.300 (9.314) seconds",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "baseline-native-app",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/MortimerHost"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 187.809,
+        "log_sha256": "b15732956f1cace919bfa56daafee63dddd6dfa83293c440b32fe7f3dd4985ff",
+        "observed_test_summary": "Executed 514 tests, with 7 tests skipped and 0 failures (0 unexpected) in 145.515 (145.545) seconds",
+        "prerequisite_skip_reasons": [
+          "Grant Screen Recording to the test runner to exercise real window capture",
+          "requires at least two non-mirrored displays",
+          "requires two connected displays",
+          "requires two connected displays",
+          "the test host cannot become the active app in this WindowServer session",
+          "the test host cannot become the active app in this WindowServer session",
+          "the test host cannot become the active app in this WindowServer session"
+        ]
+      }
+    ],
+    "preexisting_assets_unchanged": true
+  },
+  "host_backend": {
+    "source": "d242ba405915aec9c12af4c2553ef1b42cf1079e",
+    "summary": "6859 passed, 15 skipped, 19 warnings, 2 subtests passed in 287.81s (0:04:47)",
+    "log_sha256": "81d6d9b4bf250f2f9ffb9e4c245b4e64e54fa5935ae7fd2b97b93495bf513127"
+  },
+  "host_native": {
+    "status": "non-passing; no waiver",
+    "evidence_log_sha256": {
+      "acceptance-repair-full-native-cdc8672.log": "67c6d47cc9addc95aedad28c0c1e89e1b78d1104acbd426d7d04b9990bd8cba5",
+      "acceptance-repair-full-native-30bbcea.log": "5396aad5b9f8850e31ef8fc3ff9d59fc05ff0281fddcba34bafeda8ceb3d1ebf",
+      "acceptance-repair-native-capture-control-b1db9a9.log": "73b314b57dde01e0078bf04d5a386515ec88499406becf528a6decd5d7486097",
+      "acceptance-repair-native-isolated-b1db9a9.log": "4a0f36b1294585262ff9212d710933c230f463d4ececba024ef8e11677f793a2"
+    },
+    "original_full": "stalled, owned runners terminated; not passed",
+    "bounded_full": "600-second timeout, not passed",
+    "actual_capture_control": "failed ScreenCaptureKit SCStreamErrorDomain -3811 despite existing preflight permission",
+    "isolated_full": "all 580 scheduled; two capture cases failed, two nil-NSApp test-process crashes; exit 1",
+    "post_vm_serial_control": {
+      "source": "d242ba405915aec9c12af4c2553ef1b42cf1079e",
+      "status": "failed",
+      "returncode": 1,
+      "error": "ScreenCaptureKit -3811 despite permission preflight; no competing VM/host tests",
+      "log_sha256": "e135f9b046e4c76aa27ca2f1408870360e7e2f6dd297090aa7f4c7478d1d9e69"
+    },
+    "failure_paths_identical_to_main3061408": true,
+    "source_identity_does_not_establish_cause": true
+  },
+  "ci": {
+    "source": "d242ba405915aec9c12af4c2553ef1b42cf1079e",
+    "checks": [
+      {
+        "name": "allowlist",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39539833932/job/119024806057"
+      },
+      {
+        "name": "knowledge-base",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39539833925/job/119024805741"
+      },
+      {
+        "name": "controller-tests",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39539833918/job/119024805931"
+      },
+      {
+        "name": "policy-tests",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39539833932/job/119024806401"
+      },
+      {
+        "name": "validate",
+        "status": "COMPLETED",
+        "conclusion": "SUCCESS",
+        "url": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39539833932/job/119024806439"
+      }
+    ]
+  },
+  "source_review": {
+    "status": "pending parent-managed consent/review; no verdict",
+    "packet_sha256": "206c1a4449f9870d8c936b96815d882e2b505e66d31c36693915a7d457c5d4a5",
+    "packet_bytes": 474299,
+    "transmitted": false
+  },
+  "acceptance": {
+    "checkbox_updates": 0,
+    "owner_lines_preserved": 29,
+    "checkbox_lines_preserved": 144,
+    "UI2-22": "untested on repaired candidate; live/release gates open",
+    "UI2-23": "blocked on full release/native/review/integration and live observation",
+    "UI2-24": "blocked on full release/native/review/integration and live observation",
+    "UI2-25": "blocked on full release/native/review/integration and live observation",
+    "not_applicable_waivers": []
+  },
+  "interrupted_attempts": [
+    "30bbcea intentionally stopped before checks for proven source correction; cleanup/preservation verified",
+    "d242ba4 original attempt lost host orchestrator at executor disconnect; only two terminal checks; retained non-passing; fresh original full profile in recovery"
+  ],
+  "release": {
+    "merged": false,
+    "deployed": false,
+    "provider_integration": "pending source-policy/runtime/latency/overage gates and coordinated exact-source integration",
+    "five_day_observation": "open; no calendar-only closure",
+    "WS06_week": "open; independent real observation required"
+  },
+  "privacy": "Source and synthetic test evidence only. No raw production logs, credentials, private user content, VM task identities, operational installed metadata or reviewer reasoning.",
+  "publication_validation": {
+    "roadmap_reader_event_drift_contracts": "57 passed, 2 warnings, 2.92s",
+    "log_sha256": "d3430488a11515a09df81a995c56a02ca0f82c230c3cc7f52c9dfb8b03195cc1",
+    "strict_roadmap": "0 errors, 0 warnings",
+    "runtime_test_bytes_identical_to_frozen_source": true,
+    "publication_head_ci": "separate; pending after docs-only commit"
+  }
+}

@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** Frozen current-request implementation `fbfb669` has completed all twelve original independent checks, exact-source Claude follow-up with **No blocking findings**, and all five source CI checks. [Final scrubbed evidence](../acceptance/command-console/receipts/ws17-current-request-final-2026-10-19.md). Documentation-only publication, publication-head CI and separate merge/release/live gates are distinguished below. Historical status follows: Claim #225 merged as `c244963` at 00:08:12 UTC on 2026-10-19; current-request implementation is claimed on `codex/ws17-current-request-arrival-20261018`, with wire reservation committed before code. Historical status follows: Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
+**Status:** Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: Frozen current-request implementation `fbfb669` has completed all twelve original independent checks, exact-source Claude follow-up with **No blocking findings**, and all five source CI checks. [Final scrubbed evidence](../acceptance/command-console/receipts/ws17-current-request-final-2026-10-19.md). Documentation-only publication, publication-head CI and separate merge/release/live gates are distinguished below. Historical status follows: Claim #225 merged as `c244963` at 00:08:12 UTC on 2026-10-19; current-request implementation is claimed on `codex/ws17-current-request-arrival-20261018`, with wire reservation committed before code. Historical status follows: Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -3300,3 +3300,212 @@ focused live session checks roadmap main-window presentation, multi-turn
 references, predictable interruption/cancellation, Spartanburg/Atlanta reuse,
 and persisted observations with truthful reviewed-update status. Human/visual
 criteria stay open until Larry supplies their observations.
+
+
+### 2026-10-21 — Weather dispatch repair and bounded reproduction
+
+Claim #231 merged as `3061408`. The WS-05 handoff committed in `504f911`
+permits delegate/Base/Registry acceptance work; provider paths and pipeline
+readiness guard remain WS-05's. Synthetic Python reproduction failed three
+named/stale dispatch cases with one local control passing. Request-bound
+weather intent now refuses wrong local/generated-city dispatch before any
+lookup, fetch or display. Expanded focused verification passes 208 tests
+(eight deprecation warnings); two real native SDK/router/store witnesses pass.
+One witness confirms first-wrong-result consumption, so the opening rule is
+preserved. An intermediate “weather there” failure is repaired and retained.
+
+The [dated log](../roadmap-log/2026-10-21-ws-17-codex-acceptance-repair.md)
+records limits and outstanding gates. No human/visual closure or production
+change. Continue explicit cancellation/deduplication and evidence/reporting
+repairs, then freeze an integrated candidate for full verification/review/CI.
+
+
+### 2026-10-21 — Explicit task control and duplicate suppression
+
+Weather commit `5286327` is published in draft #233; its exact-source focused
+repeat passes 208 tests. Four task-control cases reproduce before repair.
+Existing delegation ownership now tracks pending operations per session,
+refuses exact duplicate starts, preserves speech-barge-in survival, and accepts
+bounded explicit task-stop commands only from the correlated accepted-input
+boundary. Multiple pending tasks require a choice unless the user explicitly
+says all. Cancellation requests do not claim rollback or completed work;
+cancelled orphaned tasks produce no late success. Notes expire at the next
+accepted turn. Combined focused verification: 223 passed, eight deprecation
+warnings. No new wire/tool/config or durable task framework. Continue truthful
+roadmap/build/acceptance/test reporting, then full integrated gates.
+
+
+### 2026-10-21 — Truthful reporting, lifecycle timing and runner handoff
+
+The existing Supervisor/Developer/console guidance now identifies formatted
+roadmap results, actual installed-build authority, the three acceptance
+reporting states, reviewed selfedit/readback and a truthful missing-test-runner
+handoff. No new executor grant or guided wizard. Transient acceptance notes
+expire; content-free request identities and monotonic terminal duration enable
+bounded live trace correlation. The 710-test affected group passes (ten
+warnings, including an inherited test-callback warning). Prompt compliance
+still needs observation. Read-only 503 investigation identifies guarded
+endpoint possibilities but not the production branch; memory parsing remains
+separate. Full suites, independent exact-source verification/review, CI and
+coordinated provider integration are next; live criteria stay open.
+
+
+### 2026-10-21 — Full backend and final-source compatibility follow-up
+
+Full host Python on `cdc8672` passes 6,846 tests, 15 skips and two subtests
+(19 warnings). Preserve the non-passing full-native stalled run and local
+stack evidence; repeat in a fresh bounded test process. Existing public local
+weather evaluation phrases reveal two additional parser regressions, repaired
+with the qualifier guard and retained in the 215-pass affected group. Refresh
+full checks on this final source. WS-05's committed `763bfe1` handoff expands
+its pipeline boundary to provider-selection constructors as well as the early
+readiness guard; neither region is edited by acceptance. Delegate/Base/Registry
+acceptance ownership remains unchanged. Final integration/review/release waits
+for coordinated provider readiness; no human or visual criterion closes.
+
+
+### 2026-10-21 — Time-before-place refusal correction and fresh freeze
+
+`30bbcea` full backend: 6,848 passes/15 skips/two subtests; all five CI checks
+pass. Five actual bound-intent Registry/cache/privacy checks pass. Further
+static/synthetic review finds five failing authority cases around time-before-
+place and hidden multiple targets. Trailing-time handling and named-target
+precedence are corrected; 898 affected tests and all 55 synthetic phrase cases
+pass. These do not establish unrestricted natural-language/model compliance.
+
+The early independent `30bbcea` run is intentionally interrupted before checks
+for this proven repair; owned cleanup and preservation checks pass. Its result
+stays non-passing. The bounded full native repeat times out at 600 seconds;
+retain its stack/log/deadline evidence and run an isolated actual-capture
+control. No skips or security settings are changed. Freeze the repaired source,
+repeat full backend/original independent profile and regenerate the static
+source packet. Parent owns pending external-review consent; no transmission.
+
+
+### 2026-10-21 — Stop-turn dispatch backstop and native diagnostic limits
+
+`b1db9a9` full backend passes 6,856 tests/15 skips/two subtests. Two synthetic
+adapter failures prove fresh delegation was possible on an explicit stop turn.
+The accepted immutable request now refuses that dispatch with the same bounded
+parser used for cancellation; ordinary speech interruption retains its behavior.
+The 901-test affected group passes. No new tool, wire field or durable state.
+
+The complete one-worker isolated native diagnostic schedules 580 cases and
+fails: two actual ScreenCaptureKit capture cases (`-3811`) and two per-test
+VoiceDisplayAudit processes crashing at unchanged nil-NSApp WindowLookup.
+The fresh capture control fails despite permission preflight. Preserve all
+original non-passing host runs; do not relabel them as passes or change tests,
+permissions or production. Refresh final frozen source backend/CI/original
+independent profile and exact source review. Parent owns pending transmission
+consent and provider integration. Live/physical criteria remain open.
+
+
+### 2026-10-21 — Frozen automation complete, host/review/integration held
+
+Frozen `d242ba4`: full host backend 6,859 passes/15 skips/two subtests, five CI
+passes, strict metadata zero errors/warnings. Original twelve independent checks
+pass after supported fresh recovery; candidate backend 6,662 passes/11 skips/two
+subtests, native 580 executed/eight skips/zero failures. The
+[scrubbed receipt](../acceptance/command-console/receipts/ws17-acceptance-repair-2026-10-21.md)
+records exact commands/fingerprints/log hashes/source manifest and native limits.
+
+Interrupted attempts and host native/capture failures remain non-passing. A
+post-VM serial capture still fails SCK-3811 despite preflight and no competing
+test. No permission change, waiver or production mutation. Final owned cleanup
+and preservation pass; paused cleanup stays paused. Parent owns pending static
+source consent; no packet sent. Provider owns tool-dispatch preview resolution,
+retaining stop refusal plus source-policy scope. Review/reverify combined source.
+No release before required review/host-native/provider gates or human closure.
+This docs publication keeps runtime/test bytes at `d242ba4`; publication CI is
+separate. One focused Larry session follows release gates, then real observation.
+
+
+### 2026-10-21 — Integrated offline verification complete
+
+Provider preview `794a298` is fetched and verified by actual tree/parent graph
+and content equivalence with provider `b1f07a2` plus acceptance `d242ba4`.
+Stop-turn refusal remains inside source-policy/run-log scope. All twelve original
+independent checks pass; candidate backend 6,728 passes/11 skips/two subtests,
+native 580 executed/eight prerequisite skips/zero failures, JarvisKit 235 passes.
+Full combined host backend: 6,925 passes/15 skips/two subtests, 19 warnings,
+244.89s. Exact commands, hashes, manifests and limits are in the
+[integrated receipt](../acceptance/command-console/receipts/ws05-ws17-integrated-2026-10-21.md).
+Owned cleanup and unchanged source/settings/production/prior-asset checks pass;
+no tests remain active and paused cleanup stays paused. Owner-supplied 421-test
+conflict check was inspected, not independently rerun. Earlier non-passing runs
+remain unchanged; no unrun integrated CI or cross-review verdict is inferred.
+
+Host UI/capture needs an unlocked awake interactive desktop before a meaningful
+recheck; historical SCK failures are not proven explained. No new permission or
+unchanged retry. Parent-managed source-review/live consent and runtime/overage
+proof remain pending; protected full-context export still needs an eligible
+private/local route or activation remains held. No merge/deploy or human/visual
+checkbox closure. One focused session follows release gates, then actual release
+and WS-06 observation. This docs publication keeps runtime/test bytes at `d242ba4`.
+
+Validation: strict combined-source roadmap against explicit main `3061408` has zero errors/warnings (no warn-only flag); missing origin/main in the handoff was resolved by the full hash. Publication contracts pass 57 tests/two warnings/3.58s; all 144 checkbox and29 owner lines and standalone runtime/test bytes remain unchanged.
+
+
+### 2026-10-21 — Host native verification resumed and passed
+
+On `f3aa78b` (native bytes identical to combined `794a298`), actual-window
+capture passes one test/zero failures; full original host native passes
+580 executed/five prerequisite skips/zero failures in138.065s. Both exact-head
+PR CI sets were green. The [updated receipt](../acceptance/command-console/receipts/ws05-ws17-integrated-2026-10-21.md)
+records commands/hashes and preserves earlier non-passing attempts. No security,
+production-service or provider change by acceptance; no human checkbox closes.
+
+Larry explicitly authorizes both merges. Provider selective direct-API guard is
+being revised to preserve OpenRouter after immediate shutdown; require immutable
+new source/checks/exact cross-system review before merge. Interface confirmation,
+private route and live runtime/latency/overage are separate deployment/activation
+gates. No legacy service restart or subscription inference before cost gate.
+Prepared old-preview review packet remains local/untransmitted.
+
+
+### 2026-10-21 — Revised combined selective guard verification
+
+Exact revised preview `e74e4b8` (provider `fec3d51` plus acceptance program
+`d242ba4`, publication `a7a269a`) passes all twelve original independent checks.
+Candidate backend6,764passes/11skips/two subtests; native580executed/eight
+prerequisite skips/zero failures; JarvisKit235passes. Combined affected group
+457passes; full integration197passes/fourskips. The initial command-restricted
+integration attempt remains non-passing; one unchanged supported repeat passes.
+Original profile/image/runner/baseline/fixtures and source scanner unchanged;
+owned cleanup/preservation pass. See [revised receipt](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md).
+
+Paired PR integration reuses the exact verified pipeline resolution and has
+identical non-documentation bytes to `e74e4b8`. Current input heads had five CI
+passes each; publication-head CI remains separate. Required exact-source cross-
+system review is not completed; no verdict or live acceptance is inferred.
+Operational records stay local. No checkbox closure; parent UI2/hardware/release/
+observation gates remain separate. Both implementation merges are authorized
+subject to required gates; row/header wording describes the after-merge state.
+
+
+### 2026-10-21 — Bounded canonical selective-restoration tool scope
+
+Larry's existing complete-plan and selective-restoration approval covers the
+recoverable canonical deployment prerequisite. WS17 records before code: only
+`deploy_main.sh` held install/local restore/held rollback and synthetic deployment
+contracts. WS04's historical authenticated-health integration remains unchanged;
+no other active owner locks this path. Preserve all denied/human-only file tiers,
+application runtime bytes and live/private/cost gates. No deployment execution.
+
+
+### 2026-10-21 — Canonical held deployment prerequisite implemented
+
+Following registration `1f864e6`, the protected canonical deployer gains
+install-held, explicitly limited local restoration and frozen rollback-held.
+Application/provider/native/config/dependency/cleanup bytes remain at207bb8b.
+The [source/synthetic receipt](../acceptance/command-console/receipts/ws17-held-deployment-tool-2026-10-21.md)
+records92 focused passes, syntax checks, actual generated Bash rollback in fake
+HOME, no-restart/no-settings-or-DB-restore and source/receipt/lease/hold failures.
+No live action, new permission, private operational record or acceptance closure.
+Required final-head CI and exact source review remain distinct.
+
+Prelaunch source correction: three failing regressions on `162c9d1` now pass;
+canonical local launch arguments/cwd and known runtime are required before
+enable/bootstrap, loader overrides/foreign KB paths refuse, and the helper uses
+isolated no-site Python. Final focused group92passes/4.74s. Final publication CI
+and required exact-source review remain separate; no live action or checkbox.

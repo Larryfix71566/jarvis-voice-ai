@@ -73,6 +73,7 @@ from jarvis.agents.delegate import (
     build_delegate_tool,
     drain_detached,
     foreground_delegation_count,
+    task_stop_command,
 )
 from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.connect_greeting import ConnectGreeting  # noqa: E402
@@ -95,6 +96,7 @@ from jarvis.bot.follow_up import (
 from jarvis.bot.status_tool import build_system_status_tool
 from jarvis.bot.weather_tool import build_local_weather_tool
 from jarvis.bot.weather_reuse import WeatherReuseBridge, current_weather_reuse, weather_reuse_scope
+from jarvis.bot.weather_intent import WeatherIntent, accepted_weather_intent, current_weather_intent
 from jarvis.bot.device_location import DeviceLocation, resolve_location, summarize_location
 from jarvis import ambient_weather
 from jarvis.bot.console_actions import build_console_action_tool, _disclosed_inventory
@@ -217,6 +219,8 @@ class ForegroundRequest:
     sequence: int
     input_timestamp: str
     input_user_id: str
+    weather_intent: WeatherIntent | None = None
+    task_stop: bool = False
 
 
 _foreground_request: ContextVar[ForegroundRequest | None] = ContextVar(
@@ -241,6 +245,9 @@ class ForegroundRequests:
         self.input_identity: tuple[str, str] | None = None
         self.sequence = 0
         self.current: ForegroundRequest | None = None
+        self.previous_weather_intent: WeatherIntent | None = None
+        self.control_input: Callable[[str], str | None] | None = None
+        self.control_note: dict | None = None
         self.boundaries: list[tuple[dict, ForegroundRequest]] = []
         self.calls: dict[str, ForegroundRequest | None] = {}
         self.seen_starts: list[int] = []
@@ -376,8 +383,22 @@ class ForegroundRequests:
             # classification or a model's claim to own a newer request.
             normalized = lambda value: " ".join(value.split())
             if normalized(boundary["content"]) == normalized(" ".join(self.parts)):
+                if self.control_note is not None:
+                    self.control_note["content"] = "[system] Prior task status superseded."
+                    self.control_note = None
+                if self.control_input is not None:
+                    note = self.control_input(boundary["content"])
+                    if note:
+                        # Keep the actual user message last for existing voice
+                        # workflow tracking. The note contains lifecycle facts,
+                        # not task text or private output, and expires next turn.
+                        self.control_note = {"role": "user", "content": "[system] " + note}
+                        messages.insert(next(i for i, m in enumerate(messages) if m is boundary), self.control_note)
                 self.sequence += 1
-                request = ForegroundRequest(str(uuid.uuid4()), self.sequence, *self.input_identity)
+                intent = accepted_weather_intent(boundary["content"], self.previous_weather_intent)
+                request = ForegroundRequest(str(uuid.uuid4()), self.sequence, *self.input_identity,
+                    weather_intent=intent, task_stop=task_stop_command(boundary["content"]) is not None)
+                self.previous_weather_intent = intent
                 self.boundaries = (self.boundaries + [(boundary, request)])[-64:]
                 self.current = request
                 # One accepted input grants one boundary. A copied context or
@@ -796,6 +817,7 @@ def adapt_to_pipecat(
         tool_call_id = str(getattr(params, "tool_call_id", "") or "")
         request = foreground_requests.calls.get(tool_call_id) if foreground_requests is not None else None
         foreground_token = _foreground_request.set(request)
+        intent_token = current_weather_intent.set(request.weather_intent if request else None)
         runlog = RunLogger(
             str(uuid.uuid4()), "supervisor", "Mortimer",
             "supervisor direct tool execution", session_id=session_id,
@@ -812,7 +834,10 @@ def adapt_to_pipecat(
                             if sources is not None and sources.context is not None else UNKNOWN)
             with source_scope(input_policy) as result_sources:
                 with run_logger_scope(runlog):
-                    result = await dict_handler(params.arguments)
+                    if name == "delegate_task" and request is not None and request.task_stop:
+                        result = "REFUSED: this is an explicit task cancellation turn. No new delegated work was started."
+                    else:
+                        result = await dict_handler(params.arguments)
                 if type(result) is ClassifiedText:
                     result_sources.observe(result.policy)
                 elif not result_sources.observations:
@@ -861,6 +886,7 @@ def adapt_to_pipecat(
             if foreground_requests is not None:
                 foreground_requests.calls.pop(tool_call_id, None)
             _foreground_request.reset(foreground_token)
+            current_weather_intent.reset(intent_token)
             if weather_token is not None:
                 _weather_context_call.reset(weather_token)
 
@@ -1245,6 +1271,7 @@ def build_pipeline(
         user_text=lambda: runtime.voice_state.user_text,
     )
     creator_dispatcher = delegate_handler.run_skill_creator
+    runtime.foreground_requests.control_input = delegate_handler.control_input
     # MORTIMER_VOICE_WORKFLOWS_PLAN.md D16 — getattr with the production
     # defaults, because tests build this pipeline from SimpleNamespace
     # settings that predate these two fields.
@@ -1996,6 +2023,8 @@ async def send_app_message(transport: Any, message: dict) -> None:
         payload.pop("origin_request_id", None)
         if (request := _foreground_request.get()) is not None:
             payload["origin_request_id"] = request.request_id
+            _logger.info("display_dispatch request_id=%s request_sequence=%d",
+                         request.request_id, request.sequence)
         message = {**message, "display": payload}
     await transport.output().send_message(
         OutputTransportMessageUrgentFrame(message=_wrap_rtvi(message)))

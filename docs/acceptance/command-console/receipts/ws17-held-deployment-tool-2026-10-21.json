@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "created_at": "2026-10-21T13:15:22.235578+00:00",
+  "row": "WS-17",
+  "registration": "1f864e6",
+  "base_publication": "207bb8b75bc01a47e6172f9d78e21bea2101f0d4",
+  "changed_source_sha256": {
+    "scripts/deploy_main.sh": "114e24b8c980a56da8b53a15a29f988f967c288d377a0535462caa83c8ccddb6",
+    "tests/unit/test_deploy_held.py": "3bf236f9c304cd89e2ee59385e78ea95b82c1faa230ddffd1b0f165a3cab9f83"
+  },
+  "focused_validation": {
+    "result": "92 passed in 4.74s, including deployment and strict-roadmap contracts",
+    "log_sha256": "63a3fd869d3afd049729e6ccc9a16f91f0ca796b6175201dc273699be72d1b07",
+    "first_restricted_attempt": "46 passed,3 failed: one malformed absolute-path fixture normalized by tarfile and restricted localhost/subprocess facilities; corrected real absolute-header fixture and supported repeat preserved separately",
+    "generated_launcher": "actual Bash rollback under synthetic HOME, fake operator commands and synthetic code/app/database/settings; no live deployment",
+    "prior_source_162c9d1": "86 passed; superseded by bounded prelaunch correction",
+    "prelaunch_red": "Three canonical-command/source tests fail on162c9d1 before correction; three passed controls are not implied",
+    "prelaunch_red_log_sha256": "a0734e60127bc35c8bb4b8dc39dbd47c9bd6d6411fac847d0cd3b862abf6a1ab"
+  },
+  "syntax": "bash -n PASS; embedded stdlib Python compiles",
+  "application_runtime": "jarvis/macOS/mcp/config/sandbox/dependency bytes unchanged from207bb8b",
+  "safety_contract": [
+    "human-only denied canonical file; no new mutable deployment helper permission",
+    "install-held requires bound exact-program source-review and five-check CI receipts",
+    "all managed services held; policy/envelope/source/bundle readback; frozen held rollback",
+    "base restoration costs/vault only; admin and inference excluded",
+    "quarantine and owned-process exit before prior code/app restore",
+    "no automatic restart, app open, private-settings or database restoration in held rollback",
+    "no cleanup lifecycle mutation or stale-lease auto-reclamation",
+    "default deployment refuses shutdown policy or disabled service overrides",
+    "pre-enable canonical launch arguments/cwd, no loader overrides or unrecognized runtime fallback; isolated stdlib helper"
+  ],
+  "review": "required external source review not yet performed; source-only packet prepared separately",
+  "coverage": "Synthetic deployment-tool evidence; no new full application suite or live/runtime/acceptance claim",
+  "privacy": "No operational production records, ledger values, account settings or private fixtures included.",
+  "updated_at": "2026-10-21T13:31:57.166872+00:00"
+}
