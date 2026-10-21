@@ -41,6 +41,7 @@ class SubscriptionVoiceLLMService(LLMService):
 
     def __init__(self, *, resolved: ResolvedModelRoute,
                  policy_for_context: Callable | None = None,
+                 sources=None,
                  session_id: str | None = None, **kwargs):
         if (resolved.workload != "voice_supervisor"
                 or resolved.route.name != "subscription"
@@ -50,7 +51,8 @@ class SubscriptionVoiceLLMService(LLMService):
         super().__init__(settings=LLMSettings(model=resolved.model), **kwargs)
         self.resolved = resolved
         self.session_id = session_id
-        self.policy_for_context = policy_for_context
+        self.sources = sources
+        self.policy_for_context = sources.policy_for_context if sources else policy_for_context
         self._native_client = None
         self._parent_id = None
         self._turn_policy = None
@@ -97,34 +99,47 @@ class SubscriptionVoiceLLMService(LLMService):
             raise SubscriptionCapabilityError("voice continuation changed earlier context")
         additions = messages[len(prefix):]
         expected = self._pending_assistant
-        if not additions or additions[0].get("role") != "assistant":
-            raise SubscriptionCapabilityError("voice continuation is missing its assistant batch")
-        observed = additions[0]
-        if (observed.get("content") or "") != (expected.get("content") or ""):
-            raise SubscriptionCapabilityError("voice continuation changed assistant text")
-        calls = observed.get("tool_calls")
         wanted = expected["tool_calls"]
-        if not isinstance(calls, list) or len(calls) != len(wanted):
-            raise SubscriptionCapabilityError("voice continuation changed its tool batch")
-        for actual, saved in zip(calls, wanted):
-            try:
-                valid = (actual.get("id") == saved["id"]
-                         and actual.get("type", "function") == "function"
-                         and actual["function"]["name"] == saved["function"]["name"]
-                         and json.loads(actual["function"]["arguments"])
-                         == json.loads(saved["function"]["arguments"]))
-            except (KeyError, TypeError, ValueError):
-                valid = False
-            if not valid:
-                raise SubscriptionCapabilityError("voice continuation changed a tool binding")
-        replies = additions[1:]
-        ids = {call["id"] for call in wanted}
-        if (len(replies) != len(ids)
-                or any(reply.get("role") != "tool" for reply in replies)
-                or {reply.get("tool_call_id") for reply in replies} != ids):
+        wanted_by_id = {call["id"]: call for call in wanted}
+        observed_calls = []
+        replies = {}
+        text_seen = False
+        # Pipecat materializes one assistant/tool pair per call, and spoken
+        # text separately. Accept that exact projection or the equivalent
+        # combined assistant batch, then restore only our native metadata.
+        for message in additions:
+            if message.get("role") == "assistant":
+                content = message.get("content") or ""
+                if content:
+                    if text_seen or content != (expected.get("content") or ""):
+                        raise SubscriptionCapabilityError("voice continuation changed assistant text")
+                    text_seen = True
+                calls = message.get("tool_calls") or []
+                if not isinstance(calls, list) or (not content and not calls):
+                    raise SubscriptionCapabilityError("voice continuation changed its assistant batch")
+                for actual in calls:
+                    try:
+                        saved = wanted_by_id[actual["id"]]
+                        valid = (actual.get("type", "function") == "function"
+                            and actual["function"]["name"] == saved["function"]["name"]
+                            and json.loads(actual["function"]["arguments"])
+                            == json.loads(saved["function"]["arguments"]))
+                    except (KeyError, TypeError, ValueError):
+                        valid = False
+                    if not valid or actual["id"] in observed_calls:
+                        raise SubscriptionCapabilityError("voice continuation changed a tool binding")
+                    observed_calls.append(actual["id"])
+            elif message.get("role") == "tool":
+                call_id = message.get("tool_call_id")
+                if call_id not in observed_calls or call_id in replies:
+                    raise SubscriptionCapabilityError("voice continuation has incomplete or foreign results")
+                replies[call_id] = message
+            else:
+                raise SubscriptionCapabilityError("voice continuation changed its assistant batch")
+        if observed_calls != [call["id"] for call in wanted] or set(replies) != set(wanted_by_id):
             raise SubscriptionCapabilityError("voice continuation has incomplete or foreign results")
-        # Earlier native metadata was generated by us, never by the caller.
-        return copy.deepcopy(self._native_history + [expected] + replies)
+        return copy.deepcopy(self._native_history + [expected]
+                             + [replies[call["id"]] for call in wanted])
 
     async def _close_turn(self):
         self._turn_generation += 1
@@ -192,6 +207,8 @@ class SubscriptionVoiceLLMService(LLMService):
         record_execution_result("supervisor", result, session_id=self.session_id)
         if generation != self._turn_generation:
             return  # Interruption/disconnect cannot publish a late response.
+        if self.sources is not None:
+            self.sources.model_output(context, result, policy)
         self._input_messages = copy.deepcopy(messages)
         self._native_history = copy.deepcopy(native_messages)
         if result.tool_calls:

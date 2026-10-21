@@ -940,3 +940,48 @@ eligible private/local runtime, a separate product/route decision; removing or
 relabeling memory is not assumed. Live synthetic consent, account overage and
 external source-review consent remain pending. No generic privacy approval
 can substitute for this implementation.
+
+
+### 2026-10-21 — Confirmed source handoff and implemented context bindings
+
+The parent/acceptance owner confirmed the source-policy-only CX-27 handoff.
+The preceding `49033ee` source passed all five CI checks, plus clean local
+6,663 unit and 197 integration tests. Its installed-Codex receipt remains
+valid; no inference, source review, account setting or activation was performed.
+
+The new `jarvis/voice_sources.py` implements host-only, per-context exact-byte
+and object bindings, per-run ContextVar accumulation, immutable classified
+text for immediate/late transport, and a monotonic session privacy floor.
+Plain JSON labels and copied/unbound/mutated messages cannot authorize egress.
+Nested scopes cannot lower their parent's restrictions. Whole-history privacy
+survives turn resets, removal, weather minimization and late-result rewriting.
+The floor is deliberately conservative until a new session is created.
+
+Pipeline context creation, memory snapshot binding, tool-result delivery,
+clipboard/silent/correction/greeting/late injection and neutralizers now retain
+source policy. Pipecat's actual assistant/tool materialization is recognized
+only against host-retained model/tool identities and exact result bytes.
+Base exports configured/acquired source floors through a per-run scope;
+Delegate keeps them through immediate and interrupted late returns, preserving
+ordinary string-return compatibility outside a tracking scope. Registry is
+unchanged. Persisted notices lack authenticated source metadata and receive a
+local-only floor on greeting, so persistence cannot silently lower a known
+local-only result; no DB schema or existing memory classification was changed.
+
+Real Pipecat projection testing exposed a buffered-adapter continuation defect:
+spoken text and per-tool assistant/result pairs are separate messages, unlike
+the earlier combined mock. The adapter now validates both exact projections,
+then restores only host-retained native metadata. A synthetic full native
+continuation plus subsequent turn passes without any provider subprocess.
+
+The focused source/voice/Base/Delegate/weather/foreground/readiness group passes
+248 tests. This includes actual SDK materialization, exact result mutation
+rejection, acquired local-only Base output, context copying, nested/cancelled
+scope isolation, and cancellation followed by typed late delivery. Full frozen
+source checks and a separate preview with acceptance `d242ba4` are next; their
+terminal results will be recorded on PR #232. No acceptance candidate was
+modified. The newly implemented bindings are not permission to send memory,
+clipboard, unclassified voice input or protected tool content to subscriptions.
+Those inputs still block the approved-external route. Remaining decisions are
+eligible private/local routing and bounded synthetic/live account acceptance;
+ordinary whole-context approval is not assumed. Production guard remains.

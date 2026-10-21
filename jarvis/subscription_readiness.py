@@ -45,6 +45,7 @@ def retirement_readiness() -> dict[str, Any]:
             "implementation": "buffered_native_tool_bridge",
             "incremental_streaming_verified": False,
             "requires_host_classified_context": True,
+            "source_provenance": "host_bound_monotonic_context",
             "production_activation_allowed": False,
         },
         "inference_attempts": 0,

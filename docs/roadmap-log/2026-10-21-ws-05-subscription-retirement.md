@@ -60,3 +60,15 @@ Full voice provenance is unfinished implementation requiring an expanded
 source-policy-only handoff outside the two agreed pipeline regions; the plan
 records exact ingress, result, memory and history boundaries. Protected-route
 availability and live/account acceptance remain separate decisions.
+
+
+Confirmed CX-27 source-policy handoff implemented in an isolated follow-up:
+host-bound context provenance, monotonic privacy floors, memory/injection/tool
+bindings, Base per-run export and Delegate immediate/late transport. Registry
+is unchanged; acceptance request/weather/stop/cancellation semantics stay owned
+by WS-17. Real Pipecat projection testing repaired an adapter continuation
+mismatch; 248 focused tests pass. Earlier `49033ee` has all five CI checks
+green and clean local 6,663 unit / 197 integration passes. This new source's
+full checks and separate combined preview are pending; PR records terminal
+results. Source classification does not grant private egress or activate a
+subscription. No inference, credentials, source review or deployment occurred.
