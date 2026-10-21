@@ -130,3 +130,36 @@ the Google/Anthropic/OpenAI provider-selection constructor branch in pipeline,
 as committed at `763bfe1`. Acceptance changes touch neither region. Shared
 delegate/Base/Registry acceptance ownership remains permitted. No provider
 activation, security setting, deployment or acceptance checkbox change.
+
+
+## Time-before-place authority correction and preserved failed runs
+
+Full host backend on `30bbcea`: 6,848 passed, 15 skipped, two subtests passed,
+19 warnings, 277.43 seconds. Its five CI checks pass. Five extra real-Registry
+checks prove bound correct-city weather/radar hits preserve native timestamps
+without provider fetch, wrong-city refusal before query/fetch, and both private
+input floors. These are overlapping checks, not additive acceptance totals.
+
+Static review then proves a further target-order defect: “umbrella today in
+Exampleburg” and “rain today in Exampleburg” incorrectly grant device-local
+execution. Real adapter/parser regressions fail five cases, including a
+multi-city phrase hidden behind a time word. Time qualifiers are now removed
+only as complete trailing phrases; named targets after time words are parsed
+first, and multiple targets remain unclear. A 55-phrase synthetic matrix also
+finds three local “right now”/“the week” forms, repaired without turning named
+requests into local ones. The final affected group passes 898 tests, ten
+warnings, in 11.89 seconds; all 55 matrix cases pass with no model calls.
+
+The just-started `30bbcea` independent VM run is deliberately interrupted for
+this demonstrated source correction, before any check completes. Its own
+cleanup deletes its allocated tasks and confirms preexisting records/assets,
+settings and production unchanged. It remains non-passing. The bounded full
+host-native repeat reaches its 600-second deadline at an actual window-capture
+case and is retained as timed out (exit 124), not passed. No test, permission,
+physical prerequisite or assertion is removed or waived. A fresh isolated
+capture control and final-source original twelve-check verification follow.
+
+Parent owns the pending explicit cross-system review consent request. The
+locally prepared `30bbcea` source packet is obsolete; no packet was transmitted.
+Regenerate exact source/fingerprints for the repaired commit before review.
+No canonical human/visual checkbox, owner, service or deployment change.

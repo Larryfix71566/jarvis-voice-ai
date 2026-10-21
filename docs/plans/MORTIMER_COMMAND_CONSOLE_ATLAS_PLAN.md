@@ -3362,3 +3362,21 @@ its pipeline boundary to provider-selection constructors as well as the early
 readiness guard; neither region is edited by acceptance. Delegate/Base/Registry
 acceptance ownership remains unchanged. Final integration/review/release waits
 for coordinated provider readiness; no human or visual criterion closes.
+
+
+### 2026-10-21 — Time-before-place refusal correction and fresh freeze
+
+`30bbcea` full backend: 6,848 passes/15 skips/two subtests; all five CI checks
+pass. Five actual bound-intent Registry/cache/privacy checks pass. Further
+static/synthetic review finds five failing authority cases around time-before-
+place and hidden multiple targets. Trailing-time handling and named-target
+precedence are corrected; 898 affected tests and all 55 synthetic phrase cases
+pass. These do not establish unrestricted natural-language/model compliance.
+
+The early independent `30bbcea` run is intentionally interrupted before checks
+for this proven repair; owned cleanup and preservation checks pass. Its result
+stays non-passing. The bounded full native repeat times out at 600 seconds;
+retain its stack/log/deadline evidence and run an isolated actual-capture
+control. No skips or security settings are changed. Freeze the repaired source,
+repeat full backend/original independent profile and regenerate the static
+source packet. Parent owns pending external-review consent; no transmission.

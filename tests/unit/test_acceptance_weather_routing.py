@@ -44,6 +44,8 @@ def local_tool(transport, operations):
 @pytest.mark.parametrize("text", [
     "Show weather for Exampleburg.",
     "Show me Exampleburg weather again.",
+    "Do I need an umbrella today in Exampleburg?",
+    "Is it going to rain today in Exampleburg?",
 ])
 async def test_named_city_cannot_execute_device_weather_or_consume_a_display(text):
     owner, transport = A.fixture()
@@ -87,7 +89,8 @@ async def test_local_call_keeps_its_original_owner_after_new_named_turn():
 @pytest.mark.parametrize("text", ["Weather here", "What's the weather?", "Show me current weather",
     "Weather for my location", "Weather for tomorrow", "The weather",
     "Is it going to rain?", "Do I need an umbrella?", "What’s the week look like?",
-    "Do I need an umbrella today?", "What does the week look like weather-wise?"])
+    "Do I need an umbrella today?", "What does the week look like weather-wise?",
+    "Weather right now", "Weather for right now", "Weather for the week"])
 def test_local_requests_keep_the_device_resolver(text):
     assert accepted_weather_intent(text) == WeatherIntent("local")
 
@@ -98,6 +101,8 @@ def test_local_requests_keep_the_device_resolver(text):
     ("Can you show me Metroville weather?", "metroville"),
     ("Weather in Exampleburg, South Carolina tomorrow", "exampleburg, south carolina"),
     ("Forecast for St. Louis", "st. louis"),
+    ("Do I need an umbrella today in Exampleburg?", "exampleburg"),
+    ("Is it going to rain today in Exampleburg?", "exampleburg"),
 ])
 def test_named_requests_preserve_the_accepted_place(text, place):
     assert accepted_weather_intent(text) == WeatherIntent("named", place)
@@ -114,7 +119,7 @@ def test_weather_followups_use_only_the_previous_accepted_weather_target():
 
 
 @pytest.mark.parametrize("text", ["Weather in Exampleburg and Metroville", "Weather in " + "x" * 130,
-    "Weather in " + "x" * 4096])
+    "Weather in " + "x" * 4096, "Weather in Exampleburg today and Metroville"])
 def test_ambiguous_and_oversized_targets_do_not_grant_local_or_named_execution(text):
     intent = accepted_weather_intent(text)
     assert not intent.permits("weather:local:device:synthetic", "local_weather")

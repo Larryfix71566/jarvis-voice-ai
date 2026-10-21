@@ -41,17 +41,20 @@ current_weather_intent: ContextVar[WeatherIntent | None] = ContextVar("weather_i
 _WEATHER = re.compile(r"\b(?:weather|forecast|rain|umbrella)\b", re.I)
 _PREFIX = re.compile(r"^(?:(?:please|can you|could you|would you|show me|show|give me|tell me|"
     r"pull up|check|get|what is|what's|what’s|how is|how's|how’s|the)\s+)+", re.I)
-_AFTER = re.compile(r"\b(?:weather|forecast|rain|umbrella)(?:\s+(?:forecast|conditions))?\s+(?:in|for|at)\s+([^?!;]+)", re.I)
+_AFTER = re.compile(r"\b(?:weather|forecast|rain|umbrella)(?:\s+(?:forecast|conditions))?(?:\s+(?:today|tonight|tomorrow|right now|now))*\s+(?:in|for|at)\s+([^?!;]+)", re.I)
 _TAIL = re.compile(r"\s+(?:weather|forecast)\b.*$", re.I)
-_TIME = re.compile(r"\s+(?:again|now|please|today|tonight|tomorrow|this week|this weekend|"
-    r"for (?:today|tonight|tomorrow|the week)|right now)\b.*$", re.I)
+_TIME = re.compile(r"(?:\s+(?:again|now|please|today|tonight|tomorrow|this week|this weekend|"
+    r"for (?:today|tonight|tomorrow|the week)|right now))+$", re.I)
 _LOCAL = frozenset({"", "here", "local", "current", "my", "my location", "my area",
-    "where i am", "where we are", "right here", "today", "tonight", "tomorrow", "this week"})
+    "where i am", "where we are", "right here", "right now", "today", "tonight", "tomorrow", "this week", "this weekend", "the week"})
 _FOLLOWUP = re.compile(r"^(?:and|what about|how about)\s+(.+?)[?.!]*$", re.I)
 
 
 def _place(value: str) -> str | None:
-    value = _TIME.sub("", value.strip()).strip(" ,?!.")
+    unqualified = canonical_place(value.strip(" ,?!."))
+    if unqualified in _LOCAL:
+        return unqualified
+    value = _TIME.sub("", value.strip(" ,?!.")).strip(" ,?!.")
     result = canonical_place(value)
     if not result or len(result) > 120 or any(c.isdigit() for c in result):
         return None
