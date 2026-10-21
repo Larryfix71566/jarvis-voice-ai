@@ -27,7 +27,13 @@ def held(tmp_path,monkeypatch):
     source=tmp_path/'source/scripts/deploy_main.sh';source.parent.mkdir(parents=True);source.write_bytes(SCRIPT.read_bytes())
     agents=tmp_path/'Library/LaunchAgents';agents.mkdir(parents=True)
     for label in m.LABELS.values():
-        (agents/(label+'.plist')).write_bytes(plistlib.dumps({'Label':label,'EnvironmentVariables':{'JARVIS_LLM_ACCESS_MODE':m.MODE}}))
+        data={'Label':label,'EnvironmentVariables':{'JARVIS_LLM_ACCESS_MODE':m.MODE}}
+        if label in {m.LABELS['costs'],m.LABELS['vault']}:
+            script='run_costs.sh' if label==m.LABELS['costs'] else 'run_kb.sh'
+            data.update(WorkingDirectory=str(c),ProgramArguments=['/bin/bash','-c','cd '+__import__('shlex').quote(str(c))+' && exec ./scripts/'+script])
+        (agents/(label+'.plist')).write_bytes(plistlib.dumps(data))
+    for path in (c/'.venv/bin/python',c/'services/mortimer-vault/.venv/bin/mortimer-vault'):
+        path.parent.mkdir(parents=True,exist_ok=True);path.write_text('synthetic-runtime-not-executed');path.chmod(0o700)
     app=c/'macos/MortimerHost/.build/MortimerHost.app';(app/'Contents/MacOS').mkdir(parents=True)
     (app/'Contents/Info.plist').write_bytes(plistlib.dumps({'MortimerSourceRevision':PRIOR}))
     (app/'Contents/MacOS/MortimerHost').write_text('synthetic-prior-app')
@@ -341,3 +347,25 @@ def test_default_legacy_cannot_bypass_per_service_guard_envelope(held):
     x=held;(x.c/'.env').write_text('JARVIS_LLM_ACCESS_MODE=legacy # synthetic baseline\n')
     x.sys.flags=dict.fromkeys(x.sys.flags,'enabled')
     with pytest.raises(x.m.HeldError):x.h.legacy_allowed()
+
+
+@pytest.mark.parametrize('change',['arguments','program','working-directory'])
+def test_stable_but_noncanonical_launch_command_refused_before_enable(held,change):
+    x=held;p=x.home/'Library/LaunchAgents/com.mortimer.costs.plist';data=plistlib.loads(p.read_bytes())
+    if change=='arguments':data['ProgramArguments']=['/bin/bash','-c','exec foreign-model-command']
+    elif change=='program':data['Program']='/foreign/executable'
+    else:data['WorkingDirectory']=str(x.home/'foreign-project')
+    p.write_bytes(plistlib.dumps(data));x.installed();x.sys.calls.clear()
+    with pytest.raises(x.m.HeldError):x.h.restore(x.rb,['costs'])
+    assert not any(a[0]=='launchctl' and a[1] in ('enable','bootstrap') for a in x.sys.calls)
+
+
+@pytest.mark.parametrize('change',['loader','missing-runtime','foreign-kb'])
+def test_no_loader_or_path_runtime_fallback_before_enable(held,change):
+    x=held;name='vault' if change=='foreign-kb' else 'costs';p=x.home/'Library/LaunchAgents'/(x.m.LABELS[name]+'.plist');data=plistlib.loads(p.read_bytes())
+    if change=='loader':data['EnvironmentVariables']['PYTHONPATH']='/foreign/code'
+    elif change=='foreign-kb':data['EnvironmentVariables']['MORTIMER_VAULT_DIR']='/foreign/vault'
+    else:(x.c/'.venv/bin/python').unlink()
+    p.write_bytes(plistlib.dumps(data));x.installed();x.sys.calls.clear()
+    with pytest.raises(x.m.HeldError):x.h.restore(x.rb,[name])
+    assert not any(a[0]=='launchctl' and a[1] in ('enable','bootstrap') for a in x.sys.calls)

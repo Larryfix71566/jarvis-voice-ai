@@ -294,7 +294,13 @@ Following registration `1f864e6`, the protected canonical deployer gains
 install-held, explicitly limited local restoration and frozen rollback-held.
 Application/provider/native/config/dependency/cleanup bytes remain at207bb8b.
 The [source/synthetic receipt](../acceptance/command-console/receipts/ws17-held-deployment-tool-2026-10-21.md)
-records86 focused passes, syntax checks, actual generated Bash rollback in fake
+records92 focused passes, syntax checks, actual generated Bash rollback in fake
 HOME, no-restart/no-settings-or-DB-restore and source/receipt/lease/hold failures.
 No live action, new permission, private operational record or acceptance closure.
 Required final-head CI and exact source review remain distinct.
+
+Prelaunch source correction: three failing regressions on `162c9d1` now pass;
+canonical local launch arguments/cwd and known runtime are required before
+enable/bootstrap, loader overrides/foreign KB paths refuse, and the helper uses
+isolated no-site Python. Final focused group92passes/4.74s. Final publication CI
+and required exact-source review remain separate; no live action or checkbox.

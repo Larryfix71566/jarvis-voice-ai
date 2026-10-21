@@ -41,7 +41,7 @@ main() {
   [ "$HELD" = 1 ] || [ -z "$APPROVAL" ] || return 2
   [ "$HELD" = 0 ] || [ -n "$APPROVAL" ] || return 2
   held_python() {
-    /usr/bin/python3 - "$@" <<'PY_HELD'
+    /usr/bin/python3 -I -S - "$@" <<'PY_HELD'
 # BEGIN HELD PYTHON
 from __future__ import annotations
 import hashlib, json, os, pathlib, plistlib, re, shutil, signal, stat, subprocess, sys, tarfile, tempfile, time, urllib.request, uuid
@@ -249,13 +249,30 @@ class Held:
         installed={'status':'installed-held','target':a['target'],'policy_sha256':digest(rb/'held-policy.json'),'bundle_sha256':tree_digest(self.c/'macos/MortimerHost/.build/MortimerHost.app')}
         if (rb/'installed-held.json').exists():require(read_json(rb/'installed-held.json')==installed,'installed bundle/receipt drifted')
         else:private_json(rb/'installed-held.json',installed)
+    def prelaunch_source(self,name):
+        # Hash-stable configuration is not proof of the right executable.
+        # Validate the actual source command before any enable/bootstrap.
+        import shlex
+        p=self.home/'Library/LaunchAgents'/(LABELS[name]+'.plist')
+        data=plistlib.loads(p.read_bytes())
+        command={'costs':'exec ./scripts/run_costs.sh','vault':'exec ./scripts/run_kb.sh'}[name]
+        expected=['/bin/bash','-c','cd '+shlex.quote(str(self.c))+' && '+command]
+        require(data.get('ProgramArguments')==expected and not data.get('Program')
+                and data.get('WorkingDirectory')==str(self.c),'noncanonical local launch source')
+        env=data.get('EnvironmentVariables',{})
+        hooks={'BASH_ENV','ENV','PYTHONPATH','PYTHONHOME','PYTHONSTARTUP','LD_PRELOAD',
+               'DYLD_INSERT_LIBRARIES','DYLD_LIBRARY_PATH','DYLD_FRAMEWORK_PATH'}
+        require(not any(env.get(k) for k in hooks),'unsupported local loader override')
+        if name=='vault':require(env.get('MORTIMER_VAULT_DIR',str(self.c/'services/mortimer-vault'))==str(self.c/'services/mortimer-vault'),'foreign KB source')
+        executable=self.c/('.venv/bin/python' if name=='costs' else 'services/mortimer-vault/.venv/bin/mortimer-vault')
+        require(executable.is_file() and os.access(executable,os.X_OK),'recognized local runtime missing; no PATH fallback')
     def restore(self,rb,names):
         rb,a=self.envelope(rb);require(set(names)<=set(LOCAL) and names and len(names)==len(set(names)),'only explicit costs/vault permitted')
         require((rb/'installed-held.json').is_file(),'held installation receipt missing')
         self.installed(rb);self.hold();self.floor(a)
         try:
             for name in names:
-                self.floor(a);label=LABELS[name];self.run('launchctl','enable',self.domain+'/'+label)
+                self.floor(a);self.prelaunch_source(name);label=LABELS[name];self.run('launchctl','enable',self.domain+'/'+label)
                 self.run('launchctl','bootstrap',self.domain,self.home/'Library/LaunchAgents'/(label+'.plist'))
                 for _ in range(100):
                     job=self.job(label)
