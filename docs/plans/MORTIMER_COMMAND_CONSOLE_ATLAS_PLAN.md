@@ -3398,3 +3398,23 @@ original non-passing host runs; do not relabel them as passes or change tests,
 permissions or production. Refresh final frozen source backend/CI/original
 independent profile and exact source review. Parent owns pending transmission
 consent and provider integration. Live/physical criteria remain open.
+
+
+### 2026-10-21 — Frozen automation complete, host/review/integration held
+
+Frozen `d242ba4`: full host backend 6,859 passes/15 skips/two subtests, five CI
+passes, strict metadata zero errors/warnings. Original twelve independent checks
+pass after supported fresh recovery; candidate backend 6,662 passes/11 skips/two
+subtests, native 580 executed/eight skips/zero failures. The
+[scrubbed receipt](../acceptance/command-console/receipts/ws17-acceptance-repair-2026-10-21.md)
+records exact commands/fingerprints/log hashes/source manifest and native limits.
+
+Interrupted attempts and host native/capture failures remain non-passing. A
+post-VM serial capture still fails SCK-3811 despite preflight and no competing
+test. No permission change, waiver or production mutation. Final owned cleanup
+and preservation pass; paused cleanup stays paused. Parent owns pending static
+source consent; no packet sent. Provider owns tool-dispatch preview resolution,
+retaining stop refusal plus source-policy scope. Review/reverify combined source.
+No release before required review/host-native/provider gates or human closure.
+This docs publication keeps runtime/test bytes at `d242ba4`; publication CI is
+separate. One focused Larry session follows release gates, then real observation.

@@ -191,3 +191,35 @@ by these diagnostics. Final native/privacy/physical acceptance remains open.
 Freeze this stop-turn correction, refresh complete backend/CI and original
 independent twelve-check verification, and regenerate the source-only review
 packet. Parent owns pending review consent and provider release coordination.
+
+
+## Frozen-source automated evidence complete; remaining gates held
+
+Frozen `d242ba4` passes full host backend (6,859 passes, 15 skips, two subtests,
+19 warnings), five CI jobs and strict roadmap drift (zero errors/warnings).
+The original twelve-check independent profile passes after fresh supported
+recovery: candidate backend 6,662 passes/11 skips/two subtests; native 580
+executed/eight prerequisite skips/zero failures. Exact commands/log hashes and
+source/test fingerprints are verified in the
+[scrubbed receipt](../acceptance/command-console/receipts/ws17-acceptance-repair-2026-10-21.md).
+
+Preserve both interrupted attempts and all non-passing host native evidence.
+The first frozen-source attempt loses its orchestrator during executor transport
+loss. No guest test remains before recovery; its orphan child is disposed and
+the exact candidate refrozen before all twelve checks rerun. Owned cleanup and
+preservation checks pass; production, settings and prior records are unchanged.
+The scheduled cleanup job stays paused. Post-VM serial capture still fails SCK
+-3811 despite preflight, with no competing tests. Resource contention is not
+established as cause. No permission change or waiver.
+
+Static source review awaits parent-managed consent; no packet was transmitted
+and no verdict exists. Provider owns the newer combined tool-dispatch conflict,
+retaining stop refusal plus source-policy scope. Base/Registry have no acceptance
+edits; exact shared regions/two metadata conflicts are documented in #233.
+Combined source must be reviewed and reverified. This publication changes docs
+only; runtime/test bytes match `d242ba4` and its own CI is separate. No owner,
+human/visual checkbox, deployment or observation gate closes.
+
+Publication validation: 57 existing roadmap reader/event/drift contracts pass
+(two deprecation warnings); strict checker remains zero errors/warnings. Runtime
+and test trees are byte-identical to `d242ba4`; publication CI is distinct.
