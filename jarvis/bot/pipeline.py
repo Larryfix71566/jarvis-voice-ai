@@ -107,6 +107,7 @@ from jarvis.bot.console_protocol import (
 from jarvis.bot.console_protocol import hello as console_hello
 from jarvis.bot.console_session import ConsoleSession
 from jarvis.privacy_policy import DataPolicy, make_tool_execution_scope, validate_tool_result
+from jarvis.voice_sources import VoiceSources, ClassifiedText, UNKNOWN, source_scope, text_policy, bound_context_type
 from jarvis.runlog.context import get_run_id
 from jarvis.bot.costs_tool import build_cost_summary_tool
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
@@ -538,6 +539,8 @@ class WeatherContextMinimizer(FrameProcessor):
     def minimize(self, context: Any) -> None:
         self.context = context
         messages = context.get_messages()
+        sources = getattr(self, "sources", None)
+        source_snapshot = [(message, sources.message_policy(message)) for message in messages] if sources else []
         boundaries = [i for i, message in enumerate(messages) if is_real_user_message(message)]
         if not boundaries:
             return
@@ -582,6 +585,8 @@ class WeatherContextMinimizer(FrameProcessor):
                     self.late_notes = [note for note in self.late_notes if note is not message]
             elif affected and message.get("role") == "assistant" and message.get("content"):
                 message["content"] = _WEATHER_CONTEXT_NOTE
+        for message, policy in source_snapshot:
+            sources.bind(message, policy)
         self.weather_calls.difference_update(consumed)
         self.ready_calls.difference_update(consumed)
         self.relay_turns = [turn for turn in self.relay_turns if any(turn is msg for msg in messages[cutoff:])]
@@ -664,6 +669,7 @@ class Runtime:
     # the inbound content transfer. Set by build_pipeline for this session.
     console_generation: str = ""
     weather_context: Any = field(default_factory=WeatherContextMinimizer)
+    voice_sources: Any = field(default_factory=VoiceSources)
     foreground_requests: Any = None
     # Command Console state is created per pipeline in build_pipeline() and
     # read by run_session()'s message handlers. It lives here because the
@@ -767,6 +773,7 @@ def adapt_to_pipecat(
     name: str, dict_handler, *, runlog_enabled: bool = False,
     session_id: str | None = None, weather_context: WeatherContextMinimizer | None = None,
     foreground_requests: ForegroundRequests | None = None,
+    sources: VoiceSources | None = None,
 ):
     """Adapt a jarvis tool handler to pipecat's calling convention.
 
@@ -801,8 +808,19 @@ def adapt_to_pipecat(
         weather_token = (_weather_context_call.set(_WeatherContextCall(weather_context, tool_call_id))
                          if weather_context is not None else None)
         try:
-            with run_logger_scope(runlog):
-                result = await dict_handler(params.arguments)
+            input_policy = (sources.policy_for_context(sources.context)
+                            if sources is not None and sources.context is not None else UNKNOWN)
+            with source_scope(input_policy) as result_sources:
+                with run_logger_scope(runlog):
+                    result = await dict_handler(params.arguments)
+                if type(result) is ClassifiedText:
+                    result_sources.observe(result.policy)
+                elif not result_sources.observations:
+                    result_sources.observe(UNKNOWN)
+            if sources is not None:
+                sources.tool_result(tool_call_id, result, result_sources.policy or UNKNOWN)
+            if type(result) is ClassifiedText:
+                result = str(result)
             task = asyncio.current_task()
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError
@@ -853,6 +871,7 @@ def register_supervisor_tool(
     llm, name: str, dict_handler, *, runlog_enabled: bool = False,
     session_id: str | None = None, weather_context: WeatherContextMinimizer | None = None,
     foreground_requests: ForegroundRequests | None = None,
+    sources: VoiceSources | None = None,
 ) -> None:
     """Register one direct Supervisor tool under a single spelling of its
     name — passing it twice invites a handler registered under the wrong
@@ -862,7 +881,7 @@ def register_supervisor_tool(
         adapt_to_pipecat(
             name, dict_handler, runlog_enabled=runlog_enabled,
             session_id=session_id, weather_context=weather_context,
-            foreground_requests=foreground_requests,
+            foreground_requests=foreground_requests, sources=sources,
         ),
     )
 
@@ -1164,6 +1183,12 @@ def build_pipeline(
     WebRTC case passes None and keeps its connection-level handler.
     """
     settings = runtime.settings
+    # This adapter has no verified native subscription streaming/tool path.
+    # Refuse before constructing any voice resource, without an API fallback.
+    from jarvis.provider_access import require_voice_readiness
+    require_voice_readiness(getattr(settings, "jarvis_llm_access_mode", None))
+    if runtime.voice_sources.context is not None:
+        runtime.voice_sources = runtime.voice_sources.for_new_context()
     pusher = pusher or FramePusher()
     console_generation = str(uuid.uuid4())
     runtime.console_generation = console_generation
@@ -1481,7 +1506,9 @@ def build_pipeline(
         if user_agg is None:  # pragma: no cover - pipeline always sets it
             _logger.warning("clipboard_inject_dropped reason=no_context")
             return
-        user_agg.add_messages([{"role": "user", "content": text}])
+        message = {"role": "user", "content": str(text)}
+        runtime.voice_sources.bind(message, text_policy(text))
+        user_agg.add_messages([message])
 
     def _clipboard_call(path: str, post: bool = False) -> dict:
         """One owner of the armed flag: the sidecar. The bot could run
@@ -1529,6 +1556,8 @@ def build_pipeline(
     # 4,096-token cache floor (below it, caching silently stops), and
     # whether the Stage A1 cap raise actually cleared the tier-cap drops.
     memory_stats: dict = {}
+    from jarvis.memory import classify_memory_context
+    memory_snapshot = classify_memory_context(render_memory_context(stats=memory_stats))
     system_prompt = build_supervisor_prompt(
         jarvis_name=settings.jarvis_name,
         user_name=settings.jarvis_user_name,
@@ -1537,7 +1566,7 @@ def build_pipeline(
         agent_catalog=agent_catalog,
         model_catalog=render_model_catalog(),
         voice_catalog=catalog_summary(catalog),
-        memory_context=render_memory_context(stats=memory_stats),  # U2.5
+        memory_context=str(memory_snapshot),  # U2.5; source binding retained below
         voice=True,
         # U5/U6: the addendum ships only when the tool does — a prompt
         # describing an unregistered tool would invite hallucinated calls.
@@ -1600,7 +1629,17 @@ def build_pipeline(
     # base_url routes there. Everything else keeps OpenAILLMService
     # unchanged. Lazy import: google-genai is an optional dependency and a
     # non-Google deployment must not need it installed.
-    if "generativelanguage.googleapis.com" in (settings.openai_base_url or ""):
+    from jarvis.provider_access import subscription_only
+    if subscription_only() or getattr(settings, "jarvis_llm_access_mode", None) == "subscription_only":
+        # Candidate integration only: the early readiness guard still blocks
+        # activation. No ordinary-turn boolean may authorize the full context.
+        from jarvis.bot.subscription_llm import SubscriptionVoiceLLMService
+        from jarvis.model_routing import resolve_model_route
+        llm = request_bound_service(SubscriptionVoiceLLMService, runtime.foreground_requests)(
+            resolved=resolve_model_route("voice_supervisor"),
+            sources=runtime.voice_sources, session_id=runtime.session_id,
+        )
+    elif "generativelanguage.googleapis.com" in (settings.openai_base_url or ""):
         from pipecat.services.google.llm import GoogleLLMService
         llm = request_bound_service(GoogleLLMService, runtime.foreground_requests)(
             api_key=settings.openai_api_key,
@@ -1655,7 +1694,7 @@ def build_pipeline(
             runlog_enabled=bool(getattr(settings, "jarvis_runlog_enabled", False)),
             session_id=runtime.session_id,
             weather_context=runtime.weather_context if name in {"delegate_task", "local_weather"} else None,
-            foreground_requests=runtime.foreground_requests,
+            foreground_requests=runtime.foreground_requests, sources=runtime.voice_sources,
         )
 
     register_voice_tool("delegate_task", weather_delegate_handler if command_console_enabled else delegate_handler)
@@ -1736,8 +1775,11 @@ def build_pipeline(
             weather=local_weather_on,
         )
     ]
-    context = LLMContext(
-        messages=[{"role": "system", "content": system_prompt}],
+    system_message = {"role": "system", "content": system_prompt}
+    runtime.voice_sources.bind(system_message, memory_snapshot.policy)
+    runtime.weather_context.sources = runtime.voice_sources
+    context = bound_context_type()(
+        sources=runtime.voice_sources, messages=[system_message],
         tools=ToolsSchema(standard_tools=standard_tools),
     )
     # Tier 2 (MORTIMER_VOICE_ISOLATION_TIER12_PLAN.md §4.3) — a local
@@ -1808,9 +1850,8 @@ def build_pipeline(
     # inject_late_result, including its in-flight deferral: a context push
     # mid-delegation makes the model answer around a hole (2026-09-05).
     async def _reply_guard_correction(note_text: str) -> None:
-        message = {"role": "user", "content": note_text}
+        message = runtime.voice_sources.append(aggregators.user(), note_text)
         runtime.voice_state.notes.append(message)
-        aggregators.user().add_messages([message])
         if foreground_delegation_count():
             _logger.info("reply_guard_correction_deferred_inflight delegations=%d",
                          foreground_delegation_count())
@@ -1842,7 +1883,7 @@ def build_pipeline(
     # nothing.
     if speaker_gate_state is not None:
         async def _inject_speaker_drop_note(text: str) -> None:
-            aggregators.user().add_messages([{"role": "user", "content": text}])
+            runtime.voice_sources.append(aggregators.user(), text)
 
         speaker_transcript_gate = TranscriptGate(
             speaker_gate_state,
@@ -2125,7 +2166,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # appends to the shared context so the note surfaces naturally on
             # the next real user turn instead of triggering an immediate,
             # unprompted spoken reply.
-            aggregators.user().add_messages([{"role": "user", "content": text}])
+            runtime.voice_sources.append(aggregators.user(), text)
 
         async def handle_voice_consent(text: str) -> bool:
             """Consume only an exact final user phrase for a pending offer."""
@@ -2172,7 +2213,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         # Constructed here so inject_late_result below can arm it; the
         # settings flag is the kill switch.
         late_neutralizer = LateResultNeutralizer(
-            enabled=settings.jarvis_late_result_neutralize_enabled,
+            enabled=settings.jarvis_late_result_neutralize_enabled, sources=runtime.voice_sources,
         )
         observers = [
             TranscriptObserver(runtime.session_id, only_from=runtime.speaker_gate,
@@ -2246,11 +2287,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # connected (late results, daily status) ride on the greeting,
             # once — take_pending marks them delivered, so it runs here,
             # when the greeting is actually sent.
+            pending_notices = notices.take_pending()
             greeting_note = (connection_greeting_note(settings.jarvis_timezone)
-                             + notices.render_for_greeting(notices.take_pending()))
-            aggregators.user().add_messages([{
-                "role": "user", "content": greeting_note,
-            }])
+                             + notices.render_for_greeting(pending_notices))
+            # Persisted notice rows have no authenticated policy field. They
+            # may originate in a local-only task; do not lower that floor.
+            greeting_policy = (DataPolicy("local_only", "unclassified-persisted-notices")
+                               if pending_notices else UNKNOWN)
+            runtime.voice_sources.append(aggregators.user(), greeting_note, policy=greeting_policy)
             await aggregators.user().push_context_frame()
 
         greeting = ConnectGreeting(_send_greeting)
@@ -2305,7 +2349,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
 
         async def inject_context(text: str) -> None:
             # D-008: same 1.4 context-injection pattern as the greeting.
-            aggregators.user().add_messages([{"role": "user", "content": text}])
+            runtime.voice_sources.append(aggregators.user(), text)
             await aggregators.user().push_context_frame()
 
         async def inject_late_result(text: str) -> bool:
@@ -2319,7 +2363,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # neutralizer so its imperative dies with the relay turn. The
             # dict handed to add_messages is the one the neutralizer later
             # rewrites — pipecat's LLMContext keeps the caller's objects.
-            message = {"role": "user", "content": text}
+            message = {"role": "user", "content": str(text)}
+            runtime.voice_sources.bind(message, text_policy(text))
             late_neutralizer.arm(message)
             runtime.weather_context.arm_late_note(message)
             aggregators.user().add_messages([message])

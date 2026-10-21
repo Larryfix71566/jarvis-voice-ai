@@ -34,6 +34,7 @@ from jarvis.agent_skills import (
     skill_selection_v2_enabled,
     skills_workspace_enabled,
 )
+from jarvis.voice_sources import ClassifiedText, UNKNOWN, source_scope, source_tracking_active, text_policy
 from jarvis.bot.sensitive_turn import current_sensitive_turn
 from jarvis.model_routing import resolve_policy
 from jarvis.procedures import _overlap_score, _tokens, learn_from_run
@@ -671,14 +672,20 @@ def build_delegate_tool(
             # (SubAgent.run() never raises; failures come back as
             # "FAILED: ..." strings) does not affect the semaphore or any
             # sibling delegation.
-            async with semaphore:
-                result = await agent.run(
-                    task, on_event=on_event, run_id=run_id,
-                    session_id=session_id,
-                    model_profile_override=model_profile or None,
-                    private_result_sink=private_result_sink,
-                    explicit_skill_id=explicit_skill_id or None,
-                )
+            export_source = source_tracking_active()
+            with source_scope() as result_sources:
+                async with semaphore:
+                    result = await agent.run(
+                        task, on_event=on_event, run_id=run_id,
+                        session_id=session_id,
+                        model_profile_override=model_profile or None,
+                        private_result_sink=private_result_sink,
+                        explicit_skill_id=explicit_skill_id or None,
+                    )
+                if type(result) is ClassifiedText:
+                    result_sources.observe(result.policy)
+                elif not result_sources.observations:
+                    result_sources.observe(UNKNOWN)
             # F9 — the honesty backstop. "Checking with Fable now" was a
             # promise the Supervisor had no mechanism to keep (measured
             # live, 2026-08-22: the developer ran on its DEFAULT model
@@ -744,7 +751,7 @@ def build_delegate_tool(
                     "what information would settle it.]"
                 )
             _emit_terminal(not failed)
-            return result
+            return ClassifiedText(result, result_sources.policy or UNKNOWN) if export_source else result
 
         # Barge-in survival: the WORK runs in a detached task; only the
         # AWAIT below belongs to the voice turn. When the user speaks over
@@ -827,7 +834,7 @@ def build_delegate_tool(
                 if live is not None and live is not fn:
                     # Another, unprotected session: an armed turn's result
                     # is redacted there exactly as in the outbox.
-                    elsewhere = (_late_note(agent.display_name, SENSITIVE_LATE_NOTICE)
+                    elsewhere = (ClassifiedText(_late_note(agent.display_name, SENSITIVE_LATE_NOTICE), text_policy(note))
                                  if armed else note)
                     if await _offer(live, elsewhere):
                         logger.info("delegate_late_result_redirected agent=%s "
@@ -851,7 +858,7 @@ def build_delegate_tool(
                     _emit_terminal(not str(task.result()).startswith("FAILED:"))
                     outcome = task.result()
                 delivery_outcome = SENSITIVE_LATE_NOTICE if armed else outcome
-                note = _late_note(agent.display_name, delivery_outcome)
+                note = ClassifiedText(_late_note(agent.display_name, delivery_outcome), text_policy(outcome))
                 fn = (late_delivery or {}).get("fn")
                 _spawn_background(_deliver_or_outbox(fn, note, outcome))
 

@@ -267,6 +267,8 @@ async def _fidelity_check(client, model: str, system_prompt: str, schema: dict,
 
 async def bench_candidate(candidate: dict, system_prompt: str, schema: dict,
                            known_agents: set[str]) -> dict:
+    from scripts.check_env import require_model_api_access
+    require_model_api_access()
     from openai import AsyncOpenAI
 
     key = os.environ.get(candidate["api_key_env"], "").strip()
@@ -345,6 +347,9 @@ def main(argv: list[str]) -> int:
                          help="comma-separated candidate names to bench")
     args = parser.parse_args(argv[1:])
 
+    if not args.dry_run:
+        from scripts.check_env import require_model_api_access
+        require_model_api_access()
     vault_note = _load_vault()
     print(f"voice_model_bench — {vault_note}", file=sys.stderr)
 

@@ -57,9 +57,10 @@ import openai
 
 from jarvis.anthropic_shim import AnthropicChatShim, AsyncAnthropicChatShim
 from jarvis.usage_ledger import ApiCompletionMetadata, provider_from_base_url
+from jarvis.provider_access import require_api_access, require_api_request
 
 
-def _instrument_completion(client: Any, provider: str, *, asynchronous: bool) -> Any:
+def _instrument_completion(client: Any, provider: str, *, asynchronous: bool, base_url: str | None = None) -> Any:
     """Measure this API adapter without changing its client/response identity.
 
     The wrapper forwards every argument unchanged and does not write a ledger
@@ -97,11 +98,15 @@ def _instrument_completion(client: Any, provider: str, *, asynchronous: bool) ->
     if asynchronous:
         @wraps(create)
         async def measured(**kwargs: Any) -> Any:
+            require_api_request(kwargs, provider=provider,
+                                base_url=str(getattr(client, "base_url", base_url) or ""))
             started = time.monotonic()
             return mark(await create(**kwargs), kwargs, started)
     else:
         @wraps(create)
         def measured(**kwargs: Any) -> Any:
+            require_api_request(kwargs, provider=provider,
+                                base_url=str(getattr(client, "base_url", base_url) or ""))
             started = time.monotonic()
             return mark(create(**kwargs), kwargs, started)
     measured._mortimer_measured = True
@@ -206,13 +211,14 @@ def make_async_client(*, api_key: str, base_url: str | None, provider: str | Non
     from the actual `.create(model=...)` kwarg, which is the only place
     a per-call model can be trusted)."""
     resolved = _resolve_provider(provider, base_url)
+    require_api_access(provider=resolved, base_url=base_url)
     kwargs = _client_kwargs(api_key, base_url, timeout, max_retries)
     if resolved == "anthropic" and native_enabled():
-        return _instrument_completion(AsyncAnthropicChatShim(**kwargs), resolved, asynchronous=True)
+        return _instrument_completion(AsyncAnthropicChatShim(**kwargs), resolved, asynchronous=True, base_url=base_url)
     client = openai.AsyncOpenAI(**kwargs)
     if resolved == "openrouter":
         client = _OpenRouterCachingClient(client, resolved, _AsyncOpenRouterCompletions)
-    return _instrument_completion(client, resolved, asynchronous=True)
+    return _instrument_completion(client, resolved, asynchronous=True, base_url=base_url)
 
 
 def make_sync_client(*, api_key: str, base_url: str | None, provider: str | None = None,
@@ -223,10 +229,11 @@ def make_sync_client(*, api_key: str, base_url: str | None, provider: str | None
     `jarvis/council/council.py`'s `_call_profile()`. See
     `make_async_client` for the decision rules; identical, sync-flavoured."""
     resolved = _resolve_provider(provider, base_url)
+    require_api_access(provider=resolved, base_url=base_url)
     kwargs = _client_kwargs(api_key, base_url, timeout, max_retries)
     if resolved == "anthropic" and native_enabled():
-        return _instrument_completion(AnthropicChatShim(**kwargs), resolved, asynchronous=False)
+        return _instrument_completion(AnthropicChatShim(**kwargs), resolved, asynchronous=False, base_url=base_url)
     client = openai.OpenAI(**kwargs)
     if resolved == "openrouter":
         client = _OpenRouterCachingClient(client, resolved, _SyncOpenRouterCompletions)
-    return _instrument_completion(client, resolved, asynchronous=False)
+    return _instrument_completion(client, resolved, asynchronous=False, base_url=base_url)

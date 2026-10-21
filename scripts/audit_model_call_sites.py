@@ -32,6 +32,10 @@ FAMILY_BY_PATH = {
     "kb_digest.py": ("background_routed", "Knowledge digest uses background route factory"),
     "procedures.py": ("background_routed", "Procedure description uses background route factory"),
     "bot/pipeline.py": ("mixed_routed", "Voice supervisor plus validated shared-content vision route"),
+    "bot/subscription_llm.py": (
+        "subscription_voice_candidate",
+        "Gated native voice uses shared execution and host-classified context; no API fallback",
+    ),
     "model_execution.py": ("execution_boundary", "Provider-neutral policy execution boundary"),
     "memory_automation_eval.py": (
         "background_routed",

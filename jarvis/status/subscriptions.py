@@ -160,7 +160,9 @@ def probe_subscription(which: Which, model: str | None = None, *,
             return {**hit[1], "cached": True}
 
     command = subscription_command(which)
-    installed = shutil.which(command) is not None
+    from jarvis.subscription import resolve_provider_executable
+    executable = resolve_provider_executable(which)
+    installed = executable is not None
     result: dict[str, Any] = {
         "which": which, "model": tried, "ok": False, "response_present": False,
         "category": None, "installed": installed, "command": command,
