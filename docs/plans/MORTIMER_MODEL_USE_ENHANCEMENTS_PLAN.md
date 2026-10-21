@@ -1034,3 +1034,49 @@ continuation. Original full-run evidence was kept frozen until completion;
 only then was this bounded repair applied. Source schemas remain bound by the
 existing exact-workload native receipt gate. No source authorization, private
 label, runtime/credential gate or production activation was relaxed.
+
+## 2026-10-21 — Selective direct-provider shutdown; preserve explicit OpenRouter
+
+Larry corrected the rollout priority: stop direct OpenAI/Anthropic immediately,
+keep OpenRouter available, and continue implementation/merge with existing
+checks. At 11:27:52 UTC the bot, extractor, admin, costs, daily-status and vault
+launch agents were reversibly disabled and unloaded. All former processes
+exited; aggregate-only local ledger verification at 11:29:13 found zero new
+calls since shutdown. Native UI remained open. No credential, OpenRouter
+configuration or production source changed. This broad temporary stop also
+makes OpenRouter unavailable through the stopped services; it is not the final
+selective restoration. Detailed process metadata/rollback state stays local.
+
+The original `subscription_only` meaning is retained. New reserved value
+`direct_apis_disabled` denies direct/unknown API endpoints and implicit fallback,
+while permitting explicitly configured canonical `https://openrouter.ai/api/v1`
+requests through the existing validated execution boundary. Endpoint and
+provider-label checks precede construction; retained clients recheck their
+actual endpoint on every completion. SDK protocol/model branding cannot make a
+direct OpenAI/Anthropic request eligible. No workload/profile/default is silently
+rewritten to OpenRouter or subscriptions.
+
+OpenRouter completion admission is scoped to the exact already validated
+payload and approved-external source policy. The scope is reset after success,
+error or cancellation; legacy unclassified clients cannot use it. Existing
+private/local-only history checks still refuse before client creation. Native
+subscription/local routes retain their existing runtime/source/receipt/operator
+gates, and no new account inference is authorized by this mode. Voice stays
+blocked until its whole protected context has an eligible route; no memory
+removal, redaction-by-assumption or blanket declassification is introduced.
+Standalone diagnostics still refuse paid probes. Speech billing is separate.
+
+First focused gate: 119 tests pass, including a real OpenAI SDK with offline
+HTTP mock transport, public OpenRouter success, confidential/local-only refusal,
+exact-payload binding, endpoint spoof/retarget rejection, retained direct-client
+refusal and direct-route refusal with injected clients. Expanded and full gates
+are recorded on the revised PR. Prior b1f07a2/794a298 receipts remain historical;
+they do not validate this policy change. Acceptance #233 has advanced with
+additional host evidence; its owner retains combined verification, merge order
+and guarded release/restoration. No service should be enabled before this exact
+policy source is deployed and its effective setting verified. Non-inference
+services may then be restored independently; protected voice/background work
+must remain unavailable rather than buying direct inference or leaking private
+data to OpenRouter. External review and bounded synthetic subscription tests
+are now approved, but no inference (including review) may run until paid-overage
+disabled confirmation is obtained. Login metadata does not establish that gate.

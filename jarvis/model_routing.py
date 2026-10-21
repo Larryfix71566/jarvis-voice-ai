@@ -837,7 +837,8 @@ def _validate_client_endpoint(resolved: ResolvedModelRoute) -> None:
     # The billing policy still runs before credential lookup/client creation.
     from jarvis.provider_access import ProviderAccessError, require_route_access
     try:
-        require_route_access(route.name)
+        require_route_access(route.name, provider=resolved.provider,
+                             base_url=resolved.base_url, resolved=True)
     except ProviderAccessError as exc:
         raise ModelRouteError(str(exc)) from None
 
