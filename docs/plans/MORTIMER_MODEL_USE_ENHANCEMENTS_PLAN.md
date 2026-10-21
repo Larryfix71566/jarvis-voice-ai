@@ -818,9 +818,9 @@ The service requires a host-owned policy for the **entire** context, including r
 
 **Updated bounded handoff:** in `jarvis/bot/pipeline.py`, WS-05 changes only the early guard in `build_pipeline` and the adjacent-to-existing LLM provider-selection branch around the Google/Anthropic/OpenAI constructors. Acceptance retains all weather, result, interruption/foreground logic plus delegate/Base/Registry files; those three files remain unchanged by WS-05. Final integrated release remains acceptance-owned. No separate deployment.
 
-Codex command discovery now checks an explicit override first, then PATH, then the already-installed ChatGPT app's bundled executable. An explicit unavailable override never falls back. This changes no installed file, credential or service setting and does not relax the pinned version/capability receipt. Read-only status commands with a credential-stripped environment report Codex `logged in using ChatGPT`; Claude's JSON status reports `loggedIn=false`. These describe this CLI environment only, not an invoice or account entitlement. No identity/email/token fields were retained. The current bundled Codex version remains unverified for the pinned no-tool contract.
+Codex command discovery now checks an explicit override first, then PATH, then the already-installed ChatGPT app's bundled executable. An explicit unavailable override never falls back. This changes no installed file, credential or service setting and does not relax the pinned version/capability receipt. Read-only status commands with a credential-stripped environment report Codex `logged in using ChatGPT`. The first sandboxed Claude check returned `loggedIn=false`; a status-only repeat outside the sandbox confirms both installed Claude 2.1.290 and 2.1.291 report `loggedIn=true`, `authMethod=claude.ai`, `subscriptionType=max`. This corrects a sandbox Keychain-access artifact, not an account change. No new sign-in is indicated. These checks do not verify allowance, invoice cost or paid-overage settings. No identity/email/token fields were retained. The current bundled Codex version remains unverified for the pinned no-tool contract.
 
-The minimum **future** live-test approval is specific: authorize bounded synthetic-only requests through official Claude Code (voice/tool model and exact synthetic schema) and Codex (gpt-6-astra text-only), consuming subscription quota with possible account overage exposure if enabled; direct API/OpenRouter fallback remains prohibited. Claude sign-in must first be completed through its official interface, with account allowance/overage confirmed separately. No real conversation, repo, memory, file, clipboard or private tool result is included in that proposed proof. Production voice context/private-source routing and latency acceptance remain separate gates; synthetic approval cannot authorize those payloads. Current restrictions still prohibit provider inference, so none has been attempted.
+The minimum **future** live-test approval is specific: authorize bounded synthetic-only requests through official Claude Code (voice/tool model and exact synthetic schema) and Codex (gpt-6-astra text-only), consuming subscription quota with possible account overage exposure if enabled; direct API/OpenRouter fallback remains prohibited. Claude Max and Codex ChatGPT login metadata are confirmed; account allowance/overage must be confirmed separately. Do not ask for a redundant sign-in based on the sandbox-only result. No real conversation, repo, memory, file, clipboard or private tool result is included in that proposed proof. Production voice context/private-source routing and latency acceptance remain separate gates; synthetic approval cannot authorize those payloads. Current restrictions still prohibit provider inference, so none has been attempted.
 
 The alternative implemented here is buffered Claude subscription speech plus host-executed tools, subject to latency acceptance. A later incremental-streaming contract needs exact-runtime evidence and matching receipts. Codex remains a text-role option; no unsupported Codex tool/voice capability is claimed. Full clean offline validation and final-head CI are next.
 
@@ -842,3 +842,43 @@ inventory assertion. That run also inherited audio enablement during collection
 and overlapped the resolver repair, so it is not final-head evidence. The clean
 rerun explicitly sets `JARVIS_NS_ENABLED=false` for the test process (tests may
 still override it), disables live tests, and freezes the committed candidate.
+
+
+### 2026-10-21 — Frozen-source verification and exact remaining acceptance
+
+Runtime candidate `763bfe1926e2b9f0ed0279db9a3b0d81b0eadc15` passes the full
+clean unit suite: **6,661 passed, 11 skipped, 2 subtests passed** in 206.13 s.
+The run used a minimal environment containing only host execution essentials,
+`RUN_LIVE=0`, and explicit default-disabled audio/console flags. Test vault and
+ledger isolation remained active. Earlier local wiring failures were caused by
+inherited production console enablement; a 5 ms deadline test also once expired
+before reaching its mock under concurrent suite load. No assertion, deadline,
+source scanner, fixture pin or production setting was weakened. The integration
+and scripted eval gates are running sequentially; final PR evidence will record
+their terminal results and all five final-head CI outcomes.
+
+The minimum proposed human confirmation for later live proof is: authorize one
+bounded Claude Code 2.1.290 / Haiku 4.5 synthetic voice-tool session and one Codex
+/ gpt-6-astra synthetic text session, each at most 120 seconds with no retries,
+only after the applicable runtime capability gates pass. Claude would receive
+explicitly reviewed tool schemas with synthetic stub results, plus a synthetic
+prompt; Codex receives synthetic text only. No real conversation, memory,
+repository file content, clipboard, screen image or private result may be sent.
+Subscription quota will be consumed; **paid overage must be confirmed disabled,
+or separately approved with an enforceable limit before any request**. Direct
+API and OpenRouter fallback remain forbidden. This is the exact future request,
+not authorization supplied by this document, and does not establish production
+privacy or latency acceptance.
+
+Remaining technical/source gates are concrete: the current Codex binary still
+needs its own verified no-tools contract; the native Claude receipt must match
+the actual voice model/tool schema and executable; buffered response latency and
+interruption need live confirmation. The full voice context contains retained
+memory/tool material without comprehensive trusted source labels, so it is
+confidential by default. Subscription routes are `approved_external`, and no
+eligible local runtime or attested confidential route is configured. A blanket
+ordinary-turn approval or an API-compatible URL cannot solve that mismatch.
+The implemented alternative is buffered Claude speech with Mortimer-owned tools
+for appropriately classified workloads. Protected work must remain unavailable
+until an eligible private/local route exists or Larry explicitly approves a
+narrow source-policy change. Existing restrictions have not been relaxed.

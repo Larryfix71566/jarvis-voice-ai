@@ -38,6 +38,13 @@ Buffered Claude voice/tool adapter implemented with 14 synthetic tests passing,
 including actual Pipecat registered-handler dispatch. The LLM provider-selection
 branch is now also part of the bounded pipeline overlap; delegate/Base/Registry
 remain untouched. Codex bundle discovery preserves explicit overrides and
-exact-version gates. Read-only sanitized CLI status reports Codex ChatGPT login
-and Claude not logged in. No inference, activation or credential mutation.
+exact-version gates. Read-only status confirms Codex ChatGPT login and, outside the sandbox,
+Claude.ai Max login on both installed versions. The earlier sandbox-only
+logged-out result was an access artifact; no sign-in or account change occurred. No inference, activation or credential mutation.
 See the plan's continuation for precise remaining source/account/live gates.
+
+
+Frozen runtime `763bfe1` clean unit result: 6,661 passed, 11 skipped, two
+subtests passed. Runtime source stays frozen; this follow-up corrects account
+metadata and records evidence/remaining acceptance only. Integration/evals and
+final-head CI terminal outcomes are recorded on PR #232 when available.
