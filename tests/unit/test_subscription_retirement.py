@@ -107,15 +107,17 @@ def test_codex_discovery_keeps_explicit_command_authoritative(monkeypatch, tmp_p
     monkeypatch.setattr(subscription, "_BUNDLED_CODEX", bundled)
     monkeypatch.setattr(subscription.shutil, "which", lambda _: None)
     monkeypatch.delenv("JARVIS_CODEX_SUBSCRIPTION_COMMAND", raising=False)
-    assert subscription.provider_command("codex") == str(bundled)
+    assert subscription.provider_command("codex") == "codex"
+    assert subscription.resolve_provider_executable("codex") == str(bundled)
     monkeypatch.setenv("JARVIS_CODEX_SUBSCRIPTION_COMMAND", "/missing/explicit-codex")
     assert subscription.provider_command("codex") == "/missing/explicit-codex"
+    assert subscription.resolve_provider_executable("codex") is None
     monkeypatch.delenv("JARVIS_CODEX_SUBSCRIPTION_COMMAND")
     monkeypatch.setattr(subscription.shutil, "which", lambda _: "/path/codex")
-    assert subscription.provider_command("codex") == "codex"
+    assert subscription.resolve_provider_executable("codex") == "/path/codex"
     monkeypatch.setattr(subscription.shutil, "which", lambda _: None)
     bundled.chmod(0o600)
-    assert subscription.provider_command("codex") == "codex"
+    assert subscription.resolve_provider_executable("codex") is None
 
 
 def test_standalone_key_diagnostic_refuses_before_vault(retired):
@@ -234,7 +236,7 @@ def test_subscription_policy_cannot_gain_a_paid_fallback(retired):
 
 def test_readiness_does_not_claim_account_or_activation(monkeypatch):
     from jarvis import subscription_readiness as readiness
-    monkeypatch.setattr(readiness.shutil, "which", lambda _: None)
+    monkeypatch.setattr(readiness, "resolve_provider_executable", lambda _: None)
     report = readiness.retirement_readiness()
     assert report["inference_attempts"] == 0
     assert report["activation_ready"] is False

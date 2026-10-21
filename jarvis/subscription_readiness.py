@@ -1,7 +1,6 @@
 """Read-only subscription retirement diagnostics; never run inference or auth."""
 from __future__ import annotations
 
-import shutil
 import os
 from pathlib import Path
 from typing import Any
@@ -9,7 +8,7 @@ from typing import Any
 from jarvis.provider_access import access_mode
 from jarvis.subscription import (
     CODEX_VERIFIED_VERSIONS, SubscriptionCapabilityError, codex_runtime_identity,
-    provider_command,
+    resolve_provider_executable,
 )
 from jarvis.subscription_tools import CLAUDE_NATIVE_VERSIONS, claude_tool_runtime_identity
 
@@ -20,7 +19,7 @@ def retirement_readiness() -> dict[str, Any]:
         ("claude", claude_tool_runtime_identity, CLAUDE_NATIVE_VERSIONS),
         ("codex", codex_runtime_identity, CODEX_VERIFIED_VERSIONS),
     ):
-        selected = shutil.which(provider_command(provider))
+        selected = resolve_provider_executable(provider)
         entry: dict[str, Any] = {
             "installed_on_configured_path": selected is not None,
             "verified_versions": sorted(versions),

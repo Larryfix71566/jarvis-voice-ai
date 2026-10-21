@@ -199,5 +199,4 @@ def test_installed_check_and_run_use_the_same_command(monkeypatch):
     monkeypatch.setenv("JARVIS_CLAUDE_SUBSCRIPTION_COMMAND", "/Users/tester/.local/bin/claude")
     assert S.subscription_command("claude") == provider_command("claude") == \
         "/Users/tester/.local/bin/claude"
-    # The shared resolver also handles app-bundled installations off PATH.
-    assert S.subscription_command("codex") == provider_command("codex")
+    assert S.subscription_command("codex") == provider_command("codex") == "codex"

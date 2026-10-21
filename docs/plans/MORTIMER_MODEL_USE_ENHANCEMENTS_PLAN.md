@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status:** SUBSCRIPTION RETIREMENT STAGED 2026-10-21 — draft #232 contains opt-in runtime guards; voice/tool integration and activation remain blocked. Claim #230 is merged and all five claim CI checks passed. No deployment or runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
+**Status:** SUBSCRIPTION RETIREMENT STAGED 2026-10-21 — draft #232 contains opt-in runtime guards and a buffered native voice/tool adapter; activation and incremental-streaming acceptance remain blocked. Claim #230 is merged and all five claim CI checks passed. No deployment or runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -823,3 +823,13 @@ Codex command discovery now checks an explicit override first, then PATH, then t
 The minimum **future** live-test approval is specific: authorize bounded synthetic-only requests through official Claude Code (voice/tool model and exact synthetic schema) and Codex (gpt-6-astra text-only), consuming subscription quota with possible account overage exposure if enabled; direct API/OpenRouter fallback remains prohibited. Claude sign-in must first be completed through its official interface, with account allowance/overage confirmed separately. No real conversation, repo, memory, file, clipboard or private tool result is included in that proposed proof. Production voice context/private-source routing and latency acceptance remain separate gates; synthetic approval cannot authorize those payloads. Current restrictions still prohibit provider inference, so none has been attempted.
 
 The alternative implemented here is buffered Claude subscription speech plus host-executed tools, subject to latency acceptance. A later incremental-streaming contract needs exact-runtime evidence and matching receipts. Codex remains a text-role option; no unsupported Codex tool/voice capability is claimed. Full clean offline validation and final-head CI are next.
+
+
+Compatibility follow-up: controller CI on `544bf7f` correctly rejected a changed
+hash-pinned historical status test. Restored that test byte-for-byte; no pin,
+scanner exemption or fixture hash was changed. Kept `provider_command`'s
+configured-name contract and added `resolve_provider_executable` for PATH/bundle
+selection, used by runtime identity, status installation checks and readiness.
+The status response schema is unchanged. All 160 controller tests pass locally.
+The focused status/retirement/voice/runtime group passes 127 tests. A fresh
+complete offline suite and final-head CI follow.
