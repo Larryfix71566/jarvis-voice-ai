@@ -24,7 +24,7 @@ from jarvis.urls import DEFAULT_BOT_URL
 
 logger = logging.getLogger(__name__)
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REQUIRED_ENV_VARS = ("OPENAI_API_KEY", "DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY")
@@ -51,9 +51,18 @@ class Settings(BaseSettings):
     )
 
     # LLM (OpenAI-compatible)
-    openai_api_key: str
+    openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4.1-mini"
+    jarvis_llm_access_mode: str = "legacy"
+
+    @model_validator(mode="after")
+    def validate_llm_access(self):
+        from jarvis.provider_access import access_mode
+        mode = access_mode({"JARVIS_LLM_ACCESS_MODE": self.jarvis_llm_access_mode})
+        if mode == "legacy" and not self.openai_api_key:
+            raise ValueError("OPENAI_API_KEY is required in legacy LLM access mode")
+        return self
 
     # Speech
     deepgram_api_key: str
@@ -322,6 +331,9 @@ def bridge_settings_to_env(settings=None) -> None:
     try:
         if settings is None:
             settings = load_settings()
+        os.environ.setdefault(
+            "JARVIS_LLM_ACCESS_MODE", getattr(settings, "jarvis_llm_access_mode", "legacy")
+        )
         os.environ.setdefault("JARVIS_DB_PATH", settings.jarvis_db_path)
         os.environ.setdefault("JARVIS_TIMEZONE", settings.jarvis_timezone)
         # W3 — same transport JARVIS_TIMEZONE already uses to reach MCP
@@ -382,6 +394,7 @@ def bridge_settings_to_env(settings=None) -> None:
             "JARVIS_MEMORY_AUTOMATION_ENABLED", "JARVIS_MEMORY_AUTOMATION_SHADOW",
             "JARVIS_MEMORY_AUTOMATION_STAGE",
             "JARVIS_COMMAND_CONSOLE_ENABLED", "JARVIS_SHARED_CONTENT_ENABLED",
+            "JARVIS_LLM_ACCESS_MODE",
         ):
             if value:
                 os.environ.setdefault(name, value)

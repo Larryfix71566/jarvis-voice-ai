@@ -43,6 +43,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from scripts.check_env import require_model_api_access
+
+# Refuse before vault access or credential diagnostics in retirement mode.
+require_model_api_access()
+
 # 1. Snapshot which vars the ENVIRONMENT already supplies, before the vault
 #    gets a chance. A non-empty env var BEATS the vault, so anything here
 #    is what production will actually use.
@@ -129,6 +134,7 @@ def probe(base_url, key, model):
     malformed request. That is reported as OK with the reason attached,
     rather than as a failure.
     """
+    require_model_api_access()
     client = OpenAI(api_key=key, base_url=base_url, timeout=30.0, max_retries=0)
     try:
         client.chat.completions.create(

@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** Frozen current-request implementation `fbfb669` has completed all twelve original independent checks, exact-source Claude follow-up with **No blocking findings**, and all five source CI checks. [Final scrubbed evidence](../acceptance/command-console/receipts/ws17-current-request-final-2026-10-19.md). Documentation-only publication, publication-head CI and separate merge/release/live gates are distinguished below. Historical status follows: Claim #225 merged as `c244963` at 00:08:12 UTC on 2026-10-19; current-request implementation is claimed on `codex/ws17-current-request-arrival-20261018`, with wire reservation committed before code. Historical status follows: Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
+**Status:** Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: Frozen current-request implementation `fbfb669` has completed all twelve original independent checks, exact-source Claude follow-up with **No blocking findings**, and all five source CI checks. [Final scrubbed evidence](../acceptance/command-console/receipts/ws17-current-request-final-2026-10-19.md). Documentation-only publication, publication-head CI and separate merge/release/live gates are distinguished below. Historical status follows: Claim #225 merged as `c244963` at 00:08:12 UTC on 2026-10-19; current-request implementation is claimed on `codex/ws17-current-request-arrival-20261018`, with wire reservation committed before code. Historical status follows: Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -3461,3 +3461,23 @@ new source/checks/exact cross-system review before merge. Interface confirmation
 private route and live runtime/latency/overage are separate deployment/activation
 gates. No legacy service restart or subscription inference before cost gate.
 Prepared old-preview review packet remains local/untransmitted.
+
+
+### 2026-10-21 — Revised combined selective guard verification
+
+Exact revised preview `e74e4b8` (provider `fec3d51` plus acceptance program
+`d242ba4`, publication `a7a269a`) passes all twelve original independent checks.
+Candidate backend6,764passes/11skips/two subtests; native580executed/eight
+prerequisite skips/zero failures; JarvisKit235passes. Combined affected group
+457passes; full integration197passes/fourskips. The initial command-restricted
+integration attempt remains non-passing; one unchanged supported repeat passes.
+Original profile/image/runner/baseline/fixtures and source scanner unchanged;
+owned cleanup/preservation pass. See [revised receipt](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md).
+
+Paired PR integration reuses the exact verified pipeline resolution and has
+identical non-documentation bytes to `e74e4b8`. Current input heads had five CI
+passes each; publication-head CI remains separate. Required exact-source cross-
+system review is not completed; no verdict or live acceptance is inferred.
+Operational records stay local. No checkbox closure; parent UI2/hardware/release/
+observation gates remain separate. Both implementation merges are authorized
+subject to required gates; row/header wording describes the after-merge state.

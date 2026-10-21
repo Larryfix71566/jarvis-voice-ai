@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status:** SUBSCRIPTION RETIREMENT DISPATCHED 2026-10-20 — claim registration only; no runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
+**Status:** Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: SUBSCRIPTION RETIREMENT STAGED 2026-10-21 — draft #232 contains opt-in runtime guards and a buffered native voice/tool adapter; activation and incremental-streaming acceptance remain blocked. Claim #230 is merged and all five claim CI checks passed. No deployment or runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -781,3 +781,302 @@ Implementation sequence: central fail-closed access policy and complete direct-c
 The audit of deployed `b136a2a` observed direct Anthropic voice, developer, analyst and maintenance calls; no direct OpenAI ledger entries. Legacy OpenAI defaults and automatic executor API failover remain to retire. Claude's saved subscription probe succeeds; Codex is absent from the service PATH. These are routing/readiness findings, not invoice or current authentication proof.
 
 Main `fd56e98` roadmap checker reports one unrelated stale WS-17 status (review despite merged #226). Preserve that owner's row; this dispatch does not close its acceptance. Claim branch: `codex/ws05-subscription-retirement-20261020`. Claim-only registration edits ROADMAP and this existing plan; runtime implementation must follow the merged claim.
+
+### 2026-10-20 implementation checkpoint — staged guards, not migration acceptance
+
+Claim #230 merged as `005e2a4`. The candidate adds an opt-in central `JARVIS_LLM_ACCESS_MODE=subscription_only` policy, refusing application-runtime LLM API client construction and legacy paid fallback, including retained/injected API clients at the shared execution boundary. It uses staged subscription workload selections without changing privacy/capability floors, makes the bare Codex alias select the subscription profile, and removes the requirement for an OpenAI-shaped API credential in subscription-only Settings. Screen MCP explicitly inherits the nonsecret billing-policy setting; no skill permission is added. Legacy mode remains the deployed default.
+
+This is NOT a ready production migration: voice construction deliberately refuses in retirement mode until subscription streaming/tools have been implemented and verified. Tool workloads retain existing exact-runtime/receipt checks; protected memory and local-only workloads retain their private-route requirements. No authentication, native capability, quota/overage, or integrated release acceptance is claimed. Installed Claude `2.1.291` and the bundled ChatGPT Codex `0.163.0-alpha.10.2` differ from the pinned verified tool/text runtime versions. The bundled binary is present but absent from Mortimer's service PATH; no path, credential, account or production setting was changed. `scripts/check_subscription_retirement.py` invokes only version inspection and reports activation blocked, never a successful login or model call.
+
+Focused verification: client/configuration/Anthropic protocol group 166 passed; routing/execution/executor/screen/orchestrator group 216 passed (overlapping groups, do not sum). Manifest validation passes for all 15 skills using synthetic placeholder environment values; no credentials were loaded. The initial full unit run had sandbox-local-socket failures and integration failures; see the 10-21 follow-up below for the corrected run. An initial new-test failure was a mock's fabricated instrumentation marker; the corrected fixture exercises the original no-provider-call assertion.
+
+Coordination: acceptance task `01a15094-cfcd-729f-83f0-0301d1c7001c` owns the final integrated release. WS-05's only pipeline edit is the early LLM readiness guard immediately after `settings = runtime.settings` in `build_pipeline`; no delegate/Base/Registry code is changed, and weather, result selection, cancellation/foreground ownership remain untouched. No deployment is underway. Current WS-05 checker ambiguity was corrected by moving the old merged fixture branch from the current `Where` field to historical evidence; only the unrelated WS-17 stale merged-review finding remains on the inspected main.
+
+
+### 2026-10-21 — Draft #232 repair and bounded integration handoff
+
+The endpoint-contract check now rejects forged routes before reading any environment value, while the billing guard still precedes credential lookup and SDK construction. The screen child receives the nonsecret denial setting through its explicit optional-env declaration; its frozen environment snapshot is updated without adding a credential or tool permission. The policy's environment read is statically traceable. The owned-source test fixture correctly includes the new policy module after it is committed; no fixture inclusion rule, ownership guard or source scanner was weakened.
+
+Offline validation with local test sockets permitted: **6,638 passed, 11 skipped, 2 failed, 2 subtests passed**. One failure was the new retained-route test lacking a synthetic credential before switching modes; that fixture is corrected. The other was the host's inherited `JARVIS_NS_ENABLED` affecting a default-disabled audio test. With that variable removed only in the test process, the complete audio group passes (14 tests). The repaired subscription/endpoint-contract/env-scope/snapshot/audio group then passes **135 tests**. These are follow-up results, not a claim that the full suite was rerun to green. No provider inference or real account credential is needed by these tests. The original sandbox run's socket denials do not represent application regressions. Claim #230 has all five CI checks green; runtime #232 still requires its final-head CI and review.
+
+Read-only runtime identity checks confirm the still-installed Claude Code 2.1.290 binary matches the existing version contract (SHA-256 `b8412a3826b2dc8ecb1c0605970c28dea28355de5faa740407dd881acdd40237`). This was a process-local command override and `--version` only, not a service change, login or capability receipt. Default Claude remains 2.1.291 and unverified. The bundled Codex binary is present but its 0.163.0-alpha.10.2 version remains outside the pinned 0.160.0 contract. Authentication, subscription billing and overage settings remain unverified.
+
+**Handoff boundaries:** WS-05 owns `provider_access`, client factories/shims, routing/execution, subscription readiness, related configuration and tests. In `jarvis/bot/pipeline.py`, only the four-line readiness guard immediately following `settings = runtime.settings` in `build_pipeline` is changed. Acceptance may edit `jarvis/agents/delegate.py`, `jarvis/agents/base.py`, and `jarvis/skills/registry.py`; WS-05 has no edits planned there. Preserve both streams' intent on integration. The WS-05 roadmap checker ambiguity is fixed by moving the historical branch out of `Where`. The checker still reports the separate stale WS-17 #226 review status on this main baseline; acceptance owns its correction.
+
+**Remaining implementation/acceptance:** subscription voice streaming, tool continuation, interruption/cancellation and latency; exact-runtime/model/tool-schema receipts for each workload; verified Codex text runtime and capability contract (Codex native tools remain unsupported); account subscription/paid-overage evidence; and an eligible route for confidential/local-only work without weakening source policy. Standalone operator utilities `scripts/check_env.py:model_key_probe`, `scripts/check_keys.py:probe`, `scripts/probe_planner.py:main`, and `scripts/voice_model_bench.py:bench_candidate` now apply the same retirement guard, including when the policy exists only in .env. Key/planner/bench entry points refuse before vault/source reads; check_env suppresses LLM API probes without declaring subscription readiness. Their provider operations were not invoked. The diagnostic-retirement/check-env group passes **50 tests**, including refusal-before-HTTP/SDK/vault and .env-only policy coverage. Legacy diagnostic behavior remains available in legacy mode. Speech stays on separately billed Deepgram/ElevenLabs. OpenRouter is separately billed and is denied as an implicit fallback in subscription-only mode.
+
+Production remains on its existing legacy routing. Do not enable the new mode yet: it intentionally refuses voice startup and unsupported/private workloads. Acceptance task `01a15094-cfcd-729f-83f0-0301d1c7001c` owns the eventual integrated release; WS-05 has no separate deployment in progress or planned. Migration is blocked, not completed. No action was denied by automatic approval review; provider/account/source acceptance has not been attempted under the current no-provider/no-credential-change constraints.
+
+
+### 2026-10-21 — Buffered subscription voice implementation (continuation)
+
+Integrated current main `3061408` (#231 claim/metadata). The roadmap checker now passes with zero errors/warnings. Added `jarvis/bot/subscription_llm.py`: a Pipecat LLMService over Mortimer's existing Claude native-tool gateway, using the shared model execution/privacy boundary. It publishes complete assistant messages as speech frames; this is **buffered delivery, not verified incremental token streaming**. The pinned gateway explicitly refuses stream=True and its validated invocation/receipt does not include partial-message output. Do not silently broaden that contract or advertise streaming from a buffered response.
+
+The adapter retains exact parent/task tool bindings across Pipecat results, rejects mutated/foreign/incomplete continuations, represents only validated completed tool history as retrospective text for a later native session, and runs tools through the existing Pipecat/Mortimer registered handlers. It drains inference and native sessions on interruption, stop, cancellation and cleanup, retaining failed cleanup as a reuse blocker. It records normalized subscription route/billing once, without emitting duplicate API-attributed usage frames. Unknown token counts remain unknown. Fourteen synthetic tests pass, including real Pipecat dispatcher execution; no provider process is started by those tests.
+
+The service requires a host-owned policy for the **entire** context, including retained memory and tool results. An ordinary current-turn sensitivity boolean is not sufficient. Its default is confidential/refused, and the pipeline supplies no blanket external approval. Voice activation stays blocked until trustworthy per-source voice classification and an eligible private/local route exist. This preserves restrictions rather than relabeling private content. Images and unsupported tool contexts refuse. The pipeline candidate branch now selects this adapter, behind the unchanged unconditional retirement-readiness guard.
+
+**Updated bounded handoff:** in `jarvis/bot/pipeline.py`, WS-05 changes only the early guard in `build_pipeline` and the adjacent-to-existing LLM provider-selection branch around the Google/Anthropic/OpenAI constructors. Acceptance retains all weather, result, interruption/foreground logic plus delegate/Base/Registry files; those three files remain unchanged by WS-05. Final integrated release remains acceptance-owned. No separate deployment.
+
+Codex command discovery now checks an explicit override first, then PATH, then the already-installed ChatGPT app's bundled executable. An explicit unavailable override never falls back. This changes no installed file, credential or service setting and does not relax the pinned version/capability receipt. Read-only status commands with a credential-stripped environment report Codex `logged in using ChatGPT`. The first sandboxed Claude check returned `loggedIn=false`; a status-only repeat outside the sandbox confirms both installed Claude 2.1.290 and 2.1.291 report `loggedIn=true`, `authMethod=claude.ai`, `subscriptionType=max`. This corrects a sandbox Keychain-access artifact, not an account change. No new sign-in is indicated. These checks do not verify allowance, invoice cost or paid-overage settings. No identity/email/token fields were retained. The current bundled Codex version remains unverified for the pinned no-tool contract.
+
+The minimum **future** live-test approval is specific: authorize bounded synthetic-only requests through official Claude Code (voice/tool model and exact synthetic schema) and Codex (gpt-6-astra text-only), consuming subscription quota with possible account overage exposure if enabled; direct API/OpenRouter fallback remains prohibited. Claude Max and Codex ChatGPT login metadata are confirmed; account allowance/overage must be confirmed separately. Do not ask for a redundant sign-in based on the sandbox-only result. No real conversation, repo, memory, file, clipboard or private tool result is included in that proposed proof. Production voice context/private-source routing and latency acceptance remain separate gates; synthetic approval cannot authorize those payloads. Current restrictions still prohibit provider inference, so none has been attempted.
+
+The alternative implemented here is buffered Claude subscription speech plus host-executed tools, subject to latency acceptance. A later incremental-streaming contract needs exact-runtime evidence and matching receipts. Codex remains a text-role option; no unsupported Codex tool/voice capability is claimed. Full clean offline validation and final-head CI are next.
+
+
+Compatibility follow-up: controller CI on `544bf7f` correctly rejected a changed
+hash-pinned historical status test. Restored that test byte-for-byte; no pin,
+scanner exemption or fixture hash was changed. Kept `provider_command`'s
+configured-name contract and added `resolve_provider_executable` for PATH/bundle
+selection, used by runtime identity, status installation checks and readiness.
+The status response schema is unchanged. All 160 controller tests pass locally.
+The focused status/retirement/voice/runtime group passes 127 tests. A fresh
+complete offline suite and final-head CI follow.
+
+
+The intermediate full-suite run exposed the new voice execution site's missing
+static ownership-map entry; it is now explicitly classified as a gated native
+voice candidate in `scripts/audit_model_call_sites.py`, without weakening the
+inventory assertion. That run also inherited audio enablement during collection
+and overlapped the resolver repair, so it is not final-head evidence. The clean
+rerun explicitly sets `JARVIS_NS_ENABLED=false` for the test process (tests may
+still override it), disables live tests, and freezes the committed candidate.
+
+
+### 2026-10-21 — Frozen-source verification and exact remaining acceptance
+
+Runtime candidate `763bfe1926e2b9f0ed0279db9a3b0d81b0eadc15` passes the full
+clean unit suite: **6,661 passed, 11 skipped, 2 subtests passed** in 206.13 s.
+The run used a minimal environment containing only host execution essentials,
+`RUN_LIVE=0`, and explicit default-disabled audio/console flags. Test vault and
+ledger isolation remained active. Earlier local wiring failures were caused by
+inherited production console enablement; a 5 ms deadline test also once expired
+before reaching its mock under concurrent suite load. No assertion, deadline,
+source scanner, fixture pin or production setting was weakened. The integration
+and scripted eval gates are running sequentially; final PR evidence will record
+their terminal results and all five final-head CI outcomes.
+
+The minimum proposed human confirmation for later live proof is: authorize one
+bounded Claude Code 2.1.290 / Haiku 4.5 synthetic voice-tool session and one Codex
+/ gpt-6-astra synthetic text session, each at most 120 seconds with no retries,
+only after the applicable runtime capability gates pass. Claude would receive
+explicitly reviewed tool schemas with synthetic stub results, plus a synthetic
+prompt; Codex receives synthetic text only. No real conversation, memory,
+repository file content, clipboard, screen image or private result may be sent.
+Subscription quota will be consumed; **paid overage must be confirmed disabled,
+or separately approved with an enforceable limit before any request**. Direct
+API and OpenRouter fallback remain forbidden. This is the exact future request,
+not authorization supplied by this document, and does not establish production
+privacy or latency acceptance.
+
+Remaining technical/source gates are concrete: the current Codex binary still
+needs its own verified no-tools contract; the native Claude receipt must match
+the actual voice model/tool schema and executable; buffered response latency and
+interruption need live confirmation. The full voice context contains retained
+memory/tool material without comprehensive trusted source labels, so it is
+confidential by default. Subscription routes are `approved_external`, and no
+eligible local runtime or attested confidential route is configured. A blanket
+ordinary-turn approval or an API-compatible URL cannot solve that mismatch.
+The implemented alternative is buffered Claude speech with Mortimer-owned tools
+for appropriately classified workloads. Protected work must remain unavailable
+until an eligible private/local route exists or Larry explicitly approves a
+narrow source-policy change. Existing restrictions have not been relaxed.
+
+
+### 2026-10-21 — Offline runtime proof and voice provenance integration boundary
+
+The final `c8f2e56` candidate passed all five CI checks (validation run
+39538458818), with local 6,661 unit / 197 integration / 13 eval passes on its
+runtime source `763bfe1`. The following bounded continuation supersedes only
+the earlier installed-Codex compatibility blocker, not live/account acceptance.
+
+The existing installed-CLI localhost diagnostic now has a candidate-only mode
+that can inspect an unverified version without changing the production gate.
+Actual Codex `0.163.0-alpha.10.2` passed both positive and hostile-tool fixtures:
+one credential-free request with an empty tool menu completed successfully;
+the negative fixture made two requests, explicitly refused the injected
+`exec_command`, and left its canary absent. External networking and reads of
+the existing Codex/Keychain credential directories were denied by an additional
+macOS sandbox, and HOME was an empty temporary directory. No inference or
+account request occurred. The exact binary/model/catalog/invocation evidence is
+[codex-0163-loopback-capability-2026-10-21.json](../acceptance/model-use-enhancements/receipts/codex-0163-loopback-capability-2026-10-21.json).
+This evidence supports adding that exact version to the verified text-runtime
+set. Matching receipt and operator gates still apply; no production variable,
+route, credential, tool permission, model identity or old fixture was changed.
+A future release may change the binary and invalidate this receipt.
+
+Full voice source classification is **unfinished implementation**, not a user
+consent switch. The agreed WS-05/WS-17 handoff currently covers only the early
+readiness guard and LLM selection. The missing source bindings occur outside
+those regions:
+
+- `jarvis/memory.py:render_memory_context` returns one string with facts and
+  summary; `pipeline.py` inserts it directly into the system prompt. The
+  renderer must return host-owned policy/source metadata alongside the exact
+  rendered bytes; historical/unclassified memory remains confidential.
+- The accepted user-aggregator boundary and every assistant append need
+  immutable source bindings. `SensitiveTurn.clear()` resets the current flag;
+  that flag cannot authorize older retained history. Outputs inherit the
+  complete input's strictest policy, including local-only restrictions.
+- `pipeline.py:adapt_to_pipecat` passes plain results to `result_callback`.
+  Trusted tool scope/result policies must survive this boundary before JSON
+  conversion and be bound to exact call IDs and result bytes. Model-supplied
+  labels are never authority. Delegate/Base/Registry metadata transport needs
+  a bounded handoff coordinated with the acceptance owner.
+- Clipboard injection, `inject_context`, `inject_late_result`, deferred
+  injection and history rewriting/minimization must carry those same bindings.
+  A copied, mutated, unbound or stale message must fail closed; compaction must
+  preserve the strictest source floor rather than infer approval from text.
+
+The smallest integration dependency is an explicit expanded handoff for those
+source-policy-only boundaries (plus directly related regression tests), with
+WS-17 retaining weather, foreground/request identity and cancellation behavior.
+No such regions were edited in this continuation. This can be implemented
+without inference or user declassification once ownership is coordinated.
+It would still correctly block memory/private/local-only contexts from the
+approved-external subscription route. Supporting those contexts requires an
+eligible private/local runtime, a separate product/route decision; removing or
+relabeling memory is not assumed. Live synthetic consent, account overage and
+external source-review consent remain pending. No generic privacy approval
+can substitute for this implementation.
+
+
+### 2026-10-21 — Confirmed source handoff and implemented context bindings
+
+The parent/acceptance owner confirmed the source-policy-only CX-27 handoff.
+The preceding `49033ee` source passed all five CI checks, plus clean local
+6,663 unit and 197 integration tests. Its installed-Codex receipt remains
+valid; no inference, source review, account setting or activation was performed.
+
+The new `jarvis/voice_sources.py` implements host-only, per-context exact-byte
+and object bindings, per-run ContextVar accumulation, immutable classified
+text for immediate/late transport, and a monotonic session privacy floor.
+Plain JSON labels and copied/unbound/mutated messages cannot authorize egress.
+Nested scopes cannot lower their parent's restrictions. Whole-history privacy
+survives turn resets, removal, weather minimization and late-result rewriting.
+The floor is deliberately conservative until a new session is created.
+
+Pipeline context creation, memory snapshot binding, tool-result delivery,
+clipboard/silent/correction/greeting/late injection and neutralizers now retain
+source policy. Pipecat's actual assistant/tool materialization is recognized
+only against host-retained model/tool identities and exact result bytes.
+Base exports configured/acquired source floors through a per-run scope;
+Delegate keeps them through immediate and interrupted late returns, preserving
+ordinary string-return compatibility outside a tracking scope. Registry is
+unchanged. Persisted notices lack authenticated source metadata and receive a
+local-only floor on greeting, so persistence cannot silently lower a known
+local-only result; no DB schema or existing memory classification was changed.
+
+Real Pipecat projection testing exposed a buffered-adapter continuation defect:
+spoken text and per-tool assistant/result pairs are separate messages, unlike
+the earlier combined mock. The adapter now validates both exact projections,
+then restores only host-retained native metadata. A synthetic full native
+continuation plus subsequent turn passes without any provider subprocess.
+
+The focused source/voice/Base/Delegate/weather/foreground/readiness group passes
+248 tests. This includes actual SDK materialization, exact result mutation
+rejection, acquired local-only Base output, context copying, nested/cancelled
+scope isolation, and cancellation followed by typed late delivery. Full frozen
+source checks and a separate preview with acceptance `d242ba4` are next; their
+terminal results will be recorded on PR #232. No acceptance candidate was
+modified. The newly implemented bindings are not permission to send memory,
+clipboard, unclassified voice input or protected tool content to subscriptions.
+Those inputs still block the approved-external route. Remaining decisions are
+eligible private/local routing and bounded synthetic/live account acceptance;
+ordinary whole-context approval is not assumed. Production guard remains.
+
+
+The first full provenance run at `d0f18c3` finished 6,675 passed / one failed:
+the clipboard contract requires an explicit `add_messages` in its injector.
+The helper had preserved silent-append behavior, but moved that call out of
+the checked region. Restored the explicit append with source binding directly
+before it, without editing the test. The combined preview `df75f80` of
+`d0f18c3` + acceptance `d242ba4` passes 327 focused tests; its one runtime
+merge conflict preserves the stop-turn refusal inside the source/runlog scope
+before invoking any handler. Two roadmap conflicts preserve WS-05 history and
+both handoffs. Acceptance's candidate remains unchanged. Final repaired-head
+full local/CI results will be recorded on PR #232.
+
+
+Repaired source `336c5ca` passes 6,676 clean unit tests. Integration exposed a
+separate lifecycle defect: rebuilding a pipeline with the same Runtime tried
+to reuse its already-bound context source store. Rebuilds now create fresh
+message/call identities while inheriting the original privacy floor; the
+single-context ownership check stays enforced. The existing three bot-wiring
+assertions are unchanged, and a new regression proves rebuilding cannot erase
+a local-only floor or reuse another context's authority.
+
+The pinned Claude Code 2.1.290 also completed a synthetic localhost roundtrip
+with all 16 voice tools enabled. Both HTTP requests matched the exact tool
+schemas and Haiku 4.5 model; the cost_summary call received a synthetic stub
+result only, terminal text matched, and native cleanup was verified. A macOS
+sandbox denied external networking and existing credential-file reads, with a
+temporary empty HOME and a dummy localhost-only credential. No actual handler,
+provider inference or account request ran. See
+[claude-voice16-loopback-2026-10-21.json](../acceptance/model-use-enhancements/receipts/claude-voice16-loopback-2026-10-21.json).
+This is full-menu protocol evidence, not actual model tool choice, live
+latency/quality, billing or an exact production feature-switch receipt. The
+first diagnostic attempt stopped at executable lookup because its temporary
+selector variable was misspelled; correcting only that variable enabled the
+localhost probe. No sign-in, credential change or gate bypass was applied to
+production. Runtime/workload live acceptance still requires later consent.
+
+
+Frozen source `acc0bd1` completed 6,677 unit tests, 197 integration tests and
+13 scripted evals successfully. Before finalizing, a separate preview regression
+reproduced a materialized-payload gap: modifying adapter output after the first
+context classification was not rejected. The adapter now compares its owned
+message snapshot against the exact host bindings immediately before execution;
+a mismatch refuses before native client construction. The regression fails
+without this check and passes with it, alongside the actual public Pipecat
+continuation. Original full-run evidence was kept frozen until completion;
+only then was this bounded repair applied. Source schemas remain bound by the
+existing exact-workload native receipt gate. No source authorization, private
+label, runtime/credential gate or production activation was relaxed.
+
+## 2026-10-21 — Selective direct-provider shutdown; preserve explicit OpenRouter
+
+Larry corrected the rollout priority: stop direct OpenAI/Anthropic immediately,
+keep OpenRouter available, and continue implementation/merge with existing
+checks. At 11:27:52 UTC the bot, extractor, admin, costs, daily-status and vault
+launch agents were reversibly disabled and unloaded. All former processes
+exited; aggregate-only local ledger verification at 11:29:13 found zero new
+calls since shutdown. Native UI remained open. No credential, OpenRouter
+configuration or production source changed. This broad temporary stop also
+makes OpenRouter unavailable through the stopped services; it is not the final
+selective restoration. Detailed process metadata/rollback state stays local.
+
+The original `subscription_only` meaning is retained. New reserved value
+`direct_apis_disabled` denies direct/unknown API endpoints and implicit fallback,
+while permitting explicitly configured canonical `https://openrouter.ai/api/v1`
+requests through the existing validated execution boundary. Endpoint and
+provider-label checks precede construction; retained clients recheck their
+actual endpoint on every completion. SDK protocol/model branding cannot make a
+direct OpenAI/Anthropic request eligible. No workload/profile/default is silently
+rewritten to OpenRouter or subscriptions.
+
+OpenRouter completion admission is scoped to the exact already validated
+payload and approved-external source policy. The scope is reset after success,
+error or cancellation; legacy unclassified clients cannot use it. Existing
+private/local-only history checks still refuse before client creation. Native
+subscription/local routes retain their existing runtime/source/receipt/operator
+gates, and no new account inference is authorized by this mode. Voice stays
+blocked until its whole protected context has an eligible route; no memory
+removal, redaction-by-assumption or blanket declassification is introduced.
+Standalone diagnostics still refuse paid probes. Speech billing is separate.
+
+First focused gate: 119 tests pass, including a real OpenAI SDK with offline
+HTTP mock transport, public OpenRouter success, confidential/local-only refusal,
+exact-payload binding, endpoint spoof/retarget rejection, retained direct-client
+refusal and direct-route refusal with injected clients. Expanded and full gates
+are recorded on the revised PR. Prior b1f07a2/794a298 receipts remain historical;
+they do not validate this policy change. Acceptance #233 has advanced with
+additional host evidence; its owner retains combined verification, merge order
+and guarded release/restoration. No service should be enabled before this exact
+policy source is deployed and its effective setting verified. Non-inference
+services may then be restored independently; protected voice/background work
+must remain unavailable rather than buying direct inference or leaking private
+data to OpenRouter. External review and bounded synthetic subscription tests
+are now approved, but no inference (including review) may run until paid-overage
+disabled confirmation is obtained. Login metadata does not establish that gate.

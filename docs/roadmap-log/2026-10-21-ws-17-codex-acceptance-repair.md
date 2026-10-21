@@ -266,3 +266,23 @@ new source/checks/exact cross-system review before merge. Interface confirmation
 private route and live runtime/latency/overage are separate deployment/activation
 gates. No legacy service restart or subscription inference before cost gate.
 Prepared old-preview review packet remains local/untransmitted.
+
+
+## Revised combined selective guard verification
+
+Exact revised preview `e74e4b8` (provider `fec3d51` plus acceptance program
+`d242ba4`, publication `a7a269a`) passes all twelve original independent checks.
+Candidate backend6,764passes/11skips/two subtests; native580executed/eight
+prerequisite skips/zero failures; JarvisKit235passes. Combined affected group
+457passes; full integration197passes/fourskips. The initial command-restricted
+integration attempt remains non-passing; one unchanged supported repeat passes.
+Original profile/image/runner/baseline/fixtures and source scanner unchanged;
+owned cleanup/preservation pass. See [revised receipt](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md).
+
+Paired PR integration reuses the exact verified pipeline resolution and has
+identical non-documentation bytes to `e74e4b8`. Current input heads had five CI
+passes each; publication-head CI remains separate. Required exact-source cross-
+system review is not completed; no verdict or live acceptance is inferred.
+Operational records stay local. No checkbox closure; parent UI2/hardware/release/
+observation gates remain separate. Both implementation merges are authorized
+subject to required gates; row/header wording describes the after-merge state.

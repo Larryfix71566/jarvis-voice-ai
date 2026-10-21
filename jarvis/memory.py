@@ -551,6 +551,16 @@ def scan_memory_content(text: str) -> str | None:
     return None
 
 
+def classify_memory_context(rendered: str):
+    """Bind the exact rendered snapshot; historical memory is confidential.
+
+    No content inspection, inferred permission, extra DB read or label change.
+    """
+    from jarvis.privacy_policy import DataPolicy
+    from jarvis.voice_sources import ClassifiedText
+    return ClassifiedText(rendered, DataPolicy("confidential", "retained-memory-snapshot"))
+
+
 def render_memory_context(
     conn: sqlite3.Connection | None = None, *, stats: dict | None = None,
 ) -> str:
