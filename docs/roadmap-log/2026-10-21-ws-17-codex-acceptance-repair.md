@@ -318,3 +318,14 @@ criterion changes. Independent source review and final CI precede another deploy
 Synthetic red/green complete: three failures/ten controls before;98 focused passes
 after. Only the verifier status/log handling and its synthetic tests change.
 Required new exact-source review and publication CI precede a retry.
+
+
+## Narrow verified native-version compatibility
+
+Register before code: only the2.1.291 native verified-version entry and tests/
+offline evidence. Actual installed-binary synthetic loopback positive and hostile
+rounds pass with no real inference and no production admission change. Preserve
+unknown-version refusal and every exact request/model/schema/binary receipt,
+privacy/source, route, flag and activation gate. No new contract or private grant.
+The canonical Swift verifier fix merged as `dd112eb` after98 focused passes,
+five CI passes and independent static review with no blocking findings.
