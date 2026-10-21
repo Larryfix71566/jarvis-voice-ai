@@ -1504,7 +1504,9 @@ def build_pipeline(
         if user_agg is None:  # pragma: no cover - pipeline always sets it
             _logger.warning("clipboard_inject_dropped reason=no_context")
             return
-        runtime.voice_sources.append(user_agg, text)
+        message = {"role": "user", "content": str(text)}
+        runtime.voice_sources.bind(message, text_policy(text))
+        user_agg.add_messages([message])
 
     def _clipboard_call(path: str, post: bool = False) -> dict:
         """One owner of the armed flag: the sidecar. The bot could run
