@@ -1573,3 +1573,21 @@ records existing release/acceptance status, which is preserved here.
 - **Updated:** 10-18 (new documentation request and sandbox optimization/testing constraints; no gate closed)
 
 </details>
+
+## 11. Skills consolidation — approved direction, implementation after acceptance
+
+<details id="ws-29">
+<summary>WS-29 — Unified Skills library with preserved policy and runtime controls · parked</summary>
+
+- **Owner:** `codex` for this documentation only; future implementation unassigned and model-neutral
+- **Status:** parked: Larry accepted Option 2 on 2026-10-20 and requested this implementation plan at the end of the roadmap; implementation waits until existing acceptance testing is complete
+- **Implemented by:** not implemented; Codex documented the accepted direction and future handoff
+- **Remaining work / acceptance:** Complete existing acceptance under the authoritative clearance plan, record Larry's closeout, then dispatch a fresh bounded implementation claim. Implement SC0–SC6 and pass AT-01–AT-18 in the linked plan, preserving standing policies, all seven voice-event contracts, draft exclusion, trusted execution, privacy, and rollback. No present acceptance checkbox is closed by this entry.
+- **Model version:** not recorded; any assigned model meeting the plan's capability and evidence requirements may implement it
+- **Where:** documentation on `codex/skills-consolidation-plan-20261020`, via this PR; baseline main `b136a2a`; no runtime implementation branch or claim
+- **Plan:** [Skills consolidation implementation plan](docs/plans/MORTIMER_SKILLS_CONSOLIDATION_IMPLEMENTATION_PLAN.md)
+- **Scope:** Documentation only: this appended section, the linked new plan, and `docs/roadmap-log/2026-10-20-ws-29-skills-consolidation-plan.md`. Future source/UI/schema changes are proposals, not current locks or assignments. No runtime, credential, model, provider, deployment, migration, configuration-key, port or allow-list change is authorized or reserved.
+- **Next step:** larry: complete and record existing acceptance closeout, then dispatch WS-29 to any capable model with owner/branch/scope. Assigned implementer: refresh main and dependencies, follow SC0 before code, and coordinate existing owners; keep WS-22/24 operational state and WS-27 target/task routing intact.
+- **Updated:** 10-20 (accepted Option 2; documentation only; future implementation remains parked)
+
+</details>
