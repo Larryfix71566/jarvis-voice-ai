@@ -72,3 +72,12 @@ green and clean local 6,663 unit / 197 integration passes. This new source's
 full checks and separate combined preview are pending; PR records terminal
 results. Source classification does not grant private egress or activate a
 subscription. No inference, credentials, source review or deployment occurred.
+
+
+The repaired provenance source `acc0bd1` passes clean local 6,677 unit / 197
+integration / 13 eval tests. The pinned Claude runtime additionally passes a
+16-tool localhost schema/result roundtrip under external-network denial; the
+sanitized receipt explicitly excludes live/model/account acceptance. A final
+before/after regression adds exact checking of the materialized message
+snapshot immediately before execution. The new final-head full results and
+combined preview are recorded on PR #232; prior source results stay scoped.

@@ -1021,3 +1021,16 @@ first diagnostic attempt stopped at executable lookup because its temporary
 selector variable was misspelled; correcting only that variable enabled the
 localhost probe. No sign-in, credential change or gate bypass was applied to
 production. Runtime/workload live acceptance still requires later consent.
+
+
+Frozen source `acc0bd1` completed 6,677 unit tests, 197 integration tests and
+13 scripted evals successfully. Before finalizing, a separate preview regression
+reproduced a materialized-payload gap: modifying adapter output after the first
+context classification was not rejected. The adapter now compares its owned
+message snapshot against the exact host bindings immediately before execution;
+a mismatch refuses before native client construction. The regression fails
+without this check and passes with it, alongside the actual public Pipecat
+continuation. Original full-run evidence was kept frozen until completion;
+only then was this bounded repair applied. Source schemas remain bound by the
+existing exact-workload native receipt gate. No source authorization, private
+label, runtime/credential gate or production activation was relaxed.

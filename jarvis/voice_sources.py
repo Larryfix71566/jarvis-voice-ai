@@ -230,6 +230,19 @@ class VoiceSources:
                       or id(value["placeholder"]) in active}
         return DataPolicy(strictest(self.floor or UNKNOWN, *policies).level, "complete-voice-context")
 
+    def policy_for_projection(self, context, messages):
+        """Verify the owned snapshot that will actually enter execution."""
+        policy = self.policy_for_context(context)
+        originals = list(context.get_messages())
+        if context is not self.context or len(originals) != len(messages):
+            return self._observe(UNKNOWN)
+        for original, snapshot in zip(originals, messages):
+            bound = self.bindings.get(id(original))
+            if (bound is None or bound[0] is not original
+                    or bound[1] is None or bound[1] != _digest(snapshot)):
+                return self._observe(UNKNOWN)
+        return policy
+
 
 def bound_context_type():
     # Keep provenance primitives usable without importing the voice SDK.
