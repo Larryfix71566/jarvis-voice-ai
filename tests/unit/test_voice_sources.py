@@ -232,3 +232,30 @@ async def test_cancelled_delegate_late_result_retains_policy_after_scope_restora
     finally:
         release.set()
         current_sensitive_turn.reset(token)
+
+
+async def test_native_adapter_checks_materialized_payload_after_classification(setup, monkeypatch):
+    from jarvis.model_routing import ModelRouteError
+    native = Native()
+    service = setup(native)
+    sources = VoiceSources()
+    context = synthetic_context()
+    sources.context = context
+    for message in context.get_messages():
+        sources.bind(message, PUBLIC)
+    service.sources = sources
+    service.policy_for_context = sources.policy_for_context
+    adapter = service.get_llm_adapter()
+    original = adapter.get_llm_invocation_params
+    def changed_projection(ctx, **kwargs):
+        params = original(ctx, **kwargs)
+        params['messages'] = copy.deepcopy(params['messages'])
+        params['messages'][0]['content'] = 'SYNTHETIC_UNCLASSIFIED_PROJECTION'
+        return params
+    monkeypatch.setattr(adapter, 'get_llm_invocation_params', changed_projection)
+    try:
+        with pytest.raises(ModelRouteError):
+            await service._process_context(context)
+        assert native.requests == []
+    finally:
+        await service.cleanup()

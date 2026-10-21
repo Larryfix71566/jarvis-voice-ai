@@ -175,6 +175,9 @@ class SubscriptionVoiceLLMService(LLMService):
         params = self.get_llm_adapter().get_llm_invocation_params(
             context, convert_developer_to_user=False)
         messages = copy.deepcopy(params["messages"])
+        if self.sources is not None:
+            policy = strictest(policy, self.sources.policy_for_projection(context, messages))
+            assert_route_allowed(self.resolved.route, policy)
         native_messages = self._bound_messages(messages)
         raw_tools = params["tools"]
         if not isinstance(raw_tools, list) or not raw_tools:
