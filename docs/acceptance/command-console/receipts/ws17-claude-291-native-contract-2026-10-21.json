@@ -1,0 +1,77 @@
+{
+  "record_kind": "offline-native-version-protocol",
+  "version": 1,
+  "registration": "ef40c02",
+  "runtime": {
+    "version": "2.1.291 (Claude Code)",
+    "binary_sha256": "9a1d2ed6bb4421e8fc80c892c0413f293be3ee50ae3d7dda1a7622197a056690"
+  },
+  "model": "claude-haiku-4-5",
+  "protocol": "claude-stream-json-mortimer-mcp-v2",
+  "native_control_sha256": "869e897df7fc92e55cb19f96dc61ca614a305a35d53c5c6c78f79766bedc2f48",
+  "real_inference_requests": 0,
+  "production_admission_unchanged_during_probe": true,
+  "initial_production_version_set": [
+    "2.1.290 (Claude Code)"
+  ],
+  "probe_artifact_sha256": "479ca0fb091162932ba844125e70d3a1894c1d7bd2b55a96dae2ba980c1a65eb",
+  "raw_local_receipt_sha256": "94a904445bfe080f46094905ea7f6cf2e672701a689eae4ab6125b17229ccd8b",
+  "base_runtime_source_sha256": "4d6ffa8072f5238bfca2cee97ad6309019fcc7629ca9f45280292865ba922937",
+  "fixture_source_sha256": "f94863a4e9b7b35588963d47fee7cab3947b944f82d07ffc85f952177a3926da",
+  "rounds": {
+    "positive": {
+      "loopback_verified": true,
+      "fixture_closed": true,
+      "canary_absent": true,
+      "cleanup_verified": true,
+      "terminal_success": true,
+      "unknown_tool_rejected": true,
+      "unadvertised_tool_rejected": false,
+      "native_host_ingress_count": 2,
+      "synthetic_callbacks": [
+        "repo_read_file",
+        "selfedit_finish"
+      ],
+      "observed_models": [
+        "claude-haiku-4-5"
+      ],
+      "all_constraints_present": true,
+      "all_auth_synthetic": true,
+      "all_schemas_match": true
+    },
+    "unadvertised_builtin": {
+      "loopback_verified": true,
+      "fixture_closed": true,
+      "canary_absent": true,
+      "cleanup_verified": true,
+      "terminal_success": false,
+      "unknown_tool_rejected": true,
+      "unadvertised_tool_rejected": true,
+      "native_host_ingress_count": 0,
+      "synthetic_callbacks": [],
+      "observed_models": [
+        "claude-haiku-4-5"
+      ],
+      "all_constraints_present": true,
+      "all_auth_synthetic": true,
+      "all_schemas_match": true
+    }
+  },
+  "not_workload_capability_receipt": true,
+  "limits": [
+    "Offline native protocol only; no live inference, quality, latency or voice acceptance.",
+    "Exact workload/model/schema/binary receipts, source privacy and activation gates remain mandatory."
+  ],
+  "source_sha256": {
+    "jarvis/subscription_tools.py": "8c9d64f06d3b6392002e21da4cff9a4d895927fb34d0550336edc2375f2142f2",
+    "tests/unit/test_subscription_tools.py": "b6e53c9b582d5d42de981305ce13c74d62eef53903a4d2e1c016a5fe2f8274ce"
+  },
+  "validation": {
+    "red_before": "1 failed,3passed on previous exact-version set; new291compatibility case refused before sourcechange",
+    "red_log_sha256": "29a992b44db8e5d39f37b6c300d3e3425eee291e993943c52298d2a50585ea7f",
+    "final_focused": "330 passed,1warning in11.26s",
+    "focused_log_sha256": "df3213e2e43c6726144f54d2983262c6bdffe38e2903cc1327118f3145827a8c"
+  },
+  "source_review": "required for this source revision; no prior pass substituted",
+  "final_head_ci": "required and separate"
+}

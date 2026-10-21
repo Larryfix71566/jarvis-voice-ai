@@ -329,3 +329,10 @@ unknown-version refusal and every exact request/model/schema/binary receipt,
 privacy/source, route, flag and activation gate. No new contract or private grant.
 The canonical Swift verifier fix merged as `dd112eb` after98 focused passes,
 five CI passes and independent static review with no blocking findings.
+
+Exact2.1.291 compatibility added after actual positive/hostile loopback proof.
+The replayable fixture uses synthetic HOME/auth/model endpoint/callbacks only,
+with no gate mutation or real inference. One red compatibility case/three
+controls before;330 affected tests pass/11.26s after. Unknown versions, exact
+request receipts, source/privacy and activation remain closed by default.
+Required new source review/CI precede merge; no human criterion closes.
