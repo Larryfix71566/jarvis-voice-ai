@@ -62,3 +62,13 @@ Restoration now checks exact local argv/cwd before enable/bootstrap, rejects
 loader injection/foreign KB paths and missing recognized local runtime, and runs
 the stdlib helper with isolated/no-site Python. Six new synthetic cases pass.
 The earlier86-pass receipt remains historical; application runtime is unchanged.
+
+Swift verifier correction after `a124781`: three actual-Bash regressions fail
+before repair (nonzero exits1/143 with a prior passing subsuite; durable output
+while a synthetic child is blocked). The canonical gate now checks the Swift
+exit status and writes the existing log while execution proceeds. All98 focused
+tests pass/4.80s. No test assertion, profile, timeout or application runtime changes.
+Fresh source review/publication CI for this bounded correction remain required.
+The earlier combined0a23954/providerfec3d51 source reviews completed with no proven
+blocking defect after requested full-context checks; they do not review this new
+correction. Live/physical/workload acceptance remains separate.

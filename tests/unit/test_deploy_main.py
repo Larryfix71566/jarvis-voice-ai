@@ -200,3 +200,66 @@ def test_deploy_main_never_runs_the_file_that_replaced_it(tmp_path: Path) -> Non
         time.sleep(0.01)
     assert "STOPPED: origin/main does not contain #80" in logs[0].read_text()
     assert not (tmp_path / "checkout" / "closure-checks").exists()
+
+
+def _swift_gate_harness(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
+    source = SCRIPT.read_text()
+    function = source.split('  swift_gate() {', 1)[1].split('  echo "JarvisKit:"', 1)[0]
+    script = tmp_path / "gate.sh"
+    script.write_text(
+        'set -uo pipefail\nV="$FIXTURE"; LOGD="$FIXTURE"; TS=fixture; ERR_RE="(^|: )error: "\n'
+        'die() { echo "STOPPED: $*"; exit 1; }\n'
+        'swift_gate() {' + function + '\nswift_gate package native\necho AFTER_GATE\n'
+    )
+    (tmp_path / "package").mkdir()
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    swift = fake / "swift"
+    swift.write_text('#!/bin/sh\nprintf "%s\\n" "$TALLY"\n'
+                     'if [ "${WAIT_FOR_PERMIT:-}" = 1 ]; then\n'
+                     '  while [ ! -f "$FIXTURE/permit" ]; do sleep .05; done\nfi\n'
+                     'exit "$SWIFT_STATUS"\n')
+    swift.chmod(0o700)
+    env = {"HOME": str(tmp_path), "FIXTURE": str(tmp_path),
+           "PATH": str(fake) + os.pathsep + "/usr/bin:/bin", "LANG": "C",
+           "TALLY": "Executed 2 tests, with 0 failures", "SWIFT_STATUS": "0"}
+    return script, env, tmp_path / "deploy-native-fixture.txt"
+
+
+@pytest.mark.skipif(BASH is None, reason="bash is not installed")
+@pytest.mark.parametrize("status,tally,accepted", [
+    (1, "Executed 2 tests, with 0 failures", False),
+    (143, "Executed 2 tests, with 0 failures", False),
+    (0, "Executed 2 tests, with 0 failures", True),
+    (0, "no final tally", False),
+    (0, "Executed 2 tests, with 1 failures", False),
+])
+def test_swift_gate_requires_exit_success_and_final_tally(tmp_path, status, tally, accepted):
+    script, env, log = _swift_gate_harness(tmp_path)
+    env.update(SWIFT_STATUS=str(status), TALLY=tally)
+    result = subprocess.run([BASH, str(script)], env=env, capture_output=True, text=True, timeout=10)
+    assert (result.returncode == 0) is accepted
+    assert ("AFTER_GATE" in result.stdout) is accepted
+    assert tally in log.read_text()
+
+
+@pytest.mark.skipif(BASH is None, reason="bash is not installed")
+def test_swift_gate_preserves_log_while_process_is_still_running(tmp_path):
+    script, env, log = _swift_gate_harness(tmp_path)
+    env["WAIT_FOR_PERMIT"] = "1"
+    proc = subprocess.Popen([BASH, str(script)], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    visible = False
+    try:
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if log.exists() and "Executed 2 tests" in log.read_text():
+                visible = True
+                break
+            time.sleep(.05)
+        assert proc.poll() is None, "synthetic child must remain blocked until permitted"
+    finally:
+        (tmp_path / "permit").touch()
+        stdout, stderr = proc.communicate(timeout=10)
+    assert visible, "native diagnostics must be durable while a process is stalled"
+    assert proc.returncode == 0, stderr
+    assert "AFTER_GATE" in stdout
