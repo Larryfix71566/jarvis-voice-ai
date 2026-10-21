@@ -66,6 +66,18 @@ def test_nested_scope_cannot_lower_parent_source_floor():
             assert child.policy.level == "local_only"
 
 
+def test_rebuilt_context_gets_new_identities_but_cannot_drop_the_old_floor():
+    sources, original = public_context()
+    sources.append(original, ClassifiedText("synthetic local-only result", LOCAL))
+    child = sources.for_new_context()
+    message = {"role": "system", "content": "new public instructions"}
+    child.bind(message, PUBLIC)
+    rebuilt = bound_context_type()(sources=child, messages=[message])
+    assert sources.context is original and child.context is rebuilt
+    assert child.policy_for_context(rebuilt).level == "local_only"
+    assert child.policy_for_context(original).level == "local_only"
+
+
 @pytest.mark.parametrize("policy", [PUBLIC, LOCAL])
 async def test_real_pipecat_tool_materialization_keeps_exact_result_policy(policy):
     sources, context = public_context()

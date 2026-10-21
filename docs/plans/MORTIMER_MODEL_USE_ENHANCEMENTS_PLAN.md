@@ -997,3 +997,27 @@ merge conflict preserves the stop-turn refusal inside the source/runlog scope
 before invoking any handler. Two roadmap conflicts preserve WS-05 history and
 both handoffs. Acceptance's candidate remains unchanged. Final repaired-head
 full local/CI results will be recorded on PR #232.
+
+
+Repaired source `336c5ca` passes 6,676 clean unit tests. Integration exposed a
+separate lifecycle defect: rebuilding a pipeline with the same Runtime tried
+to reuse its already-bound context source store. Rebuilds now create fresh
+message/call identities while inheriting the original privacy floor; the
+single-context ownership check stays enforced. The existing three bot-wiring
+assertions are unchanged, and a new regression proves rebuilding cannot erase
+a local-only floor or reuse another context's authority.
+
+The pinned Claude Code 2.1.290 also completed a synthetic localhost roundtrip
+with all 16 voice tools enabled. Both HTTP requests matched the exact tool
+schemas and Haiku 4.5 model; the cost_summary call received a synthetic stub
+result only, terminal text matched, and native cleanup was verified. A macOS
+sandbox denied external networking and existing credential-file reads, with a
+temporary empty HOME and a dummy localhost-only credential. No actual handler,
+provider inference or account request ran. See
+[claude-voice16-loopback-2026-10-21.json](../acceptance/model-use-enhancements/receipts/claude-voice16-loopback-2026-10-21.json).
+This is full-menu protocol evidence, not actual model tool choice, live
+latency/quality, billing or an exact production feature-switch receipt. The
+first diagnostic attempt stopped at executable lookup because its temporary
+selector variable was misspelled; correcting only that variable enabled the
+localhost probe. No sign-in, credential change or gate bypass was applied to
+production. Runtime/workload live acceptance still requires later consent.

@@ -97,6 +97,12 @@ class VoiceSources:
         self.calls = {}
         self.texts = []
 
+    def for_new_context(self):
+        """Rebuilding a pipeline gets new identities but retains its floor."""
+        child = VoiceSources()
+        child.floor = self.floor
+        return child
+
     def _observe(self, policy):
         level = strictest(self.floor, policy).level if self.floor else policy.level
         self.floor = DataPolicy(level, "voice-context-history")
