@@ -95,6 +95,7 @@ from jarvis.bot.follow_up import (
 from jarvis.bot.status_tool import build_system_status_tool
 from jarvis.bot.weather_tool import build_local_weather_tool
 from jarvis.bot.weather_reuse import WeatherReuseBridge, current_weather_reuse, weather_reuse_scope
+from jarvis.bot.weather_intent import WeatherIntent, accepted_weather_intent, current_weather_intent
 from jarvis.bot.device_location import DeviceLocation, resolve_location, summarize_location
 from jarvis import ambient_weather
 from jarvis.bot.console_actions import build_console_action_tool, _disclosed_inventory
@@ -216,6 +217,7 @@ class ForegroundRequest:
     sequence: int
     input_timestamp: str
     input_user_id: str
+    weather_intent: WeatherIntent | None = None
 
 
 _foreground_request: ContextVar[ForegroundRequest | None] = ContextVar(
@@ -240,6 +242,7 @@ class ForegroundRequests:
         self.input_identity: tuple[str, str] | None = None
         self.sequence = 0
         self.current: ForegroundRequest | None = None
+        self.previous_weather_intent: WeatherIntent | None = None
         self.boundaries: list[tuple[dict, ForegroundRequest]] = []
         self.calls: dict[str, ForegroundRequest | None] = {}
         self.seen_starts: list[int] = []
@@ -376,7 +379,10 @@ class ForegroundRequests:
             normalized = lambda value: " ".join(value.split())
             if normalized(boundary["content"]) == normalized(" ".join(self.parts)):
                 self.sequence += 1
-                request = ForegroundRequest(str(uuid.uuid4()), self.sequence, *self.input_identity)
+                intent = accepted_weather_intent(boundary["content"], self.previous_weather_intent)
+                request = ForegroundRequest(str(uuid.uuid4()), self.sequence, *self.input_identity,
+                    weather_intent=intent)
+                self.previous_weather_intent = intent
                 self.boundaries = (self.boundaries + [(boundary, request)])[-64:]
                 self.current = request
                 # One accepted input grants one boundary. A copied context or
@@ -789,6 +795,7 @@ def adapt_to_pipecat(
         tool_call_id = str(getattr(params, "tool_call_id", "") or "")
         request = foreground_requests.calls.get(tool_call_id) if foreground_requests is not None else None
         foreground_token = _foreground_request.set(request)
+        intent_token = current_weather_intent.set(request.weather_intent if request else None)
         runlog = RunLogger(
             str(uuid.uuid4()), "supervisor", "Mortimer",
             "supervisor direct tool execution", session_id=session_id,
@@ -843,6 +850,7 @@ def adapt_to_pipecat(
             if foreground_requests is not None:
                 foreground_requests.calls.pop(tool_call_id, None)
             _foreground_request.reset(foreground_token)
+            current_weather_intent.reset(intent_token)
             if weather_token is not None:
                 _weather_context_call.reset(weather_token)
 

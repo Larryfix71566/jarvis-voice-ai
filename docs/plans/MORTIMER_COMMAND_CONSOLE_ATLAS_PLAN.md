@@ -3300,3 +3300,21 @@ focused live session checks roadmap main-window presentation, multi-turn
 references, predictable interruption/cancellation, Spartanburg/Atlanta reuse,
 and persisted observations with truthful reviewed-update status. Human/visual
 criteria stay open until Larry supplies their observations.
+
+
+### 2026-10-21 — Weather dispatch repair and bounded reproduction
+
+Claim #231 merged as `3061408`. The WS-05 handoff committed in `504f911`
+permits delegate/Base/Registry acceptance work; provider paths and pipeline
+readiness guard remain WS-05's. Synthetic Python reproduction failed three
+named/stale dispatch cases with one local control passing. Request-bound
+weather intent now refuses wrong local/generated-city dispatch before any
+lookup, fetch or display. Expanded focused verification passes 208 tests
+(eight deprecation warnings); two real native SDK/router/store witnesses pass.
+One witness confirms first-wrong-result consumption, so the opening rule is
+preserved. An intermediate “weather there” failure is repaired and retained.
+
+The [dated log](../roadmap-log/2026-10-21-ws-17-codex-acceptance-repair.md)
+records limits and outstanding gates. No human/visual closure or production
+change. Continue explicit cancellation/deduplication and evidence/reporting
+repairs, then freeze an integrated candidate for full verification/review/CI.
