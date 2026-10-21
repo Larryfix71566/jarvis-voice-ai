@@ -71,11 +71,13 @@ def test_explicit_paid_selection_cannot_override_retirement(retired, route):
         resolve_model_route("planning", explicit_route=route)
 
 
-def test_forged_api_route_is_refused_at_client_boundary(retired):
-    route = resolve_model_route("planning")
-    forged = replace(route, route=replace(route.route, name="direct_api"))
+def test_retained_valid_api_route_is_refused_at_client_boundary(retired):
+    retired.setenv("JARVIS_LLM_ACCESS_MODE", "legacy")
+    retired.setenv("ANTHROPIC_API_KEY", "synthetic-unit-credential")
+    route = resolve_model_route("planning", explicit_route="direct_api")
+    retired.setenv("JARVIS_LLM_ACCESS_MODE", "subscription_only")
     with pytest.raises(ModelRouteError, match="no fallback"):
-        make_route_client(forged)
+        make_route_client(route)
 
 
 @pytest.mark.asyncio

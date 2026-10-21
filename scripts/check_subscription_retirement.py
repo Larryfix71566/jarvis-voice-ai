@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Print payload-free migration readiness without login, inference or writes.
+"""Print payload-free migration readiness without login or inference.
 
 Only installed official CLIs' --version commands are invoked. No .env or
 credential store is loaded. A nonzero exit means activation remains blocked.
+Runtime identity checks use temporary directories, with no persistent settings
+or service changes.
 """
 from pathlib import Path
 import json

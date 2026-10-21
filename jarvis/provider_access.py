@@ -19,8 +19,8 @@ class ProviderAccessError(ValueError):
 
 
 def access_mode(environ: Mapping[str, str] | None = None) -> str:
-    env = os.environ if environ is None else environ
-    mode = env.get(ACCESS_MODE_ENV, "legacy")
+    mode = (os.environ.get(ACCESS_MODE_ENV, "legacy") if environ is None
+            else environ.get(ACCESS_MODE_ENV, "legacy"))
     if mode not in {"legacy", "subscription_only"}:
         raise ProviderAccessError("invalid LLM access mode; inference is unavailable")
     return mode

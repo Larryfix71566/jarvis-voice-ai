@@ -805,11 +805,6 @@ def available_routes(profile: dict[str, Any],
 
 
 def _validate_client_endpoint(resolved: ResolvedModelRoute) -> None:
-    from jarvis.provider_access import ProviderAccessError, require_route_access
-    try:
-        require_route_access(resolved.route.name)
-    except ProviderAccessError as exc:
-        raise ModelRouteError(str(exc)) from None
     # Validate even manually supplied route objects before credentials are
     # read or an SDK client is constructed. Config is not an egress authority.
     route = resolved.route
@@ -838,6 +833,13 @@ def _validate_client_endpoint(resolved: ResolvedModelRoute) -> None:
                               resolved.route.credential_env)
         except SayGMError as exc:
             raise ModelRouteError(str(exc)) from exc
+    # Reject forged endpoint contracts before reading any environment value.
+    # The billing policy still runs before credential lookup/client creation.
+    from jarvis.provider_access import ProviderAccessError, require_route_access
+    try:
+        require_route_access(route.name)
+    except ProviderAccessError as exc:
+        raise ModelRouteError(str(exc)) from None
 
 
 def make_route_client(resolved: ResolvedModelRoute, *, timeout: float | None = 60,

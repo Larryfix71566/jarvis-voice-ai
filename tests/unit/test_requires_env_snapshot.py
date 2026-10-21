@@ -50,9 +50,11 @@ EXPECTED = {
                        "GITHUB_OWNER": "${GITHUB_OWNER}"}),
     "mcp-selfedit":  (["JARVIS_SERVICE_TOKEN"], ["JARVIS_UPGRADE_PROFILE"], {}),
     "mcp-screen":    ([],
+                      # WS-05: forward the nonsecret paid-inference denial
+                      # policy into the child; no new credential grant.
                       ["JARVIS_SCREEN_ENABLED", "JARVIS_VISION_PROFILE",
                        "JARVIS_SCREEN_RETENTION_HOURS", "JARVIS_UPGRADE_MODELS",
-                       "JARVIS_MODEL_ROUTING_ENABLED"],
+                       "JARVIS_MODEL_ROUTING_ENABLED", "JARVIS_LLM_ACCESS_MODE"],
                       {}),
     # logic.py supplies localhost:8484; an explicit URL still reaches the child.
     "mcp-kb":        ([], ["KB_BASE_URL"], {}),
