@@ -833,3 +833,12 @@ selection, used by runtime identity, status installation checks and readiness.
 The status response schema is unchanged. All 160 controller tests pass locally.
 The focused status/retirement/voice/runtime group passes 127 tests. A fresh
 complete offline suite and final-head CI follow.
+
+
+The intermediate full-suite run exposed the new voice execution site's missing
+static ownership-map entry; it is now explicitly classified as a gated native
+voice candidate in `scripts/audit_model_call_sites.py`, without weakening the
+inventory assertion. That run also inherited audio enablement during collection
+and overlapped the resolver repair, so it is not final-head evidence. The clean
+rerun explicitly sets `JARVIS_NS_ENABLED=false` for the test process (tests may
+still override it), disables live tests, and freezes the committed candidate.
