@@ -86,7 +86,8 @@ async def test_local_call_keeps_its_original_owner_after_new_named_turn():
 
 @pytest.mark.parametrize("text", ["Weather here", "What's the weather?", "Show me current weather",
     "Weather for my location", "Weather for tomorrow", "The weather",
-    "Is it going to rain?", "Do I need an umbrella?", "What’s the week look like?"])
+    "Is it going to rain?", "Do I need an umbrella?", "What’s the week look like?",
+    "Do I need an umbrella today?", "What does the week look like weather-wise?"])
 def test_local_requests_keep_the_device_resolver(text):
     assert accepted_weather_intent(text) == WeatherIntent("local")
 
@@ -160,3 +161,4 @@ def test_an_explicit_qualifier_cannot_be_changed_by_generated_tool_arguments():
     intent = accepted_weather_intent("Weather in Portland, Maine")
     assert intent.permits("weather:named:portland, maine", "get_weather")
     assert not intent.permits("weather:named:portland, oregon", "get_weather")
+    assert not intent.permits("weather:named:portland, maine, oregon", "get_weather")

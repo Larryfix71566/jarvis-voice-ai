@@ -33,7 +33,7 @@ class WeatherIntent:
         # A caller may qualify an unqualified city, never change a supplied
         # qualifier (Portland, Maine must not become Portland, Oregon).
         return subject_key.startswith("weather:named:") and (
-            actual == self.place or actual.startswith(self.place + ","))
+            actual == self.place or ("," not in self.place and actual.startswith(self.place + ",")))
 
 
 current_weather_intent: ContextVar[WeatherIntent | None] = ContextVar("weather_intent", default=None)
@@ -64,10 +64,10 @@ def accepted_weather_intent(text: str, previous: WeatherIntent | None = None) ->
     text = " ".join(unicodedata.normalize("NFKC", text).split()).strip()
     if len(text) > 4096:
         return WeatherIntent("unclear")
-    local_question = canonical_place(text.strip(" ?.！!"))
+    local_question = canonical_place(_TIME.sub("", text.strip(" ?.！!")))
     if local_question in {"is it going to rain", "will it rain", "do i need an umbrella",
                           "should i bring an umbrella", "what's the week look like",
-                          "what’s the week look like"}:
+                          "what’s the week look like", "what does the week look like weather-wise"}:
         return WeatherIntent("local")
     if not _WEATHER.search(text):
         follow = _FOLLOWUP.fullmatch(text)

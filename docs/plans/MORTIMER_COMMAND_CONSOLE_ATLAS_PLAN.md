@@ -3348,3 +3348,17 @@ still needs observation. Read-only 503 investigation identifies guarded
 endpoint possibilities but not the production branch; memory parsing remains
 separate. Full suites, independent exact-source verification/review, CI and
 coordinated provider integration are next; live criteria stay open.
+
+
+### 2026-10-21 — Full backend and final-source compatibility follow-up
+
+Full host Python on `cdc8672` passes 6,846 tests, 15 skips and two subtests
+(19 warnings). Preserve the non-passing full-native stalled run and local
+stack evidence; repeat in a fresh bounded test process. Existing public local
+weather evaluation phrases reveal two additional parser regressions, repaired
+with the qualifier guard and retained in the 215-pass affected group. Refresh
+full checks on this final source. WS-05's committed `763bfe1` handoff expands
+its pipeline boundary to provider-selection constructors as well as the early
+readiness guard; neither region is edited by acceptance. Delegate/Base/Registry
+acceptance ownership remains unchanged. Final integration/review/release waits
+for coordinated provider readiness; no human or visual criterion closes.

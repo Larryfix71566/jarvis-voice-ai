@@ -105,3 +105,28 @@ selection. Neither unrelated warning is converted into an acceptance pass.
 Next: freeze committed source, run required full host and independent checks,
 refresh CI and obtain the required independent review within authorized
 privacy boundaries. No production/deployment or human acceptance change.
+
+
+## Full backend and local-weather compatibility follow-up
+
+Full host backend on `cdc8672`: 6,846 passed, 15 skipped, two subtests passed,
+19 warnings, 261.78 seconds. This is an offline environment-isolated run.
+The full native run stalls without a terminal verdict; a retained local stack
+sample shows the dispatch soft limit reached with blocked AppKit animation
+threads. Only its verified test runner processes were terminated. This run
+is non-passing, not a native acceptance pass or a proven product defect.
+A fresh bounded unbuffered full-native repeat is required.
+
+Read-only checks against the existing public voice-evaluation fixtures find
+two additional local-weather classification failures (“umbrella today” and
+“week ... weather-wise”). They are repaired and retained as regression cases;
+explicit city qualifiers also cannot acquire a contradictory appended
+qualifier. Expanded affected verification passes 215 tests, eight deprecation
+warnings, in 8.54 seconds. The prior full backend result remains scoped to
+`cdc8672`; final source needs its own complete repeat.
+
+Provider handoff update: WS-05 now retains both the early readiness guard and
+the Google/Anthropic/OpenAI provider-selection constructor branch in pipeline,
+as committed at `763bfe1`. Acceptance changes touch neither region. Shared
+delegate/Base/Registry acceptance ownership remains permitted. No provider
+activation, security setting, deployment or acceptance checkbox change.
