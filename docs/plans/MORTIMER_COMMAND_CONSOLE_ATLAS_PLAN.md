@@ -3300,3 +3300,101 @@ focused live session checks roadmap main-window presentation, multi-turn
 references, predictable interruption/cancellation, Spartanburg/Atlanta reuse,
 and persisted observations with truthful reviewed-update status. Human/visual
 criteria stay open until Larry supplies their observations.
+
+
+### 2026-10-21 — Weather dispatch repair and bounded reproduction
+
+Claim #231 merged as `3061408`. The WS-05 handoff committed in `504f911`
+permits delegate/Base/Registry acceptance work; provider paths and pipeline
+readiness guard remain WS-05's. Synthetic Python reproduction failed three
+named/stale dispatch cases with one local control passing. Request-bound
+weather intent now refuses wrong local/generated-city dispatch before any
+lookup, fetch or display. Expanded focused verification passes 208 tests
+(eight deprecation warnings); two real native SDK/router/store witnesses pass.
+One witness confirms first-wrong-result consumption, so the opening rule is
+preserved. An intermediate “weather there” failure is repaired and retained.
+
+The [dated log](../roadmap-log/2026-10-21-ws-17-codex-acceptance-repair.md)
+records limits and outstanding gates. No human/visual closure or production
+change. Continue explicit cancellation/deduplication and evidence/reporting
+repairs, then freeze an integrated candidate for full verification/review/CI.
+
+
+### 2026-10-21 — Explicit task control and duplicate suppression
+
+Weather commit `5286327` is published in draft #233; its exact-source focused
+repeat passes 208 tests. Four task-control cases reproduce before repair.
+Existing delegation ownership now tracks pending operations per session,
+refuses exact duplicate starts, preserves speech-barge-in survival, and accepts
+bounded explicit task-stop commands only from the correlated accepted-input
+boundary. Multiple pending tasks require a choice unless the user explicitly
+says all. Cancellation requests do not claim rollback or completed work;
+cancelled orphaned tasks produce no late success. Notes expire at the next
+accepted turn. Combined focused verification: 223 passed, eight deprecation
+warnings. No new wire/tool/config or durable task framework. Continue truthful
+roadmap/build/acceptance/test reporting, then full integrated gates.
+
+
+### 2026-10-21 — Truthful reporting, lifecycle timing and runner handoff
+
+The existing Supervisor/Developer/console guidance now identifies formatted
+roadmap results, actual installed-build authority, the three acceptance
+reporting states, reviewed selfedit/readback and a truthful missing-test-runner
+handoff. No new executor grant or guided wizard. Transient acceptance notes
+expire; content-free request identities and monotonic terminal duration enable
+bounded live trace correlation. The 710-test affected group passes (ten
+warnings, including an inherited test-callback warning). Prompt compliance
+still needs observation. Read-only 503 investigation identifies guarded
+endpoint possibilities but not the production branch; memory parsing remains
+separate. Full suites, independent exact-source verification/review, CI and
+coordinated provider integration are next; live criteria stay open.
+
+
+### 2026-10-21 — Full backend and final-source compatibility follow-up
+
+Full host Python on `cdc8672` passes 6,846 tests, 15 skips and two subtests
+(19 warnings). Preserve the non-passing full-native stalled run and local
+stack evidence; repeat in a fresh bounded test process. Existing public local
+weather evaluation phrases reveal two additional parser regressions, repaired
+with the qualifier guard and retained in the 215-pass affected group. Refresh
+full checks on this final source. WS-05's committed `763bfe1` handoff expands
+its pipeline boundary to provider-selection constructors as well as the early
+readiness guard; neither region is edited by acceptance. Delegate/Base/Registry
+acceptance ownership remains unchanged. Final integration/review/release waits
+for coordinated provider readiness; no human or visual criterion closes.
+
+
+### 2026-10-21 — Time-before-place refusal correction and fresh freeze
+
+`30bbcea` full backend: 6,848 passes/15 skips/two subtests; all five CI checks
+pass. Five actual bound-intent Registry/cache/privacy checks pass. Further
+static/synthetic review finds five failing authority cases around time-before-
+place and hidden multiple targets. Trailing-time handling and named-target
+precedence are corrected; 898 affected tests and all 55 synthetic phrase cases
+pass. These do not establish unrestricted natural-language/model compliance.
+
+The early independent `30bbcea` run is intentionally interrupted before checks
+for this proven repair; owned cleanup and preservation checks pass. Its result
+stays non-passing. The bounded full native repeat times out at 600 seconds;
+retain its stack/log/deadline evidence and run an isolated actual-capture
+control. No skips or security settings are changed. Freeze the repaired source,
+repeat full backend/original independent profile and regenerate the static
+source packet. Parent owns pending external-review consent; no transmission.
+
+
+### 2026-10-21 — Stop-turn dispatch backstop and native diagnostic limits
+
+`b1db9a9` full backend passes 6,856 tests/15 skips/two subtests. Two synthetic
+adapter failures prove fresh delegation was possible on an explicit stop turn.
+The accepted immutable request now refuses that dispatch with the same bounded
+parser used for cancellation; ordinary speech interruption retains its behavior.
+The 901-test affected group passes. No new tool, wire field or durable state.
+
+The complete one-worker isolated native diagnostic schedules 580 cases and
+fails: two actual ScreenCaptureKit capture cases (`-3811`) and two per-test
+VoiceDisplayAudit processes crashing at unchanged nil-NSApp WindowLookup.
+The fresh capture control fails despite permission preflight. Preserve all
+original non-passing host runs; do not relabel them as passes or change tests,
+permissions or production. Refresh final frozen source backend/CI/original
+independent profile and exact source review. Parent owns pending transmission
+consent and provider integration. Live/physical criteria remain open.

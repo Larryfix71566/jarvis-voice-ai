@@ -15,9 +15,9 @@ import json
 import math
 import time
 from typing import Any, Callable, Iterator
-import unicodedata
 
 from jarvis.bot.sensitive_turn import is_sensitive
+from jarvis.bot.weather_intent import canonical_place, current_weather_intent
 from jarvis.runlog.context import get_run_id
 
 MAX_WEATHER_SOURCE = 16 * 1024
@@ -27,10 +27,7 @@ WEATHER_TOOLS = frozenset({"local_weather", "get_weather", "get_weather_radar"})
 
 
 def canonical_weather_subject(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    value = " ".join(unicodedata.normalize("NFKC", value).casefold().split())
-    return value or None
+    return canonical_place(value)
 
 
 def named_weather_subject_key(city: Any) -> str | None:
@@ -152,6 +149,9 @@ class WeatherReuseBridge:
                 or type(days) is not int or not 1 <= days <= 7
                 or not isinstance(units, str) or units not in {"metric", "imperial"}
                 or (run_id is not None and (not isinstance(run_id, str) or len(run_id) > 120))):
+            return WeatherReuseOutcome("refused", "invalid_request")
+        intent = current_weather_intent.get()
+        if intent is not None and not intent.permits(subject_key, tool):
             return WeatherReuseOutcome("refused", "invalid_request")
         try:
             reply = await asyncio.wait_for(self._query(subject_key=subject_key, tool=tool,
