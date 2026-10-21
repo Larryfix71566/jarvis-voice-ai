@@ -3541,3 +3541,16 @@ with no gate mutation or real inference. One red compatibility case/three
 controls before;330 affected tests pass/11.26s after. Unknown versions, exact
 request receipts, source/privacy and activation remain closed by default.
 Required new source review/CI precede merge; no human criterion closes.
+
+
+### 2026-10-21 — Frozen compatibility verification and source review complete
+
+Frozen `e9c30b0` / merged code `63c5cde` passed all twelve original independent
+checks with unchanged profile/runner/image/dependencies/protected fixtures.
+Backend: 6,838 passed, 11 skipped, two subtests; native: 580 executed, eight
+prerequisite skips, zero failures; JarvisKit: 235 passed. All five exact-head CI checks pass; independent static
+source review reports with no blocking findings. Owned cleanup, source and preservation pass.
+The [scrubbed source receipt](../acceptance/command-console/receipts/ws17-native291-source-verification-2026-10-21.md)
+records hashes/results and keeps runtime/private/live/human/observation limits
+explicit. Metadata publication changes no verified application/test/config bytes
+and closes no checkbox. Historical non-passing attempts remain non-passing.
