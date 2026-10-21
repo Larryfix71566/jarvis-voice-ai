@@ -2,7 +2,7 @@
 date: 2026-10-20
 system: codex
 rows: [WS-29]
-prs: [228]
+prs: [228, 229]
 ---
 
 # WS-29 — Claude implementation-readiness review
@@ -20,4 +20,6 @@ This slice changes documentation only. It makes no provider calls, enables no sk
 
 Validation at preparation: `git diff --check`; all 23 disposition rows remain present; SC0–SC7 and AT-01–AT-19 are present; relative links resolve; and `python3 scripts/check_roadmap.py` retains the one pre-existing WS-17 stale-review finding for merged PR #226 with no WS-29 error. Runtime and live-model tests were not run for this documentation-only amendment.
 
-Published draft [PR #228](https://github.com/Larryfix71566/jarvis-voice-ai/pull/228) from `codex/ws29-claude-review-20261020`; initial amendment commit `3bda1a0`. The PR remains a reviewable documentation change and does not start WS-29 implementation.
+Published [PR #228](https://github.com/Larryfix71566/jarvis-voice-ai/pull/228) from `codex/ws29-claude-review-20261020`; initial amendment commit `3bda1a0`. Claude re-read head `e1cf334`, accepted the correction that `prepare_commit` supplies no present backstop, and found the amendment implementation-ready without weakening a constraint or reserving an identifier. The docs-only PR merged as `0acf8a8`; it does not start WS-29 implementation.
+
+Dispatch note from the final review: 1,637 characters measures only the current YAML `steps`. SC0 must measure the actual string returned by the workflow renderer, including `done_when` and wrappers, when it fills the per-policy budget ledger. This note belongs to the future dispatch evidence and does not change the plan or its present budget conclusion.
