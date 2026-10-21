@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "created_at": "2026-10-21T13:15:22.235578+00:00",
+  "row": "WS-17",
+  "registration": "1f864e6",
+  "base_publication": "207bb8b75bc01a47e6172f9d78e21bea2101f0d4",
+  "changed_source_sha256": {
+    "scripts/deploy_main.sh": "97df083139e1568d97b93f2b7c770fe9da44e9341504c9531314e5174f4db358",
+    "tests/unit/test_deploy_held.py": "f35b37d38f39d9f5f7c9dd2870eebfaa7a097f88d6a009c3d015b603b20946d5"
+  },
+  "focused_validation": {
+    "result": "86 passed, including deployment and strict-roadmap contracts",
+    "log_sha256": "ac7225e5ec9f013fda39ab0ea8b7e417a64b7e67334764fd9965e271adf78502",
+    "first_restricted_attempt": "46 passed,3 failed: one malformed absolute-path fixture normalized by tarfile and restricted localhost/subprocess facilities; corrected real absolute-header fixture and supported repeat preserved separately",
+    "generated_launcher": "actual Bash rollback under synthetic HOME, fake operator commands and synthetic code/app/database/settings; no live deployment"
+  },
+  "syntax": "bash -n PASS; embedded stdlib Python compiles",
+  "application_runtime": "jarvis/macOS/mcp/config/sandbox/dependency bytes unchanged from207bb8b",
+  "safety_contract": [
+    "human-only denied canonical file; no new mutable deployment helper permission",
+    "install-held requires bound exact-program source-review and five-check CI receipts",
+    "all managed services held; policy/envelope/source/bundle readback; frozen held rollback",
+    "base restoration costs/vault only; admin and inference excluded",
+    "quarantine and owned-process exit before prior code/app restore",
+    "no automatic restart, app open, private-settings or database restoration in held rollback",
+    "no cleanup lifecycle mutation or stale-lease auto-reclamation",
+    "default deployment refuses shutdown policy or disabled service overrides"
+  ],
+  "review": "required external source review not yet performed; source-only packet prepared separately",
+  "coverage": "Synthetic deployment-tool evidence; no new full application suite or live/runtime/acceptance claim",
+  "privacy": "No operational production records, ledger values, account settings or private fixtures included."
+}

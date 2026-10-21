@@ -3491,3 +3491,15 @@ recoverable canonical deployment prerequisite. WS17 records before code: only
 contracts. WS04's historical authenticated-health integration remains unchanged;
 no other active owner locks this path. Preserve all denied/human-only file tiers,
 application runtime bytes and live/private/cost gates. No deployment execution.
+
+
+### 2026-10-21 — Canonical held deployment prerequisite implemented
+
+Following registration `1f864e6`, the protected canonical deployer gains
+install-held, explicitly limited local restoration and frozen rollback-held.
+Application/provider/native/config/dependency/cleanup bytes remain at207bb8b.
+The [source/synthetic receipt](../acceptance/command-console/receipts/ws17-held-deployment-tool-2026-10-21.md)
+records86 focused passes, syntax checks, actual generated Bash rollback in fake
+HOME, no-restart/no-settings-or-DB-restore and source/receipt/lease/hold failures.
+No live action, new permission, private operational record or acceptance closure.
+Required final-head CI and exact source review remain distinct.

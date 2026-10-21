@@ -3,6 +3,11 @@
 # Run it from any checkout of this repository, production included:
 #   bash scripts/deploy_main.sh                        full verification
 #   bash scripts/deploy_main.sh --reuse-verification   reuse an earlier passing run on the same commit
+#   bash scripts/deploy_main.sh --install-held --approval-receipt FILE [--reuse-verification]
+#   bash scripts/deploy_main.sh --restore-local SNAPSHOT costs,vault
+#   bash scripts/deploy_main.sh --rollback-held SNAPSHOT
+# Held modes require bound review/CI receipts and preserve the direct-call shutdown.
+# Rollback never restarts services or restores databases/settings. Admin is excluded.
 # Mortimer names it "DEPLOY-MAIN" after every merge. It moved here from the
 # git-ignored closure-checks/DEPLOY-MAIN.sh on 2026-09-26 (Larry's decision of
 # 2026-09-25) and is human-only (config/self_edit_allowlist.json deny).
@@ -22,6 +27,302 @@
 set -uo pipefail
 
 main() {
+  HELD=0; REUSE=0; HELD_OP=""; APPROVAL=""; SNAPSHOT=""; LOCAL_SERVICES=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --install-held) [ -z "$HELD_OP" ] && [ "$HELD" = 0 ] || return 2; HELD=1; shift;;
+      --reuse-verification) [ "$REUSE" = 0 ] || return 2; REUSE=1; shift;;
+      --approval-receipt) [ $# -ge 2 ] && [ -z "$APPROVAL" ] || return 2; APPROVAL=$2; shift 2;;
+      --rollback-held) [ $# -eq 2 ] && [ "$HELD" = 0 ] && [ "$REUSE" = 0 ] && [ -z "$APPROVAL" ] || return 2; HELD_OP=rollback; SNAPSHOT=$2; shift 2;;
+      --restore-local) [ $# -eq 3 ] && [ "$HELD" = 0 ] && [ "$REUSE" = 0 ] && [ -z "$APPROVAL" ] || return 2; HELD_OP=restore; SNAPSHOT=$2; LOCAL_SERVICES=$3; shift 3;;
+      *) echo "unknown deployment argument" >&2; return 2;;
+    esac
+  done
+  [ "$HELD" = 1 ] || [ -z "$APPROVAL" ] || return 2
+  [ "$HELD" = 0 ] || [ -n "$APPROVAL" ] || return 2
+  held_python() {
+    /usr/bin/python3 - "$@" <<'PY_HELD'
+# BEGIN HELD PYTHON
+from __future__ import annotations
+import hashlib, json, os, pathlib, plistlib, re, shutil, signal, stat, subprocess, sys, tarfile, tempfile, time, urllib.request, uuid
+
+MODE = 'direct_apis_disabled'
+LABELS = {x: 'com.mortimer.' + x for x in ('vault','bot','extractor','admin','costs')}
+LABELS['status-daily'] = 'com.mortimer.status-daily'
+CLEANUP = 'com.mortimer.sandbox-prune'
+LOCAL = {'costs':(8487,'/openapi.json'), 'vault':(8484,'/health')}
+CHECKS = {'allowlist','policy-tests','controller-tests','knowledge-base','validate'}
+
+class HeldError(RuntimeError): pass
+
+def require(ok, message):
+    if not ok: raise HeldError(message)
+
+def digest(path):
+    return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+
+def private_json(path, data):
+    p=pathlib.Path(path); require(not p.is_symlink(), 'unsafe receipt path')
+    fd,name=tempfile.mkstemp(prefix='.held-',dir=p.parent)
+    try:
+        with os.fdopen(fd,'w') as out:json.dump(data,out,indent=2);out.write('\n');out.flush();os.fsync(out.fileno())
+        os.replace(name,p);p.chmod(0o600)
+    finally:
+        if os.path.exists(name):os.unlink(name)
+
+def read_json(path):
+    p=pathlib.Path(path);s=p.lstat()
+    require(stat.S_ISREG(s.st_mode) and not p.is_symlink() and s.st_uid==os.getuid()
+            and not s.st_mode&0o022 and s.st_nlink==1 and s.st_size<2_000_000,'unsafe receipt')
+    return json.loads(p.read_text())
+
+def revision(value):
+    require(isinstance(value,str) and re.fullmatch('[0-9a-f]{40}',value),'exact revision required')
+    return value
+
+def tree_digest(path):
+    p=pathlib.Path(path);require(p.is_dir() and not p.is_symlink(),'app snapshot missing')
+    values=[]
+    for base,dirs,files in os.walk(p,followlinks=False):
+        for name in sorted(dirs+files):
+            f=pathlib.Path(base)/name;r=str(f.relative_to(p));mode=stat.S_IMODE(f.lstat().st_mode)
+            if f.is_symlink(): values.append([r,mode,'link',os.readlink(f)])
+            elif f.is_file():values.append([r,mode,digest(f)])
+            else:values.append([r,mode,'directory'])
+    return hashlib.sha256(json.dumps(sorted(values),separators=(',',':')).encode()).hexdigest()
+
+class System:
+    def run(self,argv,check=True):
+        try:r=subprocess.run([str(x) for x in argv],capture_output=True,text=True,timeout=40)
+        except Exception:raise HeldError('operator command unavailable') from None
+        if check:require(r.returncode==0,'operator command failed')
+        return r
+    def request(self,port,path):
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self,*args,**kwargs):return None
+        opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect)
+        with opener.open('http://127.0.0.1:'+str(port)+path,timeout=3) as response:
+            require(response.getcode()==200,'local health refused')
+    def alive(self,pid):
+        try:os.kill(pid,0);return True
+        except ProcessLookupError:return False
+        except PermissionError:return True
+    def sleep(self):time.sleep(.2)
+
+class Held:
+    def __init__(self,c,source,system=None):
+        self.c=pathlib.Path(c).resolve();self.source=pathlib.Path(source).resolve();self.sys=system or System()
+        self.home=pathlib.Path.home().resolve();self.root=self.home/'MortimerRollback';self.domain='gui/'+str(os.getuid())
+        require(self.c==self.home/'jarvis-voice-ai-clean','unexpected production root')
+    def run(self,*args,check=True):return self.sys.run(args,check)
+    def disabled(self):
+        text=self.run('launchctl','print-disabled',self.domain).stdout
+        return dict(re.findall(r'"([^"]+)"\s*=>\s*(disabled|enabled|true|false)',text))
+    def job(self,label):
+        r=self.run('launchctl','print',self.domain+'/'+label,check=False)
+        if r.returncode==0:
+            m=re.search(r'^\s*pid = (\d+)\s*$',r.stdout,re.M)
+            return {'loaded':True,'pid':int(m.group(1)) if m else None}
+        require('Could not find service' in r.stderr and label in r.stderr,'cannot prove service absence')
+        return {'loaded':False,'pid':None}
+    def hold(self,subset=None):
+        flags=self.disabled()
+        names=list(LABELS) if subset is None else list(subset)
+        for label in [LABELS[n] for n in names]+[CLEANUP]:
+            require(flags.get(label) in {'disabled','true'},'disabled override missing')
+            require(not self.job(label)['loaded'],'service not held')
+    def policy_files(self):
+        env=self.c/'.env';st=env.lstat()
+        require(stat.S_ISREG(st.st_mode) and not env.is_symlink() and st.st_uid==os.getuid() and not st.st_mode&0o022,'unsafe settings file')
+        text=env.read_text()
+        lines=[x for x in text.splitlines() if re.match(r'^\s*(?:export\s+)?JARVIS_LLM_ACCESS_MODE\s*=',x)]
+        pattern=r'''^\s*(?:export\s+)?JARVIS_LLM_ACCESS_MODE\s*=\s*(?:direct_apis_disabled|'direct_apis_disabled'|"direct_apis_disabled")\s*(?:#.*)?$'''
+        require(len(lines)==1 and re.fullmatch(pattern,lines[0]),'disk shutdown policy missing or ambiguous')
+        require(os.environ.get('JARVIS_LLM_ACCESS_MODE',MODE)==MODE,'ambient policy conflicts')
+        files={'.env':digest(env)}
+        for label in LABELS.values():
+            p=self.home/'Library/LaunchAgents'/(label+'.plist');s=p.lstat()
+            require(not p.is_symlink() and stat.S_ISREG(s.st_mode) and s.st_uid==os.getuid()
+                    and not s.st_mode&0o022,'unsafe launch envelope')
+            data=plistlib.loads(p.read_bytes())
+            require(data.get('Label')==label and data.get('EnvironmentVariables',{}).get('JARVIS_LLM_ACCESS_MODE')==MODE,
+                    'launch envelope shutdown policy missing')
+            files[label]=digest(p)
+        return files
+    def legacy_allowed(self):
+        mode=os.environ.get('JARVIS_LLM_ACCESS_MODE')
+        if (self.c/'.env').exists():
+            matches=re.findall(r'^\s*(?:export\s+)?JARVIS_LLM_ACCESS_MODE\s*=\s*([^\n]+)',(self.c/'.env').read_text(),re.M)
+            if matches: require(len(matches)==1 and re.fullmatch(r'''(?:legacy|'legacy'|"legacy")\s*(?:#.*)?''',matches[0].strip()),'held policy requires held deployment')
+        require(mode in (None,'legacy'),'held policy requires held deployment')
+        flags=self.disabled()
+        require(not any(flags.get(x) in {'disabled','true'} for x in LABELS.values()),'disabled services require held deployment')
+        for label in LABELS.values():
+            p=self.home/'Library/LaunchAgents'/(label+'.plist')
+            if p.exists():
+                require(not p.is_symlink(),'unsafe launch envelope')
+                info=plistlib.loads(p.read_bytes());mode=info.get('EnvironmentVariables',{}).get('JARVIS_LLM_ACCESS_MODE')
+                require(mode in (None,'legacy'),'launch policy requires held deployment')
+                require(info.get('Disabled') is not True or flags.get(label) in {'enabled','false'},'disabled launch envelope requires held deployment')
+    def program(self,repo,rev):
+        rows=[]
+        for line in self.run('git','-C',repo,'ls-tree','-r',revision(rev)).stdout.splitlines():
+            info,path=line.split('\t',1)
+            require(path!='.env' and not (path.startswith('.env.') and path!='.env.example'),'private settings in code tree')
+            if path=='ROADMAP.md' or path.startswith(('docs/plans/','docs/acceptance/','docs/roadmap-log/')):continue
+            rows.append([path,info])
+        require(rows,'empty program manifest')
+        return hashlib.sha256(json.dumps(sorted(rows),separators=(',',':')).encode()).hexdigest()
+    def approval(self,repo,target,path):
+        a=read_json(path);require(a.get('version')==1 and a.get('target')==target,'approval target mismatch')
+        program=self.program(repo,target)
+        for kind in ('review','ci'):
+            p=a.get(kind+'_receipt');require(isinstance(p,str),'missing gate receipt')
+            receipt=read_json(p);require(digest(p)==a.get(kind+'_sha256'),'gate receipt hash mismatch');rev=revision(receipt.get('source'))
+            require(self.program(repo,rev)==program and receipt.get('program_sha256')==program,'gate program mismatch')
+            if kind=='review':require(receipt.get('verdict')=='no_blocking_findings','required review not passed')
+            else:require(receipt.get('checks')==dict.fromkeys(CHECKS,'SUCCESS'),'required exact-program CI not passed')
+        expected=self.run('git','-C',repo,'show',target+':scripts/deploy_main.sh').stdout.encode()
+        require(hashlib.sha256(expected).hexdigest()==digest(self.source),'run exact target canonical script')
+        return {'target':target,'program_sha256':program,'approval_sha256':digest(path)}
+    def preflight(self,repo,target,path):
+        gate=self.approval(repo,revision(target),path);self.hold();self.policy_files();return gate
+    def rb_path(self,path):
+        p=pathlib.Path(path);require(p.is_dir() and not p.is_symlink(),'snapshot missing')
+        p=p.resolve();require(p.parent==self.root and p.stat().st_uid==os.getuid() and not p.stat().st_mode&0o077,'unsafe snapshot directory')
+        return p
+    def snapshot(self,rb,repo,target,approval):
+        rb=self.rb_path(rb);gate=self.preflight(repo,target,approval);self.archive_safe(rb/'code.tgz')
+        require(self.run('git','-C',self.c,'ls-files','--error-unmatch','.env',check=False).returncode==1,'private settings must not be tracked')
+        frozen=rb/'deploy-main-held.sh';shutil.copyfile(self.source,frozen);frozen.chmod(0o700)
+        meta={**gate,'version':1,'production':str(self.c),'prior':revision(self.run('git','-C',self.c,'rev-parse','HEAD').stdout.strip()),
+              'policy_files':self.policy_files(),'runner_sha256':digest(frozen),'archive_sha256':digest(rb/'code.tgz'),
+              'app_sha256':tree_digest(rb/'MortimerHost.app')}
+        private_json(rb/'held-policy.json',meta)
+        launcher='#!/bin/bash\nset -euo pipefail\nexec /bin/bash '+__import__('shlex').quote(str(frozen))+' --rollback-held '+__import__('shlex').quote(str(rb))+'\n'
+        (rb/'ROLLBACK.sh').write_text(launcher);(rb/'ROLLBACK.sh').chmod(0o700)
+    def envelope(self,rb):
+        rb=self.rb_path(rb);a=read_json(rb/'held-policy.json');require(a.get('version')==1 and a.get('production')==str(self.c),'snapshot binding mismatch')
+        require(digest(self.source)==a.get('runner_sha256'),'frozen operator source changed')
+        revision(a.get('prior'));revision(a.get('target'));return rb,a
+    def floor(self,a):require(self.policy_files()==a.get('policy_files'),'shutdown policy/envelopes drifted')
+    def stop_app(self):
+        r=self.run('pgrep','-x','MortimerHost',check=False);require(r.returncode in (0,1),'app inventory unavailable')
+        pids=[int(x) for x in r.stdout.split()]
+        for pid in pids:
+            exe=self.run('ps','-p',str(pid),'-o','comm=').stdout.strip()
+            require(exe==str(self.c/'macos/MortimerHost/.build/MortimerHost.app/Contents/MacOS/MortimerHost'),'unrelated app instance; stop before install')
+        if pids:self.run('osascript','-e','tell application id "com.mortimer.host" to quit')
+        for _ in range(100):
+            if not any(self.sys.alive(p) for p in pids):return
+            self.sys.sleep()
+        raise HeldError('production app did not quit; no install/rollback')
+    def quarantine(self):
+        owned=set();table={}
+        for line in self.run('ps','-axo','pid=,ppid=').stdout.splitlines():
+            fields=line.split()
+            if len(fields)==2 and all(x.isdigit() for x in fields):table[int(fields[0])]=int(fields[1])
+        for label in LABELS.values():
+            j=self.job(label)
+            if j['pid']:owned.add(j['pid'])
+        for _ in range(len(table)+1):
+            more={pid for pid,parent in table.items() if parent in owned};old=len(owned);owned.update(more)
+            if len(owned)==old:break
+        for label in LABELS.values():
+            self.run('launchctl','disable',self.domain+'/'+label)
+            self.run('launchctl','bootout',self.domain+'/'+label,check=False)
+        self.hold()
+        for _ in range(100):
+            if not any(self.sys.alive(p) for p in owned):return
+            self.sys.sleep()
+        raise HeldError('owned process remains; no code rollback')
+    def installed(self,rb):
+        rb,a=self.envelope(rb);self.hold();self.floor(a)
+        require(self.run('git','-C',self.c,'rev-parse','HEAD').stdout.strip()==a['target'],'installed source mismatch')
+        self.run('git','-C',self.c,'diff','--quiet',a['target'],'--','.',':(exclude)docs/acceptance/adaptive-interface/P2-latency.json')
+        untracked=self.run('git','-C',self.c,'ls-files','--others','--exclude-standard').stdout.splitlines()
+        require(not any(p.startswith(('jarvis/','macos/','scripts/','sandbox/','config/','services/','mcp_servers/','web/')) for p in untracked),'untracked runtime source')
+        info=plistlib.loads((self.c/'macos/MortimerHost/.build/MortimerHost.app/Contents/Info.plist').read_bytes())
+        require(info.get('MortimerSourceRevision')==a['target'],'bundle source mismatch')
+        a['installed_program_sha256']=self.program(self.c,a['target'])
+        require(a['installed_program_sha256']==a['program_sha256'],'installed program mismatch')
+        installed={'status':'installed-held','target':a['target'],'policy_sha256':digest(rb/'held-policy.json'),'bundle_sha256':tree_digest(self.c/'macos/MortimerHost/.build/MortimerHost.app')}
+        if (rb/'installed-held.json').exists():require(read_json(rb/'installed-held.json')==installed,'installed bundle/receipt drifted')
+        else:private_json(rb/'installed-held.json',installed)
+    def restore(self,rb,names):
+        rb,a=self.envelope(rb);require(set(names)<=set(LOCAL) and names and len(names)==len(set(names)),'only explicit costs/vault permitted')
+        require((rb/'installed-held.json').is_file(),'held installation receipt missing')
+        self.installed(rb);self.hold();self.floor(a)
+        try:
+            for name in names:
+                self.floor(a);label=LABELS[name];self.run('launchctl','enable',self.domain+'/'+label)
+                self.run('launchctl','bootstrap',self.domain,self.home/'Library/LaunchAgents'/(label+'.plist'))
+                for _ in range(100):
+                    job=self.job(label)
+                    if job['pid']:break
+                    self.sys.sleep()
+                require(job['pid'],'new service PID unavailable')
+                env=self.run('ps','eww','-p',str(job['pid']),'-o','command=').stdout
+                require(re.findall(r'(?:^|\s)JARVIS_LLM_ACCESS_MODE=([^\s]+)',env)==[MODE],'effective service policy unavailable')
+                cwd=self.run('lsof','-a','-p',str(job['pid']),'-d','cwd','-Fn').stdout
+                paths=[x[1:] for x in cwd.splitlines() if x.startswith('n')]
+                require(len(paths)==1 and pathlib.Path(paths[0]).resolve().is_relative_to(self.c),'service source cwd mismatch')
+                self.sys.request(*LOCAL[name]);self.floor(a)
+            self.hold(set(LABELS)-set(names))
+            private_json(rb/'local-restoration.json',{'status':'local-only-restored','services':names,'target':a['target']})
+        except Exception:
+            self.quarantine();raise HeldError('local restoration failed; services quarantined') from None
+    def archive_safe(self,path):
+        with tarfile.open(path,'r:gz') as tar:
+            for item in tar:
+                bits=pathlib.PurePosixPath(item.name).parts
+                require(not item.name.startswith('/') and '..' not in bits,'unsafe code archive path')
+                require(not any(x in {'.git','.venv','data','logs'} or x=='.env' or x.startswith('.env.') or x.endswith(('.db','.db-wal','.db-shm','.sqlite','.sqlite3')) for x in bits),'archive contains protected settings/data')
+                require(not item.issym() and not item.islnk() and (item.isfile() or item.isdir()),'unsafe code archive mode')
+    def rollback(self,rb):
+        rb,a=self.envelope(rb);self.quarantine();self.stop_app();self.floor(a)
+        require(digest(rb/'code.tgz')==a['archive_sha256'] and tree_digest(rb/'MortimerHost.app')==a['app_sha256'],'rollback archive/app changed')
+        self.archive_safe(rb/'code.tgz')
+        self.run('git','-C',self.c,'checkout','-q','-f','--detach',a['prior'])
+        self.run('tar','-C',self.c,'-xzf',rb/'code.tgz')
+        app=self.c/'macos/MortimerHost/.build/MortimerHost.app';require(not app.is_symlink() and app.parent.resolve().is_relative_to(self.c),'unsafe app target')
+        if app.exists():shutil.rmtree(app)
+        self.run('ditto',rb/'MortimerHost.app',app)
+        self.hold();self.floor(a)
+        require(self.run('git','-C',self.c,'rev-parse','HEAD').stdout.strip()==a['prior'] and tree_digest(app)==a['app_sha256'],'rollback identity mismatch')
+        private_json(rb/'rollback-held.json',{'status':'rollback-held','prior':a['prior'],'services_restarted':False,'databases_restored':False,'settings_restored':False})
+    def lock(self):
+        self.root.mkdir(mode=0o700,parents=True,exist_ok=True);p=self.root/'.held-deploy.lock'
+        p.mkdir(mode=0o700);token=uuid.uuid4().hex;private_json(p/'owner.json',{'token':token,'pid':os.getppid()});return token
+    def unlock(self,token):
+        p=self.root/'.held-deploy.lock';require(read_json(p/'owner.json').get('token')==token,'foreign deployment lease')
+        (p/'owner.json').unlink();p.rmdir()
+
+def held_main(args):
+    op,c,source,*rest=args;h=Held(c,source)
+    if op=='legacy':h.legacy_allowed()
+    elif op=='preflight':h.preflight(*rest)
+    elif op=='snapshot':h.snapshot(*rest)
+    elif op=='hold':h.hold()
+    elif op=='floor':_,a=h.envelope(rest[0]);h.floor(a)
+    elif op=='quarantine':h.quarantine()
+    elif op=='stop-app':h.stop_app()
+    elif op=='installed':h.installed(*rest)
+    elif op=='restore':h.restore(rest[0],rest[1].split(','))
+    elif op=='rollback':h.rollback(*rest)
+    elif op=='lock':print(h.lock())
+    elif op=='unlock':h.unlock(rest[0])
+    else:raise HeldError('unsupported held operation')
+
+if __name__=='__main__':
+    try:held_main(sys.argv[1:])
+    except Exception as exc:
+        print('HELD operation refused: '+(str(exc) if isinstance(exc,HeldError) else type(exc).__name__),file=sys.stderr)
+        sys.exit(1)
+# END HELD PYTHON
+PY_HELD
+  }
+  SOURCE_PATH="$(cd "$(dirname "$0")" && pwd -P)/$(basename "$0")"
   # A compiler or XCTest error, not a source excerpt that happens to contain
   # "error: " (LAUNCHER-RULES rule 9): ": error: " or "error: " at line start,
   # with or without colour codes.
@@ -29,6 +330,16 @@ main() {
   HERE="$(cd "$(dirname "$0")/.." && pwd)"   # the checkout this script is in: production or any clone
   C="$HOME/jarvis-voice-ai-clean"
   PY="$C/.venv/bin/python"
+  if [ -n "$HELD_OP" ]; then
+    HELD_LOCK_TOKEN=$(held_python lock "$C" "$SOURCE_PATH") || return 1
+    trap 'held_python unlock "$C" "$SOURCE_PATH" "$HELD_LOCK_TOKEN" >/dev/null 2>&1' EXIT
+    if [ "$HELD_OP" = restore ]; then
+      held_python restore "$C" "$SOURCE_PATH" "$SNAPSHOT" "$LOCAL_SERVICES"
+    else
+      held_python rollback "$C" "$SOURCE_PATH" "$SNAPSHOT"
+    fi
+    return $?
+  fi
   TS=$(date +%Y%m%d-%H%M%S)
   # Logs and verification worktrees live beside the rollback snapshots, outside
   # every checkout, so the script behaves the same wherever it is run from.
@@ -46,6 +357,13 @@ main() {
   git -C "$HERE" log -1 --format='origin/main: %h %ad %s' --date=format:'%m-%d %H:%M' "$TARGET"
   git -C "$HERE" merge-base --is-ancestor 88b206f "$TARGET" || die "origin/main does not contain #80 (88b206f)"
   [ -x "$PY" ] || die "production venv python missing: $PY"
+  if [ "$HELD" = 1 ]; then
+    HELD_LOCK_TOKEN=$(held_python lock "$C" "$SOURCE_PATH") || die "another held deployment owns the lease"
+    trap 'held_python unlock "$C" "$SOURCE_PATH" "$HELD_LOCK_TOKEN" >/dev/null 2>&1' EXIT
+    held_python preflight "$C" "$SOURCE_PATH" "$HERE" "$TARGET" "$APPROVAL" || die "held preflight refused"
+  else
+    held_python legacy "$C" "$SOURCE_PATH" || die "shutdown or disabled services require --install-held"
+  fi
   # A zero-byte index.lock left by a crashed/sandboxed git blocks every checkout
   # (23 Sep: production had one dated 11 Sep). Remove it only when it is empty,
   # older than 10 minutes, and no git process is running; otherwise stop.
@@ -81,7 +399,7 @@ main() {
   # --reuse-verification: skip re-running the suites when an earlier run of THIS
   # script already passed all three on the SAME commit. The evidence is that
   # run's own log, named and quoted below, not a claim.
-  if [ "${1:-}" = "--reuse-verification" ]; then
+  if [ "$REUSE" = 1 ]; then
     PREV=$(grep -l "origin/main: $SHORT" "$LOGD"/deploy-main-*.log 2>/dev/null | while read f; do
              grep -qE "Executed [0-9]+ tests, with 0 failures" "$f" \
              && grep -qE "Executed [0-9]+ tests, with [0-9]+ tests skipped and 0 failures" "$f" \
@@ -150,9 +468,9 @@ main() {
   PRIOR=$(git -C "$C" rev-parse HEAD)
   git -C "$C" status --porcelain > "$RB/prior-status.txt"
   git -C "$C" diff > "$RB/prior-tracked-changes.patch"
-  "$PY" - "$C/data" "$RB" <<'PYB' || die "database backup failed"
+  "$PY" - "$C/data" "$RB" "$HELD" <<'PYB' || die "database backup failed"
 import sqlite3, sys, hashlib, json, pathlib
-src, dst = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+src, dst = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]); held = sys.argv[3] == "1"
 meta = {}
 for name in ("jarvis.db", "costs.db"):
     s = src / name
@@ -165,13 +483,23 @@ with sqlite3.connect(dst / "jarvis.db") as c:
     meta["memories"] = c.execute("select count(*) from memories").fetchone()[0]
     meta["memories_columns"] = len(c.execute("pragma table_info(memories)").fetchall())
     meta["extraction_cursor"] = c.execute("select * from memory_extraction_cursor").fetchall()
-(dst / "db-backup.json").write_text(json.dumps(meta, indent=1)); print(json.dumps(meta))
+(dst / "db-backup.json").write_text(json.dumps(meta, indent=1)); (dst / "db-backup.json").chmod(0o600)
+print("consistent database snapshots saved" if held else json.dumps(meta))
 PYB
-  tar -C "$C" --exclude ./.git --exclude ./.venv --exclude ./data --exclude ./logs \
+  if [ "$HELD" = 1 ]; then
+    tar -C "$C" --exclude './.env' --exclude './.env.*' --exclude '*/.env' --exclude '*/.env.*' \
+      --exclude '*/.venv' --exclude '*/data' --exclude '*/logs' --exclude '*.db' --exclude '*.db-wal' \
+      --exclude '*.db-shm' --exclude '*.sqlite' --exclude '*.sqlite3' --exclude ./.git --exclude ./.venv --exclude ./data --exclude ./logs \
       --exclude './macos/*/.build' --exclude '*/node_modules' --exclude '*/__pycache__' \
-      -czf "$RB/code.tgz" . || die "code tarball failed"
+      -czf "$RB/code.tgz" .
+  else
+    tar -C "$C" --exclude ./.git --exclude ./.venv --exclude ./data --exclude ./logs \
+      --exclude './macos/*/.build' --exclude '*/node_modules' --exclude '*/__pycache__' \
+      -czf "$RB/code.tgz" .
+  fi || die "code tarball failed"
   [ -d "$C/macos/MortimerHost/.build/MortimerHost.app" ] && ditto "$C/macos/MortimerHost/.build/MortimerHost.app" "$RB/MortimerHost.app"
   echo "code.tgz $(du -h "$RB/code.tgz" | cut -f1), prior HEAD ${PRIOR:0:7}, app bundle copied: $([ -d "$RB/MortimerHost.app" ] && echo yes || echo no)"
+  if [ "$HELD" = 0 ]; then
   cat > "$RB/ROLLBACK.sh" <<RBEOF
 #!/bin/bash
 # Restore production to its state before the $SHORT deploy of $TS.
@@ -193,10 +521,22 @@ fi
 sleep 8; open "\$C/macos/MortimerHost/.build/MortimerHost.app"; echo "rolled back to ${PRIOR:0:7} + prior local changes"
 RBEOF
   chmod +x "$RB/ROLLBACK.sh"; echo "rollback script: $RB/ROLLBACK.sh"
+  fi
+
+  if [ "$HELD" = 1 ]; then
+    held_python snapshot "$C" "$SOURCE_PATH" "$RB" "$HERE" "$TARGET" "$APPROVAL" || die "held rollback snapshot refused"
+    held_python hold "$C" "$SOURCE_PATH" || die "hold changed before installation"
+    held_python floor "$C" "$SOURCE_PATH" "$RB" || die "held policy changed before installation"
+    held_python stop-app "$C" "$SOURCE_PATH" || die "app still active; no installation"
+  fi
 
   # --------------------------------------------------------------- C. install
   say "C. install $SHORT into production (services still on the old code in memory)"
   restore_code() {
+    if [ "$HELD" = 1 ]; then
+      held_python rollback "$C" "$SOURCE_PATH" "$RB" || die "held rollback failed; do not use legacy restart"
+      return
+    fi
     git -C "$C" checkout -q -f --detach "$PRIOR" && echo "git HEAD back on ${PRIOR:0:7}" || echo "WARNING: git checkout of ${PRIOR:0:7} failed -- files restored from the tarball only"
     tar -C "$C" -xzf "$RB/code.tgz" && echo "working files restored from $RB/code.tgz" || echo "WARNING: tarball restore reported errors -- see $RB"; }
   git -C "$C" fetch -q origin || die "production fetch failed"
@@ -209,9 +549,15 @@ RBEOF
   APPP="$C/macos/MortimerHost/.build/MortimerHost.app"
   REV=$(/usr/libexec/PlistBuddy -c 'Print :MortimerSourceRevision' "$APPP/Contents/Info.plist" 2>/dev/null)
   [ $BRC -eq 0 ] && [ "$REV" = "$TARGET" ] || {
-    restore_code; rm -rf "$APPP"; ditto "$RB/MortimerHost.app" "$APPP"
+    if [ "$HELD" = 1 ]; then restore_code; else restore_code; rm -rf "$APPP"; ditto "$RB/MortimerHost.app" "$APPP"; fi
     die "app build failed or bundle revision '$REV' != $TARGET -- production code and app restored; services were never restarted"; }
   echo "bundle revision: $REV"
+
+  if [ "$HELD" = 1 ]; then
+    held_python installed "$C" "$SOURCE_PATH" "$RB" || { held_python quarantine "$C" "$SOURCE_PATH" || die "held quarantine failed; no automatic rollback"; die "installed-held proof failed; services quarantined"; }
+    say "DONE -- installed-held; no service or app activation. Use only the frozen held rollback."
+    return 0
+  fi
 
   # ---------------------------------------------------------------- D. switch
   say "D. switch over"

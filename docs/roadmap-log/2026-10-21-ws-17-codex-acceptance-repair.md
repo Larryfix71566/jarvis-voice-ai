@@ -286,3 +286,15 @@ system review is not completed; no verdict or live acceptance is inferred.
 Operational records stay local. No checkbox closure; parent UI2/hardware/release/
 observation gates remain separate. Both implementation merges are authorized
 subject to required gates; row/header wording describes the after-merge state.
+
+
+## Canonical held deployment prerequisite implemented
+
+Following registration `1f864e6`, the protected canonical deployer gains
+install-held, explicitly limited local restoration and frozen rollback-held.
+Application/provider/native/config/dependency/cleanup bytes remain at207bb8b.
+The [source/synthetic receipt](../acceptance/command-console/receipts/ws17-held-deployment-tool-2026-10-21.md)
+records86 focused passes, syntax checks, actual generated Bash rollback in fake
+HOME, no-restart/no-settings-or-DB-restore and source/receipt/lease/hold failures.
+No live action, new permission, private operational record or acceptance closure.
+Required final-head CI and exact source review remain distinct.
