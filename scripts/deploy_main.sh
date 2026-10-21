@@ -443,8 +443,13 @@ PY_HELD
   case "$IMP" in "$V"/*) echo "python imports jarvis from the worktree: ok ($IMP)";; *) die "python imported jarvis from $IMP, not $V";; esac
 
   swift_gate() {  # $1 package dir, $2 label -- capture once, judge the suite's own final tally
-    local out final
-    out=$(cd "$V/$1" && swift test 2>&1); echo "$out" > "$LOGD/deploy-$2-$TS.txt"
+    local out final status=0
+    # Write diagnostics as they arrive: a stalled/killed XCTest must not keep
+    # its only evidence in a command-substitution buffer. A prior passing
+    # subsuite tally never authorizes a failed or interrupted Swift process.
+    (cd "$V/$1" && swift test) > "$LOGD/deploy-$2-$TS.txt" 2>&1 || status=$?
+    out=$(cat "$LOGD/deploy-$2-$TS.txt") || die "$2 log unavailable"
+    [ "$status" -eq 0 ] || die "$2 suite failed (exit $status; see deploy-$2-$TS.txt)"
     # No `echo | grep -q` under pipefail: grep -q exits at its first match and the
     # writer can die of SIGPIPE, turning a match into a non-zero pipeline (23 Sep:
     # a 250-test pass was stopped twice). Here-strings and [[ =~ ]] have no writer.

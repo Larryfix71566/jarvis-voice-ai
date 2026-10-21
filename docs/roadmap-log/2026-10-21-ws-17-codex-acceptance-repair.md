@@ -304,3 +304,17 @@ canonical local launch arguments/cwd and known runtime are required before
 enable/bootstrap, loader overrides/foreign KB paths refuse, and the helper uses
 isolated no-site Python. Final focused group92passes/4.74s. Final publication CI
 and required exact-source review remain separate; no live action or checkbox.
+
+
+## Bounded verifier exit-status repair
+
+Existing WS17 canonical-deployer scope: require the Swift process exit status
+before accepting its final tally, and stream the captured native log to its
+existing private log file during execution. Add synthetic actual-Bash regressions
+for nonzero exits with a prior passing subsuite and log visibility while blocked.
+No test assertion/profile, application runtime, timeout, permission or acceptance
+criterion changes. Independent source review and final CI precede another deploy.
+
+Synthetic red/green complete: three failures/ten controls before;98 focused passes
+after. Only the verifier status/log handling and its synthetic tests change.
+Required new exact-source review and publication CI precede a retry.
