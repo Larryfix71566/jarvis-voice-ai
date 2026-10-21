@@ -2,7 +2,7 @@
 date: 2026-10-20
 system: codex
 rows: [WS-29]
-prs: []
+prs: [228]
 ---
 
 # WS-29 — Claude implementation-readiness review
@@ -19,3 +19,5 @@ Larry supplied Claude's review after the original constraint plan merged in PR #
 This slice changes documentation only. It makes no provider calls, enables no skills or workflows, changes no prompt/runtime/configuration, and closes no acceptance gate. The existing acceptance-first start gate remains authoritative.
 
 Validation at preparation: `git diff --check`; all 23 disposition rows remain present; SC0–SC7 and AT-01–AT-19 are present; relative links resolve; and `python3 scripts/check_roadmap.py` retains the one pre-existing WS-17 stale-review finding for merged PR #226 with no WS-29 error. Runtime and live-model tests were not run for this documentation-only amendment.
+
+Published draft [PR #228](https://github.com/Larryfix71566/jarvis-voice-ai/pull/228) from `codex/ws29-claude-review-20261020`; initial amendment commit `3bda1a0`. The PR remains a reviewable documentation change and does not start WS-29 implementation.
