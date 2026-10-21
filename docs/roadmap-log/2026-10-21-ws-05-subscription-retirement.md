@@ -31,3 +31,13 @@ Codex compatibility, account/overage evidence and eligible private routing.
 Standalone direct-API diagnostics now honor the same refusal policy; the
 diagnostic guard/check-env group passes 50 offline tests. No provider calls, credential changes, deployment
 or private-source transfer occurred. No automatic approval rejection occurred.
+
+
+Continuation: integrated #231 main `3061408`; roadmap checker now clean.
+Buffered Claude voice/tool adapter implemented with 14 synthetic tests passing,
+including actual Pipecat registered-handler dispatch. The LLM provider-selection
+branch is now also part of the bounded pipeline overlap; delegate/Base/Registry
+remain untouched. Codex bundle discovery preserves explicit overrides and
+exact-version gates. Read-only sanitized CLI status reports Codex ChatGPT login
+and Claude not logged in. No inference, activation or credential mutation.
+See the plan's continuation for precise remaining source/account/live gates.

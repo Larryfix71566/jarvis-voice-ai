@@ -42,6 +42,12 @@ def retirement_readiness() -> dict[str, Any]:
         "shared_routing_enabled": os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1",
         "subscription_text_enabled": os.environ.get("JARVIS_SUBSCRIPTION_TEXT_ENABLED") == "1",
         "activation_ready": False,
+        "voice_adapter": {
+            "implementation": "buffered_native_tool_bridge",
+            "incremental_streaming_verified": False,
+            "requires_host_classified_context": True,
+            "production_activation_allowed": False,
+        },
         "inference_attempts": 0,
         "runtimes": runtimes,
         "blockers": [

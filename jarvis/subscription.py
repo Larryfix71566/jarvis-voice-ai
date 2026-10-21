@@ -89,9 +89,23 @@ COMMAND_ENV = {
 }
 
 
+_BUNDLED_CODEX = Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex")
+
+
 def provider_command(which: str) -> str:
-    """The configured CLI for `which` ('claude' or 'codex'), else its bare name."""
-    return os.environ.get(COMMAND_ENV[which]) or which
+    """Explicit command, PATH command, then the installed macOS Codex bundle.
+
+    Discovery grants no capability/authentication. Exact executable/version
+    receipts still gate execution. An explicit broken override never falls
+    through to a different executable.
+    """
+    configured = os.environ.get(COMMAND_ENV[which])
+    if configured:
+        return configured
+    if (which == "codex" and shutil.which(which) is None
+            and _BUNDLED_CODEX.is_file() and os.access(_BUNDLED_CODEX, os.X_OK)):
+        return str(_BUNDLED_CODEX)
+    return which
 
 _CODEX_NO_TOOL_VERIFICATION_ENV = "JARVIS_CODEX_SUBSCRIPTION_NO_TOOLS_VERIFIED"
 CODEX_CAPABILITY_RECEIPT_ENV = "JARVIS_CODEX_SUBSCRIPTION_CAPABILITY_RECEIPT"

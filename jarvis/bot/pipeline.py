@@ -1604,7 +1604,17 @@ def build_pipeline(
     # base_url routes there. Everything else keeps OpenAILLMService
     # unchanged. Lazy import: google-genai is an optional dependency and a
     # non-Google deployment must not need it installed.
-    if "generativelanguage.googleapis.com" in (settings.openai_base_url or ""):
+    from jarvis.provider_access import subscription_only
+    if subscription_only() or getattr(settings, "jarvis_llm_access_mode", None) == "subscription_only":
+        # Candidate integration only: the early readiness guard still blocks
+        # activation. No ordinary-turn boolean may authorize the full context.
+        from jarvis.bot.subscription_llm import SubscriptionVoiceLLMService
+        from jarvis.model_routing import resolve_model_route
+        llm = request_bound_service(SubscriptionVoiceLLMService, runtime.foreground_requests)(
+            resolved=resolve_model_route("voice_supervisor"),
+            session_id=runtime.session_id,
+        )
+    elif "generativelanguage.googleapis.com" in (settings.openai_base_url or ""):
         from pipecat.services.google.llm import GoogleLLMService
         llm = request_bound_service(GoogleLLMService, runtime.foreground_requests)(
             api_key=settings.openai_api_key,

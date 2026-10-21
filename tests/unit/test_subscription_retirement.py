@@ -99,6 +99,25 @@ def test_diagnostic_policy_honors_dotenv_without_export(monkeypatch):
         check_env.require_model_api_access()
 
 
+def test_codex_discovery_keeps_explicit_command_authoritative(monkeypatch, tmp_path):
+    from jarvis import subscription
+    bundled = tmp_path / "bundled-codex"
+    bundled.write_text("synthetic runtime, never executed")
+    bundled.chmod(0o700)
+    monkeypatch.setattr(subscription, "_BUNDLED_CODEX", bundled)
+    monkeypatch.setattr(subscription.shutil, "which", lambda _: None)
+    monkeypatch.delenv("JARVIS_CODEX_SUBSCRIPTION_COMMAND", raising=False)
+    assert subscription.provider_command("codex") == str(bundled)
+    monkeypatch.setenv("JARVIS_CODEX_SUBSCRIPTION_COMMAND", "/missing/explicit-codex")
+    assert subscription.provider_command("codex") == "/missing/explicit-codex"
+    monkeypatch.delenv("JARVIS_CODEX_SUBSCRIPTION_COMMAND")
+    monkeypatch.setattr(subscription.shutil, "which", lambda _: "/path/codex")
+    assert subscription.provider_command("codex") == "codex"
+    monkeypatch.setattr(subscription.shutil, "which", lambda _: None)
+    bundled.chmod(0o600)
+    assert subscription.provider_command("codex") == "codex"
+
+
 def test_standalone_key_diagnostic_refuses_before_vault(retired):
     import runpy
     from pathlib import Path
