@@ -48,3 +48,15 @@ Frozen runtime `763bfe1` clean unit result: 6,661 passed, 11 skipped, two
 subtests passed. Runtime source stays frozen; this follow-up corrects account
 metadata and records evidence/remaining acceptance only. Integration/evals and
 final-head CI terminal outcomes are recorded on PR #232 when available.
+
+
+Follow-up: all five final-head checks on `c8f2e56` passed. The installed Codex
+0.163.0-alpha.10.2 now has actual localhost positive/hostile-tool evidence under
+external-network denial and empty temporary HOME. Candidate inspection does
+not authorize an unknown runtime; exact runtime/receipt/operator gates remain.
+The directly related six-file subscription test group passes 174 tests after
+allowing the three local Unix-socket fixtures. No provider inference occurred.
+Full voice provenance is unfinished implementation requiring an expanded
+source-policy-only handoff outside the two agreed pipeline regions; the plan
+records exact ingress, result, memory and history boundaries. Protected-route
+availability and live/account acceptance remain separate decisions.

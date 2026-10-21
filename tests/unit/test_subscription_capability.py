@@ -79,6 +79,32 @@ def test_unknown_installed_version_fails_before_provider(monkeypatch, tmp_path):
         S.codex_runtime_identity()
 
 
+def test_candidate_inspection_does_not_enable_unknown_runtime(monkeypatch, tmp_path):
+    from scripts.verify_subscription_capability import candidate_identity
+    executable = tmp_path / "codex"
+    executable.write_bytes(b"synthetic executable identity")
+    monkeypatch.setattr(S.shutil, "which", lambda _: str(executable))
+    monkeypatch.setattr(S.subprocess, "run", lambda *_a, **_k: type("R", (), {
+        "stdout": "codex-cli 99.0.0", "returncode": 0})())
+    identity = candidate_identity()
+    assert identity["version"] == "codex-cli 99.0.0"
+    assert identity["sha256"] == S._file_digest(executable)
+    with pytest.raises(S.SubscriptionCapabilityError, match="no verified capability contract"):
+        S.codex_runtime_identity()
+
+
+def test_current_loopback_verified_runtime_still_requires_exact_receipt(monkeypatch, tmp_path):
+    executable = tmp_path / "codex"
+    executable.write_bytes(b"synthetic current executable")
+    monkeypatch.setattr(S.shutil, "which", lambda _: str(executable))
+    monkeypatch.setattr(S.subprocess, "run", lambda *_a, **_k: type("R", (), {
+        "stdout": "codex-cli 0.163.0-alpha.10.2", "returncode": 0})())
+    assert S.codex_runtime_identity()["version"] == "codex-cli 0.163.0-alpha.10.2"
+    monkeypatch.delenv(S.CODEX_CAPABILITY_RECEIPT_ENV, raising=False)
+    with pytest.raises(S.SubscriptionCapabilityError, match="receipt is required"):
+        S.validate_codex_capability_receipt("gpt-6-astra")
+
+
 def test_text_parser_rejects_tool_execution_even_after_successful_terminal():
     stream = ('{"type":"item.completed","item":{"type":"command_execution","command":"touch /tmp/canary"}}\n'
               '{"type":"item.completed","item":{"type":"agent_message","text":"answer"}}\n'

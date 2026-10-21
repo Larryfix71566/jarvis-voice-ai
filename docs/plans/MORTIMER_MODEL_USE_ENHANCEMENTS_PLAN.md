@@ -882,3 +882,61 @@ The implemented alternative is buffered Claude speech with Mortimer-owned tools
 for appropriately classified workloads. Protected work must remain unavailable
 until an eligible private/local route exists or Larry explicitly approves a
 narrow source-policy change. Existing restrictions have not been relaxed.
+
+
+### 2026-10-21 — Offline runtime proof and voice provenance integration boundary
+
+The final `c8f2e56` candidate passed all five CI checks (validation run
+39538458818), with local 6,661 unit / 197 integration / 13 eval passes on its
+runtime source `763bfe1`. The following bounded continuation supersedes only
+the earlier installed-Codex compatibility blocker, not live/account acceptance.
+
+The existing installed-CLI localhost diagnostic now has a candidate-only mode
+that can inspect an unverified version without changing the production gate.
+Actual Codex `0.163.0-alpha.10.2` passed both positive and hostile-tool fixtures:
+one credential-free request with an empty tool menu completed successfully;
+the negative fixture made two requests, explicitly refused the injected
+`exec_command`, and left its canary absent. External networking and reads of
+the existing Codex/Keychain credential directories were denied by an additional
+macOS sandbox, and HOME was an empty temporary directory. No inference or
+account request occurred. The exact binary/model/catalog/invocation evidence is
+[codex-0163-loopback-capability-2026-10-21.json](../acceptance/model-use-enhancements/receipts/codex-0163-loopback-capability-2026-10-21.json).
+This evidence supports adding that exact version to the verified text-runtime
+set. Matching receipt and operator gates still apply; no production variable,
+route, credential, tool permission, model identity or old fixture was changed.
+A future release may change the binary and invalidate this receipt.
+
+Full voice source classification is **unfinished implementation**, not a user
+consent switch. The agreed WS-05/WS-17 handoff currently covers only the early
+readiness guard and LLM selection. The missing source bindings occur outside
+those regions:
+
+- `jarvis/memory.py:render_memory_context` returns one string with facts and
+  summary; `pipeline.py` inserts it directly into the system prompt. The
+  renderer must return host-owned policy/source metadata alongside the exact
+  rendered bytes; historical/unclassified memory remains confidential.
+- The accepted user-aggregator boundary and every assistant append need
+  immutable source bindings. `SensitiveTurn.clear()` resets the current flag;
+  that flag cannot authorize older retained history. Outputs inherit the
+  complete input's strictest policy, including local-only restrictions.
+- `pipeline.py:adapt_to_pipecat` passes plain results to `result_callback`.
+  Trusted tool scope/result policies must survive this boundary before JSON
+  conversion and be bound to exact call IDs and result bytes. Model-supplied
+  labels are never authority. Delegate/Base/Registry metadata transport needs
+  a bounded handoff coordinated with the acceptance owner.
+- Clipboard injection, `inject_context`, `inject_late_result`, deferred
+  injection and history rewriting/minimization must carry those same bindings.
+  A copied, mutated, unbound or stale message must fail closed; compaction must
+  preserve the strictest source floor rather than infer approval from text.
+
+The smallest integration dependency is an explicit expanded handoff for those
+source-policy-only boundaries (plus directly related regression tests), with
+WS-17 retaining weather, foreground/request identity and cancellation behavior.
+No such regions were edited in this continuation. This can be implemented
+without inference or user declassification once ownership is coordinated.
+It would still correctly block memory/private/local-only contexts from the
+approved-external subscription route. Supporting those contexts requires an
+eligible private/local runtime, a separate product/route decision; removing or
+relabeling memory is not assumed. Live synthetic consent, account overage and
+external source-review consent remain pending. No generic privacy approval
+can substitute for this implementation.
