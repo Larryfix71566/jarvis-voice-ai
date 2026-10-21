@@ -1498,3 +1498,16 @@ class TestExplicitTaskLifecycle:
         assert "requested" in handler.control_input("Cancel the task")
         await asyncio.sleep(0.01)
         assert delivered == [] and agent.finished_at is None
+
+
+async def test_task_terminal_trace_measures_elapsed_without_prompt_content(caplog):
+    import logging
+    agent = SlowFakeSubAgent("developer", delay=0.01)
+    _, handler = build_delegate_tool({"developer": agent})
+    with caplog.at_level(logging.INFO, logger="jarvis.agents.delegate"):
+        await handler({"agent_name": "developer", "task": "PRIVATE_SYNTHETIC_TASK_CANARY"})
+    records = [r for r in caplog.records if r.message.startswith("delegate_terminal ")]
+    assert len(records) == 1
+    elapsed = int(records[0].message.split("elapsed_ms=")[1].split()[0])
+    assert elapsed >= 10
+    assert "PRIVATE_SYNTHETIC_TASK_CANARY" not in caplog.text

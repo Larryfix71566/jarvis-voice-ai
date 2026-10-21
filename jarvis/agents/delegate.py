@@ -666,12 +666,15 @@ def build_delegate_tool(
 
         run_id = str(uuid.uuid4())
         terminal_emitted = False
+        started_at = time.monotonic()
 
         def _emit_terminal(ok: bool) -> None:
             nonlocal terminal_emitted
             if terminal_emitted:
                 return
             terminal_emitted = True
+            logger.info("delegate_terminal run_id=%s elapsed_ms=%d ok=%s",
+                        run_id, max(0, int((time.monotonic() - started_at) * 1000)), ok)
             if on_event is None:
                 return
             _emit_event(on_event, {

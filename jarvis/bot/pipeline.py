@@ -1977,6 +1977,8 @@ async def send_app_message(transport: Any, message: dict) -> None:
         payload.pop("origin_request_id", None)
         if (request := _foreground_request.get()) is not None:
             payload["origin_request_id"] = request.request_id
+            _logger.info("display_dispatch request_id=%s request_sequence=%d",
+                         request.request_id, request.sequence)
         message = {**message, "display": payload}
     await transport.output().send_message(
         OutputTransportMessageUrgentFrame(message=_wrap_rtvi(message)))

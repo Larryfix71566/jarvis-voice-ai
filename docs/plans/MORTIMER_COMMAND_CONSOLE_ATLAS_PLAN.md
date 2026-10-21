@@ -3333,3 +3333,18 @@ cancelled orphaned tasks produce no late success. Notes expire at the next
 accepted turn. Combined focused verification: 223 passed, eight deprecation
 warnings. No new wire/tool/config or durable task framework. Continue truthful
 roadmap/build/acceptance/test reporting, then full integrated gates.
+
+
+### 2026-10-21 — Truthful reporting, lifecycle timing and runner handoff
+
+The existing Supervisor/Developer/console guidance now identifies formatted
+roadmap results, actual installed-build authority, the three acceptance
+reporting states, reviewed selfedit/readback and a truthful missing-test-runner
+handoff. No new executor grant or guided wizard. Transient acceptance notes
+expire; content-free request identities and monotonic terminal duration enable
+bounded live trace correlation. The 710-test affected group passes (ten
+warnings, including an inherited test-callback warning). Prompt compliance
+still needs observation. Read-only 503 investigation identifies guarded
+endpoint possibilities but not the production branch; memory parsing remains
+separate. Full suites, independent exact-source verification/review, CI and
+coordinated provider integration are next; live criteria stay open.

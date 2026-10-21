@@ -73,3 +73,35 @@ workflow tracking. No model tool, schema, privilege, durable queue or provider
 setting is added. The combined lifecycle/boundary/weather/wiring group passes
 223 tests, eight deprecation warnings, in 10.60 seconds. This is a focused
 working-tree check, not the full release gate or live acceptance.
+
+
+## Truthful reporting and measurable lifecycle slice
+
+Task-control commit: `5f1b6b8`. Reporting guidance now explains automatic
+formatted-roadmap emission/main-window selection, historical deployment
+headers versus verified installed build, operator-reported passes versus
+verified evidence versus reviewed canonical Git readback, and truthful
+missing-runner handoff. Existing selfedit documentation governance remains
+mandatory. The Developer's core stays within its existing size budget; no
+execution tool or capability grant is added. Acceptance reminders are bounded
+to relevant turns and tombstoned on the next user turn. They do not assert
+that an observation persisted or any checkbox changed.
+
+Content-free display request/sequence breadcrumbs and monotonic delegation
+terminal elapsed time support trace correlation without transcript, task,
+location or result contents. The expanded reporting/dispatch/lifecycle/privacy
+group passes 710 tests, ten warnings, in 9.33 seconds. Warnings include SDK
+and audio deprecations plus the existing reply-guard test callback's unawaited
+coroutine warning. Model compliance and live/visual behavior remain unverified.
+
+Separate read-only investigation: the Skills runtime-inventory endpoint
+explicitly returns 503 when bearer authentication/identity is unavailable or
+inventory capacity is full. The reporter logs only exception type, so the
+reviewed production 503 status alone does not identify which branch fired.
+No authentication/security setting is changed. The isolated memory parsing
+warning has no demonstrated causal connection to weather or foreground
+selection. Neither unrelated warning is converted into an acceptance pass.
+
+Next: freeze committed source, run required full host and independent checks,
+refresh CI and obtain the required independent review within authorized
+privacy boundaries. No production/deployment or human acceptance change.
