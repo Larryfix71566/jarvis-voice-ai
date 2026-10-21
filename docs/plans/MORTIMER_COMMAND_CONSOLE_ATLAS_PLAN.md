@@ -3481,3 +3481,13 @@ system review is not completed; no verdict or live acceptance is inferred.
 Operational records stay local. No checkbox closure; parent UI2/hardware/release/
 observation gates remain separate. Both implementation merges are authorized
 subject to required gates; row/header wording describes the after-merge state.
+
+
+### 2026-10-21 — Bounded canonical selective-restoration tool scope
+
+Larry's existing complete-plan and selective-restoration approval covers the
+recoverable canonical deployment prerequisite. WS17 records before code: only
+`deploy_main.sh` held install/local restore/held rollback and synthetic deployment
+contracts. WS04's historical authenticated-health integration remains unchanged;
+no other active owner locks this path. Preserve all denied/human-only file tiers,
+application runtime bytes and live/private/cost gates. No deployment execution.
