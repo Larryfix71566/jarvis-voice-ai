@@ -1,0 +1,209 @@
+{
+  "version": 1,
+  "created_at": "2026-10-21T23:22:49.548581+00:00",
+  "row": "WS-17",
+  "candidate_source_commit": "e9c30b0a0814844251b0ad09d0e7f39a19f805dc",
+  "merged_code_commit": "63c5cdedf784aff5d91962838ea183eb73582ca0",
+  "program_sha256": "d2b3561f8b417f57b1d8241ca9f981a082b44ef9caf880fcd65f01053fbd5080",
+  "candidate": "dfabb82aa1cae760af8ffb1d85702ea6f4c555a05627426432d63059f4855828",
+  "baseline": "1cb637d1ad2667fb040715a9ba54f43b6216b1cf8b7c943d77649afc70e67711",
+  "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+  "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+  "runner": "62019da52862d37e1e9c12b521849171440d27c57846a156c3e6994ee71d4b39",
+  "source_manifest_sha256": {
+    "jarvis/subscription_tools.py": "8c9d64f06d3b6392002e21da4cff9a4d895927fb34d0550336edc2375f2142f2",
+    "tests/unit/test_subscription_tools.py": "b6e53c9b582d5d42de981305ce13c74d62eef53903a4d2e1c016a5fe2f8274ce"
+  },
+  "independent": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "backend-imports",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 1.3,
+        "argv_sha256": "babfe431cf19643df6a15b078a5275b11ac08afb48afb8dc6a4d38f08222d25f",
+        "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "test_summary": null
+      },
+      {
+        "name": "baseline-backend",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 420.009,
+        "argv_sha256": "9d84e31c7a8436193f81650832c00aec2ac3c5d1dbfa4fa2794b7455f9a78a75",
+        "log_sha256": "576bb96ba35921ce12478d46434b43f7f7698421cf25df16ed1e9e29eaa49008",
+        "test_summary": "6280 passed, 11 skipped, 54 warnings, 2 subtests passed in 418.67s (0:06:58)"
+      },
+      {
+        "name": "backend",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 461.643,
+        "argv_sha256": "202c5ff0f25ed0e9ee981bc463d26f0f1106f86697beb21aabbda203c806314b",
+        "log_sha256": "32f64b668eda41d5450f9e97763a090e0da363a67c56d3b40ca6371b61fed379",
+        "test_summary": "6838 passed, 11 skipped, 59 warnings, 2 subtests passed in 459.40s (0:07:39)"
+      },
+      {
+        "name": "scripted-evals",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 1.286,
+        "argv_sha256": "bb6690c97cce1d44dcc15e6cad8e76160ef6e8473f901f777118317480ba8007",
+        "log_sha256": "519c569d8f8dbf7f1bb98772ca9ba8b8bc252dd9ea7fadac0c928d9f6a028539",
+        "test_summary": "13 passed, 1 warning in 0.85s"
+      },
+      {
+        "name": "latency",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 0.157,
+        "argv_sha256": "5f57ace5fa75ad605900ab460cef1be5e5e67cd59665f4c19f23cc1d86149155",
+        "log_sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a",
+        "test_summary": null
+      },
+      {
+        "name": "knowledge-base",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 3.369,
+        "argv_sha256": "f328866430e6af08c972555ad6879f35a325a980081f157577e31be99a3e2874",
+        "log_sha256": "46972187b5d55701043f97b4f726cbb15c5a2d6a2be97e6d80bd6bc2a84a7e80",
+        "test_summary": "17 passed, 5 warnings in 3.01s"
+      },
+      {
+        "name": "baseline-knowledge-base",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 5.615,
+        "argv_sha256": "b010367c5845c564c5d0d60b3a51b7916eeff664c5f6063aa2de34033ea6faa7",
+        "log_sha256": "4c54261b160fdc2e55586099c2200d9d771ffc8a8ae9a5b13a8355978eee94ac",
+        "test_summary": "17 passed, 6 warnings in 4.38s"
+      },
+      {
+        "name": "web",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 31.131,
+        "argv_sha256": "30afddbd6164a1c9a1745d7a4eeba53e9fb618211d6ee0b8caf850215486d5ce",
+        "log_sha256": "e3af71a029c1960806c431d918c4e3e33b4ea8adc763f56a2b025b97eafc57d7",
+        "test_summary": null
+      },
+      {
+        "name": "native-library",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 88.474,
+        "argv_sha256": "a78ab90070d308e37afa5e2979e9ee8bb0eb7670a6253e47d69d55f7b9c8b25f",
+        "log_sha256": "4e7f51093b35d7f42363c1b3334ec28ae3338208379a6946a562d4d9db831864",
+        "test_summary": "Executed 235 tests, with 0 failures (0 unexpected) in 10.310 (10.336) seconds"
+      },
+      {
+        "name": "native-app",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 210.522,
+        "argv_sha256": "63a033041d826e22c7af15a85f889363ff365d115f21413ad5f9b676e18f67e9",
+        "log_sha256": "d4187beae0c53cbed4b4f04b4a760b5e7bbd827e08a48a9de8543cecca175a2d",
+        "test_summary": "Executed 580 tests, with 8 tests skipped and 0 failures (0 unexpected) in 162.884 (162.925) seconds"
+      },
+      {
+        "name": "baseline-native-library",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 21.7,
+        "argv_sha256": "714be1f5a143934ca0aaee6660552c06393676872a1e857ded7bf4d3305b2694",
+        "log_sha256": "47d0138acb5252ce637cd681ec7fe44f742e6938338d5a487b42e7f402efb7b3",
+        "test_summary": "Executed 227 tests, with 0 failures (0 unexpected) in 9.743 (9.766) seconds"
+      },
+      {
+        "name": "baseline-native-app",
+        "passed": true,
+        "returncode": 0,
+        "seconds": 184.718,
+        "argv_sha256": "9a493623ba6d43f90fae8e8fb68bea3cfb43315e6090bf4d844b8d2e4609ee8d",
+        "log_sha256": "0f3761250e828ef7d84706690b48f89d215bdffe7fb03f017e91f47b25ed69fa",
+        "test_summary": "Executed 514 tests, with 7 tests skipped and 0 failures (0 unexpected) in 145.587 (145.632) seconds"
+      }
+    ],
+    "source_unchanged": true,
+    "owned_cleanup_completed": true,
+    "preservation_checks_passed": true
+  },
+  "publication_ci": {
+    "source": "e9c30b0a0814844251b0ad09d0e7f39a19f805dc",
+    "checks": {
+      "allowlist": "SUCCESS",
+      "knowledge-base": "SUCCESS",
+      "controller-tests": "SUCCESS",
+      "policy-tests": "SUCCESS",
+      "validate": "SUCCESS"
+    },
+    "receipts": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-21T22:25:59Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39686421956/job/119521518012",
+        "name": "allowlist",
+        "startedAt": "2026-10-21T22:25:51Z",
+        "status": "COMPLETED",
+        "workflowName": ".github/workflows/validate.yml"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-21T22:26:09Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39686422047/job/119521519359",
+        "name": "knowledge-base",
+        "startedAt": "2026-10-21T22:25:51Z",
+        "status": "COMPLETED",
+        "workflowName": "Knowledge base"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-21T22:26:00Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39686421987/job/119521518649",
+        "name": "controller-tests",
+        "startedAt": "2026-10-21T22:25:51Z",
+        "status": "COMPLETED",
+        "workflowName": "Sandbox controller"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-21T22:25:57Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39686421956/job/119521518096",
+        "name": "policy-tests",
+        "startedAt": "2026-10-21T22:25:51Z",
+        "status": "COMPLETED",
+        "workflowName": ".github/workflows/validate.yml"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-10-21T22:37:38Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39686421956/job/119521517614",
+        "name": "validate",
+        "startedAt": "2026-10-21T22:25:51Z",
+        "status": "COMPLETED",
+        "workflowName": ".github/workflows/validate.yml"
+      }
+    ]
+  },
+  "source_review": {
+    "source": "e9c30b0a0814844251b0ad09d0e7f39a19f805dc",
+    "verdict": "no_blocking_findings",
+    "packet_sha256": "c7ec6da8a0bb7ff8373747af35cc5fa41054df60c6c67ed51bd37611396b47bd",
+    "verdict_sha256": "e9d60e51899dfe0e1f610594c688c2c5c4e92375d0d343fb1d8065ebedd4a9d3",
+    "scope": "narrow exact-version compatibility; no reviewer test execution"
+  },
+  "limits": [
+    "Source/synthetic protocol evidence; not actual installed-release identity.",
+    "VMnative has8explicitprerequisite skips; physicalhost/human tests remain separate.",
+    "Exact workload/private-route/authentication/latency/interruption/activation and observation gates are not closed by these totals.",
+    "No checkbox closure; counts overlap other suites."
+  ],
+  "privacy": "No operational service/ledger/account records, installed paths/metadata, VM identities, credentials or raw private logs."
+}
