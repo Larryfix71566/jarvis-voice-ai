@@ -3253,3 +3253,50 @@ and loaded-build proof precede the short fail-fast UI2-24/25 session, then
 affected UI2-23/22 and dependent UI2-04/09/13. Missing physical prerequisites,
 five-day release observation and the separate WS-06 week remain real evidence
 requirements, with no calendar-only or test-total closure.
+
+
+### 2026-10-21 — Approved bounded acceptance repair and integrated release
+
+Larry approved the complete six-part repair plan after the multi-turn/weather
+session: named-city intent must not become device-local weather; verify the
+foreground-selection cause before altering its semantics; distinguish speech
+barge-in from explicit task cancellation and avoid duplicate delegations; make
+roadmap/build/acceptance/test claims match verified evidence; use existing
+persistence and reviewed canonical Git updates; review and deploy one integrated
+release after coordinating active WS-05 subscription retirement. A dedicated
+guided acceptance wizard remains excluded. This is authorization and scope, not
+a record that any repair, test, review, deployment or visual acceptance passed.
+
+Branch `codex/ws17-acceptance-repair-20261021` starts at main `005e2a4`. Claim
+must land before runtime edits. CX-27 records overlap: `pipeline.py` weather,
+request, console and reporting adapters belong to this repair, while WS-05
+retains LLM construction/provider/subscription/authentication/billing. Any
+needed delegate/Base/Registry cancellation/source integration waits for a
+bounded coordinated handoff. No migration, flag, port, label or wire-contract
+identifier is introduced by this claim.
+
+Use only invented/public synthetic regression fixtures. Raw production logs,
+location fixes and operational deployment metadata remain local. Reproduce
+both named-city failures and actual current-result selection before changing
+behavior; test fresh, cached, corrective, unrelated, cancelled and superseded
+arrivals. Preserve supporting ownership, one presentation winner, native UUIDs,
+original fetch time, TTL and source/privacy rules.
+
+Existing durable conversation/run records can support operator observations;
+they are not canonical checkbox updates. Report separately: operator reported
+pass, evidence verified, reviewed Git update merged/read back. If the current
+agent has no approved test executor, say that clearly and give a bounded
+operator/development handoff. Repository searches and historical receipts must
+never be described as newly executed tests. No permission expansion or new
+acceptance engine is included. Investigate inventory 503s and memory warnings
+separately unless evidence proves a causal link.
+
+Review uses only permitted internal mechanisms until any additional required
+external-source disclosure is explicitly authorized. Required full suites and
+independent verification remain binding. Final deployment is authorized after
+those gates, with a fresh rollback snapshot, but held until subscription
+migration is complete and parent confirms no competing deployment. Then one
+focused live session checks roadmap main-window presentation, multi-turn
+references, predictable interruption/cancellation, Spartanburg/Atlanta reuse,
+and persisted observations with truthful reviewed-update status. Human/visual
+criteria stay open until Larry supplies their observations.
