@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status:** LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
+**Status:** SUBSCRIPTION RETIREMENT DISPATCHED 2026-10-20 — claim registration only; no runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -770,3 +770,14 @@ All broader source/identity/native-readiness/account/workload/rollout gates and
 acceptance flags retain their prior state; no deployment or live acceptance.
 
 Publication: documentation-only [PR #202](https://github.com/Larryfix71566/jarvis-voice-ai/pull/202) records this dated merged/CI/approval snapshot; it adds no runtime change or terminal WS-17 result.
+
+
+## 2026-10-20 — Direct-provider retirement dispatch (WS-05)
+
+Larry instructed Codex to proceed with retiring direct OpenAI and Anthropic API usage and migrating to his subscriptions. This extends the existing workstream; it does not create a separate plan or claim that the earlier live gates passed. Source: conversation `01a1573e-ae10-7388-b7c4-e36ff49120e0`.
+
+Implementation sequence: central fail-closed access policy and complete direct-call inventory; explicit subscription workload defaults and truthful aliases; verified Claude/Codex runtime capability integration, including voice/tool handling; offline regression coverage for missing runtime, expiration/quota, cancellation and no API fallback; staged operator readiness and activation only when supported. Deepgram/ElevenLabs speech services remain separate. OpenRouter is separately billed and cannot silently replace a subscription. Private-source and local-only policies remain binding. Do not copy subscription credentials into API clients.
+
+The audit of deployed `b136a2a` observed direct Anthropic voice, developer, analyst and maintenance calls; no direct OpenAI ledger entries. Legacy OpenAI defaults and automatic executor API failover remain to retire. Claude's saved subscription probe succeeds; Codex is absent from the service PATH. These are routing/readiness findings, not invoice or current authentication proof.
+
+Main `fd56e98` roadmap checker reports one unrelated stale WS-17 status (review despite merged #226). Preserve that owner's row; this dispatch does not close its acceptance. Claim branch: `codex/ws05-subscription-retirement-20261020`. Claim-only registration edits ROADMAP and this existing plan; runtime implementation must follow the merged claim.
