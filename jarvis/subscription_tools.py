@@ -42,7 +42,10 @@ from jarvis.privacy_policy import tool_argument_limit, tool_result_limit, bounde
 TOOLS_ENABLED_ENV = "JARVIS_SUBSCRIPTION_TOOLS_ENABLED"
 TOOL_CAPABILITY_RECEIPT_ENV = "JARVIS_SUBSCRIPTION_TOOL_CAPABILITY_RECEIPT"
 PROTOCOL = "claude-stream-json-mortimer-mcp-v2"
-CLAUDE_NATIVE_VERSIONS = frozenset({"2.1.290 (Claude Code)"})
+# Both exact versions passed installed-binary localhost control/tool isolation
+# fixtures. This identity gate never replaces exact workload/model/schema proof.
+# 2.1.291 evidence: docs/acceptance/command-console/receipts/ws17-claude-291-native-contract-2026-10-21.json
+CLAUDE_NATIVE_VERSIONS = frozenset({"2.1.290 (Claude Code)", "2.1.291 (Claude Code)"})
 MAX_TOOL_CALLS = 32
 MAX_RESULT_CHARACTERS = 1_000_000  # Same content limit as ModelContextMessage.
 MAX_RESULT_FRAME_BYTES = 6 * MAX_RESULT_CHARACTERS + 128
