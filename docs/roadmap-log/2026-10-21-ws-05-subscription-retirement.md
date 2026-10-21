@@ -28,6 +28,6 @@ WS-17 stale-status checker finding is left to its owner.
 
 Blocked: subscription voice/tool integration, exact workload/runtime receipts,
 Codex compatibility, account/overage evidence and eligible private routing.
-Standalone direct-API diagnostic utilities also remain to be guarded before
-repository-wide retirement. No provider calls, credential changes, deployment
+Standalone direct-API diagnostics now honor the same refusal policy; the
+diagnostic guard/check-env group passes 50 offline tests. No provider calls, credential changes, deployment
 or private-source transfer occurred. No automatic approval rejection occurred.

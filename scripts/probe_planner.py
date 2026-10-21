@@ -57,6 +57,8 @@ def main(argv: list[str]) -> int:
                     help="omit the repo map, to isolate its cost")
     args = ap.parse_args(argv[1:])
 
+    from scripts.check_env import require_model_api_access
+    require_model_api_access()
     inject_env()
     registry = load_model_registry()
     prof = resolve_profile(registry, args.profile)

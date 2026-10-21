@@ -80,6 +80,59 @@ def test_retained_valid_api_route_is_refused_at_client_boundary(retired):
         make_route_client(route)
 
 
+def test_diagnostic_probe_blocks_before_http_or_registry(retired):
+    from scripts import check_env
+    denied = Mock(side_effect=AssertionError("diagnostic contacted provider"))
+    retired.setattr(check_env.urllib.request, "urlopen", denied)
+    retired.setattr(check_env, "_load_model_registry", denied)
+    assert check_env.model_key_probe("https://unit.invalid", "unit", "unit")[0] == "blocked"
+    check_env.check_model_keys({"JARVIS_LLM_ACCESS_MODE": "subscription_only"}, set(), set())
+    denied.assert_not_called()
+
+
+def test_diagnostic_policy_honors_dotenv_without_export(monkeypatch):
+    from scripts import check_env
+    monkeypatch.delenv("JARVIS_LLM_ACCESS_MODE", raising=False)
+    monkeypatch.setattr(check_env, "read_dotenv_only",
+                        lambda: {"JARVIS_LLM_ACCESS_MODE": "subscription_only"})
+    with pytest.raises(ProviderAccessError):
+        check_env.require_model_api_access()
+
+
+def test_standalone_key_diagnostic_refuses_before_vault(retired):
+    import runpy
+    from pathlib import Path
+    denied = Mock(side_effect=AssertionError("vault access"))
+    retired.setattr("jarvis.vault.inject_env", denied)
+    retired.setattr("jarvis.vault.load_secrets", denied)
+    with pytest.raises(ProviderAccessError):
+        runpy.run_path(str(Path(__file__).resolve().parents[2] / "scripts/check_keys.py"))
+    denied.assert_not_called()
+
+
+def test_standalone_planner_refuses_before_source_or_vault(retired):
+    from scripts import probe_planner
+    denied = Mock(side_effect=AssertionError("private source or vault read"))
+    retired.setattr(probe_planner, "inject_env", denied)
+    retired.setattr(probe_planner, "load_repo_map_suffix", denied)
+    with pytest.raises(ProviderAccessError):
+        probe_planner.main(["probe_planner.py"])
+    denied.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_standalone_bench_refuses_before_sdk_or_vault(retired):
+    from scripts import voice_model_bench
+    denied = Mock(side_effect=AssertionError("SDK or vault accessed"))
+    retired.setattr("openai.AsyncOpenAI", denied)
+    retired.setattr(voice_model_bench, "_load_vault", denied)
+    with pytest.raises(ProviderAccessError):
+        voice_model_bench.main(["voice_model_bench.py"])
+    with pytest.raises(ProviderAccessError):
+        await voice_model_bench.bench_candidate({}, "", {}, set())
+    denied.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_retained_api_route_cannot_use_injected_execution_client(retired):
     from jarvis.model_execution import execute_chat
