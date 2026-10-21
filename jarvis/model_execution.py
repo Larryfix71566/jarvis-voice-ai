@@ -883,8 +883,9 @@ async def execute_chat(request: ModelExecutionRequest,
     entry_loop_time = asyncio.get_running_loop().time()
     # A retained/injected legacy client cannot bypass the operator's billing
     # policy, even if the route was resolved before retirement was selected.
-    from jarvis.provider_access import require_route_access
-    require_route_access(resolved.route.name)
+    from jarvis.provider_access import require_route_access, validated_api_request
+    require_route_access(resolved.route.name, provider=resolved.provider,
+                         base_url=resolved.base_url, resolved=True)
     started_at = time.monotonic()
     budget_started_at = time.time()
     if task_budget is not None and child_budget is not None:
@@ -1140,10 +1141,11 @@ async def execute_chat(request: ModelExecutionRequest,
                     require_active()
                 await emit("progress", progress_stage="provider_request")
                 native_execute = getattr(client, "execute_request", None)
-                if native_execute is not None:
-                    response = await native_execute(request, resolved, completion_args)
-                else:
-                    response = await client.chat.completions.create(**completion_args)
+                with validated_api_request(resolved, effective_policy, completion_args):
+                    if native_execute is not None:
+                        response = await native_execute(request, resolved, completion_args)
+                    else:
+                        response = await client.chat.completions.create(**completion_args)
                 require_active()
                 if request.stream_text:
                     response = await _collect_chat_stream(

@@ -81,3 +81,14 @@ sanitized receipt explicitly excludes live/model/account acceptance. A final
 before/after regression adds exact checking of the materialized message
 snapshot immediately before execution. The new final-head full results and
 combined preview are recorded on PR #232; prior source results stay scoped.
+
+Latest user clarification supersedes subscription-only rollout as the immediate
+service policy: direct OpenAI/Anthropic must stop while explicit OpenRouter
+remains eligible. API-capable services were reversibly stopped at 11:27:52 UTC;
+zero new ledger calls were observed afterward. The selective policy repair adds
+`direct_apis_disabled`, endpoint checks and exact approved-external execution
+admission without changing strict subscription-only semantics or weakening
+privacy. The first 119 focused tests pass; revised full-source and integration
+checks are required. Service restoration, merge order and release remain with
+the acceptance owner. Subscription review/test approval is recorded, but paid
+overage confirmation is still pending and no inference has been attempted.

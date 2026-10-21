@@ -41,6 +41,14 @@ def retirement_readiness() -> dict[str, Any]:
         "shared_routing_enabled": os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1",
         "subscription_text_enabled": os.environ.get("JARVIS_SUBSCRIPTION_TEXT_ENABLED") == "1",
         "activation_ready": False,
+        "selective_api_policy": {
+            "mode": "direct_apis_disabled",
+            "direct_openai_anthropic_allowed": False,
+            "openrouter": "explicit_canonical_endpoint_and_validated_approved_external_payload_only",
+            "implicit_fallback_allowed": False,
+            "legacy_unclassified_api_calls_allowed": False,
+            "voice_restoration_verified": False,
+        },
         "voice_adapter": {
             "implementation": "buffered_native_tool_bridge",
             "incremental_streaming_verified": False,
