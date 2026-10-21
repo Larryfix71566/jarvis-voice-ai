@@ -1,0 +1,357 @@
+{
+  "version": 1,
+  "created_at": "2026-10-21T05:31:05.818805+00:00",
+  "rows": [
+    "WS-05",
+    "WS-17"
+  ],
+  "candidate_source_commit": "794a298e3498d1b6e3e4fa47519449f35c06bb3d",
+  "tree": "ac0d7de6bc478154e90f035564227879edddb987",
+  "actual_parents": [
+    "1e6add5b73b0e938b0e78992e38292932e26dc33"
+  ],
+  "declared_content_inputs": [
+    "b1f07a23cc2c032d74cfd2bcd0ca8617ddd76ded",
+    "d242ba405915aec9c12af4c2553ef1b42cf1079e"
+  ],
+  "ancestry_note": "794 has parent1e6; final provider patches are replayed atop the earlier merge. Provider b1f is a declared content input, not a direct ancestor. Tree and path-byte equivalence verified, without reconstruction.",
+  "candidate": "6936380978d675f9f936ef03d7855336119149288f0313f2c1a3f319ea915ceb",
+  "protected_baseline_commit": "08c06357267ef1348ec4b64dfdd12b26d4710a50",
+  "baseline": "1cb637d1ad2667fb040715a9ba54f43b6216b1cf8b7c943d77649afc70e67711",
+  "image": "c43cc422ac3ecc9a5725a460caf64cf179205f1b931443a29b6164ebcb274e18",
+  "profile": "c400d0df293e470a810b7fda1916fee4c29d3f41cd0de78d7ef4a2219ec7a00e",
+  "runner": "62019da52862d37e1e9c12b521849171440d27c57846a156c3e6994ee71d4b39",
+  "source_manifest_sha256": {
+    ".env.example": "7a4a47ba33276f67e55f9d5b39e1b6af3001b2064725601d3f33e69035226f23",
+    "config/model_access.yaml": "4536dc0f6d6b074125e908206efa3c81cca12bcc8b9681bb2d19ad45678be123",
+    "config/model_aliases.yaml": "b2d1a78c1b4f9fd8a62742d6d80c80717ba5548fe9ee89397af6131a9e3db84f",
+    "jarvis/agents/base.py": "c9a7ff2cc53e2b734b89fcc05cb854acbb4ea5fad41af887a5b331ff6d3ee36b",
+    "jarvis/agents/delegate.py": "dc3af99a6f090c22199f521dd9e104bf1315fa05b1e3d07a67c14bbb56180604",
+    "jarvis/agents/supervisor.py": "8dcc0779a4f324bc4c7d09039088e73f734f0237ce75e1e7f5d5f2e4253a25f2",
+    "jarvis/agents/upgrade_agent.py": "1a80c4bdc67a6b646283a4ce62d9c9e47c2f55903824063d6fd51e5cdb16fc2b",
+    "jarvis/anthropic_shim.py": "4a06f7c5131034491eea16c6b106c512840f80a7fe091031d16b7c39dbfe9883",
+    "jarvis/bot/console_actions.py": "c943f025e8dda5acb1d2e82974ab7ed15ee0eeccf052bac3986abaea65589f4e",
+    "jarvis/bot/late_result.py": "7d2611ac95f72074e091de66df4dbf18cdfcb412eb1e508cc905e7bb83ca2bfb",
+    "jarvis/bot/pipeline.py": "ba392de6d1f4a9fa8edbf67707ba3bdc2a624f6ebd8bd81dcd1efb67b9a7374f",
+    "jarvis/bot/subscription_llm.py": "e8615061e5cc96ee190d0691c6ef13530d5574c57a98aef83d2c6f93475639e9",
+    "jarvis/bot/voice_guidance.py": "64eeaea9d07a8c9bdb068dcbadaa63761ef49561c71b5064fad882507204755a",
+    "jarvis/bot/weather_intent.py": "f572c2584a2f8d9cd71b1334f6854298ae5f57f874450d389b524459dacfacb8",
+    "jarvis/bot/weather_reuse.py": "e97ae1fd41e064591a0714079b54b3b5ad19afe2435e6645f2b3fed9bd8801ab",
+    "jarvis/bot/weather_tool.py": "9eaf9971298eb6077c0f4ba412772c6f8d884adb00eac40d7bba20edbef1fef4",
+    "jarvis/config.py": "df28da16d3d3a5ba2554b5ce9654fa2b01e97a2f9e25e3e14734055117638772",
+    "jarvis/llm_client.py": "7ef6c12059fa89514f75b7bde8e85a17a2df3f1ca4bd8659052285b8908a6384",
+    "jarvis/memory.py": "2ddb0b5f7ed4192bd3e123f01f8a07195952d46cf0551e802c58496942626869",
+    "jarvis/model_execution.py": "a415fb6369d8198216d20cce8f49b9597009fc41e880aa4f28afedea7991742f",
+    "jarvis/model_routing.py": "387a91485f5780ad864eb1c5c7ae8694e1382ec7b74614a2315e7ee3f88792c7",
+    "jarvis/prompts.py": "9a8369c0f460aa58bf9a355f41c9cc0b232a821a645b81c41094fc8f2325cd83",
+    "jarvis/provider_access.py": "64221354be509e78af5878219adb2c3932630fb3a2fa4f3ffdd5af8827008704",
+    "jarvis/status/subscriptions.py": "9bc93dac7a3c60b5211a926caa1af6ed2ceb0f5994cc41b7dc81fd8ab0e678f0",
+    "jarvis/subscription.py": "176a0b3327469ec50aa4201fda5f5bec1b0bf54ad58de7ae70debcb88451fd3d",
+    "jarvis/subscription_readiness.py": "d288baea6739b3cdeb447829c8b55a9c78459ad4e08e06c2b1c989fbbfb18faf",
+    "jarvis/voice_sources.py": "ce1c41bcbb70a7f276e3faf238c756a860b601ee1fefc2ef1cd84f9a3c092f33",
+    "macos/MortimerHost/Tests/MortimerHostTests/CurrentRequestForegroundWitnessTests.swift": "b37c592d7c497a23b8cf0e12204339eba537058bed158f9d0d3f87cc2647477d",
+    "mcp_servers/mcp_screen/logic.py": "29750b294c7b838d170e609f6a5969115198ee31b44bb3e9cf27f1b830cfa9fb",
+    "mcp_servers/mcp_screen/skill.yaml": "68f813e1a712e70b27b47beb4b2405ee2e41e03836258d7d7f07b634d08d27df",
+    "scripts/audit_model_call_sites.py": "79fb783f7a64bdeaf975a2e97bbc61349cdf60269995806f0968ec205e14a83b",
+    "scripts/check_env.py": "0a4cffe8da618a59821c23c813dcc714ce66287bff014e1e2b9c616b19349176",
+    "scripts/check_keys.py": "5ce425e2a202e6563d32152b14a5abda20ff6bdc54b7dd39232ee3cd3372ea34",
+    "scripts/check_subscription_retirement.py": "3e921647843a8652a2bea13109d41b8777a2fbbd1b39b079b2f15cd34d287efc",
+    "scripts/probe_planner.py": "5e8d2422260307a4c950c1b33158920f72338ec33a3a4ffd5b49821e2b9c1338",
+    "scripts/verify_subscription_capability.py": "91106fa594ef608f3ff3d9b772e032422c898f929375267af387d2fee7f3713f",
+    "scripts/voice_model_bench.py": "25fca15b09828880d4f720639282605dfb13fd13df62c71232c4d48f062da44e",
+    "tests/unit/test_acceptance_weather_routing.py": "8c716e8ff74eb5ed6904321b604a1fd1a86336f393851e0ca63dc0560b730d92",
+    "tests/unit/test_current_request_arrival.py": "fa1643cbb9b39fae1e96336504b5246baccb8008172c05d29276eeddbdf240ce",
+    "tests/unit/test_delegate.py": "06b30518da6874db0b4568a254b0fd73a989964a56bdbb66922bdbf1440260b7",
+    "tests/unit/test_requires_env_snapshot.py": "b39377416601c9957c4107ac8b66ae847df67e65ed3c8e7ec706431ea46256be",
+    "tests/unit/test_subscription_capability.py": "4082b338fd2e2c0a0d5a2e4f4bf16c0c2ba3992b96105e13a57ba887e0f62489",
+    "tests/unit/test_subscription_retirement.py": "76b73bf14ab631af533a9d61e3537bb4b6ac9d3309131fd0d01e862a01cc5ab0",
+    "tests/unit/test_subscription_voice.py": "c14da4ef878ad670cbe6d9f615c7b32a4b9d5ec86bfeec717ceafe864db69b05",
+    "tests/unit/test_voice_guidance.py": "68511b184b0de0ef48167a871a3134a05ea45dcea63229d988bff6e60e06b604",
+    "tests/unit/test_voice_sources.py": "b17576b6ddab4194cb12a752be5e534ae5a8ad792582a8e7579f4717b4aa9bc0"
+  },
+  "composition_checks": {
+    "provider_non_acceptance_program_bytes_identical": true,
+    "uncoordinated_acceptance_paths_identical": true,
+    "dispatch_refusal_preserved_inside_source_and_runlog_scopes": true,
+    "protected_fixtures_unchanged": true,
+    "prepared_dependency_key_unchanged": true,
+    "reconstruction_performed": false
+  },
+  "provider_focused_evidence": {
+    "result": "421 passed,10warnings,13.50s; owner supplied/read, not independently rerun",
+    "command_sha256": "ae9c11c6561e071171d17dd580ae83168a48d2174e133bf3200185db36aa926c",
+    "log_sha256": "7853ae430d0fea39ac2045573f1a109bd14fc837fa5b80fe32c6eacec946fc08"
+  },
+  "combined_host_backend": {
+    "source": "794a298e3498d1b6e3e4fa47519449f35c06bb3d",
+    "result": "6925 passed, 15 skipped, 19 warnings, 2 subtests passed in 244.89s (0:04:04)",
+    "log_sha256": "a70d316a6674de37de90531207c8bc04e4a69bb4b4868ef2bb2aa81ecf5613b6"
+  },
+  "independent": {
+    "passed": true,
+    "status": "passed",
+    "source_unchanged": true,
+    "checks": [
+      {
+        "name": "backend-imports",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-c",
+          "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 1.861,
+        "log_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+        "test_summary": null,
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "baseline-backend",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/unit",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 425.279,
+        "log_sha256": "bb8551ead62b1fb71f68c1d5a6017dd6c8ce4379db189293b74bc5217d282b2f",
+        "test_summary": "6280 passed, 11 skipped, 54 warnings, 2 subtests passed in 424.06s (0:07:04)",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "backend",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "tests/unit",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 454.722,
+        "log_sha256": "9f53348f1b63324749e0ec7c6238f172f6e0459378a03a0a2ee7dbaa0f526e45",
+        "test_summary": "6728 passed, 11 skipped, 59 warnings, 2 subtests passed in 452.72s (0:07:32)",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "scripted-evals",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/tests/evals/sub_agent_evals.py",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 1.92,
+        "log_sha256": "d39ad0e18b8672dd706ca6d396f82e8da2bc06acd4923bc7ffd3740cbcca67aa",
+        "test_summary": "13 passed, 1 warning in 0.88s",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "latency",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/python/bin/python",
+          "scripts/latency_probe.py",
+          "--budget",
+          "tests/fixtures/latency_sample.log"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 0.115,
+        "log_sha256": "c192bbb7b228dedbda047e7571ca16605031294ad5dea939ebe8696c07781b2a",
+        "test_summary": null,
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "knowledge-base",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "services/mortimer-vault/tests",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 3.229,
+        "log_sha256": "9fa0cf112383d08ba6cf71555454022a1516a82dd99101eb834b59cedf77e2ee",
+        "test_summary": "17 passed, 5 warnings in 2.93s",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "baseline-knowledge-base",
+        "argv": [
+          "/Users/admin/mortimer/dependencies/knowledge-python/bin/python",
+          "-m",
+          "pytest",
+          "/Users/admin/mortimer/verification/services/mortimer-vault/tests",
+          "-q"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 4.905,
+        "log_sha256": "ec2813e18100ccca42df05124808175b1e606e15ae97ccca21f386160c303c9c",
+        "test_summary": "17 passed, 6 warnings in 4.54s",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "web",
+        "argv": [
+          "npm",
+          "--prefix",
+          "web",
+          "run",
+          "build"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 31.027,
+        "log_sha256": "f4b7089c49450feeb96a294e3771ef988682cbfad06f15fd7e8ee6a829e49e7d",
+        "test_summary": null,
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "native-library",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/JarvisKit"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 88.091,
+        "log_sha256": "226245b95f06456eb6d8914539df763c45a94b40a2c2287fba593b6936e2e408",
+        "test_summary": "Executed 235 tests, with 0 failures (0 unexpected) in 9.634 (9.661) seconds",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "native-app",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "macos/MortimerHost"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 213.253,
+        "log_sha256": "361e7eea5a89a0dc7c6db18ed494bcf7ca9422abb6b2afa2ad4a7a23101f4a57",
+        "test_summary": "Executed 580 tests, with 8 tests skipped and 0 failures (0 unexpected) in 166.002 (166.046) seconds",
+        "prerequisite_skip_reasons": [
+          "Thread window capture requires Screen Recording and an interactive WindowServer; no acceptance is inferred",
+          "Grant Screen Recording to the test runner to exercise real window capture",
+          "requires at least two non-mirrored displays",
+          "requires two connected displays",
+          "requires two connected displays",
+          "the test host cannot become the active app in this WindowServer session",
+          "the test host cannot become the active app in this WindowServer session",
+          "the test host cannot become the active app in this WindowServer session"
+        ]
+      },
+      {
+        "name": "baseline-native-library",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/JarvisKit"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 22.885,
+        "log_sha256": "f79a4a50a193966f5cb303c5ed1d405321ff4a77ae6662d357010d3e85ab3faa",
+        "test_summary": "Executed 227 tests, with 0 failures (0 unexpected) in 10.253 (10.278) seconds",
+        "prerequisite_skip_reasons": []
+      },
+      {
+        "name": "baseline-native-app",
+        "argv": [
+          "swift",
+          "test",
+          "--package-path",
+          "/Users/admin/mortimer/verification/macos/MortimerHost"
+        ],
+        "returncode": 0,
+        "passed": true,
+        "seconds": 183.018,
+        "log_sha256": "4c73b68ff1865ef7f3079a649ae6015f8623cccfa652625b6f6831c09df79b07",
+        "test_summary": "Executed 514 tests, with 7 tests skipped and 0 failures (0 unexpected) in 143.188 (143.222) seconds",
+        "prerequisite_skip_reasons": [
+          "Grant Screen Recording to the test runner to exercise real window capture",
+          "requires at least two non-mirrored displays",
+          "requires two connected displays",
+          "requires two connected displays",
+          "the test host cannot become the active app in this WindowServer session",
+          "the test host cannot become the active app in this WindowServer session",
+          "the test host cannot become the active app in this WindowServer session"
+        ]
+      }
+    ],
+    "owned_cleanup_completed": true,
+    "preservation_checks_passed": true
+  },
+  "earlier_evidence": "Standalone WS17 source d242ba4, docs61e5e8f and provider b1f07a2 remain separate; this receipt does not replace earlier non-passing/interrupted host/VM runs. Both publication heads had five CI passes; no unrun integrated-CI or source-review verdict is inferred.",
+  "remaining_gates": {
+    "host_ui_capture": {
+      "status": "blocked on an unlocked awake interactive Mac desktop before meaningful recheck",
+      "previous_results": "SCK-3811 despite permission preflight; original stalls/timeout/isolation failures remain non-passing",
+      "no_permission_grant_requested": true,
+      "historical_cause_established": false
+    },
+    "cross_system_review": {
+      "status": "parent-managed source-transmission consent/review pending",
+      "source_transmitted": false,
+      "verdict": null
+    },
+    "protected_context_route": {
+      "status": "no eligible protected/private/local route selected",
+      "required_decision": "Choose/authorize/implement an eligible route or retain activation hold; never silently drop or relabel protected history",
+      "full_context_classifier": "implemented/fail-closed; real voice eligibility still blocked"
+    },
+    "live_runtime_and_billing": {
+      "status": "bounded live consent/runtime/auth/latency/overage confirmation pending",
+      "inference_performed": false
+    }
+  },
+  "release": {
+    "merged": false,
+    "deployed": false,
+    "canonical_checkbox_updates": 0,
+    "human_visual_acceptance": "open",
+    "five_day_observation": "open; real observation required",
+    "WS06_week": "open; separate real observation required",
+    "scheduled_cleanup": "remains paused"
+  },
+  "privacy": "Source/synthetic evidence only. No raw system/production records, private user content, credentials, VM identities, current console identity/flags, installed metadata or reviewer reasoning.",
+  "strict_roadmap": {
+    "source": "794a298e3498d1b6e3e4fa47519449f35c06bb3d",
+    "command": [
+      "python3",
+      "scripts/check_roadmap.py",
+      "--main",
+      "3061408d93829f3ca0a228dcd990f2d5e958b328"
+    ],
+    "result": "0 errors, 0 warnings; no warn-only flag",
+    "explicit_main_required": "The provider handoff has no origin/main ref; the first lookup warned branch checks skipped. Full explicit main hash resolved and strict complete check passed."
+  },
+  "publication_metadata": {
+    "result": "57 passed, 2 warnings, 3.58s",
+    "selection": [
+      "tests/unit/test_roadmap_reader.py",
+      "tests/unit/test_roadmap_event.py",
+      "tests/unit/test_check_roadmap.py"
+    ],
+    "log_sha256": "3cdba01e60a20021d210b28d4075dae0fbb100df2acb0631ad001569e1d5a387",
+    "checkbox_lines_preserved": 144,
+    "owner_lines_preserved": 29,
+    "runtime_test_bytes": "unchanged from d242ba4"
+  }
+}

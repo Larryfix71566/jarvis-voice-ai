@@ -223,3 +223,29 @@ human/visual checkbox, deployment or observation gate closes.
 Publication validation: 57 existing roadmap reader/event/drift contracts pass
 (two deprecation warnings); strict checker remains zero errors/warnings. Runtime
 and test trees are byte-identical to `d242ba4`; publication CI is distinct.
+
+
+## Integrated offline verification complete — 2026-10-21
+
+Provider preview `794a298` is fetched and verified by actual tree/parent graph
+and content equivalence with provider `b1f07a2` plus acceptance `d242ba4`.
+Stop-turn refusal remains inside source-policy/run-log scope. All twelve original
+independent checks pass; candidate backend 6,728 passes/11 skips/two subtests,
+native 580 executed/eight prerequisite skips/zero failures, JarvisKit 235 passes.
+Full combined host backend: 6,925 passes/15 skips/two subtests, 19 warnings,
+244.89s. Exact commands, hashes, manifests and limits are in the
+[integrated receipt](../acceptance/command-console/receipts/ws05-ws17-integrated-2026-10-21.md).
+Owned cleanup and unchanged source/settings/production/prior-asset checks pass;
+no tests remain active and paused cleanup stays paused. Owner-supplied 421-test
+conflict check was inspected, not independently rerun. Earlier non-passing runs
+remain unchanged; no unrun integrated CI or cross-review verdict is inferred.
+
+Host UI/capture needs an unlocked awake interactive desktop before a meaningful
+recheck; historical SCK failures are not proven explained. No new permission or
+unchanged retry. Parent-managed source-review/live consent and runtime/overage
+proof remain pending; protected full-context export still needs an eligible
+private/local route or activation remains held. No merge/deploy or human/visual
+checkbox closure. One focused session follows release gates, then actual release
+and WS-06 observation. This docs publication keeps runtime/test bytes at `d242ba4`.
+
+Validation: strict combined-source roadmap against explicit main `3061408` has zero errors/warnings (no warn-only flag); missing origin/main in the handoff was resolved by the full hash. Publication contracts pass 57 tests/two warnings/3.58s; all 144 checkbox and29 owner lines and standalone runtime/test bytes remain unchanged.

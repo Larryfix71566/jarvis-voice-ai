@@ -88,3 +88,5 @@ versus reviewed canonical readback.
 This publication changes docs/evidence only. Runtime/test bytes stay identical
 to frozen `d242ba4`; publication-head CI is separate. Raw production records,
 operational installed metadata and reviewer reasoning remain local.
+
+Subsequent integrated verification: [preview794a298 receipt](ws05-ws17-integrated-2026-10-21.md) records all twelve original combined-source checks passing. This later evidence resolves the offline integration-verification next step above; source review, host capture, protected route, live and release gates remain open. Earlier results are preserved.
