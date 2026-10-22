@@ -32,3 +32,11 @@ The original verdict is preserved with author dispositions and caller evidence
 in the existing Skills receipt directory. Follow-up exact-source review and CI
 remain pending. WS-20 and WS-17 main changes are integrated without editing their
 content; no checkbox, provider, registry or installed-build changes.
+
+## Post-merge lifecycle correction
+
+PR #251 merged as `b3a5fa1100891cb756a32155a61f47ffcf7a35b3`; reviewed
+`e13fc89` and all five successful CI jobs share tree `f18e0f6`. Correct the
+WS-03 lifecycle to landed and its next step to the remaining separately
+authorized work. Acceptance stays 2/12; no checkbox, owner, scope or runtime
+change. This entry supersedes the earlier pending-review/publication wording.
