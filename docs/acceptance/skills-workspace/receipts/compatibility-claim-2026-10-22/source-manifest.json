@@ -1,0 +1,6 @@
+{
+  "jarvis/agent_skills.py": "b834a5566e0951b62b0c1f7d5b875c94430f6f9a1c2a20dc9e933a623c67ad43",
+  "jarvis/skill_catalog.py": "7d228ec456e929d0819c65f9f7b6e0c1a979ef9dc300161e4d44c9d0f8b8daca",
+  "jarvis/agents/base.py": "c9a7ff2cc53e2b734b89fcc05cb854acbb4ea5fad41af887a5b331ff6d3ee36b",
+  "jarvis/skill_service.py": "b753309d6dcc19d09cd59a4135f58bd2716cdd1bd09f48b217822c53aa1ab1dd"
+}

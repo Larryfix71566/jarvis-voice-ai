@@ -1,0 +1,32 @@
+{
+  "git-history-and-status-review": {
+    "source": "str",
+    "agent": "str",
+    "promoted_successes": "int",
+    "promoted_failures": "int"
+  },
+  "current-weather-with-fahrenheit": {
+    "source": "str",
+    "agent": "str",
+    "promoted_successes": "int",
+    "promoted_failures": "int"
+  },
+  "skill-creator": {},
+  "mcp-server-authoring": {
+    "source": "str",
+    "concept_from": "str",
+    "agent": "str"
+  },
+  "technical-plan-document": {
+    "source": "str",
+    "agent": "str",
+    "promoted_successes": "int",
+    "promoted_failures": "int"
+  },
+  "layered-geolocation": {
+    "source": "str",
+    "agent": "str",
+    "promoted_successes": "int",
+    "promoted_failures": "int"
+  }
+}

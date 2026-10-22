@@ -1,0 +1,25 @@
+{
+  "input_sha256": "c973b3ca793555f017afd0d87f0c866df274c0c4126d1f9df098de437fa1f362",
+  "requested_model": "claude-opus-5-5",
+  "cli_version": "2.1.291",
+  "binary_sha256": "9a1d2ed6bb4421e8fc80c892c0413f293be3ee50ae3d7dda1a7622197a056690",
+  "started_at": "2026-10-22T15:56:47.725619+00:00",
+  "inference_started": true,
+  "tools_enabled": false,
+  "automatic_fallback": false,
+  "direct_api_credentials_inherited": false,
+  "max_seconds": 300,
+  "purpose": "focused independent re-review of corrected documentation-only claim; no benchmark",
+  "reviewed_head": "7f34ddeb60cfb6c2db4669adc6125398c7d21390",
+  "returncode": 0,
+  "timed_out": false,
+  "finished_at": "2026-10-22T15:58:55.055555+00:00",
+  "returned_models": [
+    "claude-opus-5-5"
+  ],
+  "exact_model_verified": true,
+  "review_complete": true,
+  "verdict": "REVISE",
+  "route": "official Claude Code authenticated Max subscription",
+  "input_artifact": "../corrected-claim-review/review-input.json: UTF-8 text value"
+}

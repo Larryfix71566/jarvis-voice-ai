@@ -1,0 +1,11 @@
+{
+  "main": "7b295cd92dfd331d49c08b723f622491e13f4dfa",
+  "semantic_claim": "62f8805522346d76e3f48859aca228b146d6e9b0",
+  "registration_claim": "16d3dd5f18e2c7c7939b3e3e9ecc788652b9c41f",
+  "other_roadmap_bytes_unchanged": true,
+  "checkboxes_unchanged": true,
+  "ws20_plan_and_log_match_main": true,
+  "approved_p0_contract_unchanged": true,
+  "canonical_prior_bytes_preserved": true,
+  "runtime_test_config_workflow_diff_empty": true
+}

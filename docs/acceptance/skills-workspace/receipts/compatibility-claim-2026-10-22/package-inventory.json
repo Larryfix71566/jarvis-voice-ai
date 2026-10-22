@@ -1,0 +1,199 @@
+{
+  "source_commit": "636880eabbe9dc756c30df7128d0a90c02d222bd",
+  "kind": "read_only_repository_inventory",
+  "provider_calls": 0,
+  "enabled_count": 5,
+  "packages": [
+    {
+      "skill": "current-weather-with-fahrenheit",
+      "enabled": true,
+      "frontmatter_fields": [
+        "description",
+        "metadata",
+        "name"
+      ],
+      "metadata_fields": [
+        "agent",
+        "promoted_failures",
+        "promoted_successes",
+        "source"
+      ],
+      "manifest_fields": [
+        "capabilities",
+        "category",
+        "compatible_with",
+        "display_name",
+        "example_ids",
+        "process",
+        "reference_paths",
+        "related_workflow_ids",
+        "required_credentials",
+        "required_tools",
+        "schema_version",
+        "skill_id",
+        "source",
+        "version"
+      ],
+      "scripts_present": false,
+      "skill_sha256": "ac297e1313d79f45237789e1fa314cb79a71cac6b5e7f0c0f4cb9ed31f0d26f7"
+    },
+    {
+      "skill": "git-history-and-status-review",
+      "enabled": true,
+      "frontmatter_fields": [
+        "description",
+        "metadata",
+        "name"
+      ],
+      "metadata_fields": [
+        "agent",
+        "promoted_failures",
+        "promoted_successes",
+        "source"
+      ],
+      "manifest_fields": [
+        "capabilities",
+        "category",
+        "compatible_with",
+        "display_name",
+        "example_ids",
+        "process",
+        "reference_paths",
+        "related_workflow_ids",
+        "required_credentials",
+        "required_tools",
+        "schema_version",
+        "skill_id",
+        "source",
+        "version"
+      ],
+      "scripts_present": false,
+      "skill_sha256": "fe865189eddd4eca4e4231b3ac5a2495e7b02fff1e68a8c6108269c1f44a86d2"
+    },
+    {
+      "skill": "layered-geolocation",
+      "enabled": true,
+      "frontmatter_fields": [
+        "description",
+        "metadata",
+        "name"
+      ],
+      "metadata_fields": [
+        "agent",
+        "promoted_failures",
+        "promoted_successes",
+        "source"
+      ],
+      "manifest_fields": [
+        "capabilities",
+        "category",
+        "compatible_with",
+        "display_name",
+        "example_ids",
+        "process",
+        "reference_paths",
+        "related_workflow_ids",
+        "required_credentials",
+        "required_tools",
+        "schema_version",
+        "skill_id",
+        "source",
+        "version"
+      ],
+      "scripts_present": false,
+      "skill_sha256": "9fb55d400e1f35daa924824ab33035def536789d055b7217192318edea53d60a"
+    },
+    {
+      "skill": "mcp-server-authoring",
+      "enabled": true,
+      "frontmatter_fields": [
+        "description",
+        "metadata",
+        "name"
+      ],
+      "metadata_fields": [
+        "agent",
+        "concept_from",
+        "source"
+      ],
+      "manifest_fields": [
+        "capabilities",
+        "category",
+        "compatible_with",
+        "display_name",
+        "example_ids",
+        "process",
+        "reference_paths",
+        "related_workflow_ids",
+        "required_credentials",
+        "required_tools",
+        "schema_version",
+        "skill_id",
+        "source",
+        "version"
+      ],
+      "scripts_present": false,
+      "skill_sha256": "93f6f875c7ed5bc7db71633d6d933de14de5b3c61c54389ef086ee6424ce28af"
+    },
+    {
+      "skill": "skill-creator",
+      "enabled": false,
+      "frontmatter_fields": [
+        "description",
+        "name"
+      ],
+      "metadata_fields": [],
+      "manifest_fields": [
+        "capabilities",
+        "category",
+        "compatible_with",
+        "display_name",
+        "example_ids",
+        "process",
+        "reference_paths",
+        "related_workflow_ids",
+        "required_credentials",
+        "required_tools",
+        "schema_version",
+        "skill_id",
+        "source",
+        "version"
+      ],
+      "scripts_present": false,
+      "skill_sha256": "40aa19f33f09ebfcae3102288bee436b95543d57bdab40c40c74073e88827858"
+    },
+    {
+      "skill": "technical-plan-document",
+      "enabled": true,
+      "frontmatter_fields": [
+        "description",
+        "metadata",
+        "name"
+      ],
+      "metadata_fields": [
+        "agent",
+        "promoted_failures",
+        "promoted_successes",
+        "source"
+      ],
+      "manifest_fields": [
+        "capabilities",
+        "category",
+        "compatible_with",
+        "display_name",
+        "example_ids",
+        "process",
+        "reference_paths",
+        "related_workflow_ids",
+        "required_credentials",
+        "required_tools",
+        "schema_version",
+        "skill_id",
+        "source",
+        "version"
+      ],
+      "scripts_present": false,
+      "skill_sha256": "7223e41cf4203b160d8b2519fc8218d7af22cc64d557fd3cf411553279f4bb0e"
+    }
+  ]
+}
