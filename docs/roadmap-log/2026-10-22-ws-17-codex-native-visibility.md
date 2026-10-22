@@ -2,7 +2,7 @@
 date: 2026-10-22
 system: codex
 rows: [WS-17]
-prs: [237]
+prs: [237, 238, 243]
 ---
 
 # Native visibility prerequisite — claim only
@@ -49,3 +49,5 @@ remain separate. No human acceptance checkbox closes.
 Combined `636880e` original comparison completed11/12; native581/five prerequisite skips/one visibility failure remains recorded. Three focused traces each passed five cases without skips, but one full-native trace reproduced visible/unhidden to hidden/invisible306ms after initial readiness. New real regression `845cb34` fails three assertions with zero skips after initial visibility and actual hide assertions pass. Test-only `334cf19` requires continuous settling inside the unchanged3s readiness bound, adds a stronger readiness assertion, and preserves all original assertions, negative waits and product source. [Receipt](../acceptance/command-console/receipts/ws17-native-deferred-hide-2026-10-22.md) distinguishes pending green/full/review/CI from live acceptance; no owner or checkbox changes.
 
 Publication `157f195` focused six-case gate failed three initial-visibility assertions in the existing immediate-hide regression, with zero skips; the new deferred-hide case passed. Full original verification was not started. `00fa4a0` applies settled preparation to that remaining positive setup while keeping every original assertion and explicit hide phase. Its current-source focused/full/review/CI gates remain pending.
+
+Terminal programme `a672239` verification: focused6 PASS/zero skips; all12 original offline comparisons PASS; candidate native582/five prerequisite skips/zero failures, backend6,858/11skips. Source/preexisting-asset preservation and owned-VM cleanup passed. Independent exact-source static review has no blockers; all5 programme-head CI pass on an identical actual checkout tree. Final receipt-only metadata preserves that programme and keeps actual-host/install/live/human gates separate. Both earlier nonpasses remain in the linked source receipt; no checkbox/owner closes.
