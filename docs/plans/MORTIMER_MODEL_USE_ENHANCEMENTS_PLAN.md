@@ -1091,3 +1091,14 @@ routing, authentication and task budget gates. No endpoint/configuration edits,
 new calls, fallback, service operations or native/installer changes. WS-17 owns
 release integration. Both extra-usage confirmations are recorded and both
 bounded live-test allowances are used; this slice is synthetic/offline only.
+
+Implementation: API identity is matched against the fixed protected endpoint
+registry, with direct OpenAI/Anthropic labels/domains refused even if relabeled.
+SAYGM retains its existing pinned endpoint validator and catalog-derived
+confidential route; local-only sources remain refused. Exact request admission
+and no implicit fallback remain enforced. Selective SDK transports refuse
+redirects, including retained clients whose redirect setting becomes unsafe.
+Five new regression cases failed before the repair; the expanded focused
+suite passes 243 tests (including existing localhost-only redirect tests).
+Full offline gates and final publication CI remain pending. No live provider
+requests, account/configuration changes, service restart or installation.

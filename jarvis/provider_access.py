@@ -13,11 +13,14 @@ import json
 from collections.abc import Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
+from pathlib import Path
+
+import yaml
 from urllib.parse import urlsplit
 
 ACCESS_MODE_ENV = "JARVIS_LLM_ACCESS_MODE"
 SUBSCRIPTION_ROUTES = frozenset({"subscription", "codex_subscription", "local"})
-_api_request = ContextVar("authorized_openrouter_request", default=None)
+_api_request = ContextVar("authorized_api_request", default=None)
 
 
 class ProviderAccessError(ValueError):
@@ -41,16 +44,54 @@ def selective_api_policy(mode: str | None = None) -> bool:
         mode is not None and access_mode({ACCESS_MODE_ENV: mode}) == "direct_apis_disabled")
 
 
-def _openrouter_endpoint(provider, base_url) -> bool:
-    # Match the actual destination, never a model name, SDK or provider label.
-    if provider not in {None, "openrouter"} or not isinstance(base_url, str):
-        return False
+def _endpoint_identity(base_url):
+    """Exact HTTPS destination; no aliases, redirect hints or URL credentials."""
+    if not isinstance(base_url, str) or any(ord(c) <= 32 for c in base_url):
+        return None
     try:
         url = urlsplit(base_url)
-        return (url.scheme == "https" and url.netloc == "openrouter.ai"
-                and url.path in {"/api/v1", "/api/v1/"}
-                and not url.query and not url.fragment)
+        if (url.scheme != "https" or not url.hostname or url.netloc != url.hostname
+                or url.query or url.fragment or "%" in url.path
+                or any(segment in {".", ".."} for segment in url.path.split("/"))):
+            return None
+        return url.hostname, url.path.removesuffix("/")
     except ValueError:
+        return None
+
+
+def _eligible_api_endpoint(provider, base_url) -> bool:
+    # This fixed, human-owned file is identity authority. Model profiles,
+    # caller registry overrides and an OpenAI-compatible SDK are not.
+    if provider in {"openai", "anthropic"}:
+        return False
+    if provider in {None, "saygm"}:
+        from jarvis.saygm import validate_endpoint, SayGMError
+        try:
+            validate_endpoint(base_url)
+            return True
+        except SayGMError:
+            pass
+    identity = _endpoint_identity(base_url)
+    if identity is None:
+        return False
+    host, _ = identity
+    if any(host == domain or host.endswith("." + domain)
+           for domain in ("openai.com", "anthropic.com")):
+        return False
+    try:
+        registry = yaml.safe_load((Path(__file__).resolve().parents[1]
+                                   / "config/model_endpoints.yaml").read_text())
+        endpoints = registry["endpoints"]
+        if not isinstance(endpoints, dict):
+            return False
+        matches = {entry.get("provider") for entry in endpoints.values()
+                   if isinstance(entry, dict) and entry.get("kind", "api") == "api"
+                   and _endpoint_identity(entry.get("base_url")) == identity
+                   and isinstance(entry.get("provider"), str)}
+        # Ambiguous identity fails closed, even if one label appears eligible.
+        return (len(matches) == 1 and not matches & {"openai", "anthropic"}
+                and (provider is None or provider in matches))
+    except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError):
         return False
 
 
@@ -60,9 +101,9 @@ def require_api_access(mode: str | None = None, *, provider=None, base_url=None)
         raise ProviderAccessError(
             "subscription-only mode prohibits LLM API inference; no paid fallback was used"
         )
-    if selective_api_policy(mode) and not _openrouter_endpoint(provider, base_url):
+    if selective_api_policy(mode) and not _eligible_api_endpoint(provider, base_url):
         raise ProviderAccessError(
-            "direct provider APIs are disabled; only an explicit verified OpenRouter endpoint is eligible"
+            "direct OpenAI/Anthropic APIs are disabled; other APIs require a recognized endpoint identity"
         )
 
 
@@ -82,9 +123,16 @@ def validated_api_request(resolved, policy, arguments):
         return
     from jarvis.privacy_policy import DataPolicy, assert_route_allowed
     require_api_access(provider=resolved.provider, base_url=resolved.base_url)
-    if type(policy) is not DataPolicy or policy.level != "approved_external":
-        raise ProviderAccessError("OpenRouter requires an approved external source policy")
+    if type(policy) is not DataPolicy:
+        raise ProviderAccessError("API request requires a validated source policy")
     assert_route_allowed(resolved.route, policy)
+    # Only catalog-verified SAYGM can carry confidential data. A forged route
+    # privacy label cannot promote another API or permit local-only content.
+    if policy.level != "approved_external" and not (
+        resolved.route.name == "saygm" and resolved.provider == "saygm"
+        and policy.level == "confidential"
+    ):
+        raise ProviderAccessError("API route cannot carry this protected source policy")
     admission = {"endpoint": resolved.base_url.rstrip("/"),
                  "digest": _request_digest(arguments), "active": True, "used": False}
     token = _api_request.set(admission)
@@ -103,7 +151,7 @@ def require_api_request(arguments, *, provider=None, base_url=None):
         if (admission is None or not admission["active"] or admission["used"]
                 or admission["endpoint"] != base_url.rstrip("/")
                 or admission["digest"] != _request_digest(arguments)):
-            raise ProviderAccessError("OpenRouter request lacks exact validated source-policy admission")
+            raise ProviderAccessError("API request lacks exact validated source-policy admission")
         admission["used"] = True
 
 
@@ -116,9 +164,9 @@ def require_route_access(route: str, *, fallback_routes=(), provider=None,
             "subscription-only mode requires a subscription/local route with no fallback"
         )
     if selective_api_policy():
-        if fallback_routes or route not in SUBSCRIPTION_ROUTES | {"direct_api"}:
-            raise ProviderAccessError("direct provider APIs are disabled; implicit fallback is prohibited")
-        if resolved and route == "direct_api":
+        if fallback_routes or route not in SUBSCRIPTION_ROUTES | {"direct_api", "saygm"}:
+            raise ProviderAccessError("direct OpenAI/Anthropic APIs are disabled; implicit fallback is prohibited")
+        if resolved and route in {"direct_api", "saygm"}:
             require_api_access(provider=provider, base_url=base_url)
 
 
@@ -131,5 +179,5 @@ def require_voice_readiness(mode: str | None = None) -> None:
         )
     if selective_api_policy(mode):
         raise ProviderAccessError(
-            "voice requires an eligible full-context route; direct APIs are disabled and no fallback was used"
+            "voice requires an eligible full-context route; direct OpenAI/Anthropic APIs are disabled and no fallback was used"
         )

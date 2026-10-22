@@ -54,10 +54,13 @@ from functools import wraps
 from typing import Any
 
 import openai
+import httpx
 
 from jarvis.anthropic_shim import AnthropicChatShim, AsyncAnthropicChatShim
 from jarvis.usage_ledger import ApiCompletionMetadata, provider_from_base_url
-from jarvis.provider_access import require_api_access, require_api_request
+from jarvis.provider_access import (
+    ProviderAccessError, require_api_access, require_api_request, selective_api_policy,
+)
 
 
 def _instrument_completion(client: Any, provider: str, *, asynchronous: bool, base_url: str | None = None) -> Any:
@@ -98,6 +101,7 @@ def _instrument_completion(client: Any, provider: str, *, asynchronous: bool, ba
     if asynchronous:
         @wraps(create)
         async def measured(**kwargs: Any) -> Any:
+            _require_safe_api_transport(client)
             require_api_request(kwargs, provider=provider,
                                 base_url=str(getattr(client, "base_url", base_url) or ""))
             started = time.monotonic()
@@ -105,6 +109,7 @@ def _instrument_completion(client: Any, provider: str, *, asynchronous: bool, ba
     else:
         @wraps(create)
         def measured(**kwargs: Any) -> Any:
+            _require_safe_api_transport(client)
             require_api_request(kwargs, provider=provider,
                                 base_url=str(getattr(client, "base_url", base_url) or ""))
             started = time.monotonic()
@@ -115,6 +120,23 @@ def _instrument_completion(client: Any, provider: str, *, asynchronous: bool, ba
     except (AttributeError, TypeError):
         pass
     return client
+
+
+def _require_safe_api_transport(client: Any) -> None:
+    if not selective_api_policy():
+        return
+    sdk = client._client if isinstance(client, _OpenRouterCachingClient) else client
+    transport = getattr(sdk, "_client", None)
+    if isinstance(transport, (httpx.Client, httpx.AsyncClient)) and transport.follow_redirects:
+        raise ProviderAccessError("API transport must not follow redirects under selective retirement")
+
+
+def _pin_api_transport(client: Any) -> None:
+    # The SDK defaults to following redirects. A known gateway must never
+    # redirect a credential-bearing request to a retired or unknown provider.
+    transport = getattr(client, "_client", None)
+    if selective_api_policy() and isinstance(transport, (httpx.Client, httpx.AsyncClient)):
+        transport.follow_redirects = False
 
 
 def native_enabled() -> bool:
@@ -216,6 +238,7 @@ def make_async_client(*, api_key: str, base_url: str | None, provider: str | Non
     if resolved == "anthropic" and native_enabled():
         return _instrument_completion(AsyncAnthropicChatShim(**kwargs), resolved, asynchronous=True, base_url=base_url)
     client = openai.AsyncOpenAI(**kwargs)
+    _pin_api_transport(client)
     if resolved == "openrouter":
         client = _OpenRouterCachingClient(client, resolved, _AsyncOpenRouterCompletions)
     return _instrument_completion(client, resolved, asynchronous=True, base_url=base_url)
@@ -234,6 +257,7 @@ def make_sync_client(*, api_key: str, base_url: str | None, provider: str | None
     if resolved == "anthropic" and native_enabled():
         return _instrument_completion(AnthropicChatShim(**kwargs), resolved, asynchronous=False, base_url=base_url)
     client = openai.OpenAI(**kwargs)
+    _pin_api_transport(client)
     if resolved == "openrouter":
         client = _OpenRouterCachingClient(client, resolved, _SyncOpenRouterCompletions)
     return _instrument_completion(client, resolved, asynchronous=False, base_url=base_url)
