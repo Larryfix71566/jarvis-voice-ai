@@ -1,4 +1,4 @@
-"""Synthetic-only proof: direct APIs off, explicitly admitted OpenRouter on."""
+"""Synthetic-only proof: direct OpenAI/Anthropic off, eligible other APIs on."""
 from dataclasses import replace
 from contextvars import copy_context
 from types import SimpleNamespace
@@ -184,3 +184,145 @@ def test_selective_diagnostics_cannot_make_paid_probe(monkeypatch):
     monkeypatch.setattr(check_env.urllib.request,'urlopen',probe)
     assert check_env.model_key_probe(URL,'synthetic','synthetic')[0]=='blocked'
     probe.assert_not_called()
+
+
+@pytest.mark.parametrize('provider,url', [
+    ('moonshot', 'https://api.moonshot.ai/v1'),
+    ('saygm', 'https://api.saygm.com/v1'),
+])
+@pytest.mark.parametrize('asynchronous', [False, True])
+@pytest.mark.asyncio
+async def test_other_provider_real_sdk_retains_exact_admission(monkeypatch, provider, url, asynchronous):
+    seen = []
+    def respond(request):
+        seen.append(request.url.host)
+        return httpx.Response(200, json={'id':'synthetic','object':'chat.completion',
+            'created':0,'model':'synthetic','choices':[{'index':0,
+            'message':{'role':'assistant','content':'fixture'},'finish_reason':'stop'}]})
+    original = openai.AsyncOpenAI if asynchronous else openai.OpenAI
+    transport = httpx.MockTransport(respond)
+    http = (httpx.AsyncClient if asynchronous else httpx.Client)(
+        transport=transport, follow_redirects=True)
+    monkeypatch.setattr(openai, 'AsyncOpenAI' if asynchronous else 'OpenAI',
+        lambda **kw: original(**kw, http_client=http))
+    client = (llm_client.make_async_client if asynchronous else llm_client.make_sync_client)(
+        api_key='synthetic', base_url=url, provider=provider)
+    r = replace(route(), provider=provider, base_url=url,
+        route=replace(route().route, name='saygm' if provider=='saygm' else 'direct_api',base_url=url))
+    args = {'model':'synthetic','messages':[{'role':'user','content':'public fixture'}]}
+    try:
+        with validated_api_request(r, DataPolicy('approved_external','fixture'), args):
+            response = client.chat.completions.create(**args)
+            if asynchronous:
+                response = await response
+        assert response.choices[0].message.content == 'fixture'
+        assert seen == [httpx.URL(url).host]
+        with pytest.raises(ProviderAccessError):
+            result = client.chat.completions.create(**args)
+            if asynchronous:
+                await result
+        assert http.follow_redirects is False
+    finally:
+        if asynchronous:
+            await client.close()
+        else:
+            client.close()
+
+
+def test_saygm_confidential_catalog_route_retains_source_floor(monkeypatch):
+    from jarvis.model_routing import resolve_model_route
+    from jarvis.saygm import parse_catalog
+    monkeypatch.setenv('SAYGM_API_KEY','synthetic')
+    catalog = parse_catalog({'data':[{'id':'claude-sonnet-5-TEE','tier':'confidential',
+        'api_shapes':['chat.completions']}]})
+    r = resolve_model_route('memory',explicit_route='saygm',saygm_model=catalog[0])
+    require_route_access('saygm',provider=r.provider,base_url=r.base_url,resolved=True)
+    args = {'model':r.model,'messages':[]}
+    with validated_api_request(r,DataPolicy('confidential','synthetic'),args):
+        require_api_request(args,provider='saygm',base_url=r.base_url)
+    with pytest.raises(ModelRouteError):
+        with validated_api_request(r,DataPolicy('local_only','synthetic'),args):
+            pytest.fail('local-only source admitted')
+    with pytest.raises(ModelRouteError):
+        resolve_model_route('memory',explicit_route='saygm')
+    monkeypatch.delenv('SAYGM_API_KEY')
+    with pytest.raises(ModelRouteError,match='requires SAYGM_API_KEY'):
+        resolve_model_route('memory',explicit_route='saygm',saygm_model=catalog[0])
+
+
+@pytest.mark.parametrize('provider,url', [
+    ('moonshot','https://api.openai.com/v1'),
+    ('saygm','https://api.anthropic.com/v1'),
+    ('moonshot','https://api.moonshot.ai.evil.invalid/v1'),
+    ('saygm','https://api.saygm.com/v1?redirect=api.openai.com'),
+    ('openrouter','https://api.moonshot.ai/v1'),
+    ('unregistered','https://api.moonshot.ai/v1'),
+])
+def test_other_provider_identity_mismatch_refused(provider,url):
+    with pytest.raises(ProviderAccessError):
+        require_api_access(provider=provider,base_url=url)
+
+
+def test_caller_registry_override_cannot_grant_endpoint(monkeypatch,tmp_path):
+    registry=tmp_path/'models.yaml'
+    registry.write_text('endpoints:\n  unknown:\n    provider: unknown\n    base_url: https://unknown.invalid/v1\n')
+    monkeypatch.setenv('JARVIS_UPGRADE_MODELS',str(registry))
+    with pytest.raises(ProviderAccessError):
+        require_api_access(provider='unknown',base_url='https://unknown.invalid/v1')
+
+
+@pytest.mark.parametrize('asynchronous',[False,True])
+@pytest.mark.asyncio
+async def test_gateway_redirect_cannot_contact_retired_provider(monkeypatch,asynchronous):
+    seen=[]
+    def respond(request):
+        seen.append(request.url.host)
+        return httpx.Response(307,headers={'location':'https://api.openai.com/v1/chat/completions'})
+    original=openai.AsyncOpenAI if asynchronous else openai.OpenAI
+    http=(httpx.AsyncClient if asynchronous else httpx.Client)(
+        transport=httpx.MockTransport(respond),follow_redirects=True)
+    monkeypatch.setattr(openai,'AsyncOpenAI' if asynchronous else 'OpenAI',
+        lambda **kw: original(**kw,http_client=http))
+    client=(llm_client.make_async_client if asynchronous else llm_client.make_sync_client)(
+        api_key='synthetic',base_url=URL,provider='openrouter',max_retries=0)
+    args={'model':'synthetic','messages':[{'role':'user','content':'public fixture'}]}
+    try:
+        with validated_api_request(route(),DataPolicy('approved_external','fixture'),args):
+            with pytest.raises(openai.APIStatusError):
+                result=client.chat.completions.create(**args)
+                if asynchronous:
+                    await result
+        assert seen==['openrouter.ai']
+        http.follow_redirects=True
+        with validated_api_request(route(),DataPolicy('approved_external','fixture'),args):
+            with pytest.raises(ProviderAccessError,match='redirects'):
+                result=client.chat.completions.create(**args)
+                if asynchronous:
+                    await result
+        assert seen==['openrouter.ai']
+    finally:
+        if asynchronous:
+            await client.close()
+        else:
+            client.close()
+
+
+def test_saygm_existing_endpoint_normalization_preserved():
+    require_api_access(provider='saygm',base_url='https://api.saygm.com:443/v1/')
+
+
+@pytest.mark.parametrize('url', ['https://api.openai.com/v1','https://api.anthropic.com/v1',
+    'https://other.openai.com/v1','https://other.anthropic.com/v1'])
+def test_registry_cannot_relabel_retired_provider(monkeypatch,url):
+    from jarvis.agents import upgrade_agent
+    monkeypatch.setattr(upgrade_agent,'load_registry_layers',lambda _: {'endpoints':{
+        'fixture':{'provider':'unretired','base_url':url}}})
+    with pytest.raises(ProviderAccessError):
+        require_api_access(provider='unretired',base_url=url)
+
+
+def test_confidential_label_cannot_promote_other_api():
+    r=replace(route(),route=replace(route().route,privacy='confidential'))
+    with pytest.raises(ProviderAccessError):
+        with validated_api_request(r,DataPolicy('confidential','synthetic'),{}):
+            pytest.fail('forged external privacy promoted')

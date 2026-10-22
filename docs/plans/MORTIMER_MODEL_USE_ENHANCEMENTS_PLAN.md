@@ -1080,3 +1080,40 @@ must remain unavailable rather than buying direct inference or leaking private
 data to OpenRouter. External review and bounded synthetic subscription tests
 are now approved, but no inference (including review) may run until paid-overage
 disabled confirmation is obtained. Login metadata does not establish that gate.
+
+### 2026-10-22 — Other-provider selective-policy correction (WS-05)
+
+Larry clarified that only direct Anthropic and OpenAI APIs are retired. Correct
+the OpenRouter-only allow rule using the protected endpoint registry plus the
+existing SAYGM endpoint contract. Unknown identities remain refused. Preserve
+SAYGM catalog-derived privacy, source floors, exact-payload admission, explicit
+routing, authentication and task budget gates. No endpoint/configuration edits,
+new calls, fallback, service operations or native/installer changes. WS-17 owns
+release integration. Both extra-usage confirmations are recorded and both
+bounded live-test allowances are used; this slice is synthetic/offline only.
+
+Implementation: API identity is matched against the fixed protected endpoint
+registry, with direct OpenAI/Anthropic labels/domains refused even if relabeled.
+SAYGM retains its existing pinned endpoint validator and catalog-derived
+confidential route; local-only sources remain refused. Exact request admission
+and no implicit fallback remain enforced. Selective SDK transports refuse
+redirects, including retained clients whose redirect setting becomes unsafe.
+Five new regression cases failed before the repair; the expanded focused
+suite passes 243 tests (including existing localhost-only redirect tests).
+Full offline gates and final publication CI remain pending. No live provider
+requests, account/configuration changes, service restart or installation.
+
+Follow-up verification: the first full run was interrupted after inherited
+Pipecat dotenv state blocked synthetic providers (175 failed / 3,699 passed /
+11 skipped). `pipecat/runner/run.py:140` was confirmed as the import-time
+dotenv caller without loading credentials in that diagnostic. Test-only
+`PYTHON_DOTENV_DISABLED=1 RUN_LIVE=0` isolates the installed environment;
+76 tests in sampled failing groups then passed. The isolated full run
+completed with 6,857 passes, 11 skips, two passing subtests and one genuine
+registry single-loader contract failure. Repaired by using the existing
+`load_registry_layers(DEFAULT_PROFILES_PATH)` explicitly, preserving protected
+path precedence and its validation without a second parser. Expanded focused
+verification: 302 passed / three existing prerequisite skips. Final frozen
+full verification and publication results are maintained in PR #239. This
+is source evidence only; WS-17 retains review/integration/installation and
+all runtime/private-route gates. The old interrupted run is not a pass.
