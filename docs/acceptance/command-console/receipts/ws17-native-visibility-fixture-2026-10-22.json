@@ -1,0 +1,37 @@
+{
+  "record_kind": "synthetic-native-fixture-regression",
+  "source_base_commit": "fccb760597e29c504a61eb1f2f80aa6bdf1abf66",
+  "candidate_test_path": "macos/MortimerHost/Tests/MortimerHostTests/WindowVisibilityTests.swift",
+  "candidate_test_sha256": "058bd280d898ff49ef8eef743ba3515f5af6057196defb49d4beaaa93bd81f23",
+  "original_observer_source_unchanged": true,
+  "original_assertion_lines_preserved": true,
+  "original_test_names": [
+    "testActualWindowHideShowAndDetachUpdateVisibility",
+    "testStoppedObserverCannotDeliverQueuedState",
+    "testWaveStopsSamplingWhileWindowHiddenAndResumes",
+    "testReducedMotionKeepsVisibleWaveStatic"
+  ],
+  "window_state_wait_seconds": 3,
+  "red": {
+    "tests": 1,
+    "assertion_failures": 4,
+    "skips": 0,
+    "returncode": 1,
+    "source_patch_sha256": "5ddd055c8064b2216357a5b9d38702341b8c8a4387b11cc2f5b267c5021b1e97",
+    "log_sha256": "b1bd55e701e8a3cc932028418a11b5189bb5ac2609b448e730903105b533979a",
+    "argv_sha256": "a3bc083ba2b9017a7dd5e4c9f09c2f7204aebd9baa061283c63dd78a5347b9fc"
+  },
+  "green": {
+    "tests": 5,
+    "failures": 0,
+    "skips": 0,
+    "returncode": 0,
+    "log_sha256": "1976e61a2a3fed75ece999d87f59d0e4c4ec50ed99b4b8a1a10f048ffb36fd04",
+    "argv_sha256": "73f1fcdcba1b4f248fd92bf1b248f2edd6418d4db7705a48240d4ca080eb3e0a"
+  },
+  "limits": [
+    "Real synthetic fixture preparation, not human/visual release acceptance.",
+    "Does not replace full native suite, original independent profile, source review/CI or installed identity.",
+    "No operational/account/settings records or raw private logs."
+  ]
+}

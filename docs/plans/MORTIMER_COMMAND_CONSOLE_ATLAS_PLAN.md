@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: Frozen current-request implementation `fbfb669` has completed all twelve original independent checks, exact-source Claude follow-up with **No blocking findings**, and all five source CI checks. [Final scrubbed evidence](../acceptance/command-console/receipts/ws17-current-request-final-2026-10-19.md). Documentation-only publication, publication-head CI and separate merge/release/live gates are distinguished below. Historical status follows: Claim #225 merged as `c244963` at 00:08:12 UTC on 2026-10-19; current-request implementation is claimed on `codex/ws17-current-request-arrival-20261018`, with wire reservation committed before code. Historical status follows: Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
+**Status:** Native visibility prerequisite repair is staged for this PR (landed after required merge gates): five focused real-window tests pass with zero skips; the late-hidden regression is red before/green after; all original assertions and bounds remain. Runtime observer/application bytes are unchanged. Full verification, installed-development identity and live/human acceptance remain separate. Historical status follows:  Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: Frozen current-request implementation `fbfb669` has completed all twelve original independent checks, exact-source Claude follow-up with **No blocking findings**, and all five source CI checks. [Final scrubbed evidence](../acceptance/command-console/receipts/ws17-current-request-final-2026-10-19.md). Documentation-only publication, publication-head CI and separate merge/release/live gates are distinguished below. Historical status follows: Claim #225 merged as `c244963` at 00:08:12 UTC on 2026-10-19; current-request implementation is claimed on `codex/ws17-current-request-arrival-20261018`, with wire reservation committed before code. Historical status follows: Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -3567,3 +3567,31 @@ fixture readiness from observer behavior. Initial implementation scope is the
 existing WindowVisibilityTests file; the observer changes only if a causal app
 defect is proven. No additional live inference, settings or human acceptance
 change. New source/test bytes require applicable review and verification.
+
+
+### 2026-10-22 — Hidden-after-show regression reproduced before repair
+
+Claim #237 merged as `fccb760`. On the registered implementation branch,
+a real WindowServer regression establishes a visible synthetic window and its
+actual observer, then hides the owned test app after its initial show request.
+The original preparation leaves it hidden: one test/four failed assertions/zero
+skips. Existing hide/show/miniaturize/detach/animation assertions and observer
+source are unchanged. The proposed correction remains test-only and must pass
+the original full gate; a focused skip cannot substitute for a pass.
+
+
+### 2026-10-22 — Restore actual fixture state, preserving product assertions
+
+The fixture checked frontmost activation before creating its window, despite
+the observer correctly using visible/unoccluded/unhidden state. A late hide
+after the first show left the fixture hidden during its original wait. A real
+WindowServer regression reproduces that state with four assertion failures,
+zero skips. Preparation now restores only its owned fixture while waiting for
+actual OS visibility and the real observer callback, within the unchanged
+three-second bound. Initial screen/regular-policy prerequisites remain; the
+unnecessary frontmost-app skip is removed. All four original tests retain
+every assertion, and all five focused tests now execute and pass with no skips.
+No product observer or app runtime code changed. The
+[synthetic receipt](../acceptance/command-console/receipts/ws17-native-visibility-fixture-2026-10-22.md)
+pins the exact test bytes and red/green evidence; full/review/CI/release gates
+remain separate. No human acceptance checkbox closes.
