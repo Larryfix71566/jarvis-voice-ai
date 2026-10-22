@@ -1,0 +1,59 @@
+{
+  "repair_source": "334cf1964c4d810c6fadf2c3b5085b90c37f9823",
+  "red_source": "845cb34ea1cebb2fd9725cc4bfc09ee878ac49c5",
+  "base_source": "636880eabbe9dc756c30df7128d0a90c02d222bd",
+  "test_path": "macos/MortimerHost/Tests/MortimerHostTests/WindowVisibilityTests.swift",
+  "test_sha256": "be4f6f1e2e6adf614ca531cdad89f005617b3136c2d2278eb039b1d8637961cd",
+  "runtime_observer_and_application_unchanged": true,
+  "original_five_test_assertion_lines_unchanged": true,
+  "original_readiness_bound_seconds": 3,
+  "positive_visibility_settling_seconds": 0.35,
+  "intentional_negative_waits_unchanged": true,
+  "prior_original_profile": {
+    "source": "636880eabbe9dc756c30df7128d0a90c02d222bd",
+    "passed": false,
+    "checks_passed": 11,
+    "checks_required": 12,
+    "failed_check": "native-app",
+    "native_tests": 581,
+    "native_skips": 5,
+    "native_failures": 1,
+    "assertion": "WindowVisibilityTests.testReducedMotionKeepsVisibleWaveStatic line218"
+  },
+  "full_native_trace": {
+    "trace_only": true,
+    "assertions_and_timeouts_unchanged": true,
+    "reproduced": true,
+    "visible_unhidden_at": 347.3045416666667,
+    "hidden_invisible_at": 347.61088758333335,
+    "elapsed_seconds": 0.30634591666665756,
+    "hidden_before": false,
+    "visible_before": true,
+    "hidden_after": true,
+    "visible_after": false
+  },
+  "red_regression": {
+    "source": "845cb34ea1cebb2fd9725cc4bfc09ee878ac49c5",
+    "command": [
+      "swift",
+      "test",
+      "--package-path",
+      "macos/MortimerHost",
+      "--filter",
+      "WindowVisibilityTests/testVisibleFixtureRecoversFromADeferredApplicationHide"
+    ],
+    "tests": 1,
+    "failures": 3,
+    "skips": 0,
+    "initial_actual_visible_window_assertion_passed": true,
+    "actual_late_hidden_event_assertion_passed": true,
+    "exit_status": 1,
+    "log_sha256": "55d92db517aafdd83ddc0a20550aaec805288a92139f5117c8427089d793994b"
+  },
+  "green_focused": "pending",
+  "full_original_profile": "pending",
+  "independent_source_review": "pending",
+  "publication_ci": "pending",
+  "human_acceptance_closed": false,
+  "not_an_installation_or_activation_receipt": true
+}

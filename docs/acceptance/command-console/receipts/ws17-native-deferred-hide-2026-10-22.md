@@ -1,0 +1,11 @@
+# WS-17 deferred application-hide fixture regression — 2026-10-22
+
+Source `334cf1964c4d810c6fadf2c3b5085b90c37f9823` changes only the native test fixture and adds one synthetic regression. Application and observer source are unchanged. [Machine receipt](ws17-native-deferred-hide-2026-10-22.json).
+
+The original twelve-check comparison on combined source `636880e` finished **11/12**, not a pass. Its native app suite executed 581 tests, with five prerequisite skips and one failed visibility assertion. The unchanged baseline native app suite passed 514 tests with seven prerequisite skips. Three focused trace runs each passed the five visibility tests without skips; that did not clear the failed full gate. A single full-native trace then reproduced the failure: the fixture was visible and unhidden at monotonic time 347.304542, then hidden and invisible at 347.610888, before the existing assertion. A first positive visibility sample missed a queued application hide. The precise origin of that queued hide is not established.
+
+The additive regression on `845cb34` first establishes an actual visible window, schedules a real application hide, and proves that hide occurred. The old helper then fails three visibility assertions in one test, with zero skips. No mock visibility or skipped prerequisite substitutes for the red result. The physical-host attempt that lacked initial visibility is excluded from this causal proof.
+
+The helper now requires the original 0.3-second settling period plus one 0.05-second event-pump turn of continuous visible state, within the unchanged three-second readiness bound. An observed hidden/invisible/occluded state resets that interval. It restores only its owned positive fixture. Every original assertion, deliberate hide/minimize/close/detach wait and application observer remains unchanged; a new helper assertion requires settling rather than accepting a last instantaneous sample.
+
+Focused green, the full original twelve-check profile, independent review and publication CI are pending at this source publication. These gates remain distinct from actual host prerequisites, installation and human acceptance. No checkbox, owner or live criterion closes from this receipt.
