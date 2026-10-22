@@ -30,3 +30,12 @@ limited to exact version admission and related capability tests; preserve
 all runtime receipt/privacy gates. Independent source review and focused
 verification precede draft publication. No PR #243 merge, installation or
 live test; prior exact-binary live acceptance does not transfer to alpha.11.
+
+Alpha.11 runtime/test source `b4ce39a` passed 182 focused offline tests and
+independent tools-disabled Fable 5.1 review with no blocking findings. Initial
+Unix socket failures were tool-sandbox restrictions; the same-source host
+rerun passed. Receipt includes launcher/test provenance and review dispositions.
+Draft publication only: final-head CI pending; no merge or installation.
+The diagnostic marker is informational, not a substitute for operator/live
+authorization. Renewed exact-binary workload acceptance remains blocked until
+fresh bounded live-test authorization; existing cost confirmations stand.

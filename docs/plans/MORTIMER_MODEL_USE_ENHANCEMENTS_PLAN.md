@@ -1142,3 +1142,13 @@ the old .10.2 receipt is rejected against .11. Public sanitized diagnostic:
 [offline receipt](../acceptance/model-use-enhancements/receipts/codex-alpha11-offline-2026-10-22.json).
 The complete local mock receipt remains uninstalled. Independent source review
 and final-head CI are pending at this implementation commit.
+
+Alpha.11 continuation verification: 182 focused offline tests pass, strict
+roadmap has zero errors/warnings, and independent tools-disabled Fable 5.1
+review of `b4ce39a` reports no blocking findings. [Review and dispositions](../acceptance/model-use-enhancements/receipts/codex-alpha11-review-2026-10-22.md).
+The diagnostic markers are informational collection metadata, not runtime
+authorization controls. Following reviewed version admission, an exact matching
+full diagnostic receipt can satisfy the capability check; separate operator
+flags and release/live acceptance still apply. Nothing here sets those flags
+or installs that receipt. Renewed exact-binary workload acceptance remains
+required before activation. Final publication CI is tracked on the draft PR.

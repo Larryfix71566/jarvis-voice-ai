@@ -20,7 +20,6 @@
   "production_activation_authorized": false,
   "error_category": null,
   "negative_unadvertised_tool_rejected": true,
-  "explicit_matching_host_refusal": false,
   "side_effect_absent": true,
   "limits": [
     "Local tool construction/parser evidence only.",
@@ -46,9 +45,25 @@
   "runtime_receipt_sha256": "789513dce7a5386455d402cae2a1ebfe726c1791583a9e828ca918e5c92399e3",
   "scope": "Offline diagnostic only; not installed or configured as runtime capability receipt.",
   "focused_tests": {
-    "passed": 78,
+    "passed": 182,
     "skipped": 0,
-    "failed": 0
+    "failed": 0,
+    "command": "PYTHON_DOTENV_DISABLED=1 RUN_LIVE=0 PYTHONDONTWRITEBYTECODE=1 python -m pytest tests/unit/test_subscription_capability.py tests/unit/test_subscription.py tests/unit/test_subscription_retirement.py tests/unit/test_subscription_voice.py tests/unit/test_subscription_tools.py -q -p no:cacheprovider",
+    "log_sha256": "c8bc2649024f4dd7c87a04aeda330bc23f043c9afc705e4fc72ce3f085c1b7fd",
+    "initial_tool_sandbox_result": "179 passed; three synthetic Unix socket bind failures (Operation not permitted). Same source passed all 182 in authorized host rerun."
   },
-  "live_acceptance": "Old .10.2 live evidence is historical only. Alpha.11 activation remains blocked pending renewed exact-binary workload acceptance plus existing release/privacy gates; no new live test is authorized."
+  "live_acceptance": "Old .10.2 live evidence is historical only. Alpha.11 activation remains blocked pending renewed exact-binary workload acceptance plus existing release/privacy gates; no new live test is authorized.",
+  "diagnostic_marker_semantics": "candidate_runtime_diagnostic and production_activation_authorized describe evidence collection; the validator does not treat them as authorization controls. After independently reviewed version admission, a matching full diagnostic receipt can satisfy the offline capability gate. Operator flags, release controls and renewed exact-binary workload acceptance remain separate; this patch sets none of them.",
+  "launcher_sha256": "a09c8bcc3f79607399d83a4e73746725240784ab838b51c5f4e81e966ae472b4",
+  "launcher_source": "import os, subprocess, tempfile\nfrom pathlib import Path\nroot=Path(\"/Users/larryfix/Documents/Codex/2026-10-20/task/subscription-retirement\")\nprofile='(version 1)(allow default)(deny network*)(allow network* (local ip \"localhost:*\") (remote ip \"localhost:*\"))(deny file-read* (subpath \"/Users/larryfix/.codex\") (subpath \"/Users/larryfix/Library/Keychains\"))'\nwith tempfile.TemporaryDirectory(prefix=\"mortimer-codex-offline-home-\",dir=\"/tmp\") as home:\n env={\"PATH\":\"/usr/bin:/bin:/usr/sbin:/sbin\", \"HOME\":home, \"TMPDIR\":home, \"PYTHONDONTWRITEBYTECODE\":\"1\", \"RUN_LIVE\":\"0\", \"PYTHON_DOTENV_DISABLED\":\"1\"}\n cmd=[\"/usr/bin/sandbox-exec\",\"-p\",profile,\"/Users/larryfix/jarvis-voice-ai-clean/.venv/bin/python\",str(root/\"scripts/verify_subscription_capability.py\"),\"--candidate-runtime\",\"--model\",\"gpt-6-astra\",\"--timeout\",\"20\",\"--output\",\"/tmp/ws05-codex-alpha11-capability.json\"]\n result=subprocess.run(cmd,cwd=root,env=env,capture_output=True,text=True,timeout=65)\n Path(\"/tmp/ws05-codex-alpha11-diagnostic.txt\").write_text(result.stdout+result.stderr)\n print(\"offline probe exit\",result.returncode)\n print(result.stdout)\n",
+  "positive_probe_explicit_matching_host_refusal": false,
+  "review": {
+    "source_head": "b4ce39a2bba0dbe6c13723e311fae0bb3d7362d1",
+    "model": "claude-fable-5-1",
+    "verdict": "no_blocking_findings",
+    "tools_enabled": false,
+    "direct_api_credentials_inherited": false,
+    "subscription": "existing Claude Max",
+    "report": "codex-alpha11-review-2026-10-22.md"
+  }
 }
