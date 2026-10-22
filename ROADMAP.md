@@ -577,7 +577,7 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 - **Owner:** `codex` (existing WS-20 documentation and bounded checker-enforcement integration on the registered branch); `claude` retains B4 authorship/ownership and required cross-review, plus WS-13 ownership. WS-17 release/install ownership is unchanged.
 - **Status:** landed via this PR: the existing roadmap CI step uses strict error exits and advisory warnings, per Larry’s 10-22 policy. Foundation B1–B4 remains complete; exact-source tests, review and CI are recorded in the associated PR. Product acceptance and final evidence closure remain open.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
-- **Remaining work / acceptance:** Record the exact enforcement merge identity and disposition the decision milestone against its source evidence; reconcile required owner live/physical/observation evidence and final Phase A/B exit. Both existing unchecked milestones remain unchanged by this implementation.
+- **Remaining work / acceptance:** Record the exact enforcement merge identity and record the disposition of the decision milestone against its source evidence; reconcile required owner live/physical/observation evidence and final Phase A/B exit. Both existing unchecked milestones remain unchanged by this implementation.
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws20-checker-enforcement-20261022`, based on main `7b295cd92dfd331d49c08b723f622491e13f4dfa` after registration PR #249. The separate frozen #246/#247 drafts remain unmerged and are not dependencies.
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`

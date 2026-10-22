@@ -18,7 +18,7 @@ cross-review remain; no other owner or acceptance checkbox is changed.
 
 The 36 focused checker tests pass, including five new subprocess cases with
 GitHub annotations and the default origin/main ref. Clean exits 0; an error
-exits 1; warning-only exits 0; mixed exits 1; legacy warn-only errors exit0 with
+exits 1; warning-only exits 0; mixed exits 1; legacy warn-only errors exit 0 with
 warning annotations. No live provider, runtime/service or installed-artifact
 action is used. Strict real-roadmap check and diff preservation checks are
 recorded in the PR with the frozen source. Final Claude review and publication
@@ -54,8 +54,8 @@ spaces in the exit-code prose were corrected. Workflow and test bytes are
 unchanged; their hashes above still identify the reviewed implementation.
 
 The tests invoke default ref resolution but do not independently prove ref
-precedence when origin/main and main point to the same fixture commit. Existing
-checker source and the full-history publication job establish that behavior;
+precedence when origin/main and main point to the same fixture commit. Checker source (`resolve_main` prefers `origin/main`) establishes precedence;
+the full-history checkout makes that ref available;
 no broader precedence-test claim is made. Repository-wide errors can fail
 unrelated PRs; owners must correct their own stale rows. This is the approved
 policy, not a new severity or branch-protection rule.
