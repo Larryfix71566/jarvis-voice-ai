@@ -114,10 +114,10 @@ def resolve_provider_executable(which: str) -> str | None:
 
 _CODEX_NO_TOOL_VERIFICATION_ENV = "JARVIS_CODEX_SUBSCRIPTION_NO_TOOLS_VERIFIED"
 CODEX_CAPABILITY_RECEIPT_ENV = "JARVIS_CODEX_SUBSCRIPTION_CAPABILITY_RECEIPT"
-CODEX_VERIFIED_VERSIONS = frozenset({"codex-cli 0.160.0", "codex-cli 0.163.0-alpha.10.2"})
+CODEX_VERIFIED_VERSIONS = frozenset({"codex-cli 0.160.0", "codex-cli 0.163.0-alpha.10.2", "codex-cli 0.163.0-alpha.11"})
 _CODEX_CATALOG_ARGUMENT = "<mortimer-pinned-model-catalog>"
 # These controls passed installed-CLI loopback positive and hostile-tool
-# probes on 0.160.0 and 0.163.0-alpha.10.2. Each request still requires an
+# probes on 0.160.0, 0.163.0-alpha.10.2 and 0.163.0-alpha.11. Each request requires an
 # exact binary/model/catalog/invocation receipt, not a version match alone.
 # Code Mode's host remains enabled: the selected model requires it even when
 # the model-visible tool registry is empty. Disabling the host emits an error
