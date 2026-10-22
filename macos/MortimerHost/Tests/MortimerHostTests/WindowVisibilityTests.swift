@@ -65,6 +65,51 @@ final class WindowVisibilityTests: XCTestCase {
         window.orderFrontRegardless()
     }
 
+    private func waitForVisibleFixture(_ window: NSWindow, until condition: () -> Bool) {
+        pumpEvents(until: condition)
+    }
+
+    func testVisibleFixtureRecoversFromAnApplicationHideAfterShowing() throws {
+        let app = NSApplication.shared
+        guard !NSScreen.screens.isEmpty else {
+            throw XCTSkip("requires a real WindowServer screen for the synthetic hidden-owner fixture")
+        }
+        let originalPolicy = app.activationPolicy()
+        guard app.setActivationPolicy(.regular) else {
+            throw XCTSkip("the test process cannot use a regular application policy")
+        }
+        app.finishLaunching()
+        let view = WindowVisibilityView(frame: NSRect(x: 0, y: 0, width: 300, height: 160))
+        var reports: [Bool] = []
+        view.changed = { reports.append($0) }
+        let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        defer {
+            window.close()
+            app.unhideWithoutActivation()
+            _ = app.setActivationPolicy(originalPolicy)
+        }
+        // Independently prove this WindowServer can display the owned fixture.
+        app.unhideWithoutActivation()
+        show(window)
+        pumpEvents(until: { reports.last == true })
+        XCTAssertTrue(window.isVisible)
+        XCTAssertTrue(window.occlusionState.contains(.visible))
+        XCTAssertEqual(reports.last, true)
+
+        // Reproduce a late hidden-owner state after the initial show request.
+        app.hide(nil)
+        pumpEvents(until: { app.isHidden && reports.last == false })
+        XCTAssertTrue(app.isHidden)
+        XCTAssertEqual(reports.last, false)
+        waitForVisibleFixture(window, until: { reports.last == true })
+        XCTAssertFalse(app.isHidden, "Visible fixture preparation must restore its own hidden application")
+        XCTAssertTrue(window.isVisible)
+        XCTAssertTrue(window.occlusionState.contains(.visible))
+        XCTAssertEqual(reports.last, true, "Read the real observer after the owned window is restored")
+    }
+
     func testActualWindowHideShowAndDetachUpdateVisibility() throws {
         let originalPolicy = try activateVisibleWindowServer()
         defer { _ = NSApp.setActivationPolicy(originalPolicy) }

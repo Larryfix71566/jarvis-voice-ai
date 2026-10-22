@@ -3567,3 +3567,14 @@ fixture readiness from observer behavior. Initial implementation scope is the
 existing WindowVisibilityTests file; the observer changes only if a causal app
 defect is proven. No additional live inference, settings or human acceptance
 change. New source/test bytes require applicable review and verification.
+
+
+### 2026-10-22 — Hidden-after-show regression reproduced before repair
+
+Claim #237 merged as `fccb760`. On the registered implementation branch,
+a real WindowServer regression establishes a visible synthetic window and its
+actual observer, then hides the owned test app after its initial show request.
+The original preparation leaves it hidden: one test/four failed assertions/zero
+skips. Existing hide/show/miniaturize/detach/animation assertions and observer
+source are unchanged. The proposed correction remains test-only and must pass
+the original full gate; a focused skip cannot substitute for a pass.
