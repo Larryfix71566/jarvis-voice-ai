@@ -1744,3 +1744,27 @@ WS-24 durable task recovery. No existing owner, scope or acceptance state change
 - **Updated:** 10-22 UTC (Larry requested plan-folder storage and end-of-roadmap intake; implementation not started; reconciliation and proposed synthetic claim, 2026-10-22 America/New_York)
 
 </details>
+
+
+## 13. REA-assisted app building — planned, not started
+
+<details id="ws-31">
+<summary>WS-31 — New apps and authorized feature recreation through Mortimer · NR1 contract claimed after merge</summary>
+
+Larry requested preserving the REA research and implementation plan, clarified
+that REA should help Mortimer build new apps or recreate authorized app features,
+and requested this plan at the end of the roadmap on 2026-10-22. This append
+follows landed WS-30 phone documentation revision 5.2 without changing existing priorities or entries.
+
+- **Owner:** `codex` for NR1 pure no-reference contract only after this claim lands; independent source reviewer unassigned; broader implementation/acceptance owners unchanged
+- **Status:** claimed: NR1 data-only contract scope becomes effective only when this documentation claim is on main; source implementation not started; all operational app-building/REA gates remain open
+- **Implemented by:** not implemented; Codex prepared source-referenced NR1 contract and claim; original research/plan authorship retained
+- **Remaining work / acceptance:** After this documentation claim lands on main, verify its exact owner/branch/scope; implement NR1-01–10 against the pure contract and obtain independent source/contract review. No-reference synthetic validation requires no external REA target or actual app outcome. Real build/Skill/route/recovery/publication/release gates remain separate; no existing acceptance closes.
+- **Model version:** separate Codex static contract review APPROVE at exact `eb413a25d80df202af8e6d0f04e737ef0463b992`; earlier `f6b6f6e` remains unapproved. Current-main reconciliation review recorded separately; no Claude/runtime model execution or independent source review
+- **Where:** future implementation branch `codex/ws31-no-reference-contract-20261022`, created only from main after this matching claim lands; current docs-only candidate `docs/ws31-main-integration-20261022` based on `ab31dfa8ddf58ad0583afcb25dffd18afbee5765`. Frozen REA #245 `b23b824` and corrected NR1 `eb413a25` are content inputs, not merged ancestry. Phone #265 has landed; frozen #240 remains historical. Sole serial coordinator owns integration
+- **Plan:** [REA app-building integration plan](docs/plans/MORTIMER_REA_INTEGRATION_PLAN.md), with [complete preserved research](docs/interface-research/REA_INTEGRATION_RESEARCH_2026-10-22.md) and [original DOCX](docs/interface-research/REA_INTEGRATION_RESEARCH_2026-10-22.docx)
+- **Scope:** NR1 only after main registration: new stdlib-only `jarvis/app_build_contract.py`, new `tests/unit/test_app_build_contract.py`, synthetic `tests/fixtures/app_build_contract/new_idea_v1.json`; this WS-31 block, canonical REA plan, dated WS-31 log and content-free NR1 receipt under `docs/acceptance/rea-app-building/`. No existing admin/agent/App Builder/Skill/provider/sandbox file, shared test, dependency/config/registry/policy, API/UI/tool wiring, persistence/migration, model call, reference acquisition/execution, new app repository, publication, credentials, service or deployment change. No runtime identifier reserved
+- **Next step:** serial coordinator: review and integrate this additive current-main candidate; codex: verify matching owner/branch/scope before source work, implement only NR1 and report exact review/test evidence. larry: choose actual app outcome before a later build slice. Source needs beyond this scope return for claim amendment; no concurrent merge
+- **Updated:** 10-22 (all-workstreams completion dispatch; smallest no-reference data-only claim prepared; no source work or activation)
+
+</details>
