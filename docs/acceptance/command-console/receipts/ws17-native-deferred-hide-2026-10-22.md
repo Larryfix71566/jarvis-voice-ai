@@ -1,6 +1,6 @@
 # WS-17 deferred application-hide fixture regression — 2026-10-22
 
-Source `334cf1964c4d810c6fadf2c3b5085b90c37f9823` changes only the native test fixture and adds one synthetic regression. Application and observer source are unchanged. [Machine receipt](ws17-native-deferred-hide-2026-10-22.json).
+Source `00fa4a0969629a96b1ff7a8217b2b109d9dac705` changes only the native test fixture and adds one synthetic regression. Application and observer source are unchanged. [Machine receipt](ws17-native-deferred-hide-2026-10-22.json).
 
 The original twelve-check comparison on combined source `636880e` finished **11/12**, not a pass. Its native app suite executed 581 tests, with five prerequisite skips and one failed visibility assertion. The unchanged baseline native app suite passed 514 tests with seven prerequisite skips. Three focused trace runs each passed the five visibility tests without skips; that did not clear the failed full gate. A single full-native trace then reproduced the failure: the fixture was visible and unhidden at monotonic time 347.304542, then hidden and invisible at 347.610888, before the existing assertion. A first positive visibility sample missed a queued application hide. The precise origin of that queued hide is not established.
 
@@ -8,4 +8,6 @@ The additive regression on `845cb34` first establishes an actual visible window,
 
 The helper now requires the original 0.3-second settling period plus one 0.05-second event-pump turn of continuous visible state, within the unchanged three-second readiness bound. An observed hidden/invisible/occluded state resets that interval. It restores only its owned positive fixture. Every original assertion, deliberate hide/minimize/close/detach wait and application observer remains unchanged; a new helper assertion requires settling rather than accepting a last instantaneous sample.
 
-Focused green, the full original twelve-check profile, independent review and publication CI are pending at this source publication. These gates remain distinct from actual host prerequisites, installation and human acceptance. No checkbox, owner or live criterion closes from this receipt.
+The first six-case focused run on publication `157f195` executed without skips but failed three initial-visibility assertions in the existing immediate-hide regression; the new deferred-hide regression passed. The full original profile correctly did not start. That initial positive setup had retained its single observer-sample wait outside the settled helper. The follow-up uses the same settled preparation there, retaining every real observer/visibility assertion and the separate deliberate-hide phase. Static review of `157f195` reported no blocking findings; current-revision review remains required.
+
+Focused green, the full original twelve-check profile, current independent review and publication CI are pending at this source publication. These gates remain distinct from actual host prerequisites, installation and human acceptance. No checkbox, owner or live criterion closes from this receipt.

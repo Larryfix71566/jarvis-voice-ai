@@ -1,9 +1,9 @@
 {
-  "repair_source": "334cf1964c4d810c6fadf2c3b5085b90c37f9823",
+  "repair_source": "00fa4a0969629a96b1ff7a8217b2b109d9dac705",
   "red_source": "845cb34ea1cebb2fd9725cc4bfc09ee878ac49c5",
   "base_source": "636880eabbe9dc756c30df7128d0a90c02d222bd",
   "test_path": "macos/MortimerHost/Tests/MortimerHostTests/WindowVisibilityTests.swift",
-  "test_sha256": "be4f6f1e2e6adf614ca531cdad89f005617b3136c2d2278eb039b1d8637961cd",
+  "test_sha256": "5230d307e573831f088e893414be0274a4fd1be48fe92d7ec037960572e5d7ce",
   "runtime_observer_and_application_unchanged": true,
   "original_five_test_assertion_lines_unchanged": true,
   "original_readiness_bound_seconds": 3,
@@ -52,8 +52,23 @@
   },
   "green_focused": "pending",
   "full_original_profile": "pending",
-  "independent_source_review": "pending",
+  "independent_source_review": {
+    "source": "157f195830fd76475f955ffc6111dca3ba733423",
+    "verdict": "no_blocking_findings",
+    "current_revision": "pending"
+  },
   "publication_ci": "pending",
   "human_acceptance_closed": false,
-  "not_an_installation_or_activation_receipt": true
+  "not_an_installation_or_activation_receipt": true,
+  "prior_repair_source": "334cf1964c4d810c6fadf2c3b5085b90c37f9823",
+  "initial_positive_observer_preparation": "Uses the same settled helper; all real observer/visibility assertions and explicit hide phase unchanged",
+  "first_focused_nonpass": {
+    "source": "157f195830fd76475f955ffc6111dca3ba733423",
+    "tests": 6,
+    "skips": 0,
+    "failures": 3,
+    "failed_case": "testVisibleFixtureRecoversFromAnApplicationHideAfterShowing initial positive setup only",
+    "deferred_hide_case_passed": true,
+    "original_profile_started": false
+  }
 }
