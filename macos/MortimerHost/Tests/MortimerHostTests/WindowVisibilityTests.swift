@@ -106,10 +106,11 @@ final class WindowVisibilityTests: XCTestCase {
             app.unhideWithoutActivation()
             _ = app.setActivationPolicy(originalPolicy)
         }
-        // Independently prove this WindowServer can display the owned fixture.
+        // Establish the real visible fixture and observer after queued app
+        // events settle; the explicit hide below is still a separate phase.
         app.unhideWithoutActivation()
         show(window)
-        pumpEvents(until: { reports.last == true })
+        waitForVisibleFixture(window, until: { reports.last == true })
         XCTAssertTrue(window.isVisible)
         XCTAssertTrue(window.occlusionState.contains(.visible))
         XCTAssertEqual(reports.last, true)
