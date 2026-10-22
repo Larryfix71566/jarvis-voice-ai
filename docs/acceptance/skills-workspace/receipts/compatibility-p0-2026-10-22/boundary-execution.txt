@@ -1,0 +1,13 @@
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[control-False-False] PASSED [ 16%]
+tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[control-True-False] PASSED [ 33%]
+tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[control-True-True] PASSED [ 50%]
+tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[scripts-False-False] PASSED [ 66%]
+tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[scripts-True-False] PASSED [ 83%]
+tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[scripts-True-True] PASSED [100%]
+PASSED tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[control-False-False]
+PASSED tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[control-True-False]
+PASSED tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[control-True-True]
+PASSED tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[scripts-False-False]
+PASSED tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[scripts-True-False]
+PASSED tests/unit/test_skill_injection_boundary.py::test_compatibility_drift_refuses_at_final_injection_boundary[scripts-True-True]

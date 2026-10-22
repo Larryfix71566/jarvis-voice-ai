@@ -16,6 +16,83 @@ activation, full acceptance, or release. Implement in a dedicated worktree;
 preserve concurrent work. Acceptance gates remain open until their full evidence
 is recorded.
 
+## 2026-10-22 — focused review correction candidate
+
+Main `6234949` integrated without conflict before edits; WS-20 enforcement and
+all non-WS-03 rows preserved. Claude's completed review of `4699a54` returned
+REVISE (minor), no Critical/High findings. Its original verdict remains unchanged.
+M1's concern about skipped async tests is rebutted by pytest.ini AUTO mode and
+six verbosely passing final-boundary cases; this is author evidence, not approval.
+
+Before editing assertions, the following P0-created test IDs are declared for
+strengthening from generic refusal to exact reason codes:
+- `test_skill_compatibility.py::test_unsupported_or_malformed_frontmatter_refuses_without_content`
+- `test_skill_compatibility.py::test_invalid_encoding_or_resource_limit_refuses`
+- `test_skill_compatibility.py::test_yaml_shape_and_metadata_resource_refusals_are_safe`
+
+No additional historical/frozen test outcome change is intended. Add scanner
+boundary evidence without treating schema-invalid depth/event fixtures as valid
+skills. Evaluate/fix atomic no-overwrite authoring, fixed I/O error reasons,
+round-trip checks, bounded lazy body reading and registry-error attribution.
+No executable resource support or activation capability is added. Record exact
+final tests and independently reviewed dispositions before calling this slice ready.
+
+Correction regression: **346 passed**, one dependency deprecation warning. New
+coverage reproduced 14 failures before fixes. The [correction receipt](../acceptance/skills-workspace/receipts/compatibility-p0-2026-10-22/AUTHOR_CORRECTIONS.md)
+records every M1–M4/L1–L8 disposition, exact caller evidence and the unmodified
+original REVISE verdict. Atomic no-overwrite authoring, bounded lazy reads, fixed
+I/O diagnostics and serializer checks are implemented; final independent rereview
+and updated-head CI remain separate. Exotic delimiter differences remain
+fail-closed; aggregate byte limits override otherwise-valid character lengths.
+No full-package compatibility or new activation capability is claimed.
+
+## 2026-10-22 — P0 implementation candidate after registration
+
+Registration #248 merged as `edfa28527d467ccf12dba7de8577211a3e59764a` at
+16:43:49 UTC, reviewed head `71c2789`, all five CI checks successful. Main tree
+matched the reviewed candidate exactly; every non-WS-03 roadmap byte, including
+WS-20, was preserved. Source work began afterward on the separately claimed
+`codex/ws03-compatibility-p0-20261022` branch. #246 remains untouched.
+
+The candidate implements the closed frontmatter matrix below in a pure validator,
+with parser enforcement reused by legacy loading, V2 snapshots, catalog/readiness
+and final prompt revalidation. Unsupported metadata/controls and any casefolded
+root scripts entry refuse. YAML duplicates, aliases/anchors/tags, wrong types,
+non-mapping input and excessive complexity refuse with fixed diagnostic codes.
+Invalid CLI package labels use ordinals; catalog identity remains the validated
+slug. Existing package digest integrity checks still run before compatibility.
+The writer validates and serializes before candidate creation; quoted empty and
+ambiguous strings round-trip. Source text, package/configuration pins and activation
+controls are unchanged. There is no script execution, dependency install or tool grant.
+
+Numerical P0 bounds for focused review: SKILL.md 128 KiB (same as the existing
+catalog text cap), frontmatter 16 KiB before YAML, metadata strings 1,024 characters,
+128 YAML events, nesting depth four, 256 immediate package-root entries. Exact
+file/frontmatter byte limits are inclusive. Oversize input refuses as a whole;
+existing 20,000-character body guidance remains a warning, without truncation.
+Regular files only, nonblocking/no-follow reads and bounded byte reads protect the
+parser from special files and leaf symlinks. This does not introduce a general
+script sandbox or certify prose dependency completeness.
+
+Offline evidence: the first 40 new cases produced **36 failures / four passes**
+on unchanged main. The implementation plus expanded coverage passes **232 tests**
+across parser, compatibility, catalog/CLI, readiness, selection, last injection,
+references, authoring validation, frozen workspace fixtures and runtime inventory.
+One dependency deprecation warning is unrelated. Tests use isolated synthetic
+state and in-memory providers, no real inference or external scripts.
+Only the two pre-disclosed existing assertions changed:
+`TestParsing.test_scripts_are_detected` and
+`TestNoExecutionPath.test_a_bundled_script_is_never_read_or_run` now assert refusal;
+nonexecution and diagnostic privacy remain tested. No frozen fixture was edited
+or changed outcome. Other existing test assertions remain unchanged.
+
+Full-source bounded Claude Max review and exact-head CI are pending. These local
+results are author-run regression evidence, not full acceptance. The twelve-gate
+inventory below remains unchanged: SW-B/C historically accepted, all other gates
+open. P0 adds no native import review UI, complete resource adapter, executable
+sandbox, accepted version history or activation/rollback implementation. Those
+larger slices require their existing owner coordination and prerequisites.
+
 ## 2026-10-22 — WS-03 completion dispatch and bounded compatibility claim
 
 Status: documentation claim only; source implementation waits for the matching

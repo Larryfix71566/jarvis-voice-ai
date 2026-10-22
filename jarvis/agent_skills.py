@@ -7,12 +7,12 @@ be reviewed individually."*
 
 A skill is **capability knowledge**: how to do a kind of thing, written
 down once and reusable. It is the third knowledge layer, and it is
-deliberately the only one that speaks a FOREIGN format — the Agent
-Skills open standard (agentskills.io, open since 2025-12-18): a folder
-containing `SKILL.md`, YAML frontmatter plus a Markdown body, with
-optional `scripts/`, `references/` and `assets/` siblings. Mortimer
-consumes that format rather than inventing a parallel one, so a
-community skill can be dropped in unchanged.
+an instruction-only subset of SKILL.md: YAML frontmatter and Markdown text.
+Supported fields are name, description and Mortimer's five descriptive metadata
+fields. Unknown fields and host-specific controls refuse admission. Text
+references retain the existing manifest checks. Script-bearing packages, full
+plugins and hosted services are not supported; text admission does not certify
+that every instruction or external dependency can be fulfilled.
 
 How this differs from its neighbours, since all four layers are text
 injected into a prompt and the distinction is easy to lose:
@@ -38,10 +38,8 @@ Two safety properties hold by construction, not by policy:
    risk in the standard — importing a community skill and running its
    code is arbitrary code execution from the internet on Larry's
    machine. Nothing here runs, imports, or shells out to anything: a
-   skill contributes TEXT to a prompt and nothing else. A bundled
-   `scripts/` directory is detected and reported loudly (so an operator
-   knows the skill expects capabilities it will not get here), never
-   invoked. `test_no_execution_path` fails if that ever changes.
+   skill contributes TEXT to a prompt and nothing else. Any package-root entry named `scripts` (case-insensitive) refuses
+   admission; it is never traversed or read by this parser. `test_no_execution_path` fails if that ever changes.
 
 Progressive disclosure is the reason the standard fits Mortimer
 specifically. The Supervisor runs on a small model with a prompt already
@@ -57,10 +55,17 @@ from __future__ import annotations
 import logging
 import os
 import re
+import stat
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from jarvis.procedures import _overlap_score, _tokens
+from jarvis.skill_compatibility import (
+    MAX_SKILL_BYTES, MAX_FRONTMATTER_BYTES, MAX_ROOT_ENTRIES,
+    NAME_MAX_CHARS, DESCRIPTION_MAX_CHARS, NAME_RE, RESERVED_WORDS,
+    compatibility_reason, load_frontmatter, validate_frontmatter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,12 +115,7 @@ SKILLS_WORKSPACE_ENABLED_ENV = "JARVIS_SKILLS_WORKSPACE_ENABLED"
 SKILLS_SELECTION_V2_ENABLED_ENV = "JARVIS_SKILLS_SELECTION_V2"
 _REVISION_RE = re.compile(r"^[0-9a-f]{64}$")
 
-# Limits from the standard itself.
-NAME_MAX_CHARS = 64
-DESCRIPTION_MAX_CHARS = 1024
-NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-# The standard reserves these vendor words in skill names.
-RESERVED_WORDS = ("anthropic", "claude")
+# Public name/description constants are imported from the shared validator.
 # ~5k tokens, the standard's guidance for a body, measured in chars
 # because there is no tokenizer in this path and a rough ceiling is the
 # point. Exceeding it is a warning, never a refusal — a long skill from
@@ -143,8 +143,11 @@ class Skill:
     def body(self) -> str:
         """Tier two: the Markdown body, read from disk on activation."""
         if self._body is None:
-            self._body = _split_frontmatter(
-                self.path.read_text(encoding="utf-8"))[1].strip()
+            snapshot, _problems = parse_skill(self.path)
+            if (snapshot is None or snapshot.name != self.name
+                    or snapshot.description != self.description):
+                raise ValueError("skill_body_unavailable")
+            self._body = snapshot._body
         return self._body
 
     def as_prompt(self) -> str:
@@ -277,43 +280,6 @@ def _split_frontmatter(text: str) -> tuple[str, str]:
     return "", text
 
 
-def validate_frontmatter(data: dict) -> list[str]:
-    """Every reason this frontmatter is not a valid skill, as plain
-    sentences. Pure. An empty list means valid.
-
-    Returns ALL problems rather than the first — someone fixing an
-    imported skill should see the whole list in one pass.
-    """
-    problems: list[str] = []
-    if not isinstance(data, dict):
-        return ["frontmatter is not a YAML mapping"]
-
-    name = str(data.get("name") or "").strip()
-    description = str(data.get("description") or "").strip()
-
-    if not name:
-        problems.append("missing required field: name")
-    else:
-        if len(name) > NAME_MAX_CHARS:
-            problems.append(f"name is {len(name)} chars (max {NAME_MAX_CHARS})")
-        if not NAME_RE.match(name):
-            problems.append(
-                f"name {name!r} must be lowercase letters, digits and single hyphens")
-        for word in RESERVED_WORDS:
-            if word in name.lower():
-                problems.append(f"name may not contain the reserved word {word!r}")
-        if "<" in name or ">" in name:
-            problems.append("name may not contain XML tags")
-
-    if not description:
-        problems.append("missing required field: description")
-    elif len(description) > DESCRIPTION_MAX_CHARS:
-        problems.append(
-            f"description is {len(description)} chars (max {DESCRIPTION_MAX_CHARS})")
-
-    return problems
-
-
 def parse_skill(path: Path) -> tuple[Skill | None, list[str]]:
     """Read one SKILL.md. Returns (skill, problems); never raises.
 
@@ -321,29 +287,58 @@ def parse_skill(path: Path) -> tuple[Skill | None, list[str]]:
     come back so the loader can log them and `--validate` can print them.
     """
     try:
-        # Disable universal-newline conversion so the parser can retain the
-        # package's exact body bytes when it snapshots instruction content.
-        with path.open("r", encoding="utf-8", newline="") as source:
-            text = source.read()
-    except OSError as exc:
-        return None, [f"unreadable: {exc}"]
+        if path.parent.is_symlink():
+            return None, ["skill_file_type_unsupported"]
+        # Inspect names only: never follow, traverse or read executable resources.
+        with os.scandir(path.parent) as entries:
+            for count, entry in enumerate(entries, 1):
+                if entry.name.casefold() == "scripts":
+                    return None, ["unsupported_scripts_entry"]
+                if count > MAX_ROOT_ENTRIES:
+                    return None, ["package_entry_limit"]
+        if not all(hasattr(os, flag) for flag in ("O_NONBLOCK", "O_NOFOLLOW")):
+            return None, ["skill_unreadable"]
+        flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW
+        fd = os.open(path, flags)
+        try:
+            source = os.fdopen(fd, "rb")
+        except (OSError, ValueError):
+            os.close(fd)
+            return None, ["skill_unreadable"]
+        with source:
+            info = os.fstat(source.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                return None, ["skill_file_type_unsupported"]
+            if info.st_size > MAX_SKILL_BYTES:
+                return None, ["skill_file_too_large"]
+            raw = source.read(MAX_SKILL_BYTES + 1)
+        if len(raw) > MAX_SKILL_BYTES:
+            return None, ["skill_file_too_large"]
+    except (OSError, ValueError):
+        return None, ["skill_unreadable"]
 
+    # Bound the frontmatter bytes before decoding or invoking YAML. Whole-line
+    # delimiter behavior and body newline preservation remain unchanged.
+    lines = raw.splitlines(keepends=True)
+    front_bytes = b""
+    if lines and lines[0].rstrip(b"\r\n") == b"---":
+        front_size = 0
+        for index in range(1, len(lines)):
+            if lines[index].rstrip(b"\r\n") == b"---":
+                front_bytes = b"".join(lines[1:index])
+                break
+            front_size += len(lines[index])
+            if front_size > MAX_FRONTMATTER_BYTES:
+                return None, ["frontmatter_too_large"]
+    if not front_bytes.strip():
+        return None, ["frontmatter_missing"]
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeError:
+        return None, ["skill_encoding_invalid"]
     front, body = _split_frontmatter(text)
-    if not front.strip():
-        return None, ["no YAML frontmatter (a SKILL.md must start with ---)"]
-
-    try:
-        import yaml
-    except ImportError:  # pragma: no cover - pyyaml is a hard dependency
-        return None, ["pyyaml is not installed"]
-
-    try:
-        data = yaml.safe_load(front)
-    except Exception as exc:  # noqa: BLE001
-        return None, [f"frontmatter is not valid YAML: {exc}"]
-
-    problems = validate_frontmatter(data)
-    if problems:
+    data, problems = load_frontmatter(front)
+    if data is None:
         return None, problems
 
     if len(body) > BODY_SOFT_MAX_CHARS:
@@ -353,11 +348,11 @@ def parse_skill(path: Path) -> tuple[Skill | None, list[str]]:
 
     metadata = data.get("metadata")
     skill = Skill(
-        name=str(data["name"]).strip(),
-        description=str(data["description"]).strip(),
+        name=data["name"].strip(),
+        description=data["description"].strip(),
         path=path,
         metadata=metadata if isinstance(metadata, dict) else {},
-        has_scripts=(path.parent / "scripts").is_dir(),
+        has_scripts=False,
         _body=body.strip(),
     )
     return skill, problems
@@ -492,24 +487,104 @@ def write_skill(
     enabling it are two decisions, and the second one is Larry's. A
     freshly written skill is inert until he adds its name by hand.
     """
+    import yaml
+
     directory = directory or SKILLS_DIR
-    problems = validate_frontmatter({"name": name, "description": description})
+    data = {"name": name, "description": description}
+    if metadata is not None:
+        data["metadata"] = metadata
+    problems = validate_frontmatter(data)
+    if not isinstance(body, str):
+        problems.append("body_required_string")
     if problems:
         raise ValueError("; ".join(problems))
+    data["name"] = name.strip()
+    data["description"] = description.strip()
+    front = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+    _parsed, problems = load_frontmatter(front)
+    content = "---\n" + front + "---\n\n" + body.rstrip() + "\n"
+    if len(content.encode("utf-8")) > MAX_SKILL_BYTES:
+        problems.append("skill_file_too_large")
+    if problems:
+        raise ValueError("; ".join(problems))
+    if _parsed != data or _split_frontmatter(content)[0] != front:
+        raise ValueError("skill_serialization_invalid")
 
-    folder = directory / name
+    folder = directory / data["name"]
     path = folder / "SKILL.md"
-    if path.exists():
-        raise FileExistsError(str(path))
-    folder.mkdir(parents=True, exist_ok=True)
+    if path.exists() or path.is_symlink():
+        raise FileExistsError("skill_already_exists")
+    # Pin the package directory, then publish a complete file with an atomic
+    # no-overwrite hard link. A failed write cannot expose a partial SKILL.md.
+    created_folder = False
+    directory_fd = None
+    temporary_name = None
+    published = False
+    cleanup_failed = False
+    try:
+        try:
+            folder.mkdir(parents=True)
+            created_folder = True
+        except FileExistsError:
+            pass
+        if not all(hasattr(os, flag) for flag in ("O_DIRECTORY", "O_NOFOLLOW")):
+            raise ValueError("skill_write_unavailable")
+        directory_fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        with os.scandir(directory_fd) as entries:
+            for count, entry in enumerate(entries, 1):
+                if entry.name.casefold() == "scripts":
+                    raise ValueError("unsupported_scripts_entry")
+                # Reserve the final SKILL.md entry. The temporary entry is
+                # removed before return and does not authorize activation.
+                if count > MAX_ROOT_ENTRIES - 1:
+                    raise ValueError("package_entry_limit")
+        temporary = ".skill-" + secrets.token_hex(12) + ".tmp"
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=directory_fd)
+        temporary_name = temporary  # only clean up a file we actually created
+        try:
+            output = os.fdopen(fd, "wb")
+        except (OSError, ValueError):
+            os.close(fd)
+            raise ValueError("skill_write_failed") from None
+        with output:
+            output.write(content.encode("utf-8"))
+            output.flush()
+            os.fsync(output.fileno())
+        pinned = os.fstat(directory_fd)
+        current = folder.stat(follow_symlinks=False)
+        if (current.st_dev, current.st_ino) != (pinned.st_dev, pinned.st_ino):
+            raise ValueError("skill_write_failed")
+        os.link(temporary_name, "SKILL.md", src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd, follow_symlinks=False)
+        published = True
+    except FileExistsError:
+        raise FileExistsError("skill_already_exists") from None
+    except OSError:
+        raise ValueError("skill_write_failed") from None
+    finally:
+        if temporary_name is not None and directory_fd is not None:
+            try:
+                os.unlink(temporary_name, dir_fd=directory_fd)
+            except OSError:
+                cleanup_failed = True
+        if created_folder and not published:
+            try:
+                # Never recursively delete or remove a concurrent writer's files.
+                if directory_fd is None:
+                    folder.rmdir()
+                else:
+                    pinned = os.fstat(directory_fd)
+                    current = folder.stat(follow_symlinks=False)
+                    if (current.st_dev, current.st_ino) == (pinned.st_dev, pinned.st_ino):
+                        folder.rmdir()
+            except OSError:
+                pass  # nonempty/concurrently moved folders belong to their owner
+        if directory_fd is not None:
+            os.close(directory_fd)
+        if cleanup_failed:
+            raise ValueError("skill_write_cleanup_failed") from None
 
-    lines = ["---", f"name: {name}", f"description: {description}"]
-    if metadata:
-        lines.append("metadata:")
-        for k, v in metadata.items():
-            lines.append(f"  {k}: {v}")
-    lines += ["---", "", body.rstrip(), ""]
-    path.write_text("\n".join(lines), encoding="utf-8")
     return path
 
 
@@ -604,9 +679,9 @@ def explain(
         return "\n".join(out)
 
     scored: list[tuple[float, Skill, set[str]]] = []
-    for path, skill, _problems in found:
+    for ordinal, (path, skill, _problems) in enumerate(found, 1):
         if skill is None:
-            out.append(f"[ INVALID ] {path.parent.name} — cannot be scored")
+            out.append(f"[ INVALID ] package-{ordinal} — cannot be scored")
             continue
         card_tokens = _tokens(skill.card)
         scored.append((_overlap_score(card_tokens, task_tokens), skill,
@@ -681,9 +756,9 @@ def format_inventory(directory: Path | None = None,
         )
     else:
         out.append("  registry: legacy, package digests are not pinned")
-    for path, skill, problems in found:
+    for ordinal, (path, skill, problems) in enumerate(found, 1):
         if skill is None:
-            out.append(f"  [INVALID]  {path.parent.name}")
+            out.append(f"  [INVALID]  package-{ordinal}")
             for p in problems:
                 out.append(f"             {p}")
             continue
@@ -770,16 +845,23 @@ def main(argv: list[str] | None = None) -> int:
         from jarvis.skill_catalog import validate_skill_inventory
 
         frontmatter_errors = {}
-        for path, skill, problems in discover():
+        for ordinal, (path, skill, problems) in enumerate(discover(), 1):
             if skill is None:
-                frontmatter_errors[path.parent.name] = path
-                print(f"INVALID {path}")
+                frontmatter_errors[path.parent.name] = (ordinal, compatibility_reason(problems))
+                print(f"INVALID package-{ordinal}")
                 for problem in problems:
                     print(f"        {problem}")
         package_errors = validate_skill_inventory()
         for error in package_errors:
+            if error == "registry: invalid or unavailable":
+                print(f"INVALID {error}")
+                continue
             skill_id = error.partition(":")[0]
-            if skill_id in frontmatter_errors and error.endswith("invalid_skill_instructions"):
+            if skill_id in frontmatter_errors:
+                ordinal, reason = frontmatter_errors[skill_id]
+                package_reason = error.partition(":")[2].strip()
+                if package_reason != reason:
+                    print(f"INVALID package-{ordinal}: {package_reason}")
                 continue
             print(f"INVALID {error}")
         if not frontmatter_errors and not package_errors:
