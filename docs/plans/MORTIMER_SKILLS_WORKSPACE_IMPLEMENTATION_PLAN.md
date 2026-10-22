@@ -61,11 +61,15 @@ REVISE. The latest reviewed `7f34dde`; the corrections below address its six
 documentation findings as well as the earlier script and field-schema findings.
 All reviews and input/source receipts are preserved in the WS-03 claim receipt
 directory. The fourth independent review of `62f8805` returned APPROVE and
-closed all six findings; its unmodified response/receipt and non-blocking
-implementation notes are retained. A subsequent registration-only correction
+closed all six findings; its unmodified response/receipt and author-prepared
+implementation notes derived from its non-blocking follow-ups are retained. A subsequent registration-only correction
 separates the future implementation branch from the claim publication branch,
 so the main-first claim does not immediately become a merged-branch drift error.
-That delta receives a focused review and fresh CI. These are advisory reviews, not
+The fifth independent review APPROVED that delta at `16d3dd5`. WS-20 claim #249
+then landed as `7b295cd`; its three documentation files were integrated unchanged.
+Normal and simulated-post-merge checks both pass 0/0. The integrated publication
+head receives final focused review and fresh CI before the separately approved
+documentation-only merge. These are advisory reviews, not
 full-source or implementation reviews; no acceptance evidence follows from them.
 
 - Enforce compatibility refusal in `parse_skill`, returning `None` for a blocked

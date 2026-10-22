@@ -52,3 +52,11 @@ Where now names only the distinct future `codex/ws03-compatibility-p0-20261022`;
 main only after the claim lands. This registration-only correction preserves
 the approved P0 semantics and all other workstreams. Focused delta review and
 fresh exact-head CI are required; WS-20 retains the first merge slot.
+
+The fifth independent review APPROVED the registration delta at `16d3dd5`.
+WS-20 #249 merged first as `7b295cd92dfd331d49c08b723f622491e13f4dfa`; its owner
+verified main and released the serial slot. Integration here is conflict-free
+and changes only its three already-approved documentation files. WS-20 row,
+plan and log remain byte-identical to main. The approved P0 contract and source
+scope remain unchanged. Normal/post-merge checks pass 0/0. Final integration
+review and fresh exact-head CI precede #248 merge; no source work has begun.
