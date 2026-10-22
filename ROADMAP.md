@@ -800,18 +800,18 @@ Source: [Skills plan §12, SW-A…SW-L](docs/plans/MORTIMER_SKILLS_WORKSPACE_IMP
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
-- **Status:** landed: bounded P0 compatibility source [PR #251](https://github.com/Larryfix71566/jarvis-voice-ai/pull/251) merged as `b3a5fa1100891cb756a32155a61f47ffcf7a35b3` on 2026-10-22. Exact reviewed head `e13fc89221c964d9ace0699550a0b39b0f123f39` received independent APPROVE (static), with Low follow-ups, and all five CI checks passed; [validation receipt](https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39863439464). Tested and merged tree `f18e0f6c3c1174910e69c0338d23e99b2f10a185` matches that head. Local focused regression: 346 passed. Low-priority permissions, cleanup-message and edge-case evidence follow-ups remain recorded in the PR. No installation or acceptance advancement; SW-B/C remain the only accepted full gates (2/12).
+- **Status:** claimed: bounded offline instruction-package adapter, using merged #251 P0 unchanged. Source starts only after this registration lands on main. Claude Max is the delegated patch author for the new adapter/test/synthetic fixture files only; Codex retains review, application and publication ownership. Historical P0 #251 merged as `b3a5fa1` (reviewed `e13fc89`, static approval, 346 offline passes and five CI checks; receipt in the WS-03 log); #258 was its documentation-only lifecycle correction; SW-B/C remain the only accepted full gates (2/12). No installation, activation or live acceptance follows from this claim.
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `codex/ws03-compatibility-p0-20261022`, based on verified main `edfa285`. Registration #248 and its reviewed head `71c2789` are historical. Separate documentation handoff #246 remains frozen.
+- **Where:** `codex/ws03-offline-package-adapter-20261022`, to start from main after this claim lands. Merged #251 head `e13fc89` and #258 head `aadb01e` remain frozen historical receipts; their branches are not active implementation lanes.
 - **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
-- **Scope:** This dispatch first claims `jarvis/agent_skills.py`, compatibility-only changes in `jarvis/skill_catalog.py` and `jarvis/skill_service.py`, at most one pure `jarvis/skill_compatibility.py`, focused `tests/unit/test_agent_skills.py`, `test_skill_catalog.py`, `test_skill_service.py`, `test_skill_selection.py`, `test_skill_injection_boundary.py`, a new compatibility test module and synthetic compatibility fixtures. Documentation: this WS-03 block, its canonical plan and WS-03 receipts/log. No package/configuration/registry activation, new schema/config key, migration, provider/auth/model routing, native UI, sandbox runtime or other workstream change is claimed. The broader historical Skills scope is retained in the canonical plan; additional source paths need separate coordination before expansion.
-- **Next step:** codex/larry: consider the recorded nonblocking follow-ups and separately authorize any further source work, installation and runtime readback; complete remaining manual gates with actual evidence. The merged P0 source milestone does not close full WS-03 acceptance. No WS-20 edits.
-- **Updated:** 10-22 (P0 source merged and reviewed; no installation, live activation or acceptance checkbox closure)
+- **Scope:** New `jarvis/skill_package_adapter.py`, new `tests/unit/test_skill_package_adapter.py`, and bounded synthetic `tests/fixtures/skill_package_adapter/**` only. Official authenticated Claude Code Max may author a returned patch for exactly those files from a minimal sanitized repository packet with tools disabled and no checkout access; Codex alone applies, reviews, tests and publishes. Read-only dependencies are `jarvis/agent_skills.py`, `jarvis/skill_compatibility.py`, `jarvis/skill_catalog.py`, `jarvis/skill_authoring_validation.py`, `jarvis/skill_service.py`, `sandbox/artifacts.py` and `jarvis/selfedit/skill_policy.py`; no changes to existing source/tests/fixtures, skills packages, registry/config, provider/controller/Base/delegate, admin/native UI or sandbox runtime. Documentation: this WS-03 block, its section 3 report reservation, canonical plan and existing WS-03 log/receipts. Explicit delegated assignment applies only after the matching main claim; any wider dependency edit requires coordinated scope amendment. Later script/service/resource and invocation/tool-policy adapters remain separate work, not silently omitted or authorized here.
+- **Next step:** codex: finish independent claim review and CI; sole coordinator lands the exact registration. Then dispatch the bounded Claude Max patch-author assignment, apply only approved new-file changes in the isolated implementation branch, run offline regressions and independent review, and publish a draft. Preserve owner/acceptance 2/12; no source before main claim and no merge/install authority for the implementation.
+- **Updated:** 10-22 (offline package-adapter claim; source implementation not started)
 
 
-**Claim boundary:** Larry assigned this task sole WS-03 compatibility ownership and draft publication on 2026-10-22. ROADMAP §0.3 still requires this claim on main before runtime edits; no draft-branch exception is asserted. Source review and documentation preparation do not close any acceptance gate. No feature-code merge or deployment authorization is conveyed. Documentation-only claim merge was separately approved after final review/CI. Registration PR #248 uses `codex/ws03-compatibility-20261022`; it is distinct from the future implementation branch in Where.
+**Claim boundary:** Larry's current full-program direction authorizes this bounded next slice and relevant repository context through the existing Claude Max subscription. This documentation registers the precise delegated patch-author lane without reassigning overall Codex or human acceptance ownership. Source waits for this claim on main; Claude receives no Codex checkout access, tools, persistent grants, direct paid API route or fallback. The coordinator remains sole merge owner. No installation, activation, service/model change or live-provider/VM run is authorized.
 
 </details>
 
@@ -1281,6 +1281,35 @@ Source: [native-audio plan, WS-18 progress](docs/plans/MORTIMER_NATIVE_AUDIO_TRA
 ---
 
 ## 3. Reserved shared numbers
+
+**WS-03 offline package report reservation, 2026-10-22 (before implementation):**
+Internal inert report `kind = skill_package_compatibility`, `schema_version = 1`,
+`adapter_version = p0-text-v1`; fields `source_digest`, `inputs_digest`,
+`baseline_digest`, nullable `candidate_digest`, nullable `validation_snapshot_digest`,
+`report_digest`, `parser_fingerprint`, `inventory_digest`, `dispositions`,
+`blockers`, and `validation`. SHA-256 identity uses deterministic canonical framing fixed by schema version 1; a framing change requires a schema-version change:
+
+- `source_digest`: every original source record, framed by logical path, mode and bytes; includes original source manifests/file inventory.
+- `inputs_digest`: all reviewed sidecar/provenance/license/matcher records, target slug and selected profile, even when no payload can be produced.
+- `baseline_digest`: supplied immutable Candidate fingerprint, including its protected registry.
+- `candidate_digest`: returned package-only payload fingerprint, no config/registry or baseline files. Null on failure/cancellation.
+- `validation_snapshot_digest`: full temporary validation snapshot fingerprint (unchanged baseline plus package and scoped matcher fixtures); the nested validator receipt’s `candidate_digest` binds this snapshot, not the returned payload.
+- `parser_fingerprint`: exact content digests of the enumerated read-only parser/catalog/validator/Candidate/service/policy dependencies; adapter code identity is also bound in report validation evidence alongside the profile version.
+- `inventory_digest`: deterministic sorted static configured-tool names and completeness facts observed through the existing host helper, compared before/after validation. It is not a source-file or caller-supplied dependency inventory; no alternative dependency inventory is accepted.
+- `report_digest`: canonical complete report excluding itself and any raw source bytes; nested validation evidence is included.
+
+Source evidence is a separate bounded immutable bundle, never the content-free
+report. On a secret-scan refusal, omit raw evidence and return only digests,
+ordinals and fixed codes. Dispositions cover every declared feature/file;
+unsafe or unrecognized labels use ordinals and fixed codes, never raw keys,
+text or host paths. Unknown schema versions and changed bound identities
+invalidate reuse. No `ready`, `approved` or `active` state is emitted;
+authentication/runtime readiness remain unknown and inventory evidence is static only.
+The report is not approval, owner/session proof or an activation token. No
+HTTP/native wire, request ledger, DB migration, config key, port, credential,
+service, tool grant or model route is introduced. This reservation does not
+waive the existing package/source scanner or authorize ignored semantics.
+
 
 **WS-17 current-request wire reservation, 2026-10-19 (before implementation):**
 `console/turn` version 1 is a host-generated session/generation-bound envelope

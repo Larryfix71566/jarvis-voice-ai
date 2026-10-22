@@ -40,3 +40,28 @@ PR #251 merged as `b3a5fa1100891cb756a32155a61f47ffcf7a35b3`; reviewed
 WS-03 lifecycle to landed and its next step to the remaining separately
 authorized work. Acceptance stays 2/12; no checkbox, owner, scope or runtime
 change. This entry supersedes the earlier pending-review/publication wording.
+
+## Offline adapter claim
+
+Register the bounded new adapter/test/synthetic-fixture lane and inert report
+identifiers before source work. Claude Max is delegated tools-disabled patch
+authorship without checkout access; Codex retains review/apply/publication.
+Reuse merged P0 unchanged. Source waits for main claim; no runtime/activation
+change and no advancement from historical 2/12 acceptance.
+
+## Claim review corrections (documentation only)
+
+Independent Claude Max review of claim `36c4cb6` returned REVISE. Preserve that
+verdict: bind baseline and every auxiliary input, distinguish package payload
+from the validator’s full snapshot, and state that unknown frontmatter blocks
+without rewriting. The revised reservation defines every digest, static
+inventory scope, secret-refusal redaction and no-readiness invariant. Keep
+P0’s three Low follow-ups separate. The candidate still changes no source,
+checkbox or accepted gate; focused rereview and fresh CI follow this revision.
+
+Focused rereview of `b22d235` resolved B1/B2/B3 but retained REVISE for file-level
+classification ambiguity. Close the payload allowlist, block every unknown file
+or field, and explicitly reject case-varied scripts paths/shebang files even
+when declared. Clarify static inventory’s non-atomic limit, deterministic test
+bindings, baseline fixture-prefix absence and versioned framing. These are
+contract corrections only; no dependency source or acceptance changes.
