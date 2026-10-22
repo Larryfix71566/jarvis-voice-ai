@@ -55,7 +55,12 @@ checkboxes, exact active harness fields/CX-28 and reviewed runtime/test blobs.
 Fresh publication CI remains pending; the serial coordinator alone owns merge.
 
 Coordinator prospective-main check rejected the historical provider branch
-in active Where after provider014f915 became an ancestor. Relocated only that
+in active Where after provider 014f915 became an ancestor. Relocated only that
 branch and its full lineage to Historical provider source lineage; current
 harness claim, scope/CX-28 and runtime/test bytes remain unchanged. Independent
 docs-delta review and fresh publication CI are required for the corrected head.
+
+Lifecycle correction source 0b02b0b independently reviewed by tools-disabled
+Fable 5.1: no blocking findings. Prospective-main strict checker passes 0 errors/0 warnings;
+active harness fields and complete historical lineage are preserved. Original
+0ad6bb1 CI does not certify this new head; fresh publication CI required.

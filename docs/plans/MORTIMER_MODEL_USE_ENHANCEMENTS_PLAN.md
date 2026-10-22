@@ -1231,7 +1231,7 @@ are required here. The serial coordinator alone owns main integration; no
 installation, service/model change, live test or acceptance checkoff is included.
 
 Prospective-main lifecycle correction: the coordinator's synthetic merge of
-0ad6bb1 correctly makes frozen provider014f915 an ancestor. The strict checker
+0ad6bb1 correctly makes frozen provider 014f915 an ancestor. The strict checker
 then rejects the historical provider branch in the active claimed Where field.
 Move only that completed branch and its complete lineage to an explicitly
 historical field. Keep the active harness Where, Owner, Status, Scope,
