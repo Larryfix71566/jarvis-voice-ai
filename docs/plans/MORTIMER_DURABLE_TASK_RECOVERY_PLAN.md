@@ -140,12 +140,18 @@ weighted code completion; unknown denominators remain unknown.
 
 ### Owner-reported operational corrections
 
-At this publication's preparation checkpoint, the release owner/parent reported
-development checkout and installed bundle at `c63ecce`; restoration failed,
-services and cleanup remained held, and the final ledger/app-state audit was
-pending. This is an attributed report, not this task's host verification, and
+The release owner's reconnected read-only audit, relayed through the WS-20 owner,
+reports development checkout and installed bundle at `c63ecce`, with original
+installation receipt dated 2026-10-22 18:09:49 UTC. No Mortimer app was running;
+all six services and cleanup remained held after restoration failed. The audit
+reports zero new ledger rows since the pre-install checkpoint using a stable
+private-copy query; original DB bytes/mtime were unchanged and the temporary
+copy removed. The ledger/app-state audit is complete, not pending. Restoration
+diagnosis/recovery, working runtime/private routes and live acceptance remain
+open. This is attributed owner evidence, not this task's host verification; it
 does not establish loaded, available or accepted behavior. Later owner receipts
-supersede this snapshot. The historical roadmap Production line is unchanged.
+supersede this snapshot. No private ledger or local receipt is published here;
+the historical roadmap Production line is unchanged.
 
 The parent confirmed separate approval of the WS-03 correction push and bounded
 review disclosure. Remote fetch now includes `e13fc89` on the original owner's
