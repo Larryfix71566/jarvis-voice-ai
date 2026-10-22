@@ -1,0 +1,16 @@
+{
+  "head": "9413b5e0343750c0b8bcb610cd88c6c2af2836a9",
+  "base": "636880eabbe9dc756c30df7128d0a90c02d222bd",
+  "files": {
+    "docs/acceptance/skills-workspace/receipts/compatibility-claim-2026-10-22/CLAUDE_REVIEW.md": "99900b4ca769256d84c2e07977ffa3ec404e4bd2bacfdd814d259a30d3a18eb3",
+    "docs/acceptance/skills-workspace/receipts/compatibility-claim-2026-10-22/dispositions.md": "bc414749d8e35497ae15f6adc42a0c5b589ca5aaa076a7422619e1b3b47ad05d",
+    "docs/acceptance/skills-workspace/receipts/compatibility-claim-2026-10-22/package-inventory.json": "fafd2495b42c5f4d01389e780f5a898882cb440d811df29670fa62966e8dcc2c",
+    "jarvis/agent_skills.py": "b834a5566e0951b62b0c1f7d5b875c94430f6f9a1c2a20dc9e933a623c67ad43",
+    "jarvis/skill_catalog.py": "7d228ec456e929d0819c65f9f7b6e0c1a979ef9dc300161e4d44c9d0f8b8daca",
+    "jarvis/agents/base.py": "c9a7ff2cc53e2b734b89fcc05cb854acbb4ea5fad41af887a5b331ff6d3ee36b",
+    "jarvis/skill_selection.py": "eaddc7932ccabb348e2c259a4e21bd3baf92045af4fbffad9b861fb7ce731ae7",
+    "ROADMAP.md": "4a2d51fbc8b68c9fce6a59ce19458bd26b3d99867ba86385bb242abddcb42feb",
+    "docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md": "66db87f08f37aebad021c40c0508f2412767b1c9bc14924f6485976c4cf0247a",
+    "docs/roadmap-log/2026-10-22-ws-03-compatibility-claim.md": "82c358a2d58b25824b2f003d10c90984cf6b88748e7079d52800b4ad4a8c6202"
+  }
+}

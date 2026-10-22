@@ -543,6 +543,24 @@ summary, its WS-17/20 status fields, dated joint-working plan/log, and the
 existing right-pane preview on `codex/roadmap-status-20261017`. This is
 documentation only; preserve other owners’ rows, checkboxes and pending #209.
 
+**Checker-policy decision — Larry, 2026-10-22 15:39:07 UTC:** errors fail CI;
+warnings remain advisory. Larry approved preparing the reviewed enforcement
+change, with no merge/deployment or branch-protection change. This separate
+registration proposal uses `docs/ws20-checker-policy-claim-20261022`; #247 stays
+frozen at `e284526`. B4 retains Claude ownership; Codex prepares documentation,
+synthetic verification and reviewable integration under the delegated WS-20
+workstream. Proposed implementation branch: `codex/ws20-checker-enforcement-20261022`,
+with Claude's bounded cross-review required. Scope is only the existing
+`.github/workflows/validate.yml` roadmap step's comment/name/invocation,
+directly related synthetic checker tests, and this existing plan/row/log.
+Preserve checker severity rules, all other jobs/triggers/permissions/action pins,
+branch protection and every product acceptance criterion. No policy source or
+workflow edit is applied by this registration. Under §0, this claim must reach
+main before the enforcement implementation is applied. Larry separately approved
+merging documentation-only #249 after final review and CI pass (2026-10-22 15:56:35 UTC); no broader dependency or implementation
+merge is included. The approved decision is recorded; its checklist
+milestone remains unchecked until the chosen behavior is implemented and verified.
+
 ### Acceptance checklist — remaining
 
 B1–B4 implementation is merged; the 72-entry migration is already verified.
@@ -556,16 +574,16 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
-- **Owner:** `codex` (bounded roadmap documentation); `claude` retains B4 and WS-13 ownership. Remaining WS-17 implementation belongs to Codex under Larry’s 10-07 assignment (CX-20); historical Claude attribution is preserved.
-- **Status:** claimed: Larry dispatched bounded acceptance-clearance evidence and safe-check execution on 2026-10-18. Existing foundation, #219 parked-card restoration and #220 clearance documentation remain landed; all accepted product scope and open live gates retain their state. Claim-only registration; no new acceptance.
+- **Owner:** `codex` (existing WS-20 documentation and bounded checker-enforcement integration on the registered branch); `claude` retains B4 authorship/ownership and required cross-review, plus WS-13 ownership. WS-17 release/install ownership is unchanged.
+- **Status:** landed via this PR: the existing roadmap CI step uses strict error exits and advisory warnings, per Larry’s 10-22 policy. Foundation B1–B4 remains complete; exact-source tests, review and CI are recorded in the associated PR. Product acceptance and final evidence closure remain open.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
-- **Remaining work / acceptance:** Final evidence is published via #209; acceptance owners resolve and retest their remaining gates. Larry decides whether the checker becomes blocking after the warning period. #172/#174 cleanup and #173 implementation handoffs are complete, not pending work.
+- **Remaining work / acceptance:** Record the exact enforcement merge identity and record the disposition of the decision milestone against its source evidence; reconcile required owner live/physical/observation evidence and final Phase A/B exit. Both existing unchecked milestones remain unchanged by this implementation.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `codex/acceptance-clearance-20261018`, based on main `b29c7aba431eb1c9de6a0aa092128a8ce133119d`; isolated worktree. Historical foundation/campaign/status branches remain recorded in the plan and logs.
+- **Where:** `codex/ws20-checker-enforcement-20261022`, based on main `7b295cd92dfd331d49c08b723f622491e13f4dfa` after registration PR #249. The separate frozen #246/#247 drafts remain unmerged and are not dependencies.
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
-- **Scope:** Bounded acceptance-clearance documentation/evidence and safe non-mutating checks: ROADMAP current acceptance/status summary and this WS-20 block; dated progress in existing `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`; WS-20-specific `docs/roadmap-log/**`; `docs/acceptance/IMPLEMENTATION_STATUS.md`, `docs/acceptance/ACCEPTANCE_RUNBOOK.md` and WS-20 evidence under `docs/acceptance/command-console/receipts/`. Preserve every existing owner, checkbox, receipt, scope and decision. Existing CX-23 documentation boundary remains; do not edit other owners’ implementation/feature plans or WS-17’s verification evidence. No runtime code, checker enforcement, config, credentials, access, provider workload, production write, restart or deployment.
-- **Next step:** codex: after this claim lands, publish exact source/installed-artifact identity, reconcile reusable receipts and run safe checks in the isolated workspace; update evidence as it arrives. WS-28 owns cleanup repair; WS-17 owns exact-source cross-review and release verification. larry: retain live acceptance, checker and later deployment decisions.
-- **Updated:** 10-18 (Larry-authorized acceptance execution claim; no gate closed)
+- **Scope:** Additional approved checker-enforcement integration: only `.github/workflows/validate.yml` roadmap-step comment/name/invocation, directly related synthetic tests in `tests/unit/test_check_roadmap.py`, dated progress in the existing joint-working plan and WS-20-specific log/evidence, and this row. Preserve checker logic/severity, all other jobs/triggers/permissions/action pins, branch protection and every product criterion; Claude cross-review is required. Existing acceptance-clearance documentation scope remains ROADMAP current acceptance/status summary and this block, `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`, WS-20 `docs/roadmap-log/**`, `docs/acceptance/IMPLEMENTATION_STATUS.md`, `docs/acceptance/ACCEPTANCE_RUNBOOK.md` and WS-20 receipts under `docs/acceptance/command-console/receipts/`. Preserve all other owners, checkboxes and receipts; do not edit other feature plans or WS-17 verification evidence. No application runtime, config, credentials, access, provider workload, production write, restart, deployment or enforcement beyond the named roadmap CI step.
+- **Next step:** codex: record the enforcement merge identity and update only the matching decision milestone when its required evidence is confirmed; reconcile owner receipts for final Phase A/B exit. claude: retain B4 ownership and review future checker changes. larry: retain live acceptance and release decisions. WS-17 retains source/release/installation and live-evidence ownership; no #246/#247/#243 merge or runtime operation follows.
+- **Updated:** 10-22 (strict invocation and five CLI cases prepared after main registration; acceptance checkboxes preserved)
 
 </details>
 
@@ -758,15 +776,18 @@ Source: [Skills plan §12, SW-A…SW-L](docs/plans/MORTIMER_SKILLS_WORKSPACE_IMP
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
-- **Status:** landed foundation; the deployed Versions dormant-auth wording subcheck is verified on `bde22bb` (10-06) and recorded through this documentation PR. PRs #145/#146 are included in the deployed build. SW-A overall and authenticated/creator/provider/voice/display/activation gates remain open; SW-B/C remain the only accepted full gates (2/12).
+- **Status:** claimed for the bounded compatibility slice once this documentation claim lands on main; runtime implementation has not started. Foundation and the historical `bde22bb` Versions wording subcheck ([receipt](docs/acceptance/skills-workspace/receipts/versions-wording-2026-10-06/receipt.md)) remain unchanged; SW-B/C remain the only accepted full gates (2/12). The plan fixes the P0 field/type matrix and deterministic script-package refusal, explicitly disclosing two changed test expectations before implementation; full package compatibility is not claimed.
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (foundation `539f8f6`; PRs #145/#146; documentation claim #186, merge `2d41ccd`). Build-identified Versions evidence is published through this documentation PR.
+- **Where:** `codex/ws03-compatibility-p0-20261022` (future implementation branch), based on main after this documentation-only claim lands; no runtime edits before landing. Foundation `539f8f6`, PRs #145/#146 and documentation claim #186 (`2d41ccd`) remain historical. Separate documentation handoff #246 stays frozen and retains its compatibility contract.
 - **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
-- **Scope:** `jarvis/skill_*.py`, `jarvis/agent_skills.py`, `jarvis/selfedit/skill_policy.py`, `/api/skills*` in `jarvis/admin/server.py`. The five console view-mode Swift files are **shared with WS-07's landed Workflow Viewer**: add a new `skills` mode beside `workflows`; do not replace or restyle the viewer.
-- **Next step:** codex: finish the remaining frozen-build SW-A baseline and recorded-run/privacy checks as their prerequisites become available. larry: select WS-04 onboarding and decide eligible source/provider/budget gates, then perform the required voice, accessibility and physical-display checks. Owner-scoped Versions/runtime inventory/creator and activation/rollback remain separate; the dormant-auth wording subcheck is complete.
-- **Updated:** 10-06 (build-identified Versions wording only; no new full acceptance gate)
+- **Scope:** This dispatch first claims `jarvis/agent_skills.py`, compatibility-only changes in `jarvis/skill_catalog.py` and `jarvis/skill_service.py`, at most one pure `jarvis/skill_compatibility.py`, focused `tests/unit/test_agent_skills.py`, `test_skill_catalog.py`, `test_skill_service.py`, `test_skill_selection.py`, `test_skill_injection_boundary.py`, a new compatibility test module and synthetic compatibility fixtures. Documentation: this WS-03 block, its canonical plan and WS-03 receipts/log. No package/configuration/registry activation, new schema/config key, migration, provider/auth/model routing, native UI, sandbox runtime or other workstream change is claimed. The broader historical Skills scope is retained in the canonical plan; additional source paths need separate coordination before expansion.
+- **Next step:** larry/authorized maintainer: review and merge only this documentation claim when ready. codex: refresh main, then implement strict frontmatter, content-safe compatibility diagnostics and fail-closed unsupported semantics across legacy/V2 paths with offline tests; use a bounded Claude Max source review when authenticated. Report any larger scope before expanding. Controlled activation/runtime readback remain later WS-03 work under existing evaluation, release and human gates; current activation/rollback refusals stay intact. WS-20 has a separate owner and is excluded.
+- **Updated:** 10-22 (Larry dispatched separate WS-03 completion work; bounded compatibility claim and all-12-gate inventory prepared; registration branch separated before claim merge; no code, deployment or acceptance advancement)
+
+
+**Claim boundary:** Larry assigned this task sole WS-03 compatibility ownership and draft publication on 2026-10-22. ROADMAP §0.3 still requires this claim on main before runtime edits; no draft-branch exception is asserted. Source review and documentation preparation do not close any acceptance gate. No feature-code merge or deployment authorization is conveyed. Documentation-only claim merge was separately approved after final review/CI. Registration PR #248 uses `codex/ws03-compatibility-20261022`; it is distinct from the future implementation branch in Where.
 
 </details>
 

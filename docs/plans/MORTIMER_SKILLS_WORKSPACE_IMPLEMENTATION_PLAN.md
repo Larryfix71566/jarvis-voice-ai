@@ -16,6 +16,209 @@ activation, full acceptance, or release. Implement in a dedicated worktree;
 preserve concurrent work. Acceptance gates remain open until their full evidence
 is recorded.
 
+## 2026-10-22 — WS-03 completion dispatch and bounded compatibility claim
+
+Status: documentation claim only; source implementation waits for the matching
+claim to land on main under ROADMAP §0.3. Owner: Codex, task
+`01a16137-c45f-7451-aeae-0c539af41015`, branch
+`codex/ws03-compatibility-p0-20261022` after this claim lands; registration
+PR #248 uses `codex/ws03-compatibility-20261022`, baseline `636880e`.
+Larry requested separate WS-03/WS-20 completion work and use of authenticated
+Claude Max for bounded implementation/review. WS-20 is excluded here.
+
+The compatibility contract and sanitized 22-category/25-proposed-case evidence
+are already published in draft #246 at `028b44e`; preserve them without
+copying or rewriting that publication. This first source slice, after its claim
+lands, is P0: strict bounded frontmatter parsing, explicit content-safe
+compatibility diagnostics, and refusal of unsupported/unknown execution or
+security controls on both legacy and V2 admission paths. It must preserve
+valid instruction-only packages and retained descriptive metadata, never
+silently treat ignored controls as supported. Inventory existing enabled
+packages first; no live rollout or registry mutation is included.
+
+Unknown/unsupported controls such as manual-only invocation and tool
+restrictions are blocked until their exact host semantics are implemented.
+Do not implement a partial translation that claims support. Tests must cover
+malformed/duplicate/type-invalid YAML, resource bounds, diagnostic privacy,
+legacy/V2 consistency, scripts/host controls, unchanged portable content and
+isolation of one invalid package from unrelated valid packages. Reuse existing
+catalog/readiness surfaces. No new configuration/schema identifier is reserved.
+If a final injection path can bypass validation, report the exact seam and
+coordinate its owner before extending this scope to `agents/base.py`.
+
+**Task split:** Codex owns integration and focused offline tests after landed
+claim. One bounded official Claude Code Max review examines sanitized project
+source and the proposed slice; no tools, private logs, direct API credentials,
+persistent grants or fallback. Preserve exact input/source hashes and returned
+model identity. A review is not implementation or acceptance evidence. The
+existing acceptance/release owner retains installed-build work; no competing
+voice/audio/VM tests are started.
+
+### P0 implementation contract clarified after excerpt review
+
+Three bounded Claude Max reviews of the claim and partial source excerpts returned
+REVISE. The latest reviewed `7f34dde`; the corrections below address its six
+documentation findings as well as the earlier script and field-schema findings.
+All reviews and input/source receipts are preserved in the WS-03 claim receipt
+directory. The fourth independent review of `62f8805` returned APPROVE and
+closed all six findings; its unmodified response/receipt and author-prepared
+implementation notes derived from its non-blocking follow-ups are retained. A subsequent registration-only correction
+separates the future implementation branch from the claim publication branch,
+so the main-first claim does not immediately become a merged-branch drift error.
+The fifth independent review APPROVED that delta at `16d3dd5`. WS-20 claim #249
+then landed as `7b295cd`; its three documentation files were integrated unchanged.
+Normal and simulated-post-merge checks both pass 0/0. The integrated publication
+head receives final focused review and fresh CI before the separately approved
+documentation-only merge. These are advisory reviews, not
+full-source or implementation reviews; no acceptance evidence follows from them.
+
+- Enforce compatibility refusal in `parse_skill`, returning `None` for a blocked
+  package. Existing loader, catalog and final injection re-parses then reject it.
+  Catalog/readiness blockers alone are insufficient. Propagate a closed reason
+  code through catalog inspection; test the final boundary without changing
+  `agents/base.py` or `skill_selection.py`. If that seam is insufficient, stop
+  and coordinate the additional path rather than weaken refusal.
+- Bound file bytes before reading and frontmatter bytes before decoding YAML;
+  reject duplicate keys, anchors/aliases, custom tags, non-map roots and wrong
+  types before coercion. The closed P0 field/type matrix below is authoritative;
+  additions require a reviewed plan amendment, not an implementer's judgment
+  that an unknown key is descriptive. Declared execution/security controls are
+  unsupported in P0; exact translations remain later work. Do not coerce them
+  into strings. Numerical resource limits and safe reason codes require focused
+  implementation review; they cannot expand the accepted field set.
+- Diagnostics use a closed vocabulary and trusted field labels/counts only.
+  Never echo unknown keys, values, package paths, YAML snippets or exception
+  messages. Cover parser/catalog/readiness/refusal/log sinks and compatibility
+  failure output in CLI `--validate`/`--list`/`--explain` with canaries. Invalid
+  package labels in those diagnostics must not echo directory names or paths.
+  Normal valid inventory/task explanations retain their existing local purpose;
+  this is not a redesign of the operator CLI.
+  Unsupported tool names must not leak via readiness reasons.
+- The offline main inventory found six packages, five generally enabled, and
+  no `scripts/` directory. Preserve every existing valid package's outcome,
+  including the separately pinned creator; compare #242's pending harness
+  package before integrating it. P0 refuses every package with a `scripts`
+  entry at its package root, including an empty directory, file or symlink,
+  through `parse_skill` on all admission paths. Detect it by listing package-root
+  entries without following links, matching `entry.name.casefold() == "scripts"`
+  so case-sensitive and case-insensitive filesystems agree. The parser checks
+  only entries, without traversing or reading script contents. The existing
+  catalog integrity digest may still traverse and hash package bytes, including
+  script files; it never executes, decodes, injects or displays them. Keep existing
+  integrity reason precedence, such as `symlink_in_package`. This conservative rule
+  has no new-versus-existing exception and does not infer optionality. Declared
+  executable dependencies in frontmatter are outside the supported matrix and
+  also refuse. Prose/code examples alone are not executable declarations: do
+  not scan ordinary instruction text for shell words or reject harmless examples.
+  Scripts elsewhere, executable assets and host plugins are not supported by
+  this slice; accepting text never certifies them or grants execution. Packages
+  outside the repository need inventory before any rollout.
+- The frozen #246 contract at `028b44e` remains the design reference, not an
+  executable schema. Two known tests in `tests/unit/test_agent_skills.py`
+  intentionally need changed expectations after the claim lands:
+  `TestParsing.test_scripts_are_detected` currently expects an admitted skill;
+  `TestNoExecutionPath.test_a_bundled_script_is_never_read_or_run` currently
+  expects a loaded skill plus a warning. The new contract expects refusal in
+  both, while retaining assertions that the parser never reads script contents,
+  scripts are never executed or injected, and private paths never leak through
+  compatibility diagnostics. Integrity hashing remains as described above.
+  This behavior change is disclosed
+  for review of this claim; it is not an unnoticed test weakening. Historical
+  SW-B/C receipts stay unchanged and do not certify the new behavior. Rerun
+  affected integrity/selection contracts. These are the two known admission
+  changes, not an exhaustive list of assertion updates. List any other changed
+  assertion by test ID in the implementation record before modifying it, and
+  summarize it in the implementation PR, including catalog script blockers,
+  diagnostic text or CLI output. Any additional changed frozen fixture
+  outcome stops implementation for coordination before modifying that fixture.
+
+#### P0 supported frontmatter and resource matrix
+
+This is a bounded instruction-only compatibility slice, not full Agent Skills,
+Claude, Codex, OpenAI plugin or hosted-service compatibility. The six-package
+inventory at `636880e` confirms the listed existing metadata types. No automatic
+service installation, tool grants, registry enablement or model change follows.
+
+| Feature | P0 disposition | Exact scope |
+|---|---|---|
+| `name` | Supported unchanged | Required string; retain existing slug, reserved-name and 64-character validation. No scalar coercion. |
+| `description` | Supported unchanged | Required nonempty string, existing 1,024-character maximum. No scalar coercion. |
+| `metadata` | Supported with closed schema | Optional mapping; absence/empty mapping accepted. Present null/list/scalar refuses. Only the five subkeys below are admitted. |
+| `metadata.agent`, `.source`, `.concept_from` | Supported unchanged | Optional strings retained as descriptive data under bounded validation; present null refuses. They grant no routing, identity, permission or provenance authority. |
+| `metadata.promoted_successes`, `.promoted_failures` | Supported unchanged | Optional integers, excluding booleans; present null refuses. Retain values as descriptive data, not acceptance evidence. |
+| Other top-level or metadata keys, including otherwise portable optional fields | Explicitly unsupported in P0 | Refuse with a safe diagnostic; preserve source, never silently discard or guess a translation. Reviewed schema expansion may later admit known harmless descriptions. |
+| Invocation/tool/model/security controls, hooks, executable dependency declarations | Explicitly unsupported in P0 | Refuse regardless of true/false or apparently harmless values. No partial translation or ambient tool grant. |
+| Valid Markdown instructions, code examples and harmless links | Supported as text | Preserve existing body content/normalization; do not execute commands, fetch links, infer grants or treat text as policy. Text preservation is not proof that every instruction can be fulfilled. |
+| Existing bounded text references declared through the current package manifest | Preserve existing support | Keep existing containment, revision, size and read-only handling. A harmless `references/` directory alone is not a script trigger. Do not add automatic reference import, arbitrary fetching or executable handling. |
+| `scripts` entry at package root | Explicitly unsupported | Casefolded entry-name detection; any entry type refuses even if empty or claimed optional. The parser does not traverse/read scripts; the existing catalog digest may hash bytes without execution or injection. Applies equally to registered, pinned and new packages; integrity reason precedence is preserved. |
+| Binary/executable assets, full plugins/MCP servers and hosted services | Unsupported by this slice | Existing package validators still apply. No automatic install, execution or access. P0 text admission must never be presented as certification of these resources; adapters and required-resource completeness need separately scoped work. |
+| Unknown dependency semantics in natural-language instructions | Unknown, not certified | P0 does not infer a complete dependency graph from prose. No full-package compatibility/activation claim is allowed; future import/activation must resolve required resources before approval. Existing manually reviewed instruction use retains its current boundaries. |
+
+The matrix applies to `SKILL.md` frontmatter only. It does not replace or loosen
+the existing companion-manifest schema or reference containment checks. Preserve
+original source bytes/digests; blocked candidates stay unavailable, and there is
+no registry or live activation change in this claim. Safe diagnostic codes must
+distinguish unsupported from malformed without echoing unknown field names.
+
+`write_skill` and `skill_from_procedure`, already in the claimed module, must
+emit only matrix fields using type-safe YAML serialization or refuse before
+writing. A genuine empty agent string stays a quoted string, never YAML null.
+Round-trip tests cover empty agent and YAML-ambiguous descriptions such as `yes`
+and `2026-10-22`; invalid metadata cannot leave a partially written candidate.
+Before coding, confirm the six packages' `name`/`description` are YAML strings
+under the same inventory/stop rule. Update the module docstring to describe this
+instruction-only subset; no drop-in community compatibility claim may remain.
+Creator/VM adapters outside the claimed module remain separate SW-F work; assess
+their draft compatibility there without changing them in P0.
+
+Known larger SW-D work remains outside P0: a refused parse can lose the optional
+skill trace event, and the runtime's generic refusal text may not identify the
+compatibility reason. The catalog must still expose a safe blocker; do not claim
+complete inspection UX from that alone. No activation/rollback refusal is removed.
+
+### Twelve-gate inventory as of main 636880e
+
+Only SW-A/B/C regression checks and SW-E diagnostic canaries are P0 work below.
+Other rows are completion inventory, not additional source authorization; their
+paths and prerequisites require a separately coordinated slice.
+
+Historical accepted gates remain accepted at their recorded sources. Changed
+parser/selection behavior requires fresh regression evidence, without relabeling
+a partial new check as full acceptance. No new gate is accepted by this claim.
+
+| Gate | Current status | Code / offline work | Remaining acceptance or external prerequisite |
+|---|---|---|---|
+| SW-A baseline | Open | Preserve original packages and synthetic behavior; P0 regression evidence only | Exact-build full app/voice/memory/Atlas/sharing baseline with Larry |
+| SW-B package integrity | Historically accepted | Rerun affected integrity contracts after changes; add strict compatibility cases | Retain dated receipt; do not silently extend its accepted scope |
+| SW-C selection quality | Historically accepted | Rerun frozen positives/negatives and legacy/V2 refusals on changed source | Retain dated receipt; new invocation translations need their own evidence |
+| SW-D truthful inspection | Open | Existing trace/API tests; assess content-safe blocker presentation | Actual success/failure/skipped/unknown/legacy runs and reconnect/native trace; WS-04 owner identity |
+| SW-E privacy | Open | Canary tests through diagnostic/catalog/inventory boundaries; wrong-owner contracts | Full source-to-sink checks including protected exports/capture/secondary displays on exact build |
+| SW-F creator isolation | Open | Existing authoring validator and drift/cancel contracts; no script execution | Authorized real VM lifecycle and no network/credential/host fallback, source/model/auth readiness |
+| SW-G evaluation effectiveness | Open | Frozen fixture/rubric/evaluator integrity only; no inference in P0 | Separate route/budget authorization; 12 baseline/candidate pairs, human blinded review and required thresholds |
+| SW-H lifecycle/activation | Open | Existing recovery/idempotency tests; keep activation/rollback refusal until prerequisites | Durable accepted-version history, exact approval, atomic activation/readback, real restart/cancel/rollback |
+| SW-I voice/accessibility | Open | Existing shared-action/targeting/accessibility contracts, outside P0 UI edits | Larry's voice, VoiceOver, keyboard, large-type, contrast and platform-setting checks |
+| SW-J displays | Open | Existing result identity/reconnect contracts | One/two physical displays, unplug/reopen/restart with no duplicate/orphan/focus theft |
+| SW-K performance | Open; historical sub-budgets retained | Focused deterministic regressions; no competing benchmark | Exact-build paired voice p95 ≤50 ms regression and ten-minute live-trace growth ≤10 MiB; preserve timing provenance |
+| SW-L release/handoff | Open | Exact-source tests/review and reproducible handoff | Required release suites, app/backend/config/package identity, ready versus loaded readback and human release decision |
+
+Implementation remains distinct from test pass, source review, merge,
+deployment and acceptance. The next source slice is intentionally narrow;
+full import UI, controlled activation/runtime readback, binary assets,
+executable adapters and sandbox changes need an explicit larger-scope check.
+WS-29 consolidation, model switching, auto-installation, service grants,
+third-party script execution and live benchmarks are excluded.
+
+### Ownership and smallest unblock
+
+No active WS-03 source PR was found in the open PR inventory. The old
+`codex/ws03-live-acceptance-20260930` branch has no commits beyond current main.
+Draft #242 owns harness recommendation work and its package-count assertion
+in `test_agent_skills.py`; preserve it during integration, and do not change its
+package, registry or model paths. Draft #246 remains the separate frozen
+publication of this contract. The main claim rule has no draft-only exception.
+The smallest outstanding decision is review/merge of this documentation claim;
+it authorizes only the named P0 source work after landing, not runtime adoption.
+
 ## 1. Outcome and scope
 
 Larry can ask Mortimer to show its skills, inspect what a skill does, understand
