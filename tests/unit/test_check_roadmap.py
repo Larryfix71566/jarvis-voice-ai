@@ -263,11 +263,53 @@ def test_warn_only_reports_but_exits_zero(repo, capsys):
     assert "1 errors" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize(
+    "missing_scope,undefined_reference,warn_only,expected_exit,annotation_levels",
+    [
+        (False, False, False, 0, ()),
+        (True, False, False, 1, ("error",)),
+        (False, True, False, 0, ("warning",)),
+        (True, True, False, 1, ("error", "warning")),
+        (True, False, True, 0, ("warning",)),
+    ],
+    ids=["clean", "error", "warning-only", "mixed", "legacy-warn-only"],
+)
+def test_cli_exit_and_annotations_under_ci_policy(
+    repo, missing_scope, undefined_reference, warn_only, expected_exit, annotation_levels
+):
+    # Exercise the actual entry point and CI's default origin/main resolution.
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    text = roadmap(block("20"))
+    if missing_scope:
+        text = text.replace("- **Scope:** —\n", "")
+    if undefined_reference:
+        text += "\nSee WS-99.\n"
+    write(repo, text)
+    command = [sys.executable, str(Path(cr.__file__)), "--root", str(repo)]
+    if warn_only:
+        command.append("--warn-only")
+    result = subprocess.run(
+        command, capture_output=True, text=True,
+        env={**os.environ, "GITHUB_ACTIONS": "true"},
+    )
+    assert result.returncode == expected_exit, (result.stdout, result.stderr)
+    assert result.stderr == ""
+    levels = tuple(
+        line.split(" ", 1)[0][2:]
+        for line in result.stdout.splitlines() if line.startswith("::")
+    )
+    assert levels == annotation_levels
+    assert (
+        f"roadmap check: {int(missing_scope)} errors, {int(undefined_reference)} warnings"
+        in result.stdout
+    )
+
+
 def test_the_real_roadmap_parses_into_complete_blocks():
     root = Path(__file__).resolve().parents[2]
     text = (root / "ROADMAP.md").read_text(encoding="utf-8")
     blocks = cr.parse_blocks(text)
     assert len(blocks) >= 18
-    # Structure only: lifecycle wording is a reported error the roadmap's
-    # owners fix (warn-only in CI for now), not a reason to fail this suite.
+    # Structure only: the separate strict CI invocation checks lifecycle wording
+    # and Git history against the actual roadmap; this test checks field shape.
     assert [m for m in messages(cr.check_fields(blocks), "error") if "missing fields" in m] == []
