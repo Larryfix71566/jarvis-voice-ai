@@ -1224,3 +1224,17 @@ promoted to a foundation landing. Other source integrated mechanically with
 no conflict. #242/#253 branches remain untouched. No broader foundation merge,
 installation, model switch, live inference or additional source transmission
 is authorized. The sole merge coordinator retains merge authority.
+
+
+### 2026-10-22 — Registered harness repair candidate
+
+Bounded cache serialization/generation acknowledgement, finite short-ID
+recognition, package-only matching and isolated daily tests are prepared after
+claim #257 landed. [Finding dispositions](../acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/remediation-dispositions.md)
+define completion ordering, at-least-once notice limits and timeout semantics.
+Separate-process barriers and synthetic negative controls cover the confirmed
+failures; final counts/review are recorded with the exact published candidate.
+No global matcher/importer, provider, native, installer or routing change was
+made in this repair delta. Frozen dependency/source reviews remain historical;
+new source review and exact-head CI are required. No model was selected or
+changed. The sole merge coordinator retains merge authority.

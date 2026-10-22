@@ -35,6 +35,41 @@
       "id": "generic-daily-brief-today",
       "request": "What's on my daily brief today",
       "expect_selected": false
+    },
+    {
+      "id": "switch-harness-opus",
+      "request": "Switch the harness to Opus 5.5",
+      "expect_selected": true
+    },
+    {
+      "id": "compare-opus-fable",
+      "request": "Is Opus 5.5 better than Fable for the harness?",
+      "expect_selected": true
+    },
+    {
+      "id": "switch-harness-astra",
+      "request": "Switch the harness to GPT 6 Astra",
+      "expect_selected": true
+    },
+    {
+      "id": "model-availability",
+      "request": "What models do you have access to?",
+      "expect_selected": false
+    },
+    {
+      "id": "unrelated-switch",
+      "request": "Switch to the other window",
+      "expect_selected": false
+    },
+    {
+      "id": "unrelated-comparison",
+      "request": "Is the weather better tomorrow?",
+      "expect_selected": false
+    },
+    {
+      "id": "unrelated-switch-comparison",
+      "request": "Switch to a better display layout",
+      "expect_selected": false
     }
   ]
 }

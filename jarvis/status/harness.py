@@ -6,14 +6,19 @@ model-execution capability. Public model mentions are never account eligibility.
 from __future__ import annotations
 
 import hashlib
+import fcntl
 import http.client
 import json
+import os
 import re
 import sqlite3
 import ssl
+import stat
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 SOURCES = (
     "https://code.claude.com/docs/en/model-config",
@@ -22,8 +27,33 @@ SOURCES = (
 )
 MAX_BYTES = 512 * 1024
 MAX_CANDIDATES = 32
-MODEL_ID = re.compile(r"(?<![\w-])(?:claude-(?:opus|sonnet|haiku|fable)-\d+(?:-\d+){1,3}|gpt-\d+(?:\.\d+)?-(?:sol|astra))(?![\w-])")
+MODEL_ID = re.compile(r"(?<![\w-])(?:claude-(?:opus|sonnet|haiku|fable)-\d+(?:-\d+){0,3}|gpt-\d+(?:\.\d+)?-(?:sol|astra))(?![\w-]|\.\d)")
 REPORT_NAME = "harness-model-brief.json"
+LOCK_NAME = "harness-model-brief.lock"
+
+
+@contextmanager
+def _writer_lock(status_dir: Path):
+    """Stable process-shared lock; never unlink it or hold it over external work."""
+    status_dir.mkdir(parents=True, exist_ok=True)
+    fd = os.open(status_dir / LOCK_NAME, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("invalid harness report lock")
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+def _publish(status_dir: Path, report: dict) -> None:
+    """Caller holds the writer lock. Generation identifies evidence/notice work."""
+    from jarvis.status.daily import write_atomic
+    report["generation"] = uuid4().hex
+    write_atomic(status_dir / REPORT_NAME, report)
 
 
 def fetch_document(url: str) -> str:
@@ -108,7 +138,7 @@ def _report(sources, selection, now):
             "recommendation": "retain_pending_evidence", "switching_supported": False,
             "inference_calls": 0, "automatic_change": False,
             "gaps": ["Routed selection is not the voice baseline; legacy voice may use separate Settings.",
-                     "Discovery recognizes only configured Claude numeric IDs and Codex Sol/Astra ID patterns; it is not an exhaustive release catalog.",
+                     "Discovery recognizes finite Claude numeric and Codex Sol/Astra ID patterns; it is not an exhaustive release catalog or an account eligibility check.",
                      "The daily hook re-reads cached evidence; only an explicit document refresh obtains newer sources.",
                      "Active controller, account eligibility, adapter acceptance and comparable results are unverified.",
                      "Harness switching is blocked pending a durable approval contract across all writers and runtime."],
@@ -154,6 +184,11 @@ def read_report(status_dir: Path, *, selection=configured_selection, now=None) -
         return {"ok": False, "error": "Harness evidence unavailable; no model availability is inferred."}
     now = now or datetime.now(timezone.utc)
     current = _selection(selection)
+    return _view(raw, current, now)
+
+
+def _view(raw, current, now):
+    """Render one captured generation, without mixing it with a later refresh."""
     report = _report(raw.get("sources") or [], current, now)
     freshness = "recent"
     for source in report["sources"]:
@@ -179,11 +214,13 @@ def read_report(status_dir: Path, *, selection=configured_selection, now=None) -
 
 
 def refresh_report(status_dir: Path, *, fetch=fetch_document, selection=configured_selection, now=None):
-    from jarvis.status.daily import write_atomic
+    # Fetch outside the lock. Concurrent refreshes publish in completion order;
+    # retained source dates, not generation/commit time, determine freshness.
     report = collect(fetch=fetch, selection=selection, now=now)
     # Explicit caller receives the report; no greeting notice is needed here.
     report["notice_pending"] = False
-    write_atomic(status_dir / REPORT_NAME, report)
+    with _writer_lock(status_dir):
+        _publish(status_dir, report)
     return read_report(status_dir, selection=selection, now=now)
 
 
@@ -191,23 +228,40 @@ def run_passive(*, status_dir: Path, now=None, selection=configured_selection, n
     """Scheduled addition: local cached evidence only, no network or inference."""
     from jarvis.status.daily import write_atomic
     now = now or datetime.now(timezone.utc)
-    prior = _raw(status_dir)
     current = _selection(selection)
-    report = _report((prior or {}).get("sources") or [], current, now)
     def meaning(value):
         return {key: value.get(key) for key in ("configured_selection", "sources", "recommendation")}
-    changed = prior is None or meaning(prior) != meaning(report)
-    report["notice_pending"] = changed or bool((prior or {}).get("notice_pending"))
-    write_atomic(status_dir / REPORT_NAME, report)
-    visible = read_report(status_dir, selection=lambda: current, now=now)
+    with _writer_lock(status_dir):
+        # Re-read only after acquiring the lock: never republish an earlier
+        # passive snapshot over a refresh that completed while we waited.
+        prior = _raw(status_dir)
+        report = _report((prior or {}).get("sources") or [], current, now)
+        changed = prior is None or meaning(prior) != meaning(report)
+        report["notice_pending"] = changed or bool((prior or {}).get("notice_pending"))
+        generation = (prior or {}).get("generation")
+        if changed or not isinstance(generation, str) or not re.fullmatch(r"[0-9a-f]{32}", generation):
+            # Schema-2 caches without a generation remain readable. The first
+            # mutation upgrades metadata without changing source dates.
+            _publish(status_dir, report)
+        else:
+            report = dict(prior, notice_pending=bool(prior.get("notice_pending")))
+    visible = _view(report, current, now)
     if report["notice_pending"]:
         if notice is None:
             from jarvis.notices import add_notice
             notice = add_notice
         try:
             notice_id = notice("daily_status", "harness-models", visible["report"]["summary"][:600])
-            report["notice_pending"] = not (type(notice_id) is int and notice_id >= 0)
+            delivered = type(notice_id) is int and notice_id >= 0
         except Exception:
-            report["notice_pending"] = True
-        write_atomic(status_dir / REPORT_NAME, report)
+            delivered = False
+        if delivered:
+            with _writer_lock(status_dir):
+                latest = _raw(status_dir)
+                if latest is not None and latest.get("generation") == report["generation"]:
+                    latest["notice_pending"] = False
+                    write_atomic(status_dir / REPORT_NAME, latest)
+        # Failure leaves the committed generation pending for retry. Delivery
+        # is at-least-once: overlapping workers/crash recovery may duplicate a
+        # notice, but neither may replace fresh evidence with an old payload.
     return visible

@@ -179,3 +179,32 @@ def test_injected_snapshot_defaults_to_no_ambient_harness_read(monkeypatch):
     result=model_access_status(registry={"profiles":{}},access={},env={})
     assert result["ok"] and result["harness_brief"]["ok"] is False
     assert "not supplied" in result["harness_brief"]["error"]
+
+
+@pytest.mark.parametrize("model", ["claude-fable-5", "claude-sonnet-5", "claude-opus-5",
+    "claude-opus-5-5", "claude-haiku-4-5-20251001", "gpt-6-sol", "gpt-6.1-astra"])
+def test_supported_numeric_ids_are_only_unverified_candidates(model):
+    result = H.collect(fetch=lambda _: f"Documented `{model}`.", selection=selection, now=NOW)
+    assert [c["model"] for c in result["candidates"]] == [model]
+    assert result["candidates"][0]["account_eligibility"] == "unverified"
+    assert result["switching_supported"] is False
+
+
+@pytest.mark.parametrize("model", ["claude-opus-5.5", "claude-opus-5-extra",
+    "xclaude-opus-5", "claude-opus-5_foo", "claude-opus-5-5-1-2-3",
+    "claude-unknown-5", "gpt-6-astra-mini", "gpt-5.1-codex-max"])
+def test_unsupported_ids_are_not_truncated_to_a_different_candidate(model):
+    result = H.collect(fetch=lambda _: model, selection=selection, now=NOW)
+    assert result["candidates"] == []
+
+
+def test_harness_matcher_cases_against_enabled_roster():
+    from pathlib import Path
+    from jarvis.agent_skills import load_skills, match_skill
+    root = Path(__file__).resolve().parents[2]
+    cases = json.loads((root / "tests/fixtures/skills_authoring/harness-model-evaluation/matcher-cases.json").read_text())
+    skills = load_skills()
+    assert any(s.name == "harness-model-evaluation" for s in skills)
+    for case in cases["cases"]:
+        selected = match_skill(case["request"], skills=skills)
+        assert bool(selected and selected.name == "harness-model-evaluation") == case["expect_selected"], case["id"]
