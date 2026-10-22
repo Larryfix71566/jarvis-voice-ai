@@ -95,7 +95,8 @@ def test_existing_model_status_includes_passive_brief_without_new_tool(monkeypat
     calls=[]
     monkeypatch.setattr(H,"read_report",lambda path:calls.append("read") or {"ok":False,"error":"synthetic missing evidence"})
     monkeypatch.setattr(H,"fetch_document",lambda _:pytest.fail("public fetch attempted"))
-    result=model_access_status(registry={"profiles":{}},access={},env={})
+    result=model_access_status(registry={"profiles":{}},access={},env={},
+                               harness_reader=lambda:H.read_report(None))
     assert result["harness_brief"]["error"] == "synthetic missing evidence"
     assert calls == ["read"]
     class Client:
@@ -169,3 +170,12 @@ def test_recognized_ids_do_not_claim_exhaustive_discovery(tmp_path):
     assert result["freshness"]=="recent"
     assert any("not an exhaustive" in gap for gap in result["report"]["gaps"])
     assert any("re-reads cached evidence" in gap for gap in result["report"]["gaps"])
+
+
+def test_injected_snapshot_defaults_to_no_ambient_harness_read(monkeypatch):
+    from jarvis.status.models import model_access_status
+    monkeypatch.setattr(H,"read_report",lambda *a,**kw:pytest.fail("ambient cache read"))
+    monkeypatch.setattr(H,"configured_selection",lambda:pytest.fail("ambient preference read"))
+    result=model_access_status(registry={"profiles":{}},access={},env={})
+    assert result["ok"] and result["harness_brief"]["ok"] is False
+    assert "not supplied" in result["harness_brief"]["error"]

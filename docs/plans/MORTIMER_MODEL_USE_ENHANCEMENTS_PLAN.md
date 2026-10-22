@@ -1144,4 +1144,4 @@ The earlier R3 claim description is historical. Current bounded scope reuses the
 
 ### 2026-10-22 — R5 cross-system review corrections
 
-[Dispositions](../acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r5-dispositions.md) cover unresolved-selection repair, validation outside the writer lock with exact metadata/draft rechecks, narrower skill matching, isolated passive readers and provenance.209 backend/18 native tests and seven matcher cases pass. Fresh independent focused review and exact-head CI remain required. Provider policy/tool schemas and release owner paths are unchanged; no merge/install/model change.
+[Dispositions](../acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r5-dispositions.md) cover unresolved-selection repair, validation outside the writer lock with exact metadata/draft rechecks, narrower skill matching, isolated passive readers and provenance.210 backend/18 native tests and seven matcher cases pass. Fresh independent focused review and exact-head CI remain required. Provider policy/tool schemas and release owner paths are unchanged; no merge/install/model change.

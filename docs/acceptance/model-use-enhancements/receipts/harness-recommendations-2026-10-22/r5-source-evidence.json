@@ -20,7 +20,7 @@
     },
     {
       "path": "jarvis/status/models.py",
-      "sha256": "b9cb11d1a37dac3f2c970cdb13d7618ad4a05dba722cec0c1c4a3f937d7b48a9"
+      "sha256": "7064e6c62aff49188434e81a8644f1c8ffb4d22ce71de63a692cfbf2663f6462"
     },
     {
       "path": "macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift",
@@ -52,7 +52,7 @@
     },
     {
       "path": "tests/unit/test_harness_brief.py",
-      "sha256": "43dd44cd881611ec623c076e0529502b90571f029581ab9a2a795d4c28973a5c"
+      "sha256": "037209bb1fb67ba08b1c4e44c6d63c3cb565e4242416d3e064ec313b721c5057"
     },
     {
       "path": "tests/unit/test_harness_confirmation.py",
@@ -61,13 +61,9 @@
     {
       "path": "tests/unit/test_model_preferences.py",
       "sha256": "eafba3e6c677a813579de24abb1fbddd5dd67b17f3c89ffe0b867ec0743c9efe"
-    },
-    {
-      "path": "tests/unit/test_status_models.py",
-      "sha256": "97040ba742f2a8561075e17fbbe6a51f3ec0058d15d053132aa0087930c20a0b"
     }
   ],
-  "focused_backend_passed": 209,
+  "focused_backend_passed": 210,
   "native_passed": 18,
   "matcher_cases_passed": 7,
   "package_revision": "8090fe89b6f92b7ec004c8705bad8865a9916707e3c97fe2ccb963268bcb5cd0",
@@ -80,6 +76,10 @@
     "R5_FOCUSED_INITIAL.log": "9dc546150cd23b66fefda1eba0cf917499f070c2bd414e05095f72ad175419ad",
     "R5_CALLER_TESTS.log": "91d244c3dac93421a3971eed528f6340ab77169299d05dee4bfdcc0f843e50cd",
     "R5_SWIFT_TESTS_PERMITTED.log": "c10015ef72b586b4c10586ed98f5f4fe406abcfd49cb57b4ccbff1ed12163b35",
-    "R5_SKILL_VALIDATION.json": "6e265de7d38d0b9276f367bef0f6ad39644a9611830543f7fdae4d88166b2f6c"
-  }
+    "R5_SKILL_VALIDATION.json": "6e265de7d38d0b9276f367bef0f6ad39644a9611830543f7fdae4d88166b2f6c",
+    "R5_FOCUSED_FINAL.log": "b391072225e4430658080991c3241ea2d7995e08827b36654a5d401da8fb3d19",
+    "R5_FROZEN_FIXTURE_TESTS.log": "8faff11dc8a72e446945fdab52f023a93c57ea6b377f91c8900618754ffbdd9a"
+  },
+  "frozen_fixture_tests_passed": 3,
+  "protected_status_fixture": "restored byte-for-byte to main; no scanner/pin changes"
 }

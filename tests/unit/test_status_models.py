@@ -47,8 +47,7 @@ def _reset_keyhealth():
 def _status():
     env = {"ANTHROPIC_API_KEY": SECRET, "OPENAI_API_KEY": SECRET,
            "OPENAI_BASE_URL": "https://api.anthropic.com/v1"}
-    return model_access_status(registry=REGISTRY, access=ACCESS, env=env,
-                               harness_reader=lambda: {"ok": False})
+    return model_access_status(registry=REGISTRY, access=ACCESS, env=env)
 
 
 def test_payload_shape():
@@ -98,7 +97,7 @@ def test_fixture_key_never_in_payload(caplog):
 
 
 def test_real_config_payload():
-    payload = model_access_status(env={}, harness_reader=lambda: {"ok": False})
+    payload = model_access_status(env={})
     assert payload["ok"] is True
     assert payload["coverage_gaps"] == []
     assert payload["profiles"]

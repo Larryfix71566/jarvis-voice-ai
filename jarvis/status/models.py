@@ -24,6 +24,8 @@ def model_access_status(*, registry: dict | None = None, access: dict | None = N
                         harness_reader: Callable[[], dict[str, Any]] | None = None) -> dict[str, Any]:
     from jarvis.model_routing import ModelRouteError, available_routes, load_access_config
 
+    live_inputs = registry is None and access is None and env is os.environ
+
     if registry is None:
         from jarvis.agents.upgrade_agent import load_model_registry
 
@@ -36,6 +38,10 @@ def model_access_status(*, registry: dict | None = None, access: dict | None = N
 
     # Add passive evidence to the existing tool response; preserve its exact
     # registered schema/menu and do not grant a new Developer operation.
+    if harness_reader is None and not live_inputs:
+        # A supplied registry/access/env is a test or alternate snapshot. Do not
+        # combine it with ambient cache/preferences from another configuration.
+        harness_reader = lambda: {"ok": False, "error": "Harness reader not supplied for this snapshot."}
     if harness_reader is None:
         from jarvis.status.harness import read_report
         from jarvis.status.daily import STATUS_DIR
