@@ -3606,3 +3606,7 @@ The first focused gate at `157f195` executed six cases/zero skips and failed thr
 
 
 Terminal verification on `a672239`: focused6/zero skips and all12 original comparisons PASS; backend6,858/11skips, native582/five prerequisite skips/zero failures, source/old-asset preservation PASS and both owned VMs deleted. Independent exact-source review has no blockers; all5 programme-head CI pass with identical actual checkout tree. This final metadata publication preserves the tested programme and does not rerun or relabel those results. Actual-host verification, normal held installation and human/full-context/workload/hardware/observation criteria remain separately gated.
+
+### 2026-10-22 current-main integration before #243 merge
+
+Integrated main `6234949` into the isolated native fixture repair without conflicts, preserving WS03 registration and WS20 errors-fail/warnings-advisory policy. Product/native fixture bytes are unchanged from the prior full-profile verified programme; added checker CLI tests and CI policy receive refreshed integration gates. Larry's specific #243 merge approval does not waive physical-host verification, guarded installation, privacy or live/human acceptance. Source/synthetic review and publication CI must complete before the authorized merge retry.
