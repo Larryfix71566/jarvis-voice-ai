@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "patch": {
+    "repository": "Larryfix71566/jarvis-voice-ai",
+    "sourceType": "patch_file",
+    "base": "636880eabbe9dc756c30df7128d0a90c02d222bd",
+    "head": "immutable source-only R4 patch applied to frozen subject; no amended PR head supplied",
+    "sha256": "d0a42d8adb59e5501d6c108e06ada0b9b6f4632b7f06f2ef5b7c5c5abf680339",
+    "changedFiles": [
+      "config/skills.yaml",
+      "jarvis/admin/server.py",
+      "jarvis/bot/model_route_tool.py",
+      "jarvis/model_preferences.py",
+      "jarvis/status/daily.py",
+      "jarvis/status/harness.py",
+      "jarvis/status/models.py",
+      "macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/ModelRouteControlsTests.swift",
+      "skills/harness-model-evaluation/SKILL.md",
+      "skills/harness-model-evaluation/mortimer.yaml",
+      "skills/harness-model-evaluation/references/daily-brief.md",
+      "skills/harness-model-evaluation/references/evaluation.md",
+      "skills/harness-model-evaluation/references/evidence-baseline.md",
+      "skills/harness-model-evaluation/references/mortimer-integration.md",
+      "skills/harness-model-evaluation/references/review-protocol.md",
+      "tests/fixtures/skills_authoring/harness-model-evaluation/matcher-cases.json",
+      "tests/unit/test_admin_api.py",
+      "tests/unit/test_agent_skills.py",
+      "tests/unit/test_auth_middleware.py",
+      "tests/unit/test_harness_brief.py",
+      "tests/unit/test_harness_confirmation.py",
+      "tests/unit/test_model_preferences.py"
+    ]
+  },
+  "recommendation": "hold_for_evidence",
+  "workflowLabel": "hold_for_evidence",
+  "impact": {
+    "rating": "high",
+    "rationale": "Persistent workload choices and shared model execution semantics are affected, together with the existing scheduled provider-health contract and native/voice confirmation surfaces."
+  },
+  "regressionLikelihood": {
+    "rating": "moderate",
+    "rationale": "No new source defect was found in the CI remedy. It preserves protected tool schemas/guards and reuses a passive result. Shared persistent preferences, status output, native UI and skill activation remain coupled; required amended-head CI/cross-system review is incomplete."
+  },
+  "regressionProtection": {
+    "rating": "partial",
+    "rationale": "Focused supplied run:414 passed,8 skipped,one loopback fixture initially denied socket bind. Supplied approved-access rerun passed that sole fixture (1 passed in1.48s). Additive-status,skill inventory/auth assertions inspected; prior gates/native source unchanged. Exact amended-head CI and required cross-system review remain pending.",
+    "exactHeadChecksPassed": false
+  },
+  "recoverability": {
+    "rating": "managed",
+    "rationale": "Code can be reverted without a schema migration. Saved preference rows remain, and any subsequent model use cannot be undone; operators must inspect saved state before restoring old behavior. Old clients cannot use v1 previews safely."
+  },
+  "confidence": {
+    "rating": "low",
+    "rationale": "Source-level confidence is high: exact artifact and24 hashes verified, protected files compared to base, new path synthetically checked. Overall merge confidence remains low because expressly required premerge evidence is pending, not because a code defect was established."
+  },
+  "applicability": {
+    "status": "confirmed",
+    "rationale": "The existing status_models MCP tool calls /api/status/models and now receives additive harness_brief. Skill packaging/registration and authenticated native refresh are production paths; R4 is source-only and not yet tied to an amended PR head in this review."
+  },
+  "statusQuoRisk": {
+    "rating": "moderate",
+    "rationale": "Published R3 added an MCP tool, breaking frozen Developer menu expectations and omitted capability/auth/registry inventory updates. R4 removes that menu change and repairs integration without weakening the pinned contracts. Earlier mutable preference limitations remain explicitly scoped."
+  },
+  "autoMergeExclusions": [
+    "persistent_state",
+    "public_contract",
+    "broad_shared_default",
+    "architecture_specific_rollout",
+    "other"
+  ],
+  "affectedRuntimeRoots": [
+    "jarvis/status/models.py:model_access_status additive harness_brief",
+    "mcp_servers/mcp_status/logic.py:status_models unchanged GET /api/status/models",
+    "jarvis/admin/server.py:model_routes and guarded harness read/refresh endpoints",
+    "skills/harness-model-evaluation/mortimer.yaml and config/skills.yaml registration",
+    "jarvis/model_preferences.py and model_route_tool.py unchanged admission refusals",
+    "jarvis/status/daily.py and harness.py unchanged passive collection"
+  ],
+  "importantCallers": [
+    "Existing mcp-status server status_models schema and manifest, byte-identical to base",
+    "Native AdminAPI refreshHarnessModelEvidence remains explicit refresh entrypoint",
+    "tests/unit/test_auth_middleware.py whole-app route loop includes88 routes",
+    "jarvis/skill_selection.py capability and required-tool eligibility checks",
+    "tests/unit/test_claude_developer_capability.py frozen40-tool assertions and scripts/verify_claude_developer_capability.py"
+  ],
+  "riskDrivers": [
+    "Required cross-system premerge review and final amended-head CI remain pending.",
+    "Eight focused tests were skipped; final CI must establish applicable required checks. The initial loopback infrastructure failure passed on authorized rerun.",
+    "Nonvoice saved choices remain mutable aliases; complete harness switching/durable pinning/runtime ACK remain unavailable.",
+    "Publication documentation is explicitly excluded from this immutable source assessment and needs separate final identity/provenance review."
+  ],
+  "protectiveFactors": [
+    "MCP status server/logic/manifest/test match base636880e byte-for-byte; no new LLM-callable tool or refresh argument.",
+    "Protected native40 verifier/test and model_access/agents/mcp config match base; no tool-count/schema pin weakening.",
+    "Additive result performs read_report only and existing status_models forwards it through unchanged GET.",
+    "Skill uses existing implementation_planning and acceptance_design labels; required_tools contains existing status_models; no credential requirement.",
+    "Registration test retains exact enabled-name set and pin match checks; authentication test retains exact count plus every-route401 challenge.",
+    "Previous backend voice switching block, LLM confirmation refusal, status kill switch and native freshness/runtime wording remain unchanged."
+  ],
+  "materialBoundaries": [
+    {
+      "id": "frozen_tool_menu",
+      "invariant": "CI repair must not change protected tool-count/schema identity or grant another Developer operation.",
+      "runtimeRoot": "mcp_servers/mcp_status/{server.py,logic.py,skill.yaml}; frozen native40 verifier",
+      "counterexample": "Keep an extra status_harness_models tool and increase expected tool count/hash to silence CI.",
+      "legitimateControl": "R4 restores MCP files/test to base byte-for-byte and leaves native40 verifier/test plus model_access/agents/mcp config byte-identical. Exact40 assertions remain. Brief is output-only data from existing status_models.",
+      "result": "supported"
+    },
+    {
+      "id": "passive_status",
+      "invariant": "Calling existing status_models must not gain public refresh, inference, credential use or model mutation.",
+      "runtimeRoot": "jarvis/status/models.py:33-43 -> harness.read_report",
+      "counterexample": "New report integration calls collect/refresh instead of a cached read or requires an MCP POST.",
+      "legitimateControl": "Only read_report is called. Its existing code reconstructs metadata/cache with baseline null and switching false. Synthetic extracted function/client probe observed one passive read and no POST while preserving existing fields. Explicit native refresh remains separate.",
+      "result": "supported"
+    },
+    {
+      "id": "skill_admission",
+      "invariant": "Skill capability and dependency inventory must remain fail-closed and pins must match the enabled package.",
+      "runtimeRoot": "mortimer.yaml,config/skills.yaml,skill_selection.py",
+      "counterexample": "Invent new labels or relax loader tests to accept a package whose capabilities/tools are absent.",
+      "legitimateControl": "Uses unchanged registry's implementation_planning/acceptance_design text-only labels and existing status_models; tests require all6 explicit names and6 matching pins, retaining mismatch tests. Supplied validator/matcher evidence passes with recomputed revision.",
+      "result": "supported"
+    },
+    {
+      "id": "auth_inventory",
+      "invariant": "New status endpoints must participate in whole-app bearer authentication and disabled-status enforcement.",
+      "runtimeRoot": "test_auth_middleware.py every-route test; server.py _status_call",
+      "counterexample": "Raise route count but omit new endpoints from authentication loop, or exempt them from status kill switch.",
+      "legitimateControl": "Exact88 count and explicit new-path subset assertions added; every APIRoute is still requested without bearer and must return401 with expected headers. Prior false/0/no/off kill-switch tests and _status_call wrappers remain.",
+      "result": "supported"
+    },
+    {
+      "id": "prior_harness_gates",
+      "invariant": "CI remediation must not re-enable voice confirmation or imply a working exact-model switch.",
+      "runtimeRoot": "model_preferences.py,model_route_tool.py,RepoTab.swift,harness.py",
+      "counterexample": "Use the existing tool as a bypass for confirmation or label routed selection as active.",
+      "legitimateControl": "These gate/runtime-report files are byte-identical to accepted R3 apart from unrelated base changes elsewhere. Voice stage/confirm and LLM confirmation remain blocked; baseline/active_model remain unknown; mutable nonvoice behavior stays disclosed.",
+      "result": "supported"
+    },
+    {
+      "id": "merge_evidence",
+      "invariant": "Required final checks and cross-system review must exist for the exact merge candidate before merge is recommended.",
+      "runtimeRoot": "Amended PR242 candidate and required premerge process",
+      "counterexample": "Treat R3 review/partial local R4 log as final success for a later commit including publication docs.",
+      "legitimateControl": "Source assessment is SHA-bound and publication documents excluded. Local loopback rerun passed, but no final amended-head CI or completed required cross-system review was supplied.",
+      "result": "unresolved"
+    }
+  ],
+  "validation": [
+    {
+      "name": "R4 immutable identity",
+      "status": "passed",
+      "protects": "Exact patch SHA d0a42d8adb59e5501d6c108e06ada0b9b6f4632b7f06f2ef5b7c5c5abf680339 and all24 manifest after-hashes match."
+    },
+    {
+      "name": "Protected base-file comparison",
+      "status": "passed",
+      "protects": "Independently read base636880e blobs: MCP server/logic/manifest/test, native40 verifier/test, config/model_access.yaml,agents.yaml,mcp_servers.yaml all match frozen R4 bytes."
+    },
+    {
+      "name": "Independent additive passive-status probe",
+      "status": "passed",
+      "protects": "AST-extracted actual model_access_status and existing MCP _trim/_get/status_models with synthetic dependencies preserve original fields and harness_brief, one passive read and no POST. Initial probe harness omitted postponed annotations; corrected harness preserves source future-annotations semantics."
+    },
+    {
+      "name": "Focused CI_FIX_TESTS.log and CI_FIX_LOOPBACK_TEST.log",
+      "status": "passed",
+      "protects": "Initial focused log:414 passed,8 skipped,1 infrastructure failure at denied socket bind. Supplied approved-local-access rerun of that sole test reports1 passed in1.48s. No remaining observed product failure;8 skips remain, and this is not final amended-head CI. Reviewer did not invoke a socket or provider."
+    },
+    {
+      "name": "Skill validation and matcher fixtures",
+      "status": "passed",
+      "protects": "Supplied static validator passed;5 matcher cases passed. Package revision8da0f1efe1ccb9f5f6940b04f8a00193296cc8b3e943e66c7c9dbbbb2f5ec540 matches configured pin. Existing supported labels/dependency traced."
+    },
+    {
+      "name": "Previous native/gate checks",
+      "status": "passed",
+      "protects": "Earlier reviewed R3 native implementation/tests and admission/cache source unchanged. Previous16 native test log remains relevant but not a new full native rollout run."
+    },
+    {
+      "name": "Final amended-head CI and required cross-system review",
+      "status": "unavailable",
+      "protects": "Pending at review time; needed to close merge evidence. Source-only review does not cover later publication documentation or grant merge/install authority."
+    }
+  ],
+  "unknowns": [
+    {
+      "summary": "Required cross-system premerge review of final amended candidate has not completed.",
+      "decisionCritical": true
+    },
+    {
+      "summary": "Exact amended-head CI is not yet available; it necessarily follows committing/pushing the reviewed correction. Local loopback rerun has passed.",
+      "decisionCritical": true
+    },
+    {
+      "summary": "Harness switching, durable all-writer identity binding and runtime ACK remain intentionally unavailable; no claim of completion is made.",
+      "decisionCritical": false
+    }
+  ],
+  "evidencePlan": [
+    {
+      "question": "Does the exact amended candidate satisfy required CI without weakening protected contracts?",
+      "action": "Inspect final CI results tied to the amended commit, including the unchanged loopback test in an appropriate runner and the current inventory/auth/skill checks.",
+      "outcomes": {
+        "All required checks pass and identity matches": "merge",
+        "Product failure or guard weakening appears": "revise",
+        "Only unavailable infrastructure evidence remains": "hold_for_evidence"
+      }
+    },
+    {
+      "question": "Does the required cross-system premerge review accept the final source and publication identity?",
+      "action": "Obtain the required independent review bound to the final amended commit and reconcile R3 historical versus R4 final documentation.",
+      "outcomes": {
+        "Accepted with no material finding and exact-head CI passes": "merge",
+        "Material defect or documentation contradiction found": "revise",
+        "Review remains pending": "hold_for_evidence"
+      }
+    }
+  ]
+}

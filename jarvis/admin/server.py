@@ -2039,7 +2039,9 @@ def model_routes() -> dict:
                 "workloads": workloads, "choices": choices,
                 "profiles": profiles, "preferences": list_preferences(),
                 "routing_enabled": os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1",
-                "routing_process": "admin"}
+                "routing_process": "admin",
+                "harness_brief": status_harness_models(),
+                "harness_switching_supported": False}
     except Exception as exc:  # noqa: BLE001 - read-only status boundary
         logger.warning("model_routes_status_failed error_type=%s",
                        type(exc).__name__)
@@ -4891,6 +4893,22 @@ def _status_call(topic: str, thunk) -> dict:
         logger.warning("status_route_failed topic=%s error=%s",
                        topic, type(exc).__name__)
         return {"ok": False, "error": str(exc)}
+
+
+@app.post("/api/status/harness-models/refresh")
+def refresh_harness_models() -> dict:
+    """Explicit public-doc refresh. No account API, inference, secrets or model writes."""
+    from jarvis.status.harness import refresh_report
+    from jarvis.status.daily import STATUS_DIR
+    return _status_call("harness-models-refresh", lambda: refresh_report(STATUS_DIR))
+
+
+@app.get("/api/status/harness-models")
+def status_harness_models() -> dict:
+    """Read cached daily evidence only; never refresh, probe or change a model."""
+    from jarvis.status.harness import read_report
+    from jarvis.status.daily import STATUS_DIR
+    return _status_call("harness-models", lambda: read_report(STATUS_DIR))
 
 
 @app.get("/api/status/models")

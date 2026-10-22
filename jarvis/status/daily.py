@@ -514,6 +514,11 @@ def main() -> int:
         run()
     except Exception as exc:  # noqa: BLE001 — exit 0 regardless (no retry storm)
         logger.warning("status_daily_failed error=%s", type(exc).__name__)
+    try:
+        from jarvis.status.harness import run_passive
+        run_passive(status_dir=STATUS_DIR)
+    except Exception as exc:  # noqa: BLE001 — independent passive addition
+        logger.warning("status_harness_brief_failed error=%s", type(exc).__name__)
     return 0
 
 
