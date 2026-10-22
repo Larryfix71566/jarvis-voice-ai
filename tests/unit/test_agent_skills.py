@@ -306,13 +306,14 @@ class TestRegistrationGate:
             "layered-geolocation",
             "mcp-server-authoring",
             "technical-plan-document",
+            "harness-model-evaluation",
         }
 
     def test_inventory_reports_digest_pin_state_and_enforcement_mode(self, monkeypatch):
         monkeypatch.delenv("JARVIS_SKILLS_WORKSPACE_ENABLED", raising=False)
         text = format_inventory()
         assert "registry: schema v2; digest enforcement OFF (legacy loader)" in text
-        assert text.count("digest pin: matches") == 5
+        assert text.count("digest pin: matches") == 6
 
     def test_inventory_surfaces_a_package_pin_mismatch(self, tmp_path):
         from jarvis.skill_catalog import inspect_package

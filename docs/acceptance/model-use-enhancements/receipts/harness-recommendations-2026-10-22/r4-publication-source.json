@@ -1,0 +1,20 @@
+{
+  "source_patch_sha256": "d0a42d8adb59e5501d6c108e06ada0b9b6f4632b7f06f2ef5b7c5c5abf680339",
+  "base": "636880eabbe9dc756c30df7128d0a90c02d222bd",
+  "source_files": 24,
+  "historical_r3_head": "49ebd29795b43422d02be685e77bdab8e1be7418",
+  "focused_tests_passed": 415,
+  "focused_tests_skipped": 8,
+  "loopback_retry_only": true,
+  "native_tests_previous_unchanged_source": 16,
+  "matcher_cases_passed": 5,
+  "cross_system_code_review": "pending",
+  "amended_head_ci": "pending; observe PR",
+  "benchmarks": 0,
+  "model_changes": 0,
+  "installed": false,
+  "log_sha256": {
+    "CI_FIX_TESTS.log": "45cf09693a66ee97c2e2a69bc16556600a2d5e4f568590d67998c8011bf96b53",
+    "CI_FIX_LOOPBACK_TEST.log": "18f46c04e14671be81e081e7cd3910b913bc643549561cc325d37b98e03206e1"
+  }
+}

@@ -177,7 +177,7 @@ def test_p4_tool_order_and_skill_manifest():
 
     from mcp_servers.mcp_status import server
 
-    names = ["status_harness_models", "status_models", "status_services", "status_overview", "status_build",
+    names = ["status_models", "status_services", "status_overview", "status_build",
              "log_search", "status_catalog", "status_subscription", "github_prs",
              "github_pr_checks"]
     src = inspect.getsource(server)

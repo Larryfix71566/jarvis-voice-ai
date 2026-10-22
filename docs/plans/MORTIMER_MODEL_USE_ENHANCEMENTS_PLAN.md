@@ -1131,3 +1131,8 @@ Universal approval across config writers, durable model identity, runtime ACK an
 ### R3 immutable publication evidence — 2026-10-22
 
 [Source/review receipt](../acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/README.md) records the exact reviewed25-file identity, independent review/dispositions,238 backend/16 native tests and limitations. New main636880e changes no reviewed source. The claim and reviewed implementation are separate drafts; publication is authorized, merging is not. All original provider/acceptance history and checkboxes remain unchanged.
+
+
+### 2026-10-22 — R4 draft CI correction
+
+Draft #242's initial R3 CI caught frozen Developer menu and skill/auth inventory integration failures. The independently reviewed R4 correction restores exact existing MCP schemas and uses passive `status_models.harness_brief` from `jarvis/status/models.py`. No new MCP tool or permission grant remains; native explicit refresh stays authenticated. Existing capability labels and exact six-skill/88-route assertions are preserved. R4 source SHA256 `d0a42d8adb59e5501d6c108e06ada0b9b6f4632b7f06f2ef5b7c5c5abf680339`; 415 focused tests passed with eight skips, five matcher cases passed. Native source/tests unchanged; prior16 results reused. Independent source review accepts draft correction with merge held for amended-head CI and required cross-system review. Claim #241 is green but unmerged; both drafts stay unmerged. No activation, install, benchmark, model switch or claim of complete approval/runtime enforcement.

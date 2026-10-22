@@ -89,16 +89,22 @@ def test_scheduler_preserves_legacy_job_and_adds_passive_hook(monkeypatch,legacy
     monkeypatch.setattr(H,"run_passive",lambda **kw:calls.append("passive"))
     assert D.main() == 0 and calls == ["legacy","passive"]
 
-def test_voice_tool_reads_cache_by_default_and_refresh_is_explicit():
-    from mcp_servers.mcp_status.logic import status_harness_models
+def test_existing_model_status_includes_passive_brief_without_new_tool(monkeypatch):
+    from jarvis.status.models import model_access_status
+    from mcp_servers.mcp_status.logic import status_models
     calls=[]
+    monkeypatch.setattr(H,"read_report",lambda path:calls.append("read") or {"ok":False,"error":"synthetic missing evidence"})
+    monkeypatch.setattr(H,"fetch_document",lambda _:pytest.fail("public fetch attempted"))
+    result=model_access_status(registry={"profiles":{}},access={},env={})
+    assert result["harness_brief"]["error"] == "synthetic missing evidence"
+    assert calls == ["read"]
     class Client:
-        def get(self,path): calls.append(("get",path));return {"ok":True}
-        def post(self,path,**kw): calls.append(("post",path));return {"ok":True}
-    assert status_harness_models(client=Client())["ok"]
-    assert calls == [("get","/api/status/harness-models")]
-    assert status_harness_models(refresh=True,client=Client())["ok"]
-    assert calls[-1] == ("post","/api/status/harness-models/refresh")
+        def get(self,path,**kw):
+            assert path == "/api/status/models"
+            return result
+        def post(self,*a,**kw): pytest.fail("passive tool posted")
+    assert status_models(client=Client())["harness_brief"] == result["harness_brief"]
+
 
 def test_failed_notice_remains_pending_then_retried(tmp_path):
     H.run_passive(status_dir=tmp_path,selection=selection,now=NOW,notice=lambda *a:-1)

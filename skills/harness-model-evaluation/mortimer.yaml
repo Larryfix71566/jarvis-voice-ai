@@ -7,8 +7,8 @@ source:
   kind: authored
   reference: mortimer.harness-model-management.v1
   adaptation_notes: Synthetic evaluation design and read-only daily recommendation instructions, authorized by Larry.
-capabilities: [harness_evaluation_planning, model_recommendation]
-required_tools: [status_harness_models]
+capabilities: [implementation_planning, acceptance_design]
+required_tools: [status_models]
 required_credentials: []
 reference_paths:
   - references/daily-brief.md

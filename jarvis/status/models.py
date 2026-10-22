@@ -33,6 +33,12 @@ def model_access_status(*, registry: dict | None = None, access: dict | None = N
         except ModelRouteError:
             access = {}
 
+    # Add passive evidence to the existing tool response; preserve its exact
+    # registered schema/menu and do not grant a new Developer operation.
+    from jarvis.status.harness import read_report
+    from jarvis.status.daily import STATUS_DIR
+    harness_brief = read_report(STATUS_DIR)
+
     profiles_raw = registry.get("profiles") or {}
     profiles: list[dict[str, Any]] = []
     for name, p in sorted(profiles_raw.items()):
@@ -62,6 +68,7 @@ def model_access_status(*, registry: dict | None = None, access: dict | None = N
         "ok": True,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "source": "registry",
+        "harness_brief": harness_brief,
         "default": registry.get("default"),
         "profiles": profiles,
         "workloads": workloads,
