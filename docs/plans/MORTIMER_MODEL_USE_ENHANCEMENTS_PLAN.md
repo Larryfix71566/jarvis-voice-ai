@@ -1178,3 +1178,105 @@ installation or service operation is authorized by this amendment. The prior
 47-pass receipt is Claude VM evidence, not Mac or CI evidence. No acceptance
 checkbox closes. Separate release/restoration and WS-03 compatibility work
 continue under their existing owners.
+
+
+### 2026-10-22 — Exact recommendation foundation integration registration
+
+Latest Larry program direction permits completing source integration through
+the sole serial coordinator; it does not bypass ownership or verification.
+This is a documentation-only supplement on current main `1043b9661852deb50af7fe9a82df68e491907df2`.
+Old claim #241 remains open/unmerged at
+`985379f425dc717997fe502dadfd3aaee0b37662`, based on `636880e`; its old branch
+would replace the newer repair ownership. Do not merge it blindly. #257
+landed at `29440804baf40292d84acbb0798646e67d0c510a` and independently covers
+the narrow repair only. This supplement adds only the inventoried frozen
+recommendation foundation to the existing active repair branch. It does not
+retroactively claim the original draft was landed.
+
+**Ancestry and exact comparison.** #242 `d476905057fc29207338721ce9ec2a452cb2085d`
+contains the old #241 commits; it was merged locally with main2944080 as
+`a3b4107f07e2d8a581cdf304bf172a8fb379eaf0`. The two repair commits are
+`c2cd6d9e2a23b8591c0a6615472f662b31165957` and
+`eba21305564b905299d4e59a761f6d4ca90bd2db` (#264). #253
+`a568f7dc282fff7436a4527feb7d162a2b021c81` is not an ancestor: only its
+findings and isolated daily-test source were carried; its branch is unchanged.
+Read-only merge-tree against current main1043b96 yields conflict-free tree
+`dca8e98deebee8f797affa788444c30d80ec881d`. This prospective tree preserves the newer WS-20
+program update; it is not a commit, CI result or performed merge. The combined
+feature delta is the 46 paths below. The separate 13-file repair comparison
+is a3b4107..eba2130, SHA-256
+`70bfb82f566f11230111a00f1245b85ceacc1aba9a4713bae3ddbb204c26692e`.
+
+**Ownership limits.** This is adoption of exact existing hunks, not permission
+for new shared-file features. WS-03 retains compatibility/importer/selector
+work. Its shared test file changes only the authored harness roster entry and
+matching-pin count (5 to 6); existing compatibility assertions survive. The
+one authored package enabled entry/digest is source registration, not an
+installed-app activation. Provider #244 reconciliation and installation/held
+restoration remain with their owners. Existing daily health collectors and
+MCP menu stay intact. No settings, credential, privacy boundary, endpoint
+registry or model selection changes are part of this registration. The
+foundation blocks harness switching and voice-supplied confirmation rather
+than claiming that all writers/runtime support safe switching. Non-harness
+exact-proposal controls remain limited to their existing supported surfaces.
+
+**Verification and next action.** Claude Max exact Opus5.5 accepted c2cd6d9;
+later package/test/doc changes have an independent exact-head ACCEPT at
+eba2130. Runtime harness bytes are unchanged; 148 focused offline tests pass.
+CI for eba2130 is separate and its actual base/test-merge must be recorded.
+These receipts do not establish new main integration or native runtime
+acceptance. After this supplement lands, refresh main in the registered
+branch, reconcile documentation preserving all owners, verify changed-byte
+coverage and run fresh exact combined checks. Any source conflict returns to
+its owner; do not silently widen this claim. The coordinator may then serially
+integrate verified source under the current program authorization. Installation,
+model updates, live inference and acceptance checkboxes remain separate.
+
+| Exact prospective-main changed path | Provenance |
+|---|---|
+| `ROADMAP.md` | Repair + inherited context |
+| `config/skills.yaml` | Repair + inherited context |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/README.md` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/claude-review-c2cd6d9.md` | Repair + inherited context |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/independent-assessment.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/independent-review.md` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/publication-source.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r4-independent-assessment.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r4-independent-review.md` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r4-publication-source.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r4-reviewed-file-manifest.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r5-dispositions.md` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r5-source-evidence.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/remediation-dispositions.md` | Repair + inherited context |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/review-dispositions.md` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/reviewed-file-manifest.json` | Frozen foundation |
+| `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md` | Repair + inherited context |
+| `docs/roadmap-log/2026-10-22-ws-05-harness-recommendation-claim.md` | Frozen foundation |
+| `docs/roadmap-log/2026-10-22-ws-05-harness-recommendations.md` | Frozen foundation |
+| `docs/roadmap-log/2026-10-22-ws-05-harness-remediation.md` | Repair + inherited context |
+| `jarvis/admin/server.py` | Frozen foundation |
+| `jarvis/bot/model_route_tool.py` | Frozen foundation |
+| `jarvis/model_preferences.py` | Frozen foundation |
+| `jarvis/status/daily.py` | Frozen foundation |
+| `jarvis/status/harness.py` | Repair + inherited context |
+| `jarvis/status/models.py` | Frozen foundation |
+| `macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift` | Frozen foundation |
+| `macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift` | Frozen foundation |
+| `macos/MortimerHost/Tests/MortimerHostTests/ModelRouteControlsTests.swift` | Frozen foundation |
+| `skills/harness-model-evaluation/SKILL.md` | Repair + inherited context |
+| `skills/harness-model-evaluation/mortimer.yaml` | Repair + inherited context |
+| `skills/harness-model-evaluation/references/daily-brief.md` | Frozen foundation |
+| `skills/harness-model-evaluation/references/evaluation.md` | Frozen foundation |
+| `skills/harness-model-evaluation/references/evidence-baseline.md` | Frozen foundation |
+| `skills/harness-model-evaluation/references/mortimer-integration.md` | Frozen foundation |
+| `skills/harness-model-evaluation/references/review-protocol.md` | Frozen foundation |
+| `tests/fixtures/skills_authoring/harness-model-evaluation/matcher-cases.json` | Repair + inherited context |
+| `tests/unit/test_admin_api.py` | Frozen foundation |
+| `tests/unit/test_agent_skills.py` | Frozen foundation |
+| `tests/unit/test_auth_middleware.py` | Frozen foundation |
+| `tests/unit/test_harness_brief.py` | Repair + inherited context |
+| `tests/unit/test_harness_cache_concurrency.py` | Repair + inherited context |
+| `tests/unit/test_harness_confirmation.py` | Frozen foundation |
+| `tests/unit/test_harness_daily_offline.py` | Repair + inherited context |
+| `tests/unit/test_model_preferences.py` | Frozen foundation |
+| `tests/unit/test_model_route_contracts.py` | Frozen foundation |
