@@ -1022,7 +1022,7 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 <details id="ws-24">
 <summary>WS-24 — Durable task ownership and restart recovery · Proposed</summary>
 
-**Workstream:** Extend existing SQLite, run logging and durable notification paths with one authoritative overall-task lifecycle. A task is distinct from its individual agent runs, attempts and retries. This is the highest-priority new foundation after current acceptance.
+**Workstream:** Extend existing SQLite, run logging and durable notification paths with one authoritative overall-task lifecycle. A task is distinct from its individual agent runs, attempts and retries. This is the highest-priority new foundation. The expanded October22 all-current-and-future-roadmap dispatch permits the isolated offline contract below after its main claim; product acceptance remains a separate prerequisite for later runtime rollout.
 
 ### Requirements and dependencies
 
@@ -1038,16 +1038,16 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 - [ ] Restart after result persistence but before delivery: recover and deliver the saved result once at the user-visible level through stable-ID deduplication.
 - [ ] Cancelled tasks remain cancelled; two workers cannot execute the same attempt. Expired/revoked approval prevents resume; retry exhaustion stops explicitly.
 
-- **Owner:** `codex` for documentation preparation; existing acceptance owners retained; future runtime implementation requires a fresh main claim
-- **Status:** landed documentation preparation via this PR after merge; no new runtime implementation, activation or acceptance. Prior foundation/intake history remains recorded below
-- **Implemented by:** Not implemented by this intake; reuse of existing components must be established in the implementation plan
-- **Remaining work / acceptance:** Canonical preparation plan and proposed synthetic vectors are supplied; design review, existing acceptance prerequisite, effective implementation owner/branch/scope on main and every unchecked future acceptance criterion remain open. No runtime code or automated profile authorized by this registration
+- **Owner:** `codex`; retained dispatcher owns the isolated offline recovery contract; existing acceptance and other source owners remain unchanged
+- **Status:** claimed via this PR after merge: offline transition contract only; persistence, production wiring, activation and acceptance remain unimplemented by this registration
+- **Implemented by:** Documentation preparation from #255; this claim registers a future pure module and synthetic tests, not completed recovery behavior
+- **Remaining work / acceptance:** Implement and independently review the bounded offline contract after this claim lands. All four future acceptance criteria remain open; pure transition tests cannot prove durable storage, atomic cross-process exclusion, real restart recovery or user-visible delivery
 - **Model version:** not selected; choose eligible models by workload/privacy during planning
-- **Where:** `docs/roadmap-preparation-claims-20261022` based on main `c63ecce97108787c55ef55fad73d32236694cc65`; documentation registration only, no runtime branch claimed
+- **Where:** `codex/ws24-recovery-foundation-20261022` (future implementation branch; source work begins only after this registration is on main)
 - **Plan:** [Canonical plan](docs/plans/MORTIMER_DURABLE_TASK_RECOVERY_PLAN.md); existing historical requirements and acceptance gates retained
-- **Scope:** Documentation only: this roadmap block, `docs/plans/MORTIMER_DURABLE_TASK_RECOVERY_PLAN.md` and the shared WS-04/23/24 preparation log. No runtime, tests, migration, config, private data, credentials, installer or other-owner documentation edits. Future code needs separately registered exact scope on main
-- **Next step:** codex: complete bounded design/applicability review from the canonical plan; larry: retain current acceptance prerequisite and separately register implementation ownership/branch/scope before code or any automated profile
-- **Updated:** 10-22 (completed source analysis and proposed fixture specification; documentation registration only; no acceptance checkbox changes)
+- **Scope:** Only new `jarvis/task_recovery.py`, new `tests/unit/test_task_recovery.py` with inline synthetic fixtures, this WS-24 block, existing `docs/plans/MORTIMER_DURABLE_TASK_RECOVERY_PLAN.md`, and `docs/roadmap-log/2026-10-22-ws-24-recovery-foundation.md`. No storage, runlog, notices, delegation, creator, bot/admin, sandbox, provider, config, scripts, native, other-owner plan/test or production importer edits
+- **Next step:** codex: after main registration, implement the deterministic typed contract and focused offline tests; obtain exact-source review and publication CI, then return to the sole serial merge coordinator. Current product acceptance and later storage/runtime/release gates remain open
+- **Updated:** 10-22 (offline foundation claim under the expanded all-current-and-future-roadmap dispatch; no source code, activation or acceptance checkbox changes)
 
 
 ### Prior ownership/intake checkpoint (preserved history)

@@ -1,11 +1,13 @@
 # Durable task ownership and restart recovery — WS-24
 
-**Status:** Proposed canonical preparation plan, 2026-10-22. This documentation
-registration records completed source analysis and proposed contracts. No runtime
-implementation, schema, activation or acceptance is delivered. The main-first
-claim rule and acceptance-first dependency in [WS-24](../../ROADMAP.md#ws-24)
-remain binding. Owner: Codex, documentation preparation only on
-`docs/roadmap-preparation-claims-20261022` after registration lands.
+**Status:** Offline transition-contract claim, 2026-10-22, effective only after
+this registration lands on main. Codex owns future branch
+`codex/ws24-recovery-foundation-20261022` and only the exact paths in section8.
+Preparation #255 is merged; no recovery runtime, storage, activation or acceptance
+is delivered by this claim. Earlier dated preparation and limitations below are
+retained as history. Latest user direction includes all current and future roadmap
+work; this increment advances isolated offline code while preserving product
+acceptance, owner coordination and later storage/runtime/release gates.
 
 ## 1. Evidence and existing components
 
@@ -208,3 +210,119 @@ registered match for an earlier uncertain recovery-task launch. No duplicate was
 created; the dispatcher completed the preparation here. Internal task IDs and
 local tool receipts remain outside the repository. Runtime claims, source tests,
 fresh installed-state audit and user/hardware acceptance remain outstanding.
+
+## 8. Offline transition-contract claim — 2026-10-22
+
+### Dispatch, ownership and existing-state decision
+
+Larry requested completing and integrating all current and future roadmap work.
+The dispatcher adopts one bounded offline foundation on inspected main
+`29440804baf40292d84acbb0798646e67d0c510a`. The registration branch is
+`docs/ws24-recovery-contract-claim-20261022`; only the future implementation branch
+`codex/ws24-recovery-foundation-20261022` is the source claim. No code precedes
+main registration. This is an engineering increment within that dispatch, not a
+new product choice or permission to operate a running service.
+
+The additional read-only inventory covers `jarvis/db.py`, `runlog/store.py`,
+`agents/delegate.py`, `skill_requests.py`, `notices.py`, reminder logic and its
+bot/sidecar consumers, `sandbox/session.py`/`durable.py`, workflows, launchd jobs
+and WS-22 plan sections5–6. No private DB, logs, credentials or live process was
+read. No application tests ran for the inventory.
+
+- Agent runs are attempts, not overall tasks. Existing action claims use
+  insert-once SQLite transactions; their status updater is not a worker fence.
+  Preserve this ledger as the domain effect authority, never infer replay
+  permission from orphaning or failure.
+- Creator and sandbox journals already distinguish queued work, cancellation and
+  uncertain publication. Keep their separate identities and authorities. Calling
+  sandbox resume can operate VMs; it is outside this claim.
+- Notices are marked delivered before greeting rendering; reminders separately
+  track context delivery and notification posting. None proves user-visible
+  acknowledgment. Do not replace these components with a second outbox or queue.
+- WS-22 supplies the shared lifecycle vocabulary and expected-version/attempt/
+  lease concepts. Investigation stages remain WS-22's concern. WS-22/25/26 will
+  reuse this contract and later one overall-task authority in existing SQLite.
+
+The first slice therefore introduces **no store, scheduler, migration, config
+key, port, service label, protocol or persisted report identifier**. Migration
+0035 remains mail-reserved; a future storage claim must freshly reserve its own
+number and define retention/schema before any code. No migration is reserved here.
+
+### Exact locks and rollback
+
+Only `jarvis/task_recovery.py` and `tests/unit/test_task_recovery.py` are new code
+paths, with inline synthetic fixtures. Documentation is limited to this existing
+canonical plan, the WS-24 roadmap block and
+`docs/roadmap-log/2026-10-22-ws-24-recovery-foundation.md`.
+
+No edits to DB, runlog, notices, delegate, creator, storage context, bot/admin,
+sandbox, provider/auth/model/configuration, scripts, native code, WS-22 plan or
+other owners' tests. These are read-only references, not acquired locks. No
+production importer, startup hook, CLI or public endpoint invokes the module.
+Rollback is reverting the isolated unused module/tests and recording that state;
+there is no persisted state, configuration or deployed behavior to undo.
+
+### Deterministic contract
+
+Implement `evaluate_transition(snapshot, event, context)` as a standard-library
+pure function returning a typed rejection with a bounded reason or an immutable
+proposed next snapshot and expected old record version. IDs, time, authority,
+lease/fence and evidence are caller-supplied. No clocks, environment, files,
+network, processes, databases, generated IDs, timers or effect callbacks are read
+or invoked, including at import.
+
+1. Distinguish bounded task/request/owner/attempt/run/domain-job/result/notice
+   references and digests. Reject malformed types and oversized collections;
+   never coerce arbitrary paths or content into evidence. Initial snapshots
+   contain synthetic metadata, not retained goal text, prompts or credentials.
+2. Reuse task statuses `queued`, `running`, `blocked`, `cancelling`, `succeeded`,
+   `partial`, `failed`, `cancelled`, `interrupted`; keep attempt and delivery
+   states separate. Terminal attempt data stays immutable; retry links a new
+   attempt. Same-event replay is a bounded no-op; changed request reuse conflicts.
+3. Require expected record version and current attempt/fence for mutations;
+   increment version on accepted transitions. Reject stale callbacks. The output
+   is a CAS precondition, **not cross-process atomic exclusion**. Future storage
+   must atomically enforce it with the actual domain action authority.
+4. Starting/resuming requires fresh host-established owner/scope/expiry and
+   explicit remaining budget. Missing, revoked, expired or mismatched authority
+   refuses. These inputs are not signed credentials and create no new approval
+   mechanism. No retry-count, spend or lease-duration default is invented.
+5. Expired/missing lease or orphaned run yields interruption/reconciliation,
+   not automatic requeue. Unknown/unresolved action outcomes block replacement
+   actions. Only an explicit matching authoritative result can resolve uncertainty;
+   absence of a receipt is not evidence of failure. A completed action prevents
+   duplicate execution even when its run is orphaned.
+6. Cancellation/timeout prevents new dispatch immediately. In-flight work stays
+   `cancelling` until termination is confirmed; unknown cleanup cannot be called
+   complete. Late success may be retained as evidence without reopening authority
+   or a cancelled task. Restart never resets attempt budget or stopping criteria.
+7. Saved-result evidence reuses the same result identity rather than recomputing
+   for delivery. Posting, transport success or legacy `delivered_at` alone is not
+   acknowledgment. Lost/unknown acknowledgment preserves result/notice identity
+   for later consumer deduplication. The function cannot enqueue or send anything.
+
+### Proposed focused checks — not yet executed
+
+- Authorized queued attempt, duplicate replay and changed-request conflict.
+- Two proposals expose CAS expectations; applying a stale proposal to an advanced
+  snapshot rejects it. This does not claim a real worker-race test.
+- Orphan/unknown external outcome refuses replay; missing receipt and timeout do
+  not become retry permission. Wrong owner/action/task/digest cannot reconcile.
+- Old fence/attempt/version rejects callbacks; terminal attempt cannot be rewritten.
+- Cancellation/expiry before start refuses; in-flight cancellation waits for stop
+  proof. Unknown cleanup remains unresolved; cancelled work cannot resume.
+- Attempt exhaustion survives fresh evaluation of the same serialized fixture.
+- Saved result needs no recomputation; repeated/lost acknowledgment keeps stable
+  identity and legacy delivery flags remain unconfirmed.
+- Invalid type/enum/size/inconsistent states fail closed without input mutation;
+  provider text cannot alter authority, budgets or transition rules.
+- Import/evaluation deny ambient file/network/subprocess/environment access.
+
+Only focused offline tests and mandatory publication checks run for this slice.
+No competing full-suite or VM campaign. Review exact source independently and
+verify publication CI before serial integration. Real persistence, cross-process
+SQLite fencing, restart durability, consumers, delivery deduplication and all four
+WS-24 acceptance checkboxes remain unimplemented/unaccepted by this increment.
+WS-17 retains exclusive release/VM/full-suite coordination; WS-03/05 keep their
+creator, provider and source-policy boundaries. Later integration needs fresh
+scoped claims and the existing privacy/access/release decisions.
