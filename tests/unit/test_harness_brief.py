@@ -143,3 +143,29 @@ def test_unparsed_fresh_document_is_incomplete_coverage(tmp_path):
     assert result["freshness"] == "incomplete"
     assert result["report"]["candidates"] == []
     assert result["report"]["recommendation"] == "retain_pending_evidence"
+
+
+def test_injected_status_reader_never_touches_real_cache_or_preferences(monkeypatch):
+    from jarvis.status.models import model_access_status
+    monkeypatch.setattr(H,"read_report",lambda *a,**kw:pytest.fail("real cache read"))
+    monkeypatch.setattr(H,"configured_selection",lambda:pytest.fail("real preferences read"))
+    result=model_access_status(registry={"profiles":{}},access={},env={},
+                               harness_reader=lambda:{"ok":True,"synthetic":True})
+    assert result["harness_brief"]=={"ok":True,"synthetic":True}
+    assert result["profiles"]==[] and result["source"]=="registry"
+
+
+def test_failed_optional_reader_preserves_existing_status():
+    from jarvis.status.models import model_access_status
+    def broken(): raise ValueError("synthetic private detail")
+    result=model_access_status(registry={"profiles":{}},access={},env={},harness_reader=broken)
+    assert result["ok"] and result["harness_brief"]["ok"] is False
+    assert "synthetic private detail" not in json.dumps(result)
+    assert "coverage_gaps" in result
+
+
+def test_recognized_ids_do_not_claim_exhaustive_discovery(tmp_path):
+    result=H.refresh_report(tmp_path,fetch=lambda _:"claude-opus-5-5 futuristic-new-family-v1",selection=selection,now=NOW)
+    assert result["freshness"]=="recent"
+    assert any("not an exhaustive" in gap for gap in result["report"]["gaps"])
+    assert any("re-reads cached evidence" in gap for gap in result["report"]["gaps"])

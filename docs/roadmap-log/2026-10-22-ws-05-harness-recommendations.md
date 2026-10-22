@@ -16,3 +16,7 @@ After merge the limited foundation is source-landed, not accepted or installed. 
 ## R4 CI correction
 
 Initial published head49ebd29795b43422d02be685e77bdab8e1be7418 failed CI for the added tool and inventory/capability mismatches. Reviewed correction SHA d0a42d8adb59e5501d6c108e06ada0b9b6f4632b7f06f2ef5b7c5c5abf680339 reuses existing status_models output and restores MCP files exactly; protected40 guards are unchanged. Source24 files supersede historical R3 source25. Independent review accepts draft update, with amended-head CI/cross-system review pending. Focused415 passed/eight skipped, five matcher checks; unchanged native16 evidence reused. Receipt README distinguishes current R4 from immutable R3 history. No merge/install/model change.
+
+## R5 cross-system corrections
+
+Addressed six review groups in the bounded preference/status/skill/UI surface; no shared provider policy edit.209 backend/18 native tests plus seven matcher cases pass. Fresh focused review and exact-head CI pending. Claim scope aligned in its separate draft; both histories preserved on merge. No merge/install/model switch or live benchmark.

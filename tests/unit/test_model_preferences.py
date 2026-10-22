@@ -88,7 +88,8 @@ def test_a_draft_staged_before_the_fix_is_refused_at_confirm(tmp_path, monkeypat
                  (draft_id, now.isoformat(), (now + timedelta(minutes=5)).isoformat()))
     conn.commit()
     conn.close()
-    with pytest.raises(ModelPreferenceError, match="never lower it"):
+    # A legacy token is now refused before validation or any catalog request.
+    with pytest.raises(ModelPreferenceError, match="legacy draft"):
         confirm_preference(draft_id)
     assert list_preferences() == []
 

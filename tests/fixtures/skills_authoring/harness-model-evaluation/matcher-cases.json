@@ -1,6 +1,40 @@
-{"schema_version":1,"cases":[
-{"id":"daily-harness-brief","request":"Give me the daily brief harness model recommendation","expect_selected":true},
-{"id":"compare-subscription-models","request":"Evaluate new subscription models for the Mortimer harness controller","expect_selected":true},
-{"id":"model-confirmation","request":"Explain exact harness model change confirmation","expect_selected":true},
-{"id":"unrelated-weather","request":"What is the weather in Boston today?","expect_selected":false},
-{"id":"unrelated-email","request":"Summarize yesterday's email from Alice","expect_selected":false}]}
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "daily-harness-brief",
+      "request": "Give me the daily brief harness model recommendation",
+      "expect_selected": true
+    },
+    {
+      "id": "compare-subscription-models",
+      "request": "Evaluate new subscription models for the Mortimer harness controller",
+      "expect_selected": true
+    },
+    {
+      "id": "model-confirmation",
+      "request": "Explain exact harness model change confirmation",
+      "expect_selected": true
+    },
+    {
+      "id": "unrelated-weather",
+      "request": "What is the weather in Boston today?",
+      "expect_selected": false
+    },
+    {
+      "id": "unrelated-email",
+      "request": "Summarize yesterday's email from Alice",
+      "expect_selected": false
+    },
+    {
+      "id": "generic-daily-brief",
+      "request": "Give me my daily brief",
+      "expect_selected": false
+    },
+    {
+      "id": "generic-daily-brief-today",
+      "request": "What's on my daily brief today",
+      "expect_selected": false
+    }
+  ]
+}

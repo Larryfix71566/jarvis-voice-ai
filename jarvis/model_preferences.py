@@ -63,12 +63,16 @@ def list_preferences(*, conn=None) -> list[dict[str, Any]]:
 
 
 def _validate_choice(workload: str, profile: str, route: str,
-                     privacy: str | None = None) -> dict[str, str]:
+                     privacy: str | None = None, *,
+                     expected_validation_digest: str | None = None) -> dict[str, str]:
     try:
         policy, profile_record, route_record = inspect_route_choice(workload, profile, route)
         assert_model_quality(policy, profile_record)
     except ModelRouteError as exc:
         raise ModelPreferenceError(str(exc)) from exc
+    if (expected_validation_digest is not None and not hmac.compare_digest(
+            expected_validation_digest, _validation_digest(policy, profile_record, route_record))):
+        raise ModelPreferenceError("model route proposal is stale; validation configuration changed")
     if not model_profile_exists(profile, workload=workload):
         raise ModelPreferenceError(f"unknown model profile {profile!r}")
     selected_privacy = privacy or policy.privacy
@@ -115,6 +119,10 @@ def _digest(value: Any) -> str:
                                      allow_nan=False).encode()).hexdigest()
 
 
+def _validation_digest(policy, record, access) -> str:
+    return _digest({"policy": asdict(policy), "profile": record, "access": asdict(access)})
+
+
 def _identity(workload: str, profile: str, route: str, privacy: str) -> dict[str, Any]:
     policy, record, access = inspect_route_choice(workload, profile, route)
     model = record.get("model")
@@ -126,6 +134,8 @@ def _identity(workload: str, profile: str, route: str, privacy: str) -> dict[str
             "access": asdict(access), "policy": asdict(policy),
             "temperature": record.get("temperature"), "tier": record.get("tier"),
             "profile_digest": _digest(record),
+            "validation_digest": _validation_digest(policy, record, access),
+            "resolution_state": "resolved",
             "eligibility": "unverified", "runtime_adoption": "unverified"}
 
 
@@ -147,8 +157,16 @@ def _proposal(db, choice: dict[str, str]) -> dict[str, Any]:
     flags = {key: os.environ.get(key) for key in (
         "JARVIS_MODEL_ROUTING_ENABLED", "JARVIS_MODEL_PREFERENCES_ENABLED", "JARVIS_LLM_ACCESS_MODE",
         f"JARVIS_MODEL_PROFILE_{workload.upper()}", f"JARVIS_MODEL_ROUTE_{workload.upper()}")}
+    try:
+        current_identity = _identity(workload, **current)
+    except ModelRouteError:
+        # A broken saved selection must not prevent a valid repair. Bind the
+        # unresolved labels, saved revision and overrides, never invent a model.
+        current_identity = {**current, "model": None, "resolution_state": "unresolved",
+                            "resolution_error": "Configured profile or route is unavailable.",
+                            "eligibility": "unverified", "runtime_adoption": "unverified"}
     return {"schema_version": 1, "workload": workload,
-            "current": _identity(workload, **current),
+            "current": current_identity,
             "candidate": _identity(**choice), "saved_revision": saved,
             "flags": flags, "preferences_enabled": use_saved,
             "evidence": "No comparative evaluation is asserted by this configuration preview.",
@@ -159,7 +177,10 @@ def _proposal(db, choice: dict[str, str]) -> dict[str, Any]:
 def stage_preference(workload: str, profile: str, route: str,
                      privacy: str | None = None, *, conn=None) -> dict[str, Any]:
     _require_supported_workload(workload)
-    choice = _validate_choice(workload, profile, route, privacy)
+    try:
+        choice = _validate_choice(workload, profile, route, privacy)
+    except ModelRouteError as exc:
+        raise ModelPreferenceError(str(exc)) from exc
     created = datetime.now(timezone.utc)
     expires = created + timedelta(seconds=DRAFT_TTL_S)
     db, own = _conn(conn)
@@ -180,6 +201,8 @@ def stage_preference(workload: str, profile: str, route: str,
             )
         return {"draft_id": draft_id, **choice, "expires_at": expires.isoformat(),
                 "proposal_digest": digest, "proposal": proposal}
+    except ModelRouteError as exc:
+        raise ModelPreferenceError(str(exc)) from exc
     finally:
         if own:
             db.close()
@@ -188,23 +211,35 @@ def stage_preference(workload: str, profile: str, route: str,
 def confirm_preference(draft_id: str, *, conn=None) -> dict[str, Any]:
     db, own = _conn(conn)
     try:
-        # Re-read, validate, consume and save under one SQLite writer transaction.
-        # Two connections cannot both consume a draft or overwrite a newer choice.
+        query = ("SELECT draft_id, workload, profile, route, privacy, expires_at "
+                 "FROM model_route_drafts WHERE draft_id = ?")
+        row = db.execute(query, (draft_id,)).fetchone()
+        if row is None:
+            raise ModelPreferenceError(f"unknown or already confirmed model route draft {draft_id!r}")
+        original = dict(row)
+        if _parse_iso(row["expires_at"]) <= datetime.now(timezone.utc):
+            raise ModelPreferenceError("model route draft expired; create a new preview")
+        _require_supported_workload(row["workload"])
+        parts = draft_id.split(":")
+        if len(parts) != 3 or parts[0] != "v1" or len(parts[2]) != 64:
+            raise ModelPreferenceError("legacy draft lacks exact model confirmation; create a new preview")
+        fields = {key: row[key] for key in ("workload", "profile", "route", "privacy")}
+        preview = _proposal(db, fields)
+        if not hmac.compare_digest(parts[2], _digest(preview)):
+            raise ModelPreferenceError("model route proposal is stale; current model or routing changed; create a new preview")
+        # Confidential catalog validation may wait on the network. Bind the
+        # metadata it actually validates, without holding SQLite's writer lock.
+        choice = _validate_choice(**fields,
+            expected_validation_digest=preview["candidate"]["validation_digest"])
+        # Re-read, consume and save atomically. Both the row and full proposal
+        # must still match after validation; competing confirmations cannot win.
         with db:
             db.execute("BEGIN IMMEDIATE")
-            row = db.execute(
-                "SELECT draft_id, workload, profile, route, privacy, expires_at "
-                "FROM model_route_drafts WHERE draft_id = ?", (draft_id,)
-            ).fetchone()
-            if row is None:
-                raise ModelPreferenceError(f"unknown or already confirmed model route draft {draft_id!r}")
+            row = db.execute(query, (draft_id,)).fetchone()
+            if row is None or dict(row) != original:
+                raise ModelPreferenceError("model route draft changed or was already confirmed; create a new preview")
             if _parse_iso(row["expires_at"]) <= datetime.now(timezone.utc):
                 raise ModelPreferenceError("model route draft expired; create a new preview")
-            _require_supported_workload(row["workload"])
-            choice = _validate_choice(row["workload"], row["profile"], row["route"], row["privacy"])
-            parts = draft_id.split(":")
-            if len(parts) != 3 or parts[0] != "v1" or len(parts[2]) != 64:
-                raise ModelPreferenceError("legacy draft lacks exact model confirmation; create a new preview")
             proposal = _proposal(db, choice)
             if not hmac.compare_digest(parts[2], _digest(proposal)):
                 raise ModelPreferenceError("model route proposal is stale; current model or routing changed; create a new preview")
@@ -223,6 +258,8 @@ def confirm_preference(draft_id: str, *, conn=None) -> dict[str, Any]:
                 "saved_preference": saved, "configured_model": proposal["candidate"]["model"],
                 "state": "saved", "runtime_adoption": "unverified",
                 "message": "Model route saved; active runtime adoption is unverified."}
+    except ModelRouteError as exc:
+        raise ModelPreferenceError(str(exc)) from exc
     finally:
         if own:
             db.close()

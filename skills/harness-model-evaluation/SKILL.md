@@ -1,11 +1,13 @@
 ---
 name: harness-model-evaluation
-description: Evaluate Mortimer harness controller models and subscription releases. Give daily brief model recommendations, compare controller evidence, plan synthetic evaluations, and explain exact model change confirmation.
+description: Evaluate Mortimer harness controller models and subscription releases. Compare controller evidence, plan synthetic evaluations, and explain exact harness model change confirmation.
 ---
 
 # Harness model evaluation
 
 Use Mortimer as Larry's interface. External subscription CLIs are implementation details. This skill supplies instructions; it does not grant tools, account access, spending authority, or permission to change a model.
+
+Apply to requests about harness/controller model evidence. A generic daily brief request is not a request for this evaluation. Capability/tool admission is enforced only by the opt-in v2 selector; the legacy matcher selects instructions without granting execution authority.
 
 1. Establish mode: **daily brief**, **evaluation plan**, **authorized review**, or **model proposal**. A daily check never implies authorization for the other modes.
 2. Read [evidence and baseline](references/evidence-baseline.md). Date each source. Separate official documentation, account eligibility, adapter compatibility, and measured harness results. Missing evidence stays unknown. A release announcement is not proof of account access or superiority.

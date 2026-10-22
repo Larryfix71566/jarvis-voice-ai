@@ -1,6 +1,10 @@
+# Current R5 review corrections
+
+See [R5 dispositions](r5-dispositions.md) and r5-source-evidence.json for the fixes after the independent Opus5.5 code review. Fresh focused review and publication-head CI are pending; all earlier identity/test claims below remain historical. No merge/install/model switch is authorized.
+
 # Recommendation-only publication evidence
 
-## Current R4 CI correction
+## Historical R4 CI correction
 
 Draft PR #242 initially published R3 at `49ebd29795b43422d02be685e77bdab8e1be7418`. Its clean-runner CI exposed a new MCP tool that violated the frozen 40-tool Developer menu, unsupported capability labels, and stale skill/auth inventory assertions. R4 fixes those integration gaps without changing the frozen schema/count pins or historical capability fixtures.
 

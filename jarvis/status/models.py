@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from jarvis import keyhealth
 from jarvis.status.providers import coverage_gaps, discover_providers
@@ -20,7 +20,8 @@ SUBSCRIPTION_HEALTH = "n/a (subscription)"
 
 
 def model_access_status(*, registry: dict | None = None, access: dict | None = None,
-                        env: Mapping[str, str] = os.environ) -> dict[str, Any]:
+                        env: Mapping[str, str] = os.environ,
+                        harness_reader: Callable[[], dict[str, Any]] | None = None) -> dict[str, Any]:
     from jarvis.model_routing import ModelRouteError, available_routes, load_access_config
 
     if registry is None:
@@ -35,9 +36,15 @@ def model_access_status(*, registry: dict | None = None, access: dict | None = N
 
     # Add passive evidence to the existing tool response; preserve its exact
     # registered schema/menu and do not grant a new Developer operation.
-    from jarvis.status.harness import read_report
-    from jarvis.status.daily import STATUS_DIR
-    harness_brief = read_report(STATUS_DIR)
+    if harness_reader is None:
+        from jarvis.status.harness import read_report
+        from jarvis.status.daily import STATUS_DIR
+        harness_reader = lambda: read_report(STATUS_DIR)
+    try:
+        harness_brief = harness_reader()
+    except Exception:
+        # Optional cached evidence must not suppress established health status.
+        harness_brief = {"ok": False, "error": "Harness evidence unavailable."}
 
     profiles_raw = registry.get("profiles") or {}
     profiles: list[dict[str, Any]] = []

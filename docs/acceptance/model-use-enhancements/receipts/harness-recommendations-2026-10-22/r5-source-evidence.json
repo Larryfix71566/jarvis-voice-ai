@@ -1,0 +1,85 @@
+{
+  "prior_reviewed_head": "edeed6bae032eb0b7a5421715c69abf4744129ea",
+  "provider_base": "636880eabbe9dc756c30df7128d0a90c02d222bd",
+  "changed_source_files": [
+    {
+      "path": "config/skills.yaml",
+      "sha256": "26be9686c190a5628a53ae3b465c6d3990cd923c6bbace31155556b3ab8ac3de"
+    },
+    {
+      "path": "jarvis/bot/model_route_tool.py",
+      "sha256": "3d74710cb4cd03004236459ceea73d8a0878c9a4b4095e8f26041aaaa862abc9"
+    },
+    {
+      "path": "jarvis/model_preferences.py",
+      "sha256": "a8e15169e2e7ebf7233de586b83d7160d70611e14c36bc147d4c88bdd823a93a"
+    },
+    {
+      "path": "jarvis/status/harness.py",
+      "sha256": "937717215ef7798ef7faeecf0e2a323655acb8de537843c9a6d487cfb6870429"
+    },
+    {
+      "path": "jarvis/status/models.py",
+      "sha256": "b9cb11d1a37dac3f2c970cdb13d7618ad4a05dba722cec0c1c4a3f937d7b48a9"
+    },
+    {
+      "path": "macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift",
+      "sha256": "084d4f7420d9f6f8bcd6afc16c2e040dbf117ecaf35f1f89a357638f16798087"
+    },
+    {
+      "path": "macos/MortimerHost/Tests/MortimerHostTests/ModelRouteControlsTests.swift",
+      "sha256": "3012a0a291f4baa6dd889fbd9ee0c97f919d8f289e66b785c901b8f4fa5c0fa7"
+    },
+    {
+      "path": "skills/harness-model-evaluation/SKILL.md",
+      "sha256": "3666f6cef783fdf97c173170c312db2441b193a425b356400f8b7962685512d2"
+    },
+    {
+      "path": "skills/harness-model-evaluation/mortimer.yaml",
+      "sha256": "873ab7ba984740cda97aec1cb4bdd6c7b5124c6aa1b68307362792c79c7cf0a2"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/daily-brief.md",
+      "sha256": "b3a3ba7aab56403ed9e1fcec701505b31c413576a48f3c90e1c738ab80e3fcce"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/evidence-baseline.md",
+      "sha256": "58f1578e47da228bce7bb2df2080cd9a1ef16cd116596789215e63f7c825664f"
+    },
+    {
+      "path": "tests/fixtures/skills_authoring/harness-model-evaluation/matcher-cases.json",
+      "sha256": "e57f9718ab875966b15d3a8f481c88d526e1ec07ed2da3431d51d3f01da5bc97"
+    },
+    {
+      "path": "tests/unit/test_harness_brief.py",
+      "sha256": "43dd44cd881611ec623c076e0529502b90571f029581ab9a2a795d4c28973a5c"
+    },
+    {
+      "path": "tests/unit/test_harness_confirmation.py",
+      "sha256": "359a5c3a160f50658652f6b77807404749b4f08610dfd1e1d0f61e229bcd47c3"
+    },
+    {
+      "path": "tests/unit/test_model_preferences.py",
+      "sha256": "eafba3e6c677a813579de24abb1fbddd5dd67b17f3c89ffe0b867ec0743c9efe"
+    },
+    {
+      "path": "tests/unit/test_status_models.py",
+      "sha256": "97040ba742f2a8561075e17fbbe6a51f3ec0058d15d053132aa0087930c20a0b"
+    }
+  ],
+  "focused_backend_passed": 209,
+  "native_passed": 18,
+  "matcher_cases_passed": 7,
+  "package_revision": "8090fe89b6f92b7ec004c8705bad8865a9916707e3c97fe2ccb963268bcb5cd0",
+  "independent_review": "pending",
+  "publication_CI": "pending",
+  "live_benchmarks": 0,
+  "model_changes": 0,
+  "installed": false,
+  "log_sha256": {
+    "R5_FOCUSED_INITIAL.log": "9dc546150cd23b66fefda1eba0cf917499f070c2bd414e05095f72ad175419ad",
+    "R5_CALLER_TESTS.log": "91d244c3dac93421a3971eed528f6340ab77169299d05dee4bfdcc0f843e50cd",
+    "R5_SWIFT_TESTS_PERMITTED.log": "c10015ef72b586b4c10586ed98f5f4fe406abcfd49cb57b4ccbff1ed12163b35",
+    "R5_SKILL_VALIDATION.json": "6e265de7d38d0b9276f367bef0f6ad39644a9611830543f7fdae4d88166b2f6c"
+  }
+}

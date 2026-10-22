@@ -6,10 +6,13 @@ As of 2026-10-22, the parent plan and provider-owner evidence establish:
 - Historical single synthetic capability sessions: Claude 4.25 seconds, Codex 2.97 seconds. Different sessions, no comparison claim, no authorization to repeat them.
 - Provider owner verified CLI 2.1.291 exact Opus 5.5 `claude-opus-5-5` and Fable 5.1 `claude-fable-5-1`. Sonnet 5.5 and supported Codex Sol/Astra models are candidates requiring fresh exact-ID/account verification before a test invocation. They are not pre-approved benchmark calls.
 
-Official references (consult fresh, record retrieval/source date):
+Fixed public-document refresh sources (record retrieval/source date):
 - https://code.claude.com/docs/en/model-config
+- https://learn.chatgpt.com/docs/models.md
+- https://learn.chatgpt.com/docs/app-server.md
+
+Additional background references, not fetched by the collector:
 - https://code.claude.com/docs/en/cli-reference
-- https://learn.chatgpt.com/docs/app-server
 - https://learn.chatgpt.com/docs/auth
 
 An account-specific model list is stronger availability evidence than a public document, but still not proof the harness tool adapter works. `model/list` and `turn/interrupt` names in documentation do not prove those operations exist in the installed version. Never launch a new service or a provider probe during the read-only brief to fill this gap.

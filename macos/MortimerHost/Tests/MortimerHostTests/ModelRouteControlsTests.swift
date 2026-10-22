@@ -269,4 +269,39 @@ final class ModelRouteControlsTests: XCTestCase {
         XCTAssertNil(vm.modelRouteDraftID)
     }
 
+    func testUnresolvedCurrentSelectionCanPreviewAndConfirmRepair() async {
+        var confirms = 0
+        let vm = model(load: { self.catalog() }, stage: { choice in
+            var result = Self.exactDraft(choice).objectValue!
+            var proposal = result["proposal"]!.objectValue!
+            proposal["current"] = .object(["model": .null, "profile": .string("removed-profile"),
+                "route": .string("direct_api"), "privacy": .string("approved_external"),
+                "resolution_state": .string("unresolved")])
+            result["proposal"] = .object(proposal)
+            return .object(result)
+        }, confirm: { _ in
+            confirms += 1
+            return .object(["ok": .bool(true), "state": .string("saved"),
+                "configured_model": .string("synthetic-proposed-v1"), "runtime_adoption": .string("unverified")])
+        })
+        await vm.stageModelRoute()
+        XCTAssertNotNil(vm.modelRouteDraftID)
+        XCTAssertTrue(vm.modelRouteProposalSummary?.contains("Configured selection: unresolved") == true)
+        await vm.confirmModelRoute()
+        XCTAssertEqual(confirms, 1)
+        XCTAssertTrue(vm.modelRouteNote?.contains("active runtime adoption is unverified") == true)
+    }
+
+    func testMissingCurrentIdentityWithoutExplicitUnresolvedStateIsRejected() async {
+        let vm = model(load: { self.catalog() }, stage: { choice in
+            var result = Self.exactDraft(choice).objectValue!
+            var proposal = result["proposal"]!.objectValue!
+            proposal["current"] = .object(["model": .null])
+            result["proposal"] = .object(proposal)
+            return .object(result)
+        })
+        await vm.stageModelRoute()
+        XCTAssertNil(vm.modelRouteDraftID)
+    }
+
 }

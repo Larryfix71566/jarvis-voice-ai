@@ -48,5 +48,5 @@ Impact if wrong: **high** due to shared and persistent preference behavior. Regr
 
 No source, frozen patch or active candidate was edited. No push, merge, install, service start, settings/model change, inference or benchmark occurred during this review.
 
-Structured assessment: independent-assessment.json. This review is bound solely to the R4 source SHA above.
+Structured assessment: [r4-independent-assessment.json](r4-independent-assessment.json). Publication filename correction only; the original frozen review used independent-assessment.json in its separate R4 folder. The similarly named file in this combined receipt directory is historical R3. This review is bound solely to the R4 source SHA above.
 

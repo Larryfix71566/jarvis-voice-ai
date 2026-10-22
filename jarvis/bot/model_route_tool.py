@@ -52,7 +52,8 @@ async def handle_model_route(arguments: dict[str, Any]) -> str:
         draft = stage_preference(workload, profile, route, privacy)
         proposal = draft["proposal"]
         current, candidate = proposal["current"], proposal["candidate"]
-        return (f"Configured selection: {current['model']} via {current['route']}. "
+        current_model = current["model"] or "unresolved (configured profile or route unavailable)"
+        return (f"Configured selection: {current_model} via {current['route']}. "
                 f"Proposed selection: {candidate['model']} via {candidate['route']} "
                 f"with {candidate['privacy']} privacy. Eligibility and active runtime are unverified. "
                 "Review and confirm a supported selection in Mortimer Model Access; "

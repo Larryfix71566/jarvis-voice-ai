@@ -101,3 +101,91 @@ async def test_voice_preview_has_exact_identity_but_no_approval_token():
     assert "Eligibility and active runtime are unverified" in result
     assert "v1:" not in result
     assert not P.list_preferences()
+
+
+def test_removed_saved_profile_can_be_repaired_without_inventing_current_model():
+    P.confirm_preference(draft()["draft_id"])
+    with get_conn() as db:
+        db.execute("UPDATE model_route_preferences SET profile='removed-profile' WHERE workload='developer'")
+    repair=draft()
+    current=repair["proposal"]["current"]
+    assert current["profile"] == "removed-profile" and current["model"] is None
+    assert current["resolution_state"] == "unresolved"
+    assert P.confirm_preference(repair["draft_id"])["state"] == "saved"
+    assert P.list_preferences()[0]["profile"] == "claude-opus"
+
+
+def test_unresolved_override_is_bound_and_changed_override_refuses(monkeypatch):
+    monkeypatch.setenv("JARVIS_MODEL_PROFILE_DEVELOPER", "removed-profile")
+    repair=draft()
+    assert repair["proposal"]["current"]["model"] is None
+    monkeypatch.setenv("JARVIS_MODEL_PROFILE_DEVELOPER", "another-removed-profile")
+    with pytest.raises(P.ModelPreferenceError,match="stale"):
+        P.confirm_preference(repair["draft_id"])
+    assert not P.list_preferences()
+
+
+def test_remaining_route_errors_use_preference_error_envelope(monkeypatch):
+    monkeypatch.setattr(P,"_identity",lambda *a,**kw: (_ for _ in ()).throw(P.ModelRouteError("synthetic identity failure")))
+    with pytest.raises(P.ModelPreferenceError,match="synthetic identity failure"):
+        draft()
+    assert not P.list_preferences()
+
+
+def test_validation_cannot_use_transient_different_configuration(monkeypatch):
+    d=draft(); original=P.inspect_route_choice; calls=[]
+    def transient(*args,**kwargs):
+        values=original(*args,**kwargs); calls.append(args)
+        # Preview current + candidate use A; validator sees B; later reads would
+        # return A again. Bind what was actually validated, not just two reads.
+        if len(calls)==3:
+            policy,record,access=values
+            return policy,dict(record,model="synthetic-transient-model"),access
+        return values
+    monkeypatch.setattr(P,"inspect_route_choice",transient)
+    with pytest.raises(P.ModelPreferenceError,match="validation configuration changed"):
+        P.confirm_preference(d["draft_id"])
+    assert len(calls)==3 and not P.list_preferences()
+
+
+@pytest.mark.parametrize("during_validation",["none","draft","current","configuration"])
+def test_catalog_wait_releases_writer_and_rechecks_afterward(monkeypatch,during_validation):
+    from tests.unit.test_model_preferences import _confidential_catalog
+    import sqlite3,os
+    monkeypatch.setenv("SAYGM_API_KEY","synthetic-key")
+    monkeypatch.setattr("jarvis.saygm.fetch_catalog",lambda **kw:_confidential_catalog())
+    d=P.stage_preference("memory","claude-sonnet-5","saygm","confidential")
+    checks=[]; original=P.inspect_route_choice
+    def catalog(**kwargs):
+        # Real independent SQLite writer succeeds while fake network validation
+        # is pending. This would raise 'database is locked' in the prior patch.
+        with sqlite3.connect(os.environ["JARVIS_DB_PATH"],timeout=0) as other:
+            other.execute("BEGIN IMMEDIATE")
+            if during_validation=="draft":
+                other.execute("UPDATE model_route_drafts SET route='local' WHERE draft_id=?",(d["draft_id"],))
+            elif during_validation=="current":
+                other.execute("INSERT INTO model_route_preferences(workload,profile,route,privacy,updated_at) VALUES ('memory','claude-sonnet-5','local','confidential','synthetic')")
+        if during_validation=="configuration":
+            def changed(*args,**kw):
+                policy,record,access=original(*args,**kw)
+                return policy,dict(record,model="synthetic-changed-model"),access
+            monkeypatch.setattr(P,"inspect_route_choice",changed)
+        checks.append("writer available")
+        return _confidential_catalog()
+    monkeypatch.setattr("jarvis.saygm.fetch_catalog",catalog)
+    if during_validation=="none":
+        assert P.confirm_preference(d["draft_id"])["state"]=="saved"
+    else:
+        with pytest.raises(P.ModelPreferenceError,match="stale|changed"):
+            P.confirm_preference(d["draft_id"])
+        assert all(x["route"]!="saygm" for x in P.list_preferences())
+    assert checks==["writer available"]
+
+
+@pytest.mark.asyncio
+async def test_voice_preview_describes_unresolved_current_selection(monkeypatch):
+    from jarvis.bot.model_route_tool import handle_model_route
+    monkeypatch.setenv("JARVIS_MODEL_PROFILE_DEVELOPER","removed-profile")
+    result=await handle_model_route(dict(workload="developer",profile="claude-opus",route="direct_api",confirm=False))
+    assert "Configured selection: unresolved" in result and "Proposed selection:" in result
+    assert "v1:" not in result

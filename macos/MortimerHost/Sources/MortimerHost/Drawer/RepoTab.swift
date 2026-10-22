@@ -245,7 +245,9 @@ final class RepoViewModel {
                proposal["candidate"]?["profile"]?.stringValue == choice.profile,
                proposal["candidate"]?["route"]?.stringValue == choice.route,
                proposal["candidate"]?["privacy"]?.stringValue == choice.privacy,
-               let currentModel = proposal["current"]?["model"]?.stringValue, !currentModel.isEmpty,
+               let current = proposal["current"],
+               (!(current["model"]?.stringValue ?? "").isEmpty ||
+                (current["model"] == .null && current["resolution_state"]?.stringValue == "unresolved")),
                let candidateModel = proposal["candidate"]?["model"]?.stringValue, !candidateModel.isEmpty {
                 modelRouteDraftID = draftID
                 modelRouteDraftChoice = choice
@@ -295,7 +297,9 @@ final class RepoViewModel {
         guard let proposal = modelRouteProposal,
               let current = proposal["current"], let candidate = proposal["candidate"] else { return nil }
         func value(_ item: JSONValue, _ key: String) -> String { item[key]?.stringValue ?? "unknown" }
-        return "Configured selection: \(value(current, "model")) via \(value(current, "route"))\n"
+        let currentModel = current["resolution_state"]?.stringValue == "unresolved"
+            ? "unresolved (configured profile or route unavailable)" : value(current, "model")
+        return "Configured selection: \(currentModel) via \(value(current, "route"))\n"
             + "Proposed selection: \(value(candidate, "model")) via \(value(candidate, "route"))\n"
             + "Privacy: \(value(current, "privacy")) → \(value(candidate, "privacy"))\n"
             + "Eligibility and active runtime: unverified. Quality, latency and quota: unmeasured.\n"

@@ -108,6 +108,8 @@ def _report(sources, selection, now):
             "recommendation": "retain_pending_evidence", "switching_supported": False,
             "inference_calls": 0, "automatic_change": False,
             "gaps": ["Routed selection is not the voice baseline; legacy voice may use separate Settings.",
+                     "Discovery recognizes only configured Claude numeric IDs and Codex Sol/Astra ID patterns; it is not an exhaustive release catalog.",
+                     "The daily hook re-reads cached evidence; only an explicit document refresh obtains newer sources.",
                      "Active controller, account eligibility, adapter acceptance and comparable results are unverified.",
                      "Harness switching is blocked pending a durable approval contract across all writers and runtime."],
             "summary": f"Harness model brief: {len(ids)} model IDs appear in cached official documentation. "
@@ -171,7 +173,7 @@ def read_report(status_dir: Path, *, selection=configured_selection, now=None) -
     report["evidence_generated_at"] = raw.get("generated_at")
     if freshness != "recent":
         report["summary"] = (f"Harness evidence is {freshness.replace('_', ' ')}. "
-                             "Documented IDs below are historical evidence, not current availability or an upgrade recommendation. "
+                             "Cached model IDs are historical evidence, not current availability or an upgrade recommendation. "
                              "The active controller is unverified; switching is blocked.")
     return {"ok": True, "report": report, "freshness": freshness, "cached_only": True}
 
