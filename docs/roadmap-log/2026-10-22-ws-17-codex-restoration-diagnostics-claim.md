@@ -23,3 +23,8 @@ never substitute a different helper into an existing frozen rollback snapshot.
 No runtime, configuration, access, model, harness, cleanup or acceptance change.
 Other owners and all checkboxes remain unchanged. PR254 findings stay separate
 from this bounded continuation and do not authorize its suggested changes.
+
+The row uses after-merge lifecycle wording for this registration only. The
+prospective merge tree is checked as main so registration does not leave a
+claimed-but-merged branch error under the strict policy. No installer
+implementation, release or restoration is described as landed by that wording.
