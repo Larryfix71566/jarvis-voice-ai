@@ -41,9 +41,15 @@ authorization. Renewed exact-binary workload acceptance remains blocked until
 fresh bounded live-test authorization; existing cost confirmations stand.
 
 Separate alpha.11 integration candidate starts at coordinator-verified main
-2944080 and preserves frozen014f915. Both dated canonical-plan additions and
+2944080 and preserves frozen 014f915. Both dated canonical-plan additions and
 the active #257 harness claim/CX-28 are retained; no runtime/test bytes change
 from the reviewed provider slice. Removed raw personal launcher paths from the
 final receipt and corrected the author disposition without rewriting history.
 Fresh docs-delta review and publication CI precede coordinator-owned merge.
 No installation, activation, live tests or acceptance advancement.
+
+Integration source 5889a92 passed independent tools-disabled Fable 5.1 docs
+review with no blocking findings. Strict roadmap passes with 0 errors and 0 warnings.
+Structural assertions preserve both complete dated additions, all acceptance
+checkboxes, exact active harness fields/CX-28 and reviewed runtime/test blobs.
+Fresh publication CI remains pending; the serial coordinator alone owns merge.

@@ -1,0 +1,40 @@
+{
+  "base_main": "29440804baf40292d84acbb0798646e67d0c510a",
+  "frozen_provider": "014f915bd8f8ac9a5e187779601fe1718d7e21b5",
+  "active_harness_fields_unchanged": {
+    "Owner": true,
+    "Status": true,
+    "Where": true,
+    "Scope": true,
+    "Next step": true
+  },
+  "CX28_unchanged": true,
+  "all_roadmap_checkboxes_unchanged": true,
+  "both_full_dated_plan_additions_preserved": true,
+  "runtime_test_blobs": {
+    "jarvis/subscription.py": "2231e174d919b5dcca05e3212aefa152b3cd4989",
+    "tests/unit/test_subscription_capability.py": "06bc5fe0b3c837f82976d324368901b1e4e4e041"
+  },
+  "personal_home_paths_absent_from_final_provider_receipt_and_review": true,
+  "strict_roadmap": "0 errors;0 warnings",
+  "test_execution": "No test suites rerun; unchanged reviewed runtime/test identities; fresh CI pending",
+  "integration_source_head": "5889a92be95d5181113d839f626619332123f49a",
+  "review": {
+    "source_head": "5889a92be95d5181113d839f626619332123f49a",
+    "input_sha256": "e42002795302b0e0fd64bfb71156cb4445526e7027c36c34ed021652b75e8b84",
+    "requested_model": "claude-fable-5-1",
+    "returned_models": [
+      "claude-fable-5-1"
+    ],
+    "tools_enabled": false,
+    "automatic_fallback": false,
+    "direct_api_credentials_inherited": false,
+    "finished_at": "2026-10-22T23:16:48.467051+00:00",
+    "exact_model_verified": true,
+    "review_complete": true,
+    "verdict": "no_blocking_findings",
+    "scope": "Independent docs-only review; runtime identities and original dated-section equivalence independently asserted by local structural checks, not reviewer execution."
+  },
+  "publication_ci": "Pending for new integration publication head; old PR244 CI does not certify this combination.",
+  "scope": "Source integration only; coordinator owns merge. No installation, service/model changes, activation, live test or checkbox closure."
+}
