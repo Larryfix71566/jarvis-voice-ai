@@ -15,7 +15,7 @@ This is documentation and read-only source inventory, not runtime implementation
   source hashes, metadata type inventory and five passing CI checks for that head.
   The subsequent correction requires a fresh review; prior verdicts stay historical.
 
-Three source/scope reviews ran through the authenticated Max subscription,
+Four source/scope reviews ran through the authenticated Max subscription,
 with tools/MCP/hooks disabled and no direct API credentials or fallback.
 No live benchmark, imported script execution or implementation test ran.
 No user-dependent acceptance passed; all twelve gates are inventoried in the
@@ -24,3 +24,7 @@ existing canonical plan. The claim still must land on main before code edits.
 `rereview-7f34dde/` preserves the third REVISE verdict and receipt; its input is
 the frozen `corrected-claim-review/review-input.json`. The next correction
 addresses its six documentation findings. Review outcomes remain historical.
+
+`approved-62f8805/` preserves the fourth independent APPROVE review and its
+receipt, implementation follow-ups and third-input integrity check. Its approved
+semantic contract is unchanged by the later registration-branch separation.

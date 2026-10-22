@@ -21,7 +21,8 @@ is recorded.
 Status: documentation claim only; source implementation waits for the matching
 claim to land on main under ROADMAP §0.3. Owner: Codex, task
 `01a16137-c45f-7451-aeae-0c539af41015`, branch
-`codex/ws03-compatibility-20261022`, baseline `636880e`.
+`codex/ws03-compatibility-p0-20261022` after this claim lands; registration
+PR #248 uses `codex/ws03-compatibility-20261022`, baseline `636880e`.
 Larry requested separate WS-03/WS-20 completion work and use of authenticated
 Claude Max for bounded implementation/review. WS-20 is excluded here.
 
@@ -59,8 +60,12 @@ Three bounded Claude Max reviews of the claim and partial source excerpts return
 REVISE. The latest reviewed `7f34dde`; the corrections below address its six
 documentation findings as well as the earlier script and field-schema findings.
 All reviews and input/source receipts are preserved in the WS-03 claim receipt
-directory. A fresh independent
-review of these corrections is required. These are advisory scope reviews, not
+directory. The fourth independent review of `62f8805` returned APPROVE and
+closed all six findings; its unmodified response/receipt and non-blocking
+implementation notes are retained. A subsequent registration-only correction
+separates the future implementation branch from the claim publication branch,
+so the main-first claim does not immediately become a merged-branch drift error.
+That delta receives a focused review and fresh CI. These are advisory reviews, not
 full-source or implementation reviews; no acceptance evidence follows from them.
 
 - Enforce compatibility refusal in `parse_skill`, returning `None` for a blocked

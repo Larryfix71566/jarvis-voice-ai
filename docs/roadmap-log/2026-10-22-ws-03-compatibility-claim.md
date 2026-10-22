@@ -43,3 +43,12 @@ make authoring round-trip the closed schema, cover CLI failure diagnostics, and
 correct source compatibility claims during implementation. All six repository
 packages have string names/descriptions. Larry approved documentation-only
 claim merge after final review/CI; WS-20 owns the first serial merge slot.
+
+The fourth independent review APPROVED `62f8805`, closing all six findings.
+Post-merge checker simulation then reproduced one registration error: the
+claimed implementation branch was the same branch about to merge as #248.
+Where now names only the distinct future `codex/ws03-compatibility-p0-20261022`;
+#248 publication history stays outside Where. Implementation still starts from
+main only after the claim lands. This registration-only correction preserves
+the approved P0 semantics and all other workstreams. Focused delta review and
+fresh exact-head CI are required; WS-20 retains the first merge slot.
