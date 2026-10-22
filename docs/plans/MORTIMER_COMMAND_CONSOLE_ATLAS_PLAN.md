@@ -3554,3 +3554,16 @@ The [scrubbed source receipt](../acceptance/command-console/receipts/ws17-native
 records hashes/results and keeps runtime/private/live/human/observation limits
 explicit. Metadata publication changes no verified application/test/config bytes
 and closes no checkbox. Historical non-passing attempts remain non-passing.
+
+
+### 2026-10-22 — Native visibility prerequisite continuation registered
+
+Codex owns the narrow test-host visibility diagnosis on
+`codex/ws17-native-visibility-20261022` after the claim merges. Frozen baseline
+`b97a8b3` retains its prior source/VM evidence. The native full-suite run exposed
+a hidden/inactive synthetic fixture; a focused prerequisite skip is not a pass.
+Reproduce before changing code, preserve every original assertion and distinguish
+fixture readiness from observer behavior. Initial implementation scope is the
+existing WindowVisibilityTests file; the observer changes only if a causal app
+defect is proven. No additional live inference, settings or human acceptance
+change. New source/test bytes require applicable review and verification.
