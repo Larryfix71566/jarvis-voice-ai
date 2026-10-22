@@ -55,10 +55,11 @@ voice/audio/VM tests are started.
 
 ### P0 implementation contract clarified after excerpt review
 
-Two bounded Claude Max reviews of the claim and partial source excerpts returned
-REVISE. The second reviewed `9413b5e`; the corrections below address its script
-admission and supported-field findings. Both reviews and their input/source
-receipts are preserved in the WS-03 claim receipt directory. A fresh independent
+Three bounded Claude Max reviews of the claim and partial source excerpts returned
+REVISE. The latest reviewed `7f34dde`; the corrections below address its six
+documentation findings as well as the earlier script and field-schema findings.
+All reviews and input/source receipts are preserved in the WS-03 claim receipt
+directory. A fresh independent
 review of these corrections is required. These are advisory scope reviews, not
 full-source or implementation reviews; no acceptance evidence follows from them.
 
@@ -78,15 +79,24 @@ full-source or implementation reviews; no acceptance evidence follows from them.
   implementation review; they cannot expand the accepted field set.
 - Diagnostics use a closed vocabulary and trusted field labels/counts only.
   Never echo unknown keys, values, package paths, YAML snippets or exception
-  messages. Cover parser/catalog/readiness/refusal/log sinks with canaries.
+  messages. Cover parser/catalog/readiness/refusal/log sinks and compatibility
+  failure output in CLI `--validate`/`--list`/`--explain` with canaries. Invalid
+  package labels in those diagnostics must not echo directory names or paths.
+  Normal valid inventory/task explanations retain their existing local purpose;
+  this is not a redesign of the operator CLI.
   Unsupported tool names must not leak via readiness reasons.
 - The offline main inventory found six packages, five generally enabled, and
   no `scripts/` directory. Preserve every existing valid package's outcome,
   including the separately pinned creator; compare #242's pending harness
   package before integrating it. P0 refuses every package with a `scripts`
   entry at its package root, including an empty directory, file or symlink,
-  through `parse_skill` on all admission paths. Inspect the entry without
-  following links or opening/executing script contents. This conservative rule
+  through `parse_skill` on all admission paths. Detect it by listing package-root
+  entries without following links, matching `entry.name.casefold() == "scripts"`
+  so case-sensitive and case-insensitive filesystems agree. The parser checks
+  only entries, without traversing or reading script contents. The existing
+  catalog integrity digest may still traverse and hash package bytes, including
+  script files; it never executes, decodes, injects or displays them. Keep existing
+  integrity reason precedence, such as `symlink_in_package`. This conservative rule
   has no new-versus-existing exception and does not infer optionality. Declared
   executable dependencies in frontmatter are outside the supported matrix and
   also refuse. Prose/code examples alone are not executable declarations: do
@@ -100,11 +110,17 @@ full-source or implementation reviews; no acceptance evidence follows from them.
   `TestParsing.test_scripts_are_detected` currently expects an admitted skill;
   `TestNoExecutionPath.test_a_bundled_script_is_never_read_or_run` currently
   expects a loaded skill plus a warning. The new contract expects refusal in
-  both, while retaining assertions that script content is never read, executed
-  or injected and private paths never leak. This behavior change is disclosed
+  both, while retaining assertions that the parser never reads script contents,
+  scripts are never executed or injected, and private paths never leak through
+  compatibility diagnostics. Integrity hashing remains as described above.
+  This behavior change is disclosed
   for review of this claim; it is not an unnoticed test weakening. Historical
   SW-B/C receipts stay unchanged and do not certify the new behavior. Rerun
-  affected integrity/selection contracts. Any additional changed frozen fixture
+  affected integrity/selection contracts. These are the two known admission
+  changes, not an exhaustive list of assertion updates. List any other changed
+  assertion by test ID in the implementation record before modifying it, and
+  summarize it in the implementation PR, including catalog script blockers,
+  diagnostic text or CLI output. Any additional changed frozen fixture
   outcome stops implementation for coordination before modifying that fixture.
 
 #### P0 supported frontmatter and resource matrix
@@ -119,13 +135,13 @@ service installation, tool grants, registry enablement or model change follows.
 | `name` | Supported unchanged | Required string; retain existing slug, reserved-name and 64-character validation. No scalar coercion. |
 | `description` | Supported unchanged | Required nonempty string, existing 1,024-character maximum. No scalar coercion. |
 | `metadata` | Supported with closed schema | Optional mapping; absence/empty mapping accepted. Present null/list/scalar refuses. Only the five subkeys below are admitted. |
-| `metadata.agent`, `.source`, `.concept_from` | Supported unchanged | Optional strings retained as descriptive data under bounded validation. They grant no routing, identity, permission or provenance authority. |
-| `metadata.promoted_successes`, `.promoted_failures` | Supported unchanged | Optional integers, excluding booleans; retain values as descriptive data, not acceptance evidence. |
+| `metadata.agent`, `.source`, `.concept_from` | Supported unchanged | Optional strings retained as descriptive data under bounded validation; present null refuses. They grant no routing, identity, permission or provenance authority. |
+| `metadata.promoted_successes`, `.promoted_failures` | Supported unchanged | Optional integers, excluding booleans; present null refuses. Retain values as descriptive data, not acceptance evidence. |
 | Other top-level or metadata keys, including otherwise portable optional fields | Explicitly unsupported in P0 | Refuse with a safe diagnostic; preserve source, never silently discard or guess a translation. Reviewed schema expansion may later admit known harmless descriptions. |
 | Invocation/tool/model/security controls, hooks, executable dependency declarations | Explicitly unsupported in P0 | Refuse regardless of true/false or apparently harmless values. No partial translation or ambient tool grant. |
 | Valid Markdown instructions, code examples and harmless links | Supported as text | Preserve existing body content/normalization; do not execute commands, fetch links, infer grants or treat text as policy. Text preservation is not proof that every instruction can be fulfilled. |
 | Existing bounded text references declared through the current package manifest | Preserve existing support | Keep existing containment, revision, size and read-only handling. A harmless `references/` directory alone is not a script trigger. Do not add automatic reference import, arbitrary fetching or executable handling. |
-| `scripts` entry at package root | Explicitly unsupported | Deterministic package refusal even if empty or claimed optional; no traversal or script-content read. Applies equally to registered, pinned and new packages. |
+| `scripts` entry at package root | Explicitly unsupported | Casefolded entry-name detection; any entry type refuses even if empty or claimed optional. The parser does not traverse/read scripts; the existing catalog digest may hash bytes without execution or injection. Applies equally to registered, pinned and new packages; integrity reason precedence is preserved. |
 | Binary/executable assets, full plugins/MCP servers and hosted services | Unsupported by this slice | Existing package validators still apply. No automatic install, execution or access. P0 text admission must never be presented as certification of these resources; adapters and required-resource completeness need separately scoped work. |
 | Unknown dependency semantics in natural-language instructions | Unknown, not certified | P0 does not infer a complete dependency graph from prose. No full-package compatibility/activation claim is allowed; future import/activation must resolve required resources before approval. Existing manually reviewed instruction use retains its current boundaries. |
 
@@ -134,6 +150,17 @@ the existing companion-manifest schema or reference containment checks. Preserve
 original source bytes/digests; blocked candidates stay unavailable, and there is
 no registry or live activation change in this claim. Safe diagnostic codes must
 distinguish unsupported from malformed without echoing unknown field names.
+
+`write_skill` and `skill_from_procedure`, already in the claimed module, must
+emit only matrix fields using type-safe YAML serialization or refuse before
+writing. A genuine empty agent string stays a quoted string, never YAML null.
+Round-trip tests cover empty agent and YAML-ambiguous descriptions such as `yes`
+and `2026-10-22`; invalid metadata cannot leave a partially written candidate.
+Before coding, confirm the six packages' `name`/`description` are YAML strings
+under the same inventory/stop rule. Update the module docstring to describe this
+instruction-only subset; no drop-in community compatibility claim may remain.
+Creator/VM adapters outside the claimed module remain separate SW-F work; assess
+their draft compatibility there without changing them in P0.
 
 Known larger SW-D work remains outside P0: a refused parse can lose the optional
 skill trace event, and the runtime's generic refusal text may not identify the

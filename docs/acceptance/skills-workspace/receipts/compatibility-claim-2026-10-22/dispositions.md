@@ -11,7 +11,7 @@ amendments below had not been independently re-reviewed. No code changed.
 | F2 strictness | Adopted: unique keys, bounded reads/frontmatter, no anchors/aliases/custom tags, strict types and closed descriptive-field schemas. The exact schema will be reviewed implementation work; #246 is a pinned design contract, not an executable allowlist oracle. |
 | F3 safe diagnostics | Adopted: closed reason codes/trusted labels/counts, never attacker-controlled values/keys, paths, snippets or exception text; source-to-sink canaries include tool dependency names. |
 | F4 scripts | Partially adopted: perform and preserve offline inventory before code. Six current packages, five generally enabled, have no scripts directory. Do not adopt the suggestion to preserve warning-only admission for unresolved script-dependent imports: that conflicts with Larry's no-silent-omission contract. Unknown required dependencies must block. No current package admission change is authorized without explicit review. |
-| F5 gate framing | Adopted: retitled inventory as of recorded main; only P0 regression/diagnostic portions are authorized source work. Any frozen SW-B/C fixture outcome change blocks merge and is reported, not silently re-scoped. |
+| F5 gate framing | Adopted: retitled inventory as of recorded main; only P0 regression/diagnostic portions are authorized source work. Any additional frozen SW-B/C fixture outcome change stops implementation for coordination; it is not silently re-scoped. |
 | F6 boundaries | Adopted: preserve #242, pin #246 at028b44e, leave selector source unchanged, require separate path coordination if necessary, and label this partial advisory review honestly. Source hashes were captured externally but not included in the model's excerpts; receipt links the exact input to that manifest. |
 
 No acceptance gate advanced; SW-B/C remain the only two accepted full gates.
@@ -41,3 +41,17 @@ This correction changes documentation only:
 
 The parent expressly requested these recoverable claim corrections and fresh
 review/CI. No source implementation or merge permission is inferred.
+
+## Third review of 7f34dde — additional documentation corrections
+
+The third review returned REVISE and is preserved in `rereview-7f34dde/`.
+Corrections distinguish the parser's no-script-read check from existing catalog
+integrity hashing and preserve reason precedence; make detection casefolded;
+list all changed assertions before modification; specify null and safe authoring
+round trips; include CLI failure diagnostics; and require an honest module
+docstring. The six-package top-level type inventory confirms string names and
+descriptions. These are requirements for the already claimed files, not source
+implementation or full package compatibility. Original and second review input
+file hashes are added to the next packet, alongside decoded-input hashes.
+Larry subsequently approved claim-only merge after final review and CI pass;
+WS-20 has the first serial merge slot. No feature-code merge is authorized.

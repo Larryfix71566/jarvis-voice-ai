@@ -35,3 +35,11 @@ test-expectation changes, and preserves instruction/text-reference support.
 It records the second review and supplies the previously omitted but already
 committed hash evidence. Fresh independent review and exact-head CI remain
 required for the corrected claim. No source edits, merge or acceptance change.
+
+The third review of `7f34dde` returned REVISE. Its six documentation findings are
+addressed in the canonical contract: distinguish parser entry inspection from
+existing catalog hashing, casefold script entry names, enumerate changed tests,
+make authoring round-trip the closed schema, cover CLI failure diagnostics, and
+correct source compatibility claims during implementation. All six repository
+packages have string names/descriptions. Larry approved documentation-only
+claim merge after final review/CI; WS-20 owns the first serial merge slot.

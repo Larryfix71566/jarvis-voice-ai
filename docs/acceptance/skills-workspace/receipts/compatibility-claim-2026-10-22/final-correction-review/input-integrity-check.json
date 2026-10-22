@@ -1,0 +1,14 @@
+[
+  {
+    "path": "docs/acceptance/skills-workspace/receipts/compatibility-claim-2026-10-22/review-input.json",
+    "file_sha256": "69c807232c5f131071181a14e7704d7384a3974ad3e7a556a540474aaec2d314",
+    "decoded_input_sha256": "03a4b68c8732a921a2c221881f0f6aa52e7b2f39848a2a1b407cd1aeaef739d9",
+    "matches_receipt": true
+  },
+  {
+    "path": "docs/acceptance/skills-workspace/receipts/compatibility-claim-2026-10-22/rereview-9413b5e/review-input.json",
+    "file_sha256": "5c1c544d21fdd182efbcebc3fb0f8af16418ef4513da0096d949b878db6ca134",
+    "decoded_input_sha256": "e351f459f9f0a0e9bc2c9c332b9f28aa38524da02eacca46de06f435c4bb7d23",
+    "matches_receipt": true
+  }
+]
