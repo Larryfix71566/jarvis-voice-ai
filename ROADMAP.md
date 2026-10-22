@@ -561,6 +561,17 @@ merging documentation-only #249 after final review and CI pass (2026-10-22 15:56
 merge is included. The approved decision is recorded; its checklist
 milestone remains unchecked until the chosen behavior is implemented and verified.
 
+**Full-program factual documentation — 2026-10-22:** Codex adopts the serial
+coordinator’s all-31 current/future handoff in the existing joint plan on
+`docs/ws20-program-receipts-20261022`, based on verified main `2944080`.
+This documentation-only continuation preserves frozen #246/#247/#252 and all
+checkboxes. Source claims, proposed Claude lanes, installed state and acceptance
+stay distinct; no other owner or runtime scope changes. See the
+[dated program and exact merge receipt](docs/plans/ROADMAP_JOINT_WORKING_PLAN.md#full-program-direction-and-serial-integration-receipt--2026-10-22).
+The coordinator alone handles serial merges; the parent remains Larry’s decision
+contact. #250 enforcement is proven (3/4 milestones evidenced); #252 retains
+its separate checkbox synchronization and final acceptance checklist.
+
 ### Acceptance checklist — remaining
 
 B1–B4 implementation is merged; the 72-entry migration is already verified.
@@ -575,15 +586,16 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
 - **Owner:** `codex` (existing WS-20 documentation and bounded checker-enforcement integration on the registered branch); `claude` retains B4 authorship/ownership and required cross-review, plus WS-13 ownership. WS-17 release/install ownership is unchanged.
-- **Status:** landed via this PR: the existing roadmap CI step uses strict error exits and advisory warnings, per Larry’s 10-22 policy. Foundation B1–B4 remains complete; exact-source tests, review and CI are recorded in the associated PR. Product acceptance and final evidence closure remain open.
+- **Status:** landed: checker enforcement #250 (`6234949`) and foundation B1–B4; this documentation publishes the dated all-31 program/receipt update from main `2944080`. Proposed lanes remain gated; product acceptance and final Phase A/B evidence remain open.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
-- **Remaining work / acceptance:** Record the exact enforcement merge identity and record the disposition of the decision milestone against its source evidence; reconcile required owner live/physical/observation evidence and final Phase A/B exit. Both existing unchecked milestones remain unchanged by this implementation.
+- **Remaining work / acceptance:** Reconcile frozen #252’s proven enforcement receipt and checkbox synchronization additively; 3/4 milestones are evidenced, while both existing unchecked boxes are preserved here. Retain owner-linked live/physical/observation evidence and final Phase A/B exit. Future work needs its matching claims and prerequisites; this factual update closes no gate.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `codex/ws20-checker-enforcement-20261022`, based on main `7b295cd92dfd331d49c08b723f622491e13f4dfa` after registration PR #249. The separate frozen #246/#247 drafts remain unmerged and are not dependencies.
+- **Where:** `docs/ws20-program-receipts-20261022`, documentation-only from main `29440804baf40292d84acbb0798646e67d0c510a`; no new source implementation branch. Historical enforcement branch `codex/ws20-checker-enforcement-20261022` remains frozen at #252 `86d079f`. Separate #246/#247 histories remain unchanged and are not inherited.
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
 - **Scope:** Additional approved checker-enforcement integration: only `.github/workflows/validate.yml` roadmap-step comment/name/invocation, directly related synthetic tests in `tests/unit/test_check_roadmap.py`, dated progress in the existing joint-working plan and WS-20-specific log/evidence, and this row. Preserve checker logic/severity, all other jobs/triggers/permissions/action pins, branch protection and every product criterion; Claude cross-review is required. Existing acceptance-clearance documentation scope remains ROADMAP current acceptance/status summary and this block, `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`, WS-20 `docs/roadmap-log/**`, `docs/acceptance/IMPLEMENTATION_STATUS.md`, `docs/acceptance/ACCEPTANCE_RUNBOOK.md` and WS-20 receipts under `docs/acceptance/command-console/receipts/`. Preserve all other owners, checkboxes and receipts; do not edit other feature plans or WS-17 verification evidence. No application runtime, config, credentials, access, provider workload, production write, restart, deployment or enforcement beyond the named roadmap CI step.
-- **Next step:** codex: record the enforcement merge identity and update only the matching decision milestone when its required evidence is confirmed; reconcile owner receipts for final Phase A/B exit. claude: retain B4 ownership and review future checker changes. larry: retain live acceptance and release decisions. WS-17 retains source/release/installation and live-evidence ownership; no #246/#247/#243 merge or runtime operation follows.
-- **Updated:** 10-22 (strict invocation and five CLI cases prepared after main registration; acceptance checkboxes preserved)
+- **Next step:** codex: preserve additive owner receipts and the dated program; reconcile frozen #246/#247/#252 through the sole serial coordinator, without concurrent merges. claude: retain existing ownership and prepare only the agreed bounded lanes after exact claims/dependencies. larry: decide concrete unresolved choices through the parent and retain live acceptance/release decisions. No deployment, live test or source edit follows from this document.
+- **Updated:** 10-22 (all-31 program and verified serial receipt adopted; other owners and every checkbox preserved)
+
 
 </details>
 
