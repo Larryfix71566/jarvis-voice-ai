@@ -294,6 +294,9 @@ def _snapshot(s):
     if any(a.state is AttemptState.RUNNING and a.attempt_id in s.stopped_attempts
            for a in s.attempts):
         return False
+    if any(a.state is AttemptState.STOPPED and a.attempt_id not in s.stopped_attempts
+           for a in s.attempts):
+        return False
     current = s.attempts[-1] if s.attempts else None
     running = current is not None and current.state is AttemptState.RUNNING
     if running and s.status not in (Status.RUNNING, Status.CANCELLING):
@@ -301,6 +304,9 @@ def _snapshot(s):
     if s.status is Status.RUNNING and not running:
         return False
     if s.status is Status.QUEUED and s.attempts:
+        return False
+    if (s.status is Status.CANCELLED and current is not None
+            and current.attempt_id not in s.stopped_attempts):
         return False
     if s.status is Status.CANCELLING and current is None:
         return False

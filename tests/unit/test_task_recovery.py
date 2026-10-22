@@ -266,6 +266,32 @@ class RecoveryContractTests(unittest.TestCase):
         self.assertEqual(s.stopped_attempts, (terminal_attempt.attempt_id,))
         self.assertEqual(s.attempts[-1], terminal_attempt)
 
+    def test_cancelled_persisted_snapshot_requires_retained_stop_evidence(self):
+        for original in (self.running(), self.interrupted()):
+            cancelling = self.proposed(tr.evaluate_transition(
+                original, event(original, tr.Kind.CANCEL), context()))
+            cancelled = self.proposed(tr.evaluate_transition(
+                cancelling, event(cancelling, tr.Kind.CONFIRM_STOP),
+                context(termination_confirmed=True)))
+            # Simulate losing the explicit stop evidence in a restored snapshot.
+            broken = replace(pickle.loads(pickle.dumps(cancelled)), stopped_attempts=())
+            self.reject(tr.evaluate_transition(broken, broken.last_event, context()),
+                        tr.Reason.INVALID)
+            r = receipt(broken)
+            self.reject(tr.evaluate_transition(broken, event(broken, tr.Kind.RECONCILE, receipt=r),
+                                               context(verified_receipt=r)), tr.Reason.INVALID)
+            # Retained stop evidence allows late results without reopening work.
+            valid = self.proposed(outcome(cancelled))
+            self.assertEqual(valid.status, tr.Status.CANCELLED)
+            self.assertEqual(valid.stopped_attempts, cancelled.stopped_attempts)
+            self.assertEqual(valid.attempts, cancelled.attempts)
+            self.assertTrue(tr.evaluate_transition(valid, valid.last_event, context()).replay)
+            if original.status is tr.Status.RUNNING:
+                # A terminal STOPPED attempt needs its stop evidence in any task state.
+                broken = replace(broken, status=tr.Status.BLOCKED, last_event=None)
+                self.reject(tr.evaluate_transition(broken, event(broken, tr.Kind.CANCEL), context()),
+                            tr.Reason.INVALID)
+
     def test_timeout_requires_deadline_and_still_waits_for_stop(self):
         s = self.running()
         e = event(s, tr.Kind.TIMEOUT)

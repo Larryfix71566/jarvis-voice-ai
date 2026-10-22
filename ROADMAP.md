@@ -1053,15 +1053,15 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 - [ ] Cancelled tasks remain cancelled; two workers cannot execute the same attempt. Expired/revoked approval prevents resume; retry exhaustion stops explicitly.
 
 - **Owner:** `codex`; retained dispatcher owns the isolated offline recovery contract; existing acceptance and other source owners remain unchanged
-- **Status:** review: offline transition evaluator and focused synthetic tests implemented locally after claim #263; independent source review and publication CI pending
-- **Implemented by:** Documentation preparation from #255 and merged claim #263; isolated `jarvis/task_recovery.py` plus 31 stdlib offline contract tests, with no production importer or storage wiring
+- **Status:** landed via this PR (after-merge source-only state): isolated offline transition evaluator and focused synthetic tests follow merged claim #263; exact-source independent review and publication CI remain required before integration. No persistence, runtime activation or acceptance is claimed
+- **Implemented by:** Documentation preparation from #255 and merged claim #263; isolated `jarvis/task_recovery.py` plus 32 stdlib offline contract tests, with no production importer or storage wiring
 - **Remaining work / acceptance:** Independent review and publication CI for this bounded source slice. All four future acceptance criteria remain open; pure transition tests cannot prove durable storage, atomic cross-process exclusion, real restart recovery or user-visible delivery
 - **Model version:** not selected; choose eligible models by workload/privacy during planning
-- **Where:** `codex/ws24-recovery-foundation-20261022` (local implementation after main registration `cd8d809`; not published by this worker)
+- **Where:** source in this PR from `codex/ws24-recovery-foundation-20261022`, following main registration `cd8d809`; this branch records the bounded source increment, not an ongoing storage/runtime claim
 - **Plan:** [Canonical plan](docs/plans/MORTIMER_DURABLE_TASK_RECOVERY_PLAN.md); existing historical requirements and acceptance gates retained
 - **Scope:** Only new `jarvis/task_recovery.py`, new `tests/unit/test_task_recovery.py` with inline synthetic fixtures, this WS-24 block, existing `docs/plans/MORTIMER_DURABLE_TASK_RECOVERY_PLAN.md`, and `docs/roadmap-log/2026-10-22-ws-24-recovery-foundation.md`. No storage, runlog, notices, delegation, creator, bot/admin, sandbox, provider, config, scripts, native, other-owner plan/test or production importer edits
 - **Next step:** coordinator: independently review the exact source and run publication CI before serial integration. Future storage/runtime work needs a separate scoped claim and reservations; product acceptance and release gates remain open
-- **Updated:** 10-22 (31 focused synthetic tests passed locally; no full-suite/VM test, independent review, publication, runtime activation or acceptance advance claimed)
+- **Updated:** 10-22 (32 focused synthetic tests passed locally; no full-suite/VM test, independent review, publication, runtime activation or acceptance advance claimed)
 
 
 ### Prior ownership/intake checkpoint (preserved history)

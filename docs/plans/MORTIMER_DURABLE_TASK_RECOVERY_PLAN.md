@@ -1,13 +1,13 @@
 # Durable task ownership and restart recovery — WS-24
 
-**Status:** Offline transition-contract claim, 2026-10-22, effective only after
-this registration lands on main. Codex owns future branch
-`codex/ws24-recovery-foundation-20261022` and only the exact paths in section8.
-Preparation #255 is merged; no recovery runtime, storage, activation or acceptance
-is delivered by this claim. Earlier dated preparation and limitations below are
-retained as history. Latest user direction includes all current and future roadmap
-work; this increment advances isolated offline code while preserving product
-acceptance, owner coordination and later storage/runtime/release gates.
+**Status:** Landed via this PR (after-merge source-only state), 2026-10-22.
+The isolated offline transition evaluator and synthetic tests follow merged claim
+#263 on `codex/ws24-recovery-foundation-20261022`; independent corrected-source
+review and publication CI are still required before integration. No recovery
+runtime, storage, activation or product acceptance is delivered. Earlier dated
+preparation and claim limitations below remain historical evidence. Further
+storage/runtime implementation requires a fresh scoped main-first claim and
+preserves product acceptance, owner coordination and release gates.
 
 ## 1. Evidence and existing components
 
@@ -383,3 +383,24 @@ No full suite, VM campaign, external model/API call, production state access,
 push, merge, installation or activation occurred in this worker's slice.
 All four WS-24 acceptance checkboxes remain open. Existing status versus installed
 source distinctions and other owners' scope are unchanged.
+
+
+### 2026-10-22 — Publication lifecycle correction
+
+Independent review identified that an active `review` roadmap status would become
+stale when the source branch merged. Under roadmap rule 0.10, the WS-24 row now
+records **landed via this PR (after-merge source-only state)**. This describes
+the proposed merge result; it is not evidence that publication or merge already
+happened. Exact-source independent review and publication CI remain pre-integration
+gates. This correction closes no acceptance checkbox and grants no persistence,
+runtime, storage, deployment or further source scope. A future increment needs
+its own main-first claim. Historical local test evidence above is unchanged.
+
+Independent review also found that a restored cancelled snapshot could omit its
+stop-confirmation marker and still accept a replay or late receipt. The validator
+now requires a cancelled task with an attempt to retain matching stop evidence,
+and every terminal `stopped` attempt to retain its corresponding marker. One
+new focused test exercises corrupted snapshots from both running and orphaned
+paths, rejects replay/reconciliation after marker loss, and preserves valid late
+results with retained evidence. The focused suite now passes 32 synthetic tests;
+this source correction requires independent rereview before publication.

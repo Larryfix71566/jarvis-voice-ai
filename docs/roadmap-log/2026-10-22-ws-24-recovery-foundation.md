@@ -37,3 +37,18 @@ attempts, explicit budgets/fencing, cancellation evidence and result/ack limits.
 Exact-source independent review and publication CI are still required through
 the coordinator. All four acceptance boxes and all other roadmap rows remain
 unchanged; this worker has not pushed, merged, installed or activated the slice.
+
+
+### 2026-10-22 — Publication lifecycle correction
+
+Fresh independent review identified the post-merge lifecycle mismatch in the
+worker's initial `review` status. The WS-24 row now describes the proposed
+after-merge landed source-only state under roadmap rule 0.10; publication,
+review/CI completion and merge are not claimed by this correction. All four
+acceptance boxes remain open and future storage/runtime work needs a fresh claim.
+
+The same independent review found missing stop-marker validation on restored
+cancelled snapshots. The source now refuses that inconsistent state, including
+late receipts and replays, and requires markers for terminal stopped attempts.
+The new corruption regression preserves valid late evidence; 32 focused
+synthetic tests pass locally. Exact corrected-source rereview remains required.
