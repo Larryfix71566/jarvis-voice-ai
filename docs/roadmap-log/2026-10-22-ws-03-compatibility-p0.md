@@ -47,4 +47,14 @@ Register the bounded new adapter/test/synthetic-fixture lane and inert report
 identifiers before source work. Claude Max is delegated tools-disabled patch
 authorship without checkout access; Codex retains review/apply/publication.
 Reuse merged P0 unchanged. Source waits for main claim; no runtime/activation
-change and no advancement from historical2/12 acceptance.
+change and no advancement from historical 2/12 acceptance.
+
+## Claim review corrections (documentation only)
+
+Independent Claude Max review of claim `36c4cb6` returned REVISE. Preserve that
+verdict: bind baseline and every auxiliary input, distinguish package payload
+from the validator’s full snapshot, and state that unknown frontmatter blocks
+without rewriting. The revised reservation defines every digest, static
+inventory scope, secret-refusal redaction and no-readiness invariant. Keep
+P0’s three Low follow-ups separate. The candidate still changes no source,
+checkbox or accepted gate; focused rereview and fresh CI follow this revision.

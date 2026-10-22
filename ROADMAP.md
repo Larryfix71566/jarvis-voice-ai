@@ -786,14 +786,14 @@ Source: [Skills plan §12, SW-A…SW-L](docs/plans/MORTIMER_SKILLS_WORKSPACE_IMP
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
-- **Status:** claimed: bounded offline instruction-package adapter, using merged #251 P0 unchanged. Source starts only after this registration lands on main. Claude Max is the delegated patch author for the new adapter/test/synthetic fixture files only; Codex retains review, application and publication ownership. Historical P0 landed via #251/#258 with static approval and five passing checks; SW-B/C remain the only accepted full gates (2/12). No installation, activation or live acceptance follows from this claim.
+- **Status:** claimed: bounded offline instruction-package adapter, using merged #251 P0 unchanged. Source starts only after this registration lands on main. Claude Max is the delegated patch author for the new adapter/test/synthetic fixture files only; Codex retains review, application and publication ownership. Historical P0 #251 merged as `b3a5fa1` (reviewed `e13fc89`, static approval, 346 offline passes and five CI checks; receipt in the WS-03 log); #258 was its documentation-only lifecycle correction; SW-B/C remain the only accepted full gates (2/12). No installation, activation or live acceptance follows from this claim.
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws03-offline-package-adapter-20261022`, to start from main after this claim lands. Merged #251 head `e13fc89` and #258 head `aadb01e` remain frozen historical receipts; their branches are not active implementation lanes.
 - **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
-- **Scope:** New `jarvis/skill_package_adapter.py`, new `tests/unit/test_skill_package_adapter.py`, and bounded synthetic `tests/fixtures/skill_package_adapter/**` only. Official authenticated Claude Code Max may author a returned patch for exactly those files from a minimal sanitized repository packet with tools disabled and no checkout access; Codex alone applies, reviews, tests and publishes. Reuse P0 parser, catalog, Candidate and authoring validator read-only; no changes to existing source/tests/fixtures, skills packages, registry/config, provider/controller/Base/delegate, admin/native UI or sandbox runtime. Documentation: this WS-03 block, its section 3 report reservation, canonical plan and existing WS-03 log/receipts. Explicit delegated assignment applies only after the matching main claim; any wider dependency edit requires coordinated scope amendment. Later script/service/resource and invocation/tool-policy adapters remain separate work, not silently omitted or authorized here.
-- **Next step:** codex: finish independent claim review and CI; sole coordinator lands the exact registration. Then dispatch the bounded Claude Max patch-author assignment, apply only approved new-file changes in the isolated implementation branch, run offline regressions and independent review, and publish a draft. Preserve owner/acceptance2/12; no source before main claim and no merge/install authority for the implementation.
+- **Scope:** New `jarvis/skill_package_adapter.py`, new `tests/unit/test_skill_package_adapter.py`, and bounded synthetic `tests/fixtures/skill_package_adapter/**` only. Official authenticated Claude Code Max may author a returned patch for exactly those files from a minimal sanitized repository packet with tools disabled and no checkout access; Codex alone applies, reviews, tests and publishes. Read-only dependencies are `jarvis/agent_skills.py`, `jarvis/skill_compatibility.py`, `jarvis/skill_catalog.py`, `jarvis/skill_authoring_validation.py`, `jarvis/skill_service.py`, `sandbox/artifacts.py` and `jarvis/selfedit/skill_policy.py`; no changes to existing source/tests/fixtures, skills packages, registry/config, provider/controller/Base/delegate, admin/native UI or sandbox runtime. Documentation: this WS-03 block, its section 3 report reservation, canonical plan and existing WS-03 log/receipts. Explicit delegated assignment applies only after the matching main claim; any wider dependency edit requires coordinated scope amendment. Later script/service/resource and invocation/tool-policy adapters remain separate work, not silently omitted or authorized here.
+- **Next step:** codex: finish independent claim review and CI; sole coordinator lands the exact registration. Then dispatch the bounded Claude Max patch-author assignment, apply only approved new-file changes in the isolated implementation branch, run offline regressions and independent review, and publish a draft. Preserve owner/acceptance 2/12; no source before main claim and no merge/install authority for the implementation.
 - **Updated:** 10-22 (offline package-adapter claim; source implementation not started)
 
 
@@ -1270,16 +1270,28 @@ Source: [native-audio plan, WS-18 progress](docs/plans/MORTIMER_NATIVE_AUDIO_TRA
 
 **WS-03 offline package report reservation, 2026-10-22 (before implementation):**
 Internal inert report `kind = skill_package_compatibility`, `schema_version = 1`,
-`adapter_version = p0-text-v1`; fields `source_digest`, nullable
-`candidate_digest`, `report_digest`, `parser_fingerprint`, `inventory_digest`,
-`dispositions`, `blockers`, and `validation`. SHA-256 identity uses deterministic
-canonical framing; `report_digest` excludes itself and any raw source bytes.
+`adapter_version = p0-text-v1`; fields `source_digest`, `inputs_digest`,
+`baseline_digest`, nullable `candidate_digest`, nullable `validation_snapshot_digest`,
+`report_digest`, `parser_fingerprint`, `inventory_digest`, `dispositions`,
+`blockers`, and `validation`. SHA-256 identity uses deterministic canonical framing:
+
+- `source_digest`: every original source record, framed by logical path, mode and bytes; includes original source manifests/file inventory.
+- `inputs_digest`: all reviewed sidecar/provenance/license/matcher records, target slug and selected profile, even when no payload can be produced.
+- `baseline_digest`: supplied immutable Candidate fingerprint, including its protected registry.
+- `candidate_digest`: returned package-only payload fingerprint, no config/registry or baseline files. Null on failure/cancellation.
+- `validation_snapshot_digest`: full temporary validation snapshot fingerprint (unchanged baseline plus package and scoped matcher fixtures); the nested validator receipt’s `candidate_digest` binds this snapshot, not the returned payload.
+- `parser_fingerprint`: exact content digests of the enumerated read-only parser/catalog/validator/Candidate/service/policy dependencies; adapter code identity is also bound in report validation evidence alongside the profile version.
+- `inventory_digest`: deterministic sorted static configured-tool names and completeness facts observed through the existing host helper, compared before/after validation. It is not a source-file or caller-supplied dependency inventory; no alternative dependency inventory is accepted.
+- `report_digest`: canonical complete report excluding itself and any raw source bytes; nested validation evidence is included.
+
 Source evidence is a separate bounded immutable bundle, never the content-free
-report or candidate package. Dispositions cover every declared feature and file;
-unsafe/unrecognized labels use ordinals and fixed codes, never raw secret-bearing
-keys, text or host paths. Unknown versions and changed source/candidate/parser/
-adapter/inventory identity invalidate reuse. The report is not an approval,
-owner/session receipt, runtime-readiness attestation or activation token. No
+report. On a secret-scan refusal, omit raw evidence and return only digests,
+ordinals and fixed codes. Dispositions cover every declared feature/file;
+unsafe or unrecognized labels use ordinals and fixed codes, never raw keys,
+text or host paths. Unknown schema versions and changed bound identities
+invalidate reuse. No `ready`, `approved` or `active` state is emitted;
+authentication/runtime readiness remain unknown and inventory evidence is static only.
+The report is not approval, owner/session proof or an activation token. No
 HTTP/native wire, request ledger, DB migration, config key, port, credential,
 service, tool grant or model route is introduced. This reservation does not
 waive the existing package/source scanner or authorize ignored semantics.
