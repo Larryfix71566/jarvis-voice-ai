@@ -707,16 +707,26 @@ Source: [remote-access plan Addenda R1/R2 and §8](docs/plans/MORTIMER_REMOTE_AC
 
 **Workstream:** Remote access T2: bearer tokens, fail-closed bind, Tailscale
 
-- **Owner:** `codex` (Larry, 09-27)
-- **Status:** landed foundation: R2 local-only design and separate remote-bind guard merged in PR #149 (`a39136a`) after the 09-30 `39fc6f9` deployment; the guard was deployed in `7c4637e` on 10-02 with authentication and remote binding still off. Its factual R2 status/header/checkpoint is reconciled via this PR after documentation claim #187 (`9be5dab`). Token provisioning and enabled-mode acceptance remain open
+- **Owner:** `codex` for documentation preparation; existing acceptance owners retained; future runtime implementation requires a fresh main claim
+- **Status:** landed documentation preparation via this PR after merge; no new runtime implementation, activation or acceptance. Prior foundation/intake history remains recorded below
 - **Implemented by:** Codex (remote foundation and R1)
 - **Remaining work / acceptance:** Codex prepares local-only onboarding after Larry selects the method and a fresh provisioning slice is claimed. Larry separately decides credential preparation, local activation and any remote bind; live acceptance remains open
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** main (R1 foundation `539f8f6`; R2 guard PR #149 `a39136a`; documentation claim #187 merged as `9be5dab`). R2 status correction publication: `docs/ws04-guard-status-20261006`, via this PR. Later provisioning requires its own fresh claim after the method decision.
-- **Plan:** `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` (R1 implemented; R2 local-only onboarding design)
-- **Scope:** Historical/inactive foundation scope: `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers. The R2 design proposes `scripts/provision_local_auth.py`, a small JarvisKit stdin-to-Keychain executable, its `Package.swift` target, and tests; no provisioner is implemented.
-- **Next step:** larry: select the local token-onboarding method (supervised deploy setup, one-time CLI, or Mac pairing). codex: after that decision, claim a fresh provisioning slice before implementing and validating the chosen vault/Keychain path. Local activation and any remote bind remain separate decisions; the R2 guard status documentation is reconciled.
-- **Updated:** 10-06 (R2 guard status reconciled after claimed docs slice; no new live acceptance)
+- **Where:** `docs/roadmap-preparation-claims-20261022` based on main `c63ecce97108787c55ef55fad73d32236694cc65`; documentation registration only, no runtime branch claimed
+- **Plan:** [Canonical plan](docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md); existing historical requirements and acceptance gates retained
+- **Scope:** Documentation only: this roadmap block, `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` and the shared WS-04/23/24 preparation log. No runtime, tests, migration, config, private data, credentials, installer or other-owner documentation edits. Future code needs separately registered exact scope on main
+- **Next step:** larry: choose onboarding method; codex: after that decision register exact implementation branch/scope on main. Credential preparation, activation and remote binding remain separate decisions
+- **Updated:** 10-22 (completed source analysis and proposed fixture specification; documentation registration only; no acceptance checkbox changes)
+
+
+### Prior ownership/intake checkpoint (preserved history)
+
+- **Previous Owner:** `codex` (Larry, 09-27)
+- **Previous Status:** landed foundation: R2 local-only design and separate remote-bind guard merged in PR #149 (`a39136a`) after the 09-30 `39fc6f9` deployment; the guard was deployed in `7c4637e` on 10-02 with authentication and remote binding still off. Its factual R2 status/header/checkpoint is reconciled via this PR after documentation claim #187 (`9be5dab`). Token provisioning and enabled-mode acceptance remain open
+- **Previous Where:** main (R1 foundation `539f8f6`; R2 guard PR #149 `a39136a`; documentation claim #187 merged as `9be5dab`). R2 status correction publication: `docs/ws04-guard-status-20261006`, via this PR. Later provisioning requires its own fresh claim after the method decision.
+- **Previous Scope:** Historical/inactive foundation scope: `jarvis/auth.py`, `jarvis/authmw.py`, `jarvis/bind.py`, `jarvis/urls.py`, `jarvis/bot/server.py`, auth middleware and bind in `jarvis/admin/server.py`. Plus the integration points in CX-11: `jarvis/bot/status_tool.py`, `scripts/deploy_main.sh` health checks, `mcp_servers/mcp_selfedit/logic.py` headers. The R2 design proposes `scripts/provision_local_auth.py`, a small JarvisKit stdin-to-Keychain executable, its `Package.swift` target, and tests; no provisioner is implemented.
+- **Previous Next step:** larry: select the local token-onboarding method (supervised deploy setup, one-time CLI, or Mac pairing). codex: after that decision, claim a fresh provisioning slice before implementing and validating the chosen vault/Keychain path. Local activation and any remote bind remain separate decisions; the R2 guard status documentation is reconciled.
+- **Previous Updated:** 10-06 (R2 guard status reconciled after claimed docs slice; no new live acceptance)
 
 </details>
 
@@ -986,16 +996,26 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 - [ ] Mark missing physical hardware blocked or untested; do not infer a pass from VM/CI success.
 - [ ] Demonstrate that verification cannot repair code, change criteria or authorize a release.
 
-- **Owner:** `codex` for roadmap intake only; implementation owner unassigned
-- **Status:** parked: proposed by Larry 2026-10-17; no implementation or activation authorized
+- **Owner:** `codex` for documentation preparation; existing acceptance owners retained; future runtime implementation requires a fresh main claim
+- **Status:** landed documentation preparation via this PR after merge; no new runtime implementation, activation or acceptance. Prior foundation/intake history remains recorded below
 - **Implemented by:** Not implemented by this intake; reuse of existing components must be established in the implementation plan
-- **Remaining work / acceptance:** Existing acceptance first, then owner/branch/scope dispatch and a bounded implementation plan satisfying the requirements and unchecked cases above; shared safeguards in intake item 8 apply
+- **Remaining work / acceptance:** Canonical preparation plan and proposed synthetic vectors are supplied; design review, existing acceptance prerequisite, effective implementation owner/branch/scope on main and every unchecked future acceptance criterion remain open. No runtime code or automated profile authorized by this registration
 - **Model version:** not selected; choose eligible models by workload/privacy during planning
-- **Where:** documentation on `codex/roadmap-status-20261017` (PR #211); no implementation branch
-- **Plan:** This roadmap intake records requirements; a dedicated canonical implementation plan for this new row is required before its code claim
-- **Scope:** Documentation only in this intake. Future code paths, existing-state reuse, schema/migration reservations, feature gate and rollback must be reviewed before claim; no new service, tool grants or migration number reserved here
-- **Next step:** larry: finish current acceptance and dispatch implementation ownership when ready; assigned planner: map existing components and prepare the bounded design, tests and rollback before code
-- **Updated:** 10-17 (consolidated enhancement intake; unimplemented and unaccepted)
+- **Where:** `docs/roadmap-preparation-claims-20261022` based on main `c63ecce97108787c55ef55fad73d32236694cc65`; documentation registration only, no runtime branch claimed
+- **Plan:** [Canonical plan](docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md); existing historical requirements and acceptance gates retained
+- **Scope:** Documentation only: this roadmap block, `docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md` and the shared WS-04/23/24 preparation log. No runtime, tests, migration, config, private data, credentials, installer or other-owner documentation edits. Future code needs separately registered exact scope on main
+- **Next step:** codex: complete bounded design/applicability review from the canonical plan; larry: retain current acceptance prerequisite and separately register implementation ownership/branch/scope before code or any automated profile
+- **Updated:** 10-22 (completed source analysis and proposed fixture specification; documentation registration only; no acceptance checkbox changes)
+
+
+### Prior ownership/intake checkpoint (preserved history)
+
+- **Previous Owner:** `codex` for roadmap intake only; implementation owner unassigned
+- **Previous Status:** parked: proposed by Larry 2026-10-17; no implementation or activation authorized
+- **Previous Where:** documentation on `codex/roadmap-status-20261017` (PR #211); no implementation branch
+- **Previous Scope:** Documentation only in this intake. Future code paths, existing-state reuse, schema/migration reservations, feature gate and rollback must be reviewed before claim; no new service, tool grants or migration number reserved here
+- **Previous Next step:** larry: finish current acceptance and dispatch implementation ownership when ready; assigned planner: map existing components and prepare the bounded design, tests and rollback before code
+- **Previous Updated:** 10-17 (consolidated enhancement intake; unimplemented and unaccepted)
 
 </details>
 
@@ -1018,16 +1038,26 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 - [ ] Restart after result persistence but before delivery: recover and deliver the saved result once at the user-visible level through stable-ID deduplication.
 - [ ] Cancelled tasks remain cancelled; two workers cannot execute the same attempt. Expired/revoked approval prevents resume; retry exhaustion stops explicitly.
 
-- **Owner:** `codex` for roadmap intake only; implementation owner unassigned
-- **Status:** parked: proposed by Larry 2026-10-17; no implementation or activation authorized
+- **Owner:** `codex` for documentation preparation; existing acceptance owners retained; future runtime implementation requires a fresh main claim
+- **Status:** landed documentation preparation via this PR after merge; no new runtime implementation, activation or acceptance. Prior foundation/intake history remains recorded below
 - **Implemented by:** Not implemented by this intake; reuse of existing components must be established in the implementation plan
-- **Remaining work / acceptance:** Existing acceptance first, then owner/branch/scope dispatch and a bounded implementation plan satisfying the requirements and unchecked cases above; shared safeguards in intake item 8 apply
+- **Remaining work / acceptance:** Canonical preparation plan and proposed synthetic vectors are supplied; design review, existing acceptance prerequisite, effective implementation owner/branch/scope on main and every unchecked future acceptance criterion remain open. No runtime code or automated profile authorized by this registration
 - **Model version:** not selected; choose eligible models by workload/privacy during planning
-- **Where:** documentation on `codex/roadmap-status-20261017` (PR #211); no implementation branch
-- **Plan:** This roadmap intake records requirements; a dedicated canonical implementation plan for this new row is required before its code claim
-- **Scope:** Documentation only in this intake. Future code paths, existing-state reuse, schema/migration reservations, feature gate and rollback must be reviewed before claim; no new service, tool grants or migration number reserved here
-- **Next step:** larry: finish current acceptance and dispatch implementation ownership when ready; assigned planner: map existing components and prepare the bounded design, tests and rollback before code
-- **Updated:** 10-17 (consolidated enhancement intake; unimplemented and unaccepted)
+- **Where:** `docs/roadmap-preparation-claims-20261022` based on main `c63ecce97108787c55ef55fad73d32236694cc65`; documentation registration only, no runtime branch claimed
+- **Plan:** [Canonical plan](docs/plans/MORTIMER_DURABLE_TASK_RECOVERY_PLAN.md); existing historical requirements and acceptance gates retained
+- **Scope:** Documentation only: this roadmap block, `docs/plans/MORTIMER_DURABLE_TASK_RECOVERY_PLAN.md` and the shared WS-04/23/24 preparation log. No runtime, tests, migration, config, private data, credentials, installer or other-owner documentation edits. Future code needs separately registered exact scope on main
+- **Next step:** codex: complete bounded design/applicability review from the canonical plan; larry: retain current acceptance prerequisite and separately register implementation ownership/branch/scope before code or any automated profile
+- **Updated:** 10-22 (completed source analysis and proposed fixture specification; documentation registration only; no acceptance checkbox changes)
+
+
+### Prior ownership/intake checkpoint (preserved history)
+
+- **Previous Owner:** `codex` for roadmap intake only; implementation owner unassigned
+- **Previous Status:** parked: proposed by Larry 2026-10-17; no implementation or activation authorized
+- **Previous Where:** documentation on `codex/roadmap-status-20261017` (PR #211); no implementation branch
+- **Previous Scope:** Documentation only in this intake. Future code paths, existing-state reuse, schema/migration reservations, feature gate and rollback must be reviewed before claim; no new service, tool grants or migration number reserved here
+- **Previous Next step:** larry: finish current acceptance and dispatch implementation ownership when ready; assigned planner: map existing components and prepare the bounded design, tests and rollback before code
+- **Previous Updated:** 10-17 (consolidated enhancement intake; unimplemented and unaccepted)
 
 </details>
 
