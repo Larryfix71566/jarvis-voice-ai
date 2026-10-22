@@ -1,6 +1,20 @@
 # Implementation and acceptance status
 
-**Current reconciliation: 2026-10-18, refreshed main `9ea27c7` (initial inventory `28420af`).** [ROADMAP](../../ROADMAP.md#current-acceptance-status--reconciled-2026-10-18)
+**Current WS-20 completion reconciliation — 2026-10-22:** main `636880e`, with
+frozen continuity draft #246 `028b44e` preserved. The
+[existing plan §11](../plans/ROADMAP_JOINT_WORKING_PLAN.md#11-ws-20-completion-candidate--2026-10-22)
+is the current gate checklist. B1–B4 and ten-merge evidence are complete;
+checker policy and final owner-linked live evidence remain open (2/4 listed
+milestones, not a software completion percentage). The older cleanup/missing
+review statements below are historical: §11 explicitly maps #222 repair and
+#223 cross-review evidence, preserves #216 secondary coverage limits, and
+preserves the recovered final cleanup review at its exact source and digest. #243 remains open/unmerged at `946f655`
+with five green CI checks and recorded full offline verification. Exact-source
+proof does not establish installation, physical acceptance or release.
+No fresh runtime probe, service operation or checkbox change occurred here.
+
+
+**Historical reconciliation: 2026-10-18, refreshed main `9ea27c7` (initial inventory `28420af`).** [ROADMAP](../../ROADMAP.md#current-acceptance-status--reconciled-2026-10-18)
 owns state/assignments; [acceptance clearance and exhaustive inventory](../plans/ROADMAP_JOINT_WORKING_PLAN.md#9-acceptance-clearance--current-priority-2026-10-18)
 define the next sequence. Plans retain requirements, receipts retain exact scope.
 This is a documentation audit, not a test run, release, activation or waiver.

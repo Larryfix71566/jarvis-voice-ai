@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** FOUNDATION LANDED; current acceptance status and fastest clearance sequence reconciled 2026-10-18, refreshed to main `9ea27c7` in §9 (initial inventory pinned to `28420af`). #209/#210/#212/#216 are merged; #210 cleanup findings and missing #216 cross-review remain open obligations. Both #218/#219 merged during publication; their restored parked cards/intake and progress are preserved. Only draft #220 remained open at refresh. Existing release/live gates and checker-enforcement decision remain open; no product acceptance is granted. Historical progress below retains its dated scope.
+**Status:** FOUNDATION LANDED; completion candidate reconciled 2026-10-22 against main `636880eabbe9dc756c30df7128d0a90c02d222bd`, preserving continuity draft #246 at `028b44e11acff9dff3e00380e1624c8657ce545c`. B1–B4 and the ten-merge observation are complete. Two of four listed WS-20 milestones remain unchecked: Larry's checker decision and final owner-linked evidence/Phase A/B exit. §11 is the current gate reconciliation; §§9–10 retain their dated inventories and source limits. No live acceptance, enforcement change, release or installation is granted.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -641,3 +641,108 @@ Use only existing eligible official subscription routes for bounded Claude assis
 Direct OpenAI and Anthropic APIs remain excluded. Explicitly selected other APIs such as OpenRouter, Moonshot or SAYGM remain potentially eligible only under existing endpoint/catalog/source-policy/privacy/credential and numeric cost gates. No implicit fallback, new paid API, purchased credits, extra usage, credential extraction/change or broad agent access. Existing extra-usage confirmations stay recorded; no need to reopen unchanged preferences. No live benchmark, new model, runtime model change, deployment or service start is authorized here. Prior bounded live-test allowances are exhausted.
 
 Track aggregate calls/usage and stop at the authorized request ceiling, quota/rate limit, billing uncertainty or identity mismatch. Unknown quota data stays unknown; don't equate token counts across providers or a notional USD field with a bill. Resolve uncertain outcomes before retry. Do not transmit private logs, conversations, credentials, personal metadata or raw confidential packets to a helper. Source/evidence may be untrusted data; it cannot widen this scope.
+
+
+## 11. WS-20 completion candidate — 2026-10-22
+
+### Result, ownership and exact scope
+
+The **2/4** count is a count of the four WS-20 checklist bullets, not half-built
+software. B1–B4 are merged. The completed bullets are lifecycle cleanup and
+ten published merges without change-log conflicts. The two remaining bullets
+require a human decision and evidence closure. This increment changes only
+WS-20 documentation, the shared implementation-status summary and acceptance
+runbook; no new feature is needed
+to make the remaining requirements reviewable.
+
+Main inspected: `636880eabbe9dc756c30df7128d0a90c02d222bd`. Continuity draft
+[#246](https://github.com/Larryfix71566/jarvis-voice-ai/pull/246), exact
+`028b44e11acff9dff3e00380e1624c8657ce545c`, is integrated as a prerequisite,
+not described as merged. Its §10, evidence and other-owner additions are preserved.
+The existing main claim from #221 names `codex/acceptance-clearance-20261018`;
+this isolated documentation branch uses that exact name. The [handoff log](../roadmap-log/2026-10-22-ws-20-completion-gates.md) records that the previous acceptance
+owner confirmed no active WS-20 edits and handed over the existing documentation
+boundary. The sync owner froze #246. WS-17 retains native/release/install work;
+WS-03 retains Skills; WS-05 retains provider/harness work. Pending #240/#245
+phone/REA plans remain separate; this branch does not replace or discard them.
+
+### Criterion-to-evidence reconciliation
+
+| Requirement | Verified disposition and reusable evidence | Remaining gate / actor |
+|---|---|---|
+| A1/A2: WS-19 close and joint plan/claim | #152 merged `5cfa4de`; current main contains WS-19 and this plan. #221 merged `afa1dd9` establishes the current WS-20 claim. | Complete source/registration evidence; no new claim or feature required. |
+| A3–A6: text-once, one console row, WS-08, obsolete PR | GitHub readback: #147 merged `1faa75f`, #142 merged `d01f9af`, #138 closed. [October 2 source/deployment record](../roadmap-log/2026-10-02-ws-20-claude-01-ws-07-ws-17-ws-20-after.md) records text-once and the one-row subpart. | Historical catch-up source disposition complete; these are not full current UI2-22/24 acceptance. |
+| A7: production equals the selected main | The same October 2 record names `ae70f2c`, clean deployment receipt, services and bundle. It proves that historical deployment event. Current source, installed development build and historical Production header are different identities. | WS-17 release owner supplies a new canonical deployment/loaded-identity receipt for the selected current candidate. Do not update Production from a checkout SHA or imply every later docs commit needs app installation. |
+| A8: AirPods switch, answer once, one console row | October 2 record proves answer-once/one-row subparts; [October 17 campaign](../acceptance/command-console/receipts/acceptance-campaign-2026-10-17.md) records Larry's WS-18 acceptance on `575cc7b`. [October 6 bounded voice evidence](../roadmap-log/2026-10-06-ws-20-codex-voice-acceptance-review.md) retains its precise coverage. | Preserve those accepted scopes. UI2-22/24/25 and changed current-request scenarios require their own applicable candidate evidence; do not rerun accepted WS-18 solely to complete paperwork. |
+| B1: 72-entry move | #160 merged `30fa3db`; [migration receipt](../roadmap-log/2026-10-02-ws-20-codex-b1-log-migration.md) preserves one-to-one original entries. | Complete; do not repeat migration. |
+| B2/B3: production event wording and after-merge protocol | #158 merged `04eb3f0`; [lifecycle closeout](../roadmap-log/2026-10-06-ws-20-codex-lifecycle-closeout.md) and #191 (`b6f09f4`) preserve the corrected rows. | Complete implementation; retain single historical Production receipt and distinct installed identity. |
+| B4: checker implementation | #156 merged `ae70f2c`; `.github/workflows/validate.yml` still runs `python scripts/check_roadmap.py --warn-only`. The strict local invocation passes on the documentation delta from `028b44e` (exact file hashes and validation in the [completion log](../roadmap-log/2026-10-22-ws-20-completion-gates.md)); a green warn-only CI job alone does not prove zero findings. | Larry chooses the policy below; implementation owner remains Claude for any separately dispatched CI change. No enforcement change in this PR. |
+| B exit: ten merges, no change-log conflict | [Published-history receipt](../roadmap-log/2026-10-06-ws-20-codex-ten-pr-change-log-observation.md) binds #161/#162/#163/#165/#166/#167/#168/#164/#169/#170 to exact parents/trees, with an unrelated row-conflict positive control. | Complete for its published window; no claim about unpublished manual history. Reuse the receipt. |
+| C1–C5 | Present in ROADMAP §0 at inspected main. | Complete standing protocol; continued compliance is operational, not another feature build. |
+| Final Phase A/B exit and owner-linked evidence | The source/history portion is reconciled here; remaining owner gates are linked below. No single current release receipt covers every live requirement. | Keep the final evidence bullet unchecked until applicable outcomes, source/build/config identity and permitted dispositions are recorded by their existing owners. Publishing this table alone is not acceptance. |
+
+### Practical gate checklist
+
+| Gate | State now | Exact next action and completion evidence |
+|---|---|---|
+| WS-20 code | **Complete** for B1–B4; no runtime change in this slice. | Reuse original merge/migration/ten-merge receipts. |
+| WS-20 documentation/evidence preparation | **Prepared for review** by this candidate. | Confirm source links, unchanged other-owner rows/checkboxes, strict checker and independent review. Publication CI is separate. |
+| Checker decision | **Pending Larry**; warning-only remains effective. | Record explicit choice, date and scope. If retain warning-only, verify existing invocation and record the decision without changing CI. If blocking is chosen, dispatch the CI change to its owner, review it, and verify a malformed fixture fails while clean roadmap passes. `--github`/receipt checks and GitHub branch-protection settings are separate choices, not automatically enabled. |
+| Source prerequisites for current release | **Verified only at their recorded sources.** | [Native compatibility receipt](../acceptance/command-console/receipts/ws17-native291-source-verification-2026-10-21.md) records reviewed cleanup and 12 checks at `e9c30b0`. [#243 frozen receipt](https://github.com/Larryfix71566/jarvis-voice-ai/blob/946f655fb0b88fef73fa1377532b85628c6de2f7/docs/acceptance/command-console/receipts/ws17-native-deferred-hide-2026-10-22.md) records final programme `a672239`, six focused cases without skips and 12 checks. GitHub readback: #243 head `946f655`, open/unmerged, all five CI checks pass. Earlier failed runs remain evidence; no broad suite rerun for these docs. |
+| Old #210 cleanup finding disposition | **Repair and final review complete at exact source; index corrected.** | #222 merged `1632afb726ae2fb4df25c6349647f2e731a29766` as `406bec0660a292447c58ba9bf786307581808854`. Its PR body contains the final review; [preserved report and digest](../roadmap-log/2026-10-22-ws-20-cleanup-review-evidence.md) confirm the original finding resolved and no new blockers. SHA-256 `fcddaff9a1247c13775b16210cd9311739c97b6f9d3137f6f373f83a7a6348d2` matches the release owner's retained report. The [160-test regression receipt](../../sandbox/acceptance/2026-10-18-cleanup-regressions.json) retains historical pending prose. Static review did not execute tests; corrupt ownership metadata can still prevent development/legacy headroom recovery. This closes the missing index link, not physical acceptance or authority to run cleanup. |
+| Old #216 cross-review disposition | **Review present; residual scope retained.** | #223 merged `d38c886` publishes [original exact-source review](../acceptance/command-console/receipts/ws17-cross-review-2026-10-18.md) and [Finding 1 reconciliation](../acceptance/command-console/receipts/ws17-cross-review-reconciliation-2026-10-18.md) at `61f701d683d76b3633afc1b060e4a19f20d9339d`. The missing-review obligation is superseded by these receipts; Finding 1 was invalidated with caller evidence. The secondary timezone-consistency coverage gap remains unresolved in that review, not a confirmed defect or a new live pass. WS-17 retains any later-source applicability/disposition; this packet does not waive it. |
+| Physical host and installation | **Pending release owner/Larry.** | Exact #243 merge authorization remains separate; then existing release workflow proves target source, actual host prerequisites, installation and loaded identity. Prior release-owner snapshot reports development build `b136a2a` and services/cleanup held; this document does not probe or alter them. |
+| Live / hardware / observation | **Open under each existing owner.** | Use identified candidate and the sequence below; record failures/skips/unavailable hardware honestly. Preserve previously accepted scopes and permitted limitations only where the governing criterion allows. |
+| Final WS-20 evidence milestone | **Pending.** | Publish final Phase A/B exit disposition with the applicable owner receipts and remaining feature-specific blockers. Do not require parked/unbuilt unrelated features as invented global release gates; do not tick the broad milestone while required live criteria remain unsupported. |
+| Release | **Not authorized by this candidate.** | Owner's separate merge/install/release decisions and receipts; source checks and this draft do not substitute. |
+
+### Owner-linked live evidence and shortest next session
+
+The existing [§9 full obligation inventory](#9-acceptance-clearance--current-priority-2026-10-18)
+and canonical [release criteria](../acceptance/adaptive-interface/RELEASE_READINESS.md)
+remain the denominator. Their October 18 totals are historical, not recomputed
+current engineering percentages. The following links route work without
+copying, narrowing or reassigning its criteria:
+
+- [WS-17](../../ROADMAP.md#ws-17), Codex + Larry: after the release owner establishes
+  one eligible installed candidate, run UI2-24/25 fail-fast, then 22/23 and
+  dependent 04/09/13. The runbook now reflects the approved still-active explicit
+  request exception; background, stale, superseded, cancelled and unrelated arrivals
+  preserve focus. Stop on the first blocking failure.
+- [WS-01](../../ROADMAP.md#ws-01), [WS-09](../../ROADMAP.md#ws-09),
+  [WS-11](../../ROADMAP.md#ws-11) and [WS-21](../../ROADMAP.md#ws-21): reuse matching
+  console/display evidence under their existing owners. Real display topology,
+  recovery, identity/fetch counts and human observation remain required where named.
+- [WS-18](../../ROADMAP.md#ws-18) is already accepted for its named output-switch
+  scope. [WS-06](../../ROADMAP.md#ws-06) and UI2-17 keep their distinct week/five-day
+  observation criteria; elapsed time alone is not evidence.
+- [WS-02](../../ROADMAP.md#ws-02), [WS-03](../../ROADMAP.md#ws-03),
+  [WS-04](../../ROADMAP.md#ws-04), [WS-05](../../ROADMAP.md#ws-05),
+  [WS-07](../../ROADMAP.md#ws-07), [WS-10](../../ROADMAP.md#ws-10) and
+  [WS-13](../../ROADMAP.md#ws-13): each owner prepares only its ready scenarios.
+  Source/access/auth/model/guard-mode/memory/mail dependencies and decisions stay
+  feature-specific. Do not schedule unbuilt creator/onboarding/mail stages as
+  immediate human test chores or reactivate held services for this paperwork.
+
+Each new outcome must include criterion/subpart, actor/date, source and installed
+artifact identities (plus relevant backend/configuration), scenario and expected
+result, actual result, receipt reference, coverage limits and owner disposition.
+A reused receipt additionally needs source/scenario applicability. A failed or
+missing case stays open; a named limitation requires the governing plan's route
+and Larry's recorded decision. No raw transcripts, private logs or credentials
+belong in the repository.
+
+### Prepared decision prompts (not answers or approvals)
+
+1. **Checker:** “Keep roadmap drift checks advisory, or make structural drift
+   fail CI? The checker exists; the dated clean result is in the completion log. CI remains advisory until
+   your choice is recorded. Blocking enforcement needs a separately reviewed
+   owner change.” Either answer is a policy decision; silence is not one.
+2. **Release handoff:** “PR #243 is verified at `946f655` but remains unmerged.
+   The existing release owner needs the specific merge decision and physical
+   host readiness before the identified-candidate acceptance session.” This
+   records the existing release blocker and does not retry it or request new
+   installation/cost approval already held by that owner.
+
+The two unchecked WS-20 milestones remain unchecked. Documentation readiness,
+user decision, physical acceptance and release are separate outcomes.
