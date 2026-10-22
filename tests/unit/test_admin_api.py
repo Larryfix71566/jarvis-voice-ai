@@ -347,3 +347,40 @@ class TestMemoryEndpoints:
         # endpoints accidentally depended on git state, this would fail.
         assert c.get("/api/memory").json()["ok"] is True
         assert c.delete("/api/memory/fact/whatever").json()["ok"] is False
+
+
+def test_harness_stage_is_blocked_and_never_saved(client):
+    c, _ = client
+    result = c.post('/api/model-routes/stage', json={
+        'workload': 'voice_supervisor', 'profile': 'claude-haiku-4-5', 'route': 'direct_api',
+    }).json()
+    assert result['ok'] is False and 'Harness switching is unavailable' in result['error']
+    status = c.get('/api/model-routes').json()
+    assert status['harness_switching_supported'] is False
+    assert not status['preferences']
+
+
+def test_harness_evidence_endpoint_separates_passive_read_from_explicit_refresh(client, monkeypatch, tmp_path):
+    from jarvis.status import harness as H, daily as D
+    c, _ = client
+    calls = []
+    monkeypatch.setattr(D, 'STATUS_DIR', tmp_path)
+    monkeypatch.setattr(H, 'read_report', lambda path: calls.append(('read', path)) or {'ok': False})
+    monkeypatch.setattr(H, 'refresh_report', lambda path: calls.append(('refresh', path)) or {'ok': True})
+    assert c.get('/api/status/harness-models').json()['ok'] is False
+    assert calls == [('read', tmp_path)]
+    assert c.post('/api/status/harness-models/refresh', json={}).json()['ok'] is True
+    assert calls == [('read', tmp_path), ('refresh', tmp_path)]
+
+
+@pytest.mark.parametrize("value", ["false", "0", "no", "off"])
+def test_harness_status_switch_blocks_read_and_refresh(client, monkeypatch, value):
+    from jarvis.status import harness as H
+    c, _ = client
+    monkeypatch.setenv("JARVIS_STATUS_TOOLS_ENABLED", value)
+    def forbidden(*a, **kw): pytest.fail("disabled status accessed evidence")
+    monkeypatch.setattr(H, "read_report", forbidden)
+    monkeypatch.setattr(H, "refresh_report", forbidden)
+    expected = {"ok": False, "error": "status tools are disabled"}
+    assert c.get('/api/status/harness-models').json() == expected
+    assert c.post('/api/status/harness-models/refresh', json={}).json() == expected

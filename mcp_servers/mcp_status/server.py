@@ -2,7 +2,9 @@
 
 Read-only by construction: every tool is a GET against the admin sidecar's
 /api/status/* routes, except status_subscription, a POST that spends a
-little subscription quota and is rate-limited in the sidecar (spec I2). Every tool description starts with "Mortimer status
+little subscription quota and is rate-limited in the sidecar (spec I2), and
+explicit status_harness_models refresh, which fetches fixed public documents
+and writes only its evidence cache. Default harness reads are passive. Every tool description starts with "Mortimer status
 (read-only):" for the same schema-text-drives-selection reason mcp-runlog
 states which server it is.
 """
@@ -12,6 +14,18 @@ from fastmcp import FastMCP
 from . import logic
 
 mcp = FastMCP("mcp-status")
+
+
+@mcp.tool()
+def status_harness_models(refresh: bool = False) -> dict:
+    """Mortimer harness model daily brief (read-only): cached dated official
+    sources, routed-selection metadata (not the active voice baseline), candidate IDs, eligibility/adapter gaps and
+    recommendation. REFRESH only when the user requests current official documents;
+    it fetches fixed public pages, no credentials, account API, inference, review or model change. A documented
+    candidate is not a proven improvement. Harness switching is unavailable pending
+    all-writer/runtime approval support; active controller is unknown. Do not call
+    status_subscription to fill missing evidence."""
+    return logic.status_harness_models(refresh=refresh)
 
 
 @mcp.tool()

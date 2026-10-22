@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 1,
+  "patch": {
+    "repository": "Larryfix71566/jarvis-voice-ai",
+    "sourceType": "patch_file",
+    "base": "574282e5b036a3e4a9e6f76e82c4dc92f61c309a",
+    "head": "immutable R3 REVIEWED.patch applied to frozen subject (no head commit supplied)",
+    "changedFiles": [
+      "config/skills.yaml",
+      "jarvis/admin/server.py",
+      "jarvis/bot/model_route_tool.py",
+      "jarvis/model_preferences.py",
+      "jarvis/status/daily.py",
+      "jarvis/status/harness.py",
+      "macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift",
+      "macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift",
+      "macos/MortimerHost/Tests/MortimerHostTests/ModelRouteControlsTests.swift",
+      "mcp_servers/mcp_status/logic.py",
+      "mcp_servers/mcp_status/server.py",
+      "mcp_servers/mcp_status/skill.yaml",
+      "skills/harness-model-evaluation/SKILL.md",
+      "skills/harness-model-evaluation/mortimer.yaml",
+      "skills/harness-model-evaluation/references/daily-brief.md",
+      "skills/harness-model-evaluation/references/evaluation.md",
+      "skills/harness-model-evaluation/references/evidence-baseline.md",
+      "skills/harness-model-evaluation/references/mortimer-integration.md",
+      "skills/harness-model-evaluation/references/review-protocol.md",
+      "tests/fixtures/skills_authoring/harness-model-evaluation/matcher-cases.json",
+      "tests/unit/test_admin_api.py",
+      "tests/unit/test_harness_brief.py",
+      "tests/unit/test_harness_confirmation.py",
+      "tests/unit/test_mcp_status_logic.py",
+      "tests/unit/test_model_preferences.py"
+    ],
+    "sha256": "32ccb1f8971ff3e8f11030ec502432cb80dae48bbcf8f45e8f3789b31517c2e4"
+  },
+  "recommendation": "merge",
+  "workflowLabel": "human_review_required",
+  "impact": {
+    "rating": "high",
+    "rationale": "Persistent workload choices and shared model execution semantics are affected, together with the existing scheduled provider-health contract and native/voice confirmation surfaces."
+  },
+  "regressionLikelihood": {
+    "rating": "moderate",
+    "rationale": "All established R1/R2 control/contract gaps are corrected or explicitly contained by blocking harness switching. The patch still spans persistent preferences, native UI, scheduled status and HTTP/MCP surfaces, with partial integration protection and no live rollout check."
+  },
+  "regressionProtection": {
+    "rating": "partial",
+    "rationale": "Frozen final backend log reports 238 passes. R2 native log reports 16 passes and native implementation/test files are byte-identical in R3. New fail-on-call tests cover all disabled spellings and parser gaps. Independent focused AST probe verified actual kill-switch enforcement. Full suites were not independently rerun; no full native/live deployment verification.",
+    "exactHeadChecksPassed": false
+  },
+  "recoverability": {
+    "rating": "managed",
+    "rationale": "Code can be reverted without a schema migration. Saved preference rows remain, and any subsequent model use cannot be undone; operators must inspect saved state before restoring old behavior. Old clients cannot use v1 previews safely."
+  },
+  "confidence": {
+    "rating": "high",
+    "rationale": "R3 patch SHA and all 25 changed-file after-hashes verified. Full R2-to-R3 comparison found only the five expected correction files. Actual extracted handlers, _status_call and status_enabled rejected all four disabled values without dependency calls and preserved enabled calls. Earlier reviewed paths unchanged."
+  },
+  "applicability": {
+    "status": "confirmed",
+    "rationale": "Existing launchd job, native Model Access, AdminAPI and MCP status calls reach the new code. No deployment or service execution was performed."
+  },
+  "statusQuoRisk": {
+    "rating": "moderate",
+    "rationale": "Base still permits mutable preference labels and instruction-only voice confirmation; R2 removes voice confirmation and blocks harness changes, materially reducing that risk. New public-document discovery is optional and bounded; complete harness switching remains unavailable."
+  },
+  "autoMergeExclusions": [
+    "persistent_state",
+    "public_contract",
+    "broad_shared_default",
+    "architecture_specific_rollout",
+    "other"
+  ],
+  "affectedRuntimeRoots": [
+    "jarvis/admin/server.py:4898-4911 new status refresh/read routes",
+    "jarvis/model_preferences.py:25-27,161-162,203 harness stage/confirm block",
+    "jarvis/bot/model_route_tool.py:42-62 preview-only voice tool",
+    "jarvis/status/daily.py:517-521 independent passive hook after original job",
+    "jarvis/status/harness.py:143-209 cache, explicit refresh, passive run",
+    "macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift:219-343 UI gate, truthful proposal, freshness and refresh"
+  ],
+  "importantCallers": [
+    "jarvis/status/__init__.py:status_enabled established all-/api/status/* kill-switch contract",
+    "jarvis/admin/server.py:_status_call common enforcement/error boundary",
+    "mcp_servers/mcp_status/logic.py:status_harness_models default GET and explicit POST",
+    "macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift:refreshHarnessModelEvidence",
+    "scripts/launchd_gen.py:56 unchanged daily schedule"
+  ],
+  "riskDrivers": [
+    "Persistent nonvoice preferences remain mutable aliases after save, now expressly disclosed.",
+    "Patch spans several production surfaces; complete runtime/native deployment integration was not exercised.",
+    "Full harness switching, durable pinning across writers, runtime ACK, deployment and eligibility remain unimplemented/unverified."
+  ],
+  "protectiveFactors": [
+    "Harness stage and confirm reject voice_supervisor server-side, including previously created drafts; native UI also disables staging.",
+    "Voice tool does not import/call confirm_preference and always refuses confirm requests.",
+    "Reports set baseline/active_model null, switching_supported false and retain_pending_evidence; routed metadata cannot masquerade as voice baseline.",
+    "Native proposal says future registry edits change resolution; it claims only a saved selection snapshot.",
+    "Original daily health path restored; additional hook reads local metadata/cache, no fetch/collect call.",
+    "Source retrieval timestamps preserved, changed selections invalidate read claims, native UI displays freshness.",
+    "Public HTTP remains fixed-origin, no redirect/auth/credentials/context, bounded body, no inference.",
+    "Both harness status routes now invoke the common kill-switch/error boundary; disabled calls never reach evidence readers or refreshers.",
+    "Parser gaps mark aggregate evidence incomplete; MCP description now matches unknown active baseline and blocked switching."
+  ],
+  "materialBoundaries": [
+    {
+      "id": "status_kill_switch",
+      "invariant": "When JARVIS_STATUS_TOOLS_ENABLED is falsy, all /api/status/* routes must refuse before status work or external effects.",
+      "runtimeRoot": "server.py:4898-4911 refresh_harness_models/status_harness_models -> _status_call",
+      "counterexample": "Call both routes under false, 0, no and off; refreshed public HTTP/cache work must not occur.",
+      "legitimateControl": "R3 wraps each thunk with _status_call. New tests install fail-on-call fakes. Independent execution of actual AST-extracted handlers, _status_call and status_enabled produced disabled responses with zero reader/refresher calls for all four values; enabled paths reached the proper fakes.",
+      "result": "supported"
+    },
+    {
+      "id": "voice_confirmation",
+      "invariant": "An LLM boolean/token alone must not authorize a selection change.",
+      "runtimeRoot": "model_route_tool.py:42-62",
+      "counterexample": "Call confirm=true with a valid old/new draft token.",
+      "legitimateControl": "Revised branch always returns refusal; confirm_preference is no longer imported. Preview includes exact models but no returned approval token. Regression tests verify no saved preference.",
+      "result": "supported"
+    },
+    {
+      "id": "current_voice_identity",
+      "invariant": "Routed metadata must not be represented as the configured or active legacy voice baseline.",
+      "runtimeRoot": "harness.py:50-67,105-118",
+      "counterexample": "Legacy OPENAI_MODEL differs from routed selection.",
+      "legitimateControl": "configured_selection is explicitly routed_selection_only and applies_to_voice_runtime false; report baseline and active_model are null and switching false; native summary states unknown runtime.",
+      "result": "supported"
+    },
+    {
+      "id": "durable_exact_identity",
+      "invariant": "Do not claim or expose a complete harness switch without durable identity/adoption enforcement.",
+      "runtimeRoot": "model_preferences.py:25-27,161-162,203 and native RepoTab",
+      "counterexample": "Old voice draft or ordinary stage/confirm attempts to save a controller choice; later registry edit changes a nonvoice profile alias.",
+      "legitimateControl": "Backend rejects both new and existing voice drafts. Nonvoice remains a mutable selection snapshot with an explicit future-registry-edit disclaimer; complete pinning/ACK is documented future work, not a delivered guarantee.",
+      "result": "supported"
+    },
+    {
+      "id": "scheduled_coverage",
+      "invariant": "The new passive addition preserves prior scheduled health behavior without adding provider calls.",
+      "runtimeRoot": "daily.py:main",
+      "counterexample": "Legacy job succeeds/fails while a harness notice needs refresh.",
+      "legitimateControl": "Original vault/migration/run path restored; independent guarded run_passive follows. Tests assert legacy then passive in both success/failure. run_passive only reuses cached sources/local selection and notice API.",
+      "result": "supported"
+    },
+    {
+      "id": "cached_report_identity",
+      "invariant": "Stale evidence and routed-selection changes must not become current voice availability/upgrade claims.",
+      "runtimeRoot": "harness.py:143-174; RepoTab.swift:harnessBriefSummary",
+      "counterexample": "Old retrieval timestamps, changed selection digest, missing or malformed cache.",
+      "legitimateControl": "Sources are revalidated, original retrieval dates retained, source age/current digest checked. Native displays freshness; stale/mismatched summary is historical and baseline remains null. No model switching authority is derived.",
+      "result": "supported"
+    },
+    {
+      "id": "passive_public_discovery",
+      "invariant": "Discovery does not send local data/credentials or trigger inference/model changes.",
+      "runtimeRoot": "harness.py:fetch_document/collect/refresh_report/run_passive",
+      "counterexample": "Redirect, API URL, document instruction, implicit scheduled refresh.",
+      "legitimateControl": "Fixed URL allowlist, no redirects or credential headers, response bound, regex-only extraction; passive path does not call collect/fetch. Explicit refresh is separate POST/native action.",
+      "result": "supported"
+    }
+  ],
+  "validation": [
+    {
+      "name": "R3 patch and frozen manifest identity",
+      "status": "passed",
+      "protects": "SHA-256 matches 32ccb1f8971ff3e8f11030ec502432cb80dae48bbcf8f45e8f3789b31517c2e4; all 25 changed-file after-hashes match."
+    },
+    {
+      "name": "Complete R2-to-R3 source comparison",
+      "status": "passed",
+      "protects": "Only admin handlers, harness parser freshness, MCP wording and two Python test files changed. Native implementation and tests are byte-identical to the reviewed R2 source."
+    },
+    {
+      "name": "Frozen final backend log and assertions",
+      "status": "passed",
+      "protects": "238 tests reported passing; inspected four disabled-switch tests with fail-on-call dependencies and parser-gap test, in addition to prior admission, cache, scheduling and request-path coverage. Not independently rerun."
+    },
+    {
+      "name": "R2 native log for unchanged R3 native files",
+      "status": "passed",
+      "protects": "16 tests reported passing; covers blocked harness staging, freshness, explicit refresh and prior async/readback guards. Source identity preserved across R2/R3. No full native/live integration run."
+    },
+    {
+      "name": "Independent synthetic kill-switch closure probe",
+      "status": "passed",
+      "protects": "Actual AST-extracted R3 handlers + _status_call + status_enabled returned disabled for false/0/no/off with zero dependency calls; enabled GET/refresh reached their synthetic dependencies. No network, real DB or subject imports."
+    },
+    {
+      "name": "Skill static validation",
+      "status": "passed",
+      "protects": "Supplied static package/matcher validation inspected in prior rounds; skill sources unchanged from R2. No runtime activation or authority inferred."
+    },
+    {
+      "name": "Live runtime/deployment/model/account checks",
+      "status": "skipped",
+      "protects": "Outside authorization: no services, installations, settings changes, inference, benchmarks, public fetch or external review."
+    }
+  ],
+  "unknowns": [
+    {
+      "summary": "Complete harness switching, durable exact pinning across writers and runtime ACK remain absent by design; R2 must be described as a blocked foundation, not completion of that capability.",
+      "decisionCritical": false
+    },
+    {
+      "summary": "Live deployment, active model and account eligibility are unverified and not inferred from this review.",
+      "decisionCritical": false
+    }
+  ],
+  "evidencePlan": []
+}

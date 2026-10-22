@@ -7,6 +7,16 @@ import JarvisKit
 /// No provider inference or application defaults are touched.
 @MainActor
 final class ModelRouteControlsTests: XCTestCase {
+    private static func exactDraft(_ choice: ModelRoutePreferenceStage) -> JSONValue {
+        let digest = String(repeating: "a", count: 64)
+        return .object(["ok": .bool(true), "draft_id": .string("v1:fixture:" + digest),
+            "proposal_digest": .string(digest), "proposal": .object([
+                "workload": .string(choice.workload),
+                "current": .object(["model": .string("synthetic-current-v1"), "route": .string("subscription"), "privacy": .string("approved_external")]),
+                "candidate": .object(["model": .string("synthetic-proposed-v1"), "profile": .string(choice.profile), "route": .string(choice.route), "privacy": .string(choice.privacy ?? "approved_external")])
+            ])])
+    }
+
     private func catalog(preferences: [JSONValue] = []) -> JSONValue {
         .object([
             "ok": .bool(true), "routing_enabled": .bool(false),
@@ -26,21 +36,22 @@ final class ModelRouteControlsTests: XCTestCase {
         .object(["workload": .string("developer"), "profile": .string(profile), "route": .string(route), "privacy": .string("approved_external")])
     }
 
-    private func model(load: @escaping () async throws -> JSONValue,
-                       stage: @escaping (ModelRoutePreferenceStage) async throws -> JSONValue = { _ in .object(["ok": .bool(true), "draft_id": .string("draft")]) },
-                       confirm: @escaping (String) async throws -> JSONValue = { _ in .object(["ok": .bool(true)]) }) -> RepoViewModel {
+    private func model(refreshBrief: @escaping () async throws -> JSONValue = { .object(["ok": .bool(false)]) },
+                       load: @escaping () async throws -> JSONValue,
+                       stage: @escaping (ModelRoutePreferenceStage) async throws -> JSONValue = { ModelRouteControlsTests.exactDraft($0) },
+                       confirm: @escaping (String) async throws -> JSONValue = { _ in .object(["ok": .bool(true), "state": .string("saved"), "configured_model": .string("synthetic-proposed-v1"), "runtime_adoption": .string("unverified")]) }) -> RepoViewModel {
         let config = JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
                                   adminURL: URL(string: "http://127.0.0.1:7861")!,
                                   wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: nil)
         return RepoViewModel(api: AdminAPI(config: config),
-                             modelRouteRequests: ModelRouteRequests(load: load, stage: stage, confirm: confirm))
+                             modelRouteRequests: ModelRouteRequests(load: load, stage: stage, confirm: confirm, refreshBrief: refreshBrief))
     }
 
     func testSavedPreferenceSurvivesConfirmAndRefresh() async {
         var saved = false
         let vm = model(load: { self.catalog(preferences: saved ? [self.preference()] : []) }, confirm: { _ in
             saved = true
-            return .object(["ok": .bool(true)])
+            return .object(["ok": .bool(true), "state": .string("saved"), "configured_model": .string("synthetic-proposed-v1"), "runtime_adoption": .string("unverified")])
         })
         await vm.refreshModelRoutes()
         vm.selectedModelRoute = "subscription"
@@ -49,7 +60,7 @@ final class ModelRouteControlsTests: XCTestCase {
         XCTAssertTrue(saved)
         XCTAssertEqual(vm.selectedModelRoute, "subscription")
         XCTAssertNil(vm.modelRouteDraftID)
-        XCTAssertEqual(vm.modelRouteNote, "Model route saved.")
+        XCTAssertEqual(vm.modelRouteNote, "Model route saved; active runtime adoption is unverified.")
         XCTAssertTrue(vm.modelRouteActivationSummary.contains("does not change the activation flag"))
         XCTAssertTrue(vm.modelRouteActivationSummary.contains("bot status has not been verified"))
     }
@@ -89,7 +100,7 @@ final class ModelRouteControlsTests: XCTestCase {
         var confirms = 0
         let vm = model(load: { self.catalog() }, confirm: { _ in
             confirms += 1
-            return .object(["ok": .bool(true)])
+            return .object(["ok": .bool(true), "state": .string("saved"), "configured_model": .string("synthetic-proposed-v1"), "runtime_adoption": .string("unverified")])
         })
         await vm.refreshModelRoutes()
         let changes: [() -> Void] = [
@@ -177,8 +188,85 @@ final class ModelRouteControlsTests: XCTestCase {
         await fulfillment(of: [entered], timeout: 2)
         await vm.confirmModelRoute()
         XCTAssertEqual(confirms, 1)
-        continuation?.resume(returning: .object(["ok": .bool(true)]))
+        continuation?.resume(returning: .object(["ok": .bool(true), "state": .string("saved"), "configured_model": .string("synthetic-proposed-v1"), "runtime_adoption": .string("unverified")]))
         await task.value
         XCTAssertFalse(vm.modelRouteConfirming)
     }
+    func testLegacyDraftWithoutExactModelsCannotBeConfirmed() async {
+        var calls = 0
+        let vm = model(load: { self.catalog() }, stage: { _ in
+            .object(["ok": .bool(true), "draft_id": .string("legacy")])
+        }, confirm: { _ in calls += 1; return .object(["ok": .bool(true)]) })
+        await vm.stageModelRoute()
+        XCTAssertNil(vm.modelRouteDraftID)
+        await vm.confirmModelRoute()
+        XCTAssertEqual(calls, 0)
+        XCTAssertTrue(vm.modelRouteNote?.contains("exact model preview") == true)
+    }
+
+    func testExactProposalDisplaysBothModelsAndUnverifiedEvidence() async {
+        let vm = model(load: { self.catalog() })
+        await vm.stageModelRoute()
+        XCTAssertTrue(vm.modelRouteProposalSummary?.contains("synthetic-current-v1") == true)
+        XCTAssertTrue(vm.modelRouteProposalSummary?.contains("synthetic-proposed-v1") == true)
+        XCTAssertTrue(vm.modelRouteProposalSummary?.contains("unverified") == true)
+    }
+
+    func testSuccessWithoutSavedModelReadbackDoesNotClaimApplied() async {
+        let vm = model(load: { self.catalog() }, confirm: { _ in .object(["ok": .bool(true)]) })
+        await vm.stageModelRoute()
+        await vm.confirmModelRoute()
+        XCTAssertTrue(vm.modelRouteNote?.contains("readback is unavailable") == true)
+    }
+
+    func testMissingBriefDoesNotInventModelAvailability() async {
+        let vm = model(load: { self.catalog() })
+        await vm.refreshModelRoutes()
+        XCTAssertTrue(vm.harnessBriefSummary.contains("unavailable"))
+    }
+
+    func testHarnessSwitchCannotStageOrConfirm() async {
+        var stages = 0
+        var confirms = 0
+        let vm = model(load: { self.catalog() }, stage: { choice in
+            stages += 1
+            return Self.exactDraft(choice)
+        }, confirm: { _ in
+            confirms += 1
+            return .object(["ok": .bool(true)])
+        })
+        await vm.refreshModelRoutes()
+        vm.selectedModelWorkload = "voice_supervisor"
+        await vm.stageModelRoute()
+        await vm.confirmModelRoute()
+        XCTAssertEqual(stages, 0)
+        XCTAssertEqual(confirms, 0)
+        XCTAssertNil(vm.modelRouteDraftID)
+    }
+
+    func testExplicitEvidenceRefreshShowsStalenessWithoutModelWrites() async {
+        var refreshes = 0
+        let vm = model(refreshBrief: {
+            refreshes += 1
+            return .object(["ok": .bool(true), "freshness": .string("stale"), "report": .object([
+                "summary": .string("Historical evidence; active controller unknown."),
+                "evidence_generated_at": .string("2000-01-01"),
+                "candidates": .array([])
+            ])])
+        }, load: { self.catalog() }, stage: { _ in
+            XCTFail("Evidence refresh must not stage a model")
+            return .null
+        }, confirm: { _ in
+            XCTFail("Evidence refresh must not confirm a model")
+            return .null
+        })
+        await vm.refreshModelRoutes()
+        XCTAssertEqual(refreshes, 0)
+        await vm.refreshHarnessBrief()
+        XCTAssertEqual(refreshes, 1)
+        XCTAssertTrue(vm.harnessBriefSummary.contains("Freshness: stale"))
+        XCTAssertTrue(vm.harnessBriefSummary.contains("2000-01-01"))
+        XCTAssertNil(vm.modelRouteDraftID)
+    }
+
 }

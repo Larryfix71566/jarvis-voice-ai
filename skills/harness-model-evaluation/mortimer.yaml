@@ -1,0 +1,49 @@
+schema_version: 1
+skill_id: harness-model-evaluation
+display_name: Harness model evaluation
+category: development
+version: 1.0.0
+source:
+  kind: authored
+  reference: mortimer.harness-model-management.v1
+  adaptation_notes: Synthetic evaluation design and read-only daily recommendation instructions, authorized by Larry.
+capabilities: [harness_evaluation_planning, model_recommendation]
+required_tools: [status_harness_models]
+required_credentials: []
+reference_paths:
+  - references/daily-brief.md
+  - references/evaluation.md
+  - references/review-protocol.md
+  - references/evidence-baseline.md
+  - references/mortimer-integration.md
+example_ids: [daily-harness-brief, compare-subscription-models, model-confirmation, unrelated-weather, unrelated-email]
+related_workflow_ids: []
+compatible_with: []
+process:
+  kind: guidance
+  nodes:
+    - step_id: establish-evidence
+      title: Establish mode and dated evidence
+      description: Separate documented models, account eligibility, adapter readiness and measured results.
+      inputs: [request, known harness baseline, dated sources]
+      outputs: [evidence and unknowns]
+      tools: []
+      success_criteria: [Missing evidence remains unknown.]
+      edges: [{to: recommend}]
+    - step_id: recommend
+      title: Recommend retaining or evaluating a model
+      description: Use read-only daily discovery or prepare an explicitly bounded evaluation plan.
+      inputs: [evidence and unknowns]
+      outputs: [recommendation with uncertainty]
+      tools: []
+      success_criteria: [A new release is not presented as proven better.]
+      edges: [{to: exact-proposal}]
+    - step_id: exact-proposal
+      title: Explain exact proposal and confirmation
+      description: Show tradeoffs and validation gaps; distinguish saved configuration from verified active runtime.
+      inputs: [recommendation with uncertainty]
+      outputs: [exact proposal or missing evidence report]
+      tools: []
+      approval: Larry must explicitly confirm the exact proposed model change in Mortimer; the skill cannot confirm it for him.
+      success_criteria: [No recommendation automatically changes a model.]
+      edges: []

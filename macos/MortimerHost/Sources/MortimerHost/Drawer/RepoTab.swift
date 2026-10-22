@@ -2,26 +2,30 @@ import SwiftUI
 import Observation
 import JarvisKit
 
-/// The three existing AdminAPI requests, injectable only for deterministic
+/// Model-route and evidence AdminAPI requests, injectable only for deterministic
 /// delayed-response tests. Production retains the sidecar's single owner.
 @MainActor
 struct ModelRouteRequests {
     var load: () async throws -> JSONValue
     var stage: (ModelRoutePreferenceStage) async throws -> JSONValue
     var confirm: (String) async throws -> JSONValue
+    var refreshBrief: () async throws -> JSONValue
 
     init(api: AdminAPI) {
         load = { try await api.modelRoutes() }
         stage = { try await api.stageModelRoute($0) }
         confirm = { try await api.confirmModelRoute(draftId: $0) }
+        refreshBrief = { try await api.refreshHarnessModelEvidence() }
     }
 
     init(load: @escaping () async throws -> JSONValue,
          stage: @escaping (ModelRoutePreferenceStage) async throws -> JSONValue,
-         confirm: @escaping (String) async throws -> JSONValue) {
+         confirm: @escaping (String) async throws -> JSONValue,
+         refreshBrief: @escaping () async throws -> JSONValue = { .object(["ok": .bool(false)]) }) {
         self.load = load
         self.stage = stage
         self.confirm = confirm
+        self.refreshBrief = refreshBrief
     }
 }
 
@@ -60,7 +64,9 @@ final class RepoViewModel {
         didSet { if oldValue != selectedModelPrivacy { modelRouteSelectionChanged() } }
     }
     private(set) var modelRouteDraftID: String?
+    private(set) var modelRouteProposal: JSONValue?
     var modelRouteNote: String?
+    private(set) var harnessBriefRefreshing = false
     private(set) var modelRouteStaging = false
     private(set) var modelRouteConfirming = false
     private var modelRouteRequests: ModelRouteRequests
@@ -91,6 +97,7 @@ final class RepoViewModel {
         modelRouteRequests = ModelRouteRequests(api: api)
         modelRouteStaging = false
         modelRouteConfirming = false
+        harnessBriefRefreshing = false
         discardModelRouteDraft()
     }
 
@@ -203,11 +210,17 @@ final class RepoViewModel {
     func discardModelRouteDraft() {
         modelRouteSelectionRevision += 1
         modelRouteDraftID = nil
+        modelRouteProposal = nil
         modelRouteDraftChoice = nil
         modelRouteNote = nil
     }
 
     func stageModelRoute() async {
+        guard selectedModelWorkload != "voice_supervisor" else {
+            discardModelRouteDraft()
+            modelRouteNote = "Harness switching is unavailable until all configuration writers and runtime share exact approval."
+            return
+        }
         guard !modelRouteStaging, !modelRouteConfirming else { return }
         discardModelRouteDraft()
         let choice = modelRouteChoice
@@ -224,12 +237,22 @@ final class RepoViewModel {
                   selectionRevision == modelRouteSelectionRevision,
                   choice == modelRouteChoice else { return }
             if result["ok"]?.boolValue == true,
-               let draftID = result["draft_id"]?.stringValue, !draftID.isEmpty {
+               let draftID = result["draft_id"]?.stringValue, !draftID.isEmpty,
+               let digest = result["proposal_digest"]?.stringValue, digest.count == 64,
+               draftID.hasSuffix(":" + digest),
+               let proposal = result["proposal"],
+               proposal["workload"]?.stringValue == choice.workload,
+               proposal["candidate"]?["profile"]?.stringValue == choice.profile,
+               proposal["candidate"]?["route"]?.stringValue == choice.route,
+               proposal["candidate"]?["privacy"]?.stringValue == choice.privacy,
+               let currentModel = proposal["current"]?["model"]?.stringValue, !currentModel.isEmpty,
+               let candidateModel = proposal["candidate"]?["model"]?.stringValue, !candidateModel.isEmpty {
                 modelRouteDraftID = draftID
                 modelRouteDraftChoice = choice
-                modelRouteNote = "Draft ready — confirm to save."
+                modelRouteProposal = proposal
+                modelRouteNote = "Exact proposal ready — review before confirming."
             } else {
-                modelRouteNote = result["error"]?.stringValue ?? "Route draft was rejected."
+                modelRouteNote = result["error"]?.stringValue ?? "Route draft was rejected: exact model preview is required."
             }
         } catch {
             guard serviceRevision == modelRouteServiceRevision,
@@ -240,7 +263,7 @@ final class RepoViewModel {
 
     func confirmModelRoute() async {
         guard !modelRouteStaging, !modelRouteConfirming,
-              let draftID = modelRouteDraftID, modelRouteDraftChoice == modelRouteChoice else { return }
+              let draftID = modelRouteDraftID, modelRouteProposal != nil, modelRouteDraftChoice == modelRouteChoice else { return }
         let serviceRevision = modelRouteServiceRevision
         let choice = modelRouteChoice
         modelRouteConfirming = true
@@ -248,21 +271,68 @@ final class RepoViewModel {
         do {
             let result = try await modelRouteRequests.confirm(draftID)
             guard !Task.isCancelled, serviceRevision == modelRouteServiceRevision else { return }
-            if result["ok"]?.boolValue == true {
+            if result["ok"]?.boolValue == true,
+               result["state"]?.stringValue == "saved",
+               result["configured_model"]?.stringValue == modelRouteProposal?["candidate"]?["model"]?.stringValue {
                 discardModelRouteDraft()
                 // Do not replace a different selection made programmatically
                 // during confirmation; the UI disables editing until settled.
                 if choice == modelRouteChoice {
                     await refreshModelRoutes()
-                    modelRouteNote = "Model route saved."
+                    modelRouteNote = "Model route saved; active runtime adoption is unverified."
                 }
             } else {
                 guard choice == modelRouteChoice else { return }
-                modelRouteNote = result["error"]?.stringValue ?? "Route confirmation failed."
+                modelRouteNote = result["error"]?.stringValue ?? "Route confirmation failed or saved readback is unavailable; refresh before retrying."
             }
         } catch {
             guard serviceRevision == modelRouteServiceRevision, choice == modelRouteChoice else { return }
             modelRouteNote = TabStateMapper.fromError(error).state
+        }
+    }
+
+    var modelRouteProposalSummary: String? {
+        guard let proposal = modelRouteProposal,
+              let current = proposal["current"], let candidate = proposal["candidate"] else { return nil }
+        func value(_ item: JSONValue, _ key: String) -> String { item[key]?.stringValue ?? "unknown" }
+        return "Configured selection: \(value(current, "model")) via \(value(current, "route"))\n"
+            + "Proposed selection: \(value(candidate, "model")) via \(value(candidate, "route"))\n"
+            + "Privacy: \(value(current, "privacy")) → \(value(candidate, "privacy"))\n"
+            + "Eligibility and active runtime: unverified. Quality, latency and quota: unmeasured.\n"
+            + "Confirmation saves this selection snapshot. Future registry edits can change resolution; active runtime is unverified."
+    }
+
+    var harnessBriefSummary: String {
+        guard case .loaded(let routes) = modelRoutesState,
+              let report = routes["harness_brief"]?["report"] else {
+            return "Harness model brief unavailable. No model availability or improvement is inferred."
+        }
+        let summary = report["summary"]?.stringValue ?? "No recommendation available."
+        let date = report["evidence_generated_at"]?.stringValue ?? report["generated_at"]?.stringValue ?? "unknown date"
+        let freshness = routes["harness_brief"]?["freshness"]?.stringValue ?? "unknown"
+        let sources = report["sources"]?.arrayValue?.map {
+            "\($0["url"]?.stringValue ?? "unknown source") — \($0["status"]?.stringValue ?? "unknown")"
+        }.joined(separator: "\n") ?? "Sources unavailable."
+        let candidates = report["candidates"]?.arrayValue?.compactMap { $0["model"]?.stringValue }.joined(separator: ", ") ?? "none"
+        let gaps = report["gaps"]?.arrayValue?.compactMap { $0.stringValue }.joined(separator: "\n") ?? ""
+        return "Freshness: \(freshness)\n\(summary)\nEvidence recorded: \(date)\nDocumented candidates: \(candidates)\n\(sources)\n\(gaps)"
+    }
+
+    func refreshHarnessBrief() async {
+        guard !harnessBriefRefreshing else { return }
+        let revision = modelRouteServiceRevision
+        harnessBriefRefreshing = true
+        defer { if revision == modelRouteServiceRevision { harnessBriefRefreshing = false } }
+        do {
+            let result = try await modelRouteRequests.refreshBrief()
+            guard !Task.isCancelled, revision == modelRouteServiceRevision,
+                  case .loaded(let routes) = modelRoutesState,
+                  var object = routes.objectValue else { return }
+            object["harness_brief"] = result
+            modelRoutesState = .loaded(.object(object))
+        } catch {
+            guard revision == modelRouteServiceRevision else { return }
+            modelRouteNote = "Official model evidence refresh failed; no model was changed."
         }
     }
 
@@ -523,12 +593,30 @@ private struct ModelRouteControls: View {
                         Text("confidential").tag("confidential")
                         Text("local only").tag("local_only")
                     }
+                    DisclosureGroup("Harness model daily brief") {
+                        Button("Refresh official model evidence") { Task { await model.refreshHarnessBrief() } }
+                            .disabled(model.harnessBriefRefreshing)
+                        Text(model.harnessBriefSummary)
+                            .font(.system(size: 11))
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let proposal = model.modelRouteProposalSummary {
+                        Text(proposal)
+                            .font(.system(size: 11))
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if model.selectedModelWorkload == "voice_supervisor" {
+                        Text("Harness switching is unavailable. Runtime identity and approval across all configuration writers are not yet enforced.")
+                            .foregroundStyle(AppTheme.textDim)
+                    }
                     HStack {
                         Button("Draft route") { Task { await model.stageModelRoute() } }
                             .tint(AppTheme.accent)
-                            .disabled(model.modelRouteStaging || model.modelRouteConfirming)
+                            .disabled(model.selectedModelWorkload == "voice_supervisor" || model.modelRouteStaging || model.modelRouteConfirming)
                         if model.modelRouteDraftID != nil {
-                            Button("Confirm route") { Task { await model.confirmModelRoute() } }
+                            Button("Confirm selection snapshot") { Task { await model.confirmModelRoute() } }
                                 .tint(AppTheme.green)
                             Button("Discard", action: model.discardModelRouteDraft)
                         }

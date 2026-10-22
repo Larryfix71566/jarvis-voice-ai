@@ -125,3 +125,10 @@ def github_pr_checks(number: int, client: Any = None) -> dict[str, Any]:
     c = _client(client)
     params = {"kind": "checks", "number": number}
     return _get(lambda: c.get("/api/status/github", params=params))
+
+
+def status_harness_models(refresh: bool = False, client: Any = None) -> dict[str, Any]:
+    c = _client(client, timeout=EXTERNAL_TIMEOUT_S if refresh else DEFAULT_TIMEOUT_S)
+    if refresh:
+        return _get(lambda: c.post("/api/status/harness-models/refresh", json={}))
+    return _get(lambda: c.get("/api/status/harness-models"))
