@@ -1,0 +1,35 @@
+{
+  "input_sha256": "e351f459f9f0a0e9bc2c9c332b9f28aa38524da02eacca46de06f435c4bb7d23",
+  "requested_model": "claude-opus-5-5",
+  "cli_version": "2.1.291",
+  "binary_sha256": "9a1d2ed6bb4421e8fc80c892c0413f293be3ee50ae3d7dda1a7622197a056690",
+  "started_at": "2026-10-22T15:38:22.226639+00:00",
+  "inference_started": true,
+  "tools_enabled": false,
+  "automatic_fallback": false,
+  "direct_api_credentials_inherited": false,
+  "max_seconds": 300,
+  "purpose": "focused independent re-review of corrected documentation-only claim; no benchmark",
+  "reviewed_head": "9413b5e0343750c0b8bcb610cd88c6c2af2836a9",
+  "returncode": 0,
+  "timed_out": false,
+  "finished_at": "2026-10-22T15:39:56.836931+00:00",
+  "returned_models": [
+    "claude-opus-5-5"
+  ],
+  "exact_model_verified": true,
+  "review_complete": true,
+  "verdict": "REVISE",
+  "author_evidence_check": {
+    "original_input_hash_verified": true,
+    "original_source_manifest_verified": true,
+    "evidence_finding": "manifest exists at reviewed commit; omitted from the rereview packet, not absent from repository",
+    "known_script_admission_tests": [
+      "tests/unit/test_agent_skills.py::TestParsing::test_scripts_are_detected",
+      "tests/unit/test_agent_skills.py::TestNoExecutionPath::test_a_bundled_script_is_never_read_or_run"
+    ],
+    "application_code_changes": 0
+  },
+  "route": "official Claude Code authenticated Max subscription; auth checked immediately before request",
+  "input_artifact": "review-input.json: UTF-8 encoding of text value"
+}
