@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "runtime": "codex",
+  "model": "gpt-6-astra",
+  "executable": {
+    "path": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "sha256": "8a6dc3938a2f5d30cc19c50b9ccad83a5aa2ca4a2e3411665430bb78a917220a",
+    "version": "codex-cli 0.163.0-alpha.11"
+  },
+  "proof_kind": "installed_cli_loopback_mock",
+  "catalog_sha256": "cafea0443b92c59291e727e899596d90ae68a73462c7a45fa3bd93b3cd930756",
+  "invocation_sha256": "c73f1ecb5d468a8cf52f9098f7525908f8f31df5ecbaa3fc2f29c85c08ba3828",
+  "advertised_tools": [],
+  "terminal_success_without_error_items": true,
+  "api_credentials_absent": true,
+  "real_provider_calls": 0,
+  "provider_inference_performed": false,
+  "request_count": 1,
+  "candidate_runtime_diagnostic": true,
+  "production_activation_authorized": false,
+  "error_category": null,
+  "negative_unadvertised_tool_rejected": true,
+  "explicit_matching_host_refusal": false,
+  "side_effect_absent": true,
+  "limits": [
+    "Local tool construction/parser evidence only.",
+    "No subscription account, model inference, allowance, overage or billing acceptance.",
+    "An explicit operator gate and matching binary/model/config/catalog are still required."
+  ],
+  "negative_probe": {
+    "negative_unadvertised_tool_rejected": true,
+    "explicit_matching_host_refusal": true,
+    "side_effect_absent": true,
+    "terminal_success_without_error_items": true,
+    "error_category": null,
+    "request_count": 2
+  },
+  "host_isolation": {
+    "external_network": "denied_by_macos_sandbox",
+    "existing_codex_credentials": "read_denied",
+    "existing_keychain_files": "read_denied",
+    "home": "temporary_empty",
+    "provider_inference": false
+  },
+  "observed_at_utc": "2026-10-22T04:07:54.870662+00:00",
+  "runtime_receipt_sha256": "789513dce7a5386455d402cae2a1ebfe726c1791583a9e828ca918e5c92399e3",
+  "scope": "Offline diagnostic only; not installed or configured as runtime capability receipt.",
+  "focused_tests": {
+    "passed": 78,
+    "skipped": 0,
+    "failed": 0
+  },
+  "live_acceptance": "Old .10.2 live evidence is historical only. Alpha.11 activation remains blocked pending renewed exact-binary workload acceptance plus existing release/privacy gates; no new live test is authorized."
+}
