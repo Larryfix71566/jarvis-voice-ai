@@ -56,6 +56,7 @@ import logging
 import os
 import re
 import stat
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -142,8 +143,11 @@ class Skill:
     def body(self) -> str:
         """Tier two: the Markdown body, read from disk on activation."""
         if self._body is None:
-            self._body = _split_frontmatter(
-                self.path.read_text(encoding="utf-8"))[1].strip()
+            snapshot, _problems = parse_skill(self.path)
+            if (snapshot is None or snapshot.name != self.name
+                    or snapshot.description != self.description):
+                raise ValueError("skill_body_unavailable")
+            self._body = snapshot._body
         return self._body
 
     def as_prompt(self) -> str:
@@ -292,9 +296,16 @@ def parse_skill(path: Path) -> tuple[Skill | None, list[str]]:
                     return None, ["unsupported_scripts_entry"]
                 if count > MAX_ROOT_ENTRIES:
                     return None, ["package_entry_limit"]
+        if not all(hasattr(os, flag) for flag in ("O_NONBLOCK", "O_NOFOLLOW")):
+            return None, ["skill_unreadable"]
         flags = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW
         fd = os.open(path, flags)
-        with os.fdopen(fd, "rb") as source:
+        try:
+            source = os.fdopen(fd, "rb")
+        except (OSError, ValueError):
+            os.close(fd)
+            return None, ["skill_unreadable"]
+        with source:
             info = os.fstat(source.fileno())
             if not stat.S_ISREG(info.st_mode):
                 return None, ["skill_file_type_unsupported"]
@@ -496,24 +507,83 @@ def write_skill(
         problems.append("skill_file_too_large")
     if problems:
         raise ValueError("; ".join(problems))
+    if _parsed != data or _split_frontmatter(content)[0] != front:
+        raise ValueError("skill_serialization_invalid")
 
     folder = directory / data["name"]
     path = folder / "SKILL.md"
     if path.exists() or path.is_symlink():
         raise FileExistsError("skill_already_exists")
-    if folder.is_symlink():
-        raise ValueError("skill_file_type_unsupported")
-    if folder.exists():
-        with os.scandir(folder) as entries:
+    # Pin the package directory, then publish a complete file with an atomic
+    # no-overwrite hard link. A failed write cannot expose a partial SKILL.md.
+    created_folder = False
+    directory_fd = None
+    temporary_name = None
+    published = False
+    cleanup_failed = False
+    try:
+        try:
+            folder.mkdir(parents=True)
+            created_folder = True
+        except FileExistsError:
+            pass
+        if not all(hasattr(os, flag) for flag in ("O_DIRECTORY", "O_NOFOLLOW")):
+            raise ValueError("skill_write_unavailable")
+        directory_fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        with os.scandir(directory_fd) as entries:
             for count, entry in enumerate(entries, 1):
                 if entry.name.casefold() == "scripts":
                     raise ValueError("unsupported_scripts_entry")
-                if count > MAX_ROOT_ENTRIES:
+                # Reserve the final SKILL.md entry. The temporary entry is
+                # removed before return and does not authorize activation.
+                if count > MAX_ROOT_ENTRIES - 1:
                     raise ValueError("package_entry_limit")
-    # Validate and serialize completely before creating a candidate directory.
-    folder.mkdir(parents=True, exist_ok=True)
-    with path.open("x", encoding="utf-8", newline="") as output:
-        output.write(content)
+        temporary = ".skill-" + secrets.token_hex(12) + ".tmp"
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=directory_fd)
+        temporary_name = temporary  # only clean up a file we actually created
+        try:
+            output = os.fdopen(fd, "wb")
+        except (OSError, ValueError):
+            os.close(fd)
+            raise ValueError("skill_write_failed") from None
+        with output:
+            output.write(content.encode("utf-8"))
+            output.flush()
+            os.fsync(output.fileno())
+        pinned = os.fstat(directory_fd)
+        current = folder.stat(follow_symlinks=False)
+        if (current.st_dev, current.st_ino) != (pinned.st_dev, pinned.st_ino):
+            raise ValueError("skill_write_failed")
+        os.link(temporary_name, "SKILL.md", src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd, follow_symlinks=False)
+        published = True
+    except FileExistsError:
+        raise FileExistsError("skill_already_exists") from None
+    except OSError:
+        raise ValueError("skill_write_failed") from None
+    finally:
+        if temporary_name is not None and directory_fd is not None:
+            try:
+                os.unlink(temporary_name, dir_fd=directory_fd)
+            except OSError:
+                cleanup_failed = True
+        if created_folder and not published:
+            try:
+                # Never recursively delete or remove a concurrent writer's files.
+                if directory_fd is None:
+                    folder.rmdir()
+                else:
+                    pinned = os.fstat(directory_fd)
+                    current = folder.stat(follow_symlinks=False)
+                    if (current.st_dev, current.st_ino) == (pinned.st_dev, pinned.st_ino):
+                        folder.rmdir()
+            except OSError:
+                pass  # nonempty/concurrently moved folders belong to their owner
+        if directory_fd is not None:
+            os.close(directory_fd)
+        if cleanup_failed:
+            raise ValueError("skill_write_cleanup_failed") from None
 
     return path
 
@@ -783,6 +853,9 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"        {problem}")
         package_errors = validate_skill_inventory()
         for error in package_errors:
+            if error == "registry: invalid or unavailable":
+                print(f"INVALID {error}")
+                continue
             skill_id = error.partition(":")[0]
             if skill_id in frontmatter_errors:
                 ordinal, reason = frontmatter_errors[skill_id]

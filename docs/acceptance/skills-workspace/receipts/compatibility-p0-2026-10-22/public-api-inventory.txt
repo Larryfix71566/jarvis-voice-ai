@@ -1,0 +1,37 @@
+tests/unit/test_skill_compatibility.py:95:    path = skills.write_skill("sample-skill", description, "Body", {"agent": ""}, tmp_path)
+tests/unit/test_skill_compatibility.py:105:        skills.write_skill("sample-skill", "Safe text", "Body", metadata, tmp_path)
+tests/unit/test_skill_compatibility.py:141:    good = skills.write_skill("valid-skill", "Safe task instructions", "Valid instructions", directory=root)
+tests/unit/test_skill_compatibility.py:190:        skills.write_skill("sample-skill", "Safe text", "x" * (128 * 1024), directory=tmp_path)
+tests/unit/test_skill_compatibility.py:233:    path = skills.skill_from_procedure({"id": 1, "label": "safe task", "description": "yes"}, tmp_path)
+jarvis/skill_catalog.py:312:        blockers.append("bundled_scripts_are_not_available")
+jarvis/agent_skills.py:66:    compatibility_reason, load_frontmatter, validate_frontmatter,
+jarvis/agent_skills.py:466:def write_skill(
+jarvis/agent_skills.py:485:    problems = validate_frontmatter(data)
+jarvis/agent_skills.py:503:        raise FileExistsError("skill_already_exists")
+jarvis/agent_skills.py:521:def skill_from_procedure(row: dict, directory: Path | None = None) -> Path:
+jarvis/agent_skills.py:556:    return write_skill(
+jarvis/agent_skills.py:764:            path = skill_from_procedure(row)
+jarvis/skill_compatibility.py:78:    problems = validate_frontmatter(data)
+jarvis/skill_compatibility.py:82:def validate_frontmatter(data: object) -> list[str]:
+tests/unit/test_agent_skills.py:21:    skill_from_procedure,
+tests/unit/test_agent_skills.py:23:    validate_frontmatter,
+tests/unit/test_agent_skills.py:24:    write_skill,
+tests/unit/test_agent_skills.py:67:        assert validate_frontmatter({"name": "a-b", "description": "x"}) == []
+tests/unit/test_agent_skills.py:70:        problems = validate_frontmatter({})
+tests/unit/test_agent_skills.py:75:        assert validate_frontmatter({"name": "Bad Name", "description": "x"})
+tests/unit/test_agent_skills.py:76:        assert validate_frontmatter({"name": "trailing-", "description": "x"})
+tests/unit/test_agent_skills.py:77:        assert validate_frontmatter({"name": "under_score", "description": "x"})
+tests/unit/test_agent_skills.py:83:            assert validate_frontmatter({"name": name, "description": "x"})
+tests/unit/test_agent_skills.py:86:        assert validate_frontmatter(
+tests/unit/test_agent_skills.py:88:        assert validate_frontmatter(
+tests/unit/test_agent_skills.py:93:        problems = validate_frontmatter({"name": "Bad Name", "description": ""})
+tests/unit/test_agent_skills.py:97:        assert validate_frontmatter(["not", "a", "mapping"])
+tests/unit/test_agent_skills.py:447:        write_skill("my-skill", "does a thing", "# Body\n\ntext", directory=tmp_path)
+tests/unit/test_agent_skills.py:454:        write_skill("my-skill", "d", "b", directory=tmp_path)
+tests/unit/test_agent_skills.py:456:            write_skill("my-skill", "d", "b", directory=tmp_path)
+tests/unit/test_agent_skills.py:460:            write_skill("Bad Name", "d", "b", directory=tmp_path)
+tests/unit/test_agent_skills.py:466:        write_skill("my-skill", "does a thing", "body", directory=tmp_path / "skills")
+tests/unit/test_agent_skills.py:483:        path = skill_from_procedure(self.ROW, directory=tmp_path)
+tests/unit/test_agent_skills.py:491:        path = skill_from_procedure(self.ROW, directory=tmp_path)
+tests/unit/test_agent_skills.py:500:        skill_from_procedure(row, directory=tmp_path)
+tests/unit/test_agent_skills.py:505:        path = skill_from_procedure(row, directory=tmp_path)

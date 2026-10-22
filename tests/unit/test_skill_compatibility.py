@@ -16,20 +16,28 @@ def candidate(tmp_path, front="name: sample-skill\ndescription: Safe text", body
     return path
 
 
-@pytest.mark.parametrize("extra", [
-    "disable-model-invocation: true", "disable-model-invocation: false",
-    "allowed-tools: []", "model: private-canary", "license: private-canary",
-    "metadata: null", "metadata: []", "metadata: {agent: null}",
-    "metadata: {promoted_successes: true}", "metadata: {private-canary: x}",
-    "name: replacement", "metadata: {agent: a, agent: b}",
-    "metadata: &private-canary {agent: x}", "metadata: !!map {agent: x}",
-    "metadata: {source: [x]}",
+@pytest.mark.parametrize("extra,reason", [
+    ("disable-model-invocation: true", "unsupported_frontmatter_fields"),
+    ("disable-model-invocation: false", "unsupported_frontmatter_fields"),
+    ("allowed-tools: []", "unsupported_frontmatter_fields"),
+    ("model: private-canary", "unsupported_frontmatter_fields"),
+    ("license: private-canary", "unsupported_frontmatter_fields"),
+    ("metadata: null", "metadata_not_mapping"),
+    ("metadata: []", "metadata_not_mapping"),
+    ("metadata: {agent: null}", "metadata_string_required"),
+    ("metadata: {promoted_successes: true}", "metadata_integer_required"),
+    ("metadata: {private-canary: x}", "unsupported_metadata_fields"),
+    ("name: replacement", "frontmatter_duplicate_key"),
+    ("metadata: {agent: a, agent: b}", "frontmatter_duplicate_key"),
+    ("metadata: &private-canary {agent: x}", "frontmatter_yaml_features_unsupported"),
+    ("metadata: !!map {agent: x}", "frontmatter_yaml_features_unsupported"),
+    ("metadata: {source: [x]}", "metadata_string_required"),
 ])
-def test_unsupported_or_malformed_frontmatter_refuses_without_content(tmp_path, extra):
+def test_unsupported_or_malformed_frontmatter_refuses_without_content(tmp_path, extra, reason):
     path = candidate(tmp_path, "name: sample-skill\ndescription: Safe text\n" + extra)
     skill, problems = skills.parse_skill(path)
     assert skill is None
-    assert problems
+    assert problems == [reason]
     assert "private-canary" not in str(problems)
     assert str(tmp_path) not in str(problems)
 
@@ -76,12 +84,17 @@ def test_text_examples_references_and_metadata_are_retained(tmp_path):
     assert skill.metadata == dict(agent="", source="local", concept_from="example", promoted_successes=5, promoted_failures=0)
 
 
-@pytest.mark.parametrize("content", [b"\xff", b"x" * (128 * 1024 + 1), b"---\n#" + b"x" * (16 * 1024) + b"\n---\nbody"])
-def test_invalid_encoding_or_resource_limit_refuses(tmp_path, content):
+@pytest.mark.parametrize("content,reason", [
+    (b"\xff", "frontmatter_missing"),
+    (b"---\nname: sample-skill\ndescription: \xff\n---\nb", "skill_encoding_invalid"),
+    (b"x" * (128 * 1024 + 1), "skill_file_too_large"),
+    (b"---\n#" + b"x" * (16 * 1024) + b"\n---\nbody", "frontmatter_too_large"),
+])
+def test_invalid_encoding_or_resource_limit_refuses(tmp_path, content, reason):
     path = candidate(tmp_path)
     path.write_bytes(content)
     skill, problems = skills.parse_skill(path)
-    assert skill is None and problems
+    assert skill is None and problems == [reason]
     assert str(tmp_path) not in str(problems)
 
 
@@ -235,13 +248,219 @@ def test_promotion_without_agent_preserves_empty_string(tmp_path):
     assert not problems and skill.metadata["agent"] == ""
 
 
-@pytest.mark.parametrize("front", [
-    "name: sample-skill\ndescription: Safe text\nmetadata: {source: *missing}",
-    "name: sample-skill\ndescription: Safe text\nmetadata: {source: !private-canary x}",
-    "[name, description]", "? [private-canary]\n: x",
-    "name: sample-skill\ndescription: Safe text\nmetadata: {agent: " + "x" * 1025 + "}",
+@pytest.mark.parametrize("front,reason", [
+    ("name: sample-skill\ndescription: Safe text\nmetadata: {source: *missing}", "frontmatter_yaml_features_unsupported"),
+    ("name: sample-skill\ndescription: Safe text\nmetadata: {source: !private-canary x}", "frontmatter_yaml_features_unsupported"),
+    ("[name, description]", "frontmatter_not_mapping"),
+    ("? [private-canary]\n: x", "frontmatter_keys_not_strings"),
+    ("name: sample-skill\ndescription: Safe text\nmetadata: {agent: " + "x" * 1025 + "}", "metadata_string_too_long"),
 ])
-def test_yaml_shape_and_metadata_resource_refusals_are_safe(tmp_path, front):
+def test_yaml_shape_and_metadata_resource_refusals_are_safe(tmp_path, front, reason):
     skill, problems = skills.parse_skill(candidate(tmp_path, front))
-    assert skill is None and problems
+    assert skill is None and problems == [reason]
     assert "private-canary" not in str(problems)
+
+
+@pytest.mark.parametrize("entries,reason", [(256, None), (257, "package_entry_limit")])
+def test_exact_root_entry_boundary(tmp_path, entries, reason):
+    path = candidate(tmp_path)
+    for index in range(entries - 1):
+        (path.parent / f"reference-{index}.txt").touch()
+    skill, problems = skills.parse_skill(path)
+    assert problems == ([reason] if reason else [])
+    assert (skill is None) == (reason is not None)
+
+
+@pytest.mark.parametrize("count,reason", [(128, "frontmatter_not_mapping"), (129, "frontmatter_complexity_limit")])
+def test_exact_yaml_event_boundary(count, reason):
+    import yaml
+    from jarvis.skill_compatibility import load_frontmatter
+    # The scan permits 128 events; the closed schema still rejects a sequence.
+    front = "[" + ", ".join("x" for _ in range(count - 6)) + "]"
+    assert len(list(yaml.parse(front))) == count
+    assert load_frontmatter(front) == (None, [reason])
+
+
+@pytest.mark.parametrize("depth,reason", [(4, "frontmatter_not_mapping"), (5, "frontmatter_complexity_limit")])
+def test_exact_yaml_depth_boundary(depth, reason):
+    from jarvis.skill_compatibility import load_frontmatter
+    assert load_frontmatter("[" * depth + "x" + "]" * depth) == (None, [reason])
+
+
+def test_metadata_exact_character_limit_is_accepted(tmp_path):
+    path = candidate(tmp_path, "name: sample-skill\ndescription: Safe text\nmetadata: {source: " + "x" * 1024 + "}")
+    skill, problems = skills.parse_skill(path)
+    assert not problems and skill.metadata["source"] == "x" * 1024
+
+
+def test_frontmatter_byte_limit_refuses_before_yaml(tmp_path, monkeypatch):
+    import yaml
+    path = candidate(tmp_path, "#" + "x" * (16 * 1024))
+    monkeypatch.setattr(yaml, "parse", lambda *a, **k: pytest.fail("oversize frontmatter reached YAML"))
+    assert skills.parse_skill(path) == (None, ["frontmatter_too_large"])
+
+
+@pytest.mark.parametrize("flag", ["O_NOFOLLOW", "O_NONBLOCK"])
+def test_missing_platform_read_flags_fail_closed(tmp_path, monkeypatch, flag):
+    path = candidate(tmp_path)
+    monkeypatch.delattr(os, flag)
+    assert skills.parse_skill(path) == (None, ["skill_unreadable"])
+
+
+def test_failed_fdopen_does_not_leak_reader_descriptor(tmp_path, monkeypatch):
+    path = candidate(tmp_path)
+    opened = []
+    original = os.open
+    def record(*args, **kwargs):
+        fd = original(*args, **kwargs)
+        opened.append(fd)
+        return fd
+    monkeypatch.setattr(os, "open", record)
+    monkeypatch.setattr(os, "fdopen", lambda *a, **k: (_ for _ in ()).throw(OSError("private-canary")))
+    assert skills.parse_skill(path) == (None, ["skill_unreadable"])
+    with pytest.raises(OSError):
+        os.fstat(opened[0])
+
+
+def test_invalid_registry_message_is_not_attributed_to_package(tmp_path, monkeypatch, capsys):
+    path = candidate(tmp_path, "name: sample-skill\ndescription: Safe text\nunknown: x")
+    path.parent.rename(tmp_path / "registry")
+    config = tmp_path / "config.yaml"
+    config.write_text("enabled: [\n")
+    monkeypatch.setattr(skills, "SKILLS_DIR", tmp_path)
+    monkeypatch.setattr(skills, "SKILLS_CONFIG", config)
+    import jarvis.skill_catalog as catalog
+    monkeypatch.setattr(catalog, "SKILLS_DIR", tmp_path)
+    monkeypatch.setattr(catalog, "SKILLS_CONFIG", config)
+    assert skills.main(["--validate"]) == 1
+    output = capsys.readouterr().out
+    assert "INVALID registry: invalid or unavailable" in output
+    assert "package-1: invalid or unavailable" not in output
+
+
+@pytest.mark.parametrize("stage", ["fsync", "link"])
+@pytest.mark.parametrize("preexisting_folder", [False, True])
+def test_failed_writer_never_publishes_partial_skill(tmp_path, monkeypatch, stage, preexisting_folder):
+    folder = tmp_path / "sample-skill"
+    if preexisting_folder:
+        folder.mkdir()
+        (folder / "keep.txt").write_text("unrelated")
+    def fail(*args, **kwargs):
+        raise OSError("private-canary")
+    monkeypatch.setattr(os, stage, fail)
+    with pytest.raises(ValueError, match="^skill_write_failed$"):
+        skills.write_skill("sample-skill", "Safe text", "Body", directory=tmp_path)
+    assert not (folder / "SKILL.md").exists()
+    if preexisting_folder:
+        assert [p.name for p in folder.iterdir()] == ["keep.txt"]
+    else:
+        assert not folder.exists()
+
+
+def test_writer_race_preserves_winner_and_hides_path(tmp_path, monkeypatch):
+    original_link = os.link
+    def race(src, dst, **kwargs):
+        (tmp_path / "sample-skill" / "SKILL.md").write_text("concurrent winner")
+        return original_link(src, dst, **kwargs)
+    monkeypatch.setattr(os, "link", race)
+    with pytest.raises(FileExistsError, match="^skill_already_exists$"):
+        skills.write_skill("sample-skill", "Safe text", "Body", directory=tmp_path)
+    folder = tmp_path / "sample-skill"
+    assert (folder / "SKILL.md").read_text() == "concurrent winner"
+    assert [p.name for p in folder.iterdir()] == ["SKILL.md"]
+
+
+def test_writer_rejects_changed_serialization_before_creation(tmp_path, monkeypatch):
+    import yaml
+    monkeypatch.setattr(yaml, "safe_dump", lambda *a, **k: "name: another-skill\ndescription: Safe text\n")
+    with pytest.raises(ValueError, match="^skill_serialization_invalid$"):
+        skills.write_skill("sample-skill", "Safe text", "Body", directory=tmp_path)
+    assert not (tmp_path / "sample-skill").exists()
+
+
+def test_lazy_body_validates_supported_content(tmp_path):
+    path = candidate(tmp_path)
+    skill = skills.Skill("sample-skill", "Safe text", path)
+    assert skill.body() == "Keep all instructions."
+    assert skill._body == "Keep all instructions."
+
+
+@pytest.mark.parametrize("kind", ["control", "mismatched_card", "fifo", "symlink"])
+def test_lazy_body_cannot_bypass_parser(tmp_path, monkeypatch, kind):
+    path = candidate(tmp_path)
+    if kind == "control":
+        path.write_text(path.read_text().replace("description:", "allowed-tools: private-canary\ndescription:"))
+    if kind in {"fifo", "symlink"}:
+        path.unlink()
+        if kind == "fifo":
+            os.mkfifo(path)
+        else:
+            path.symlink_to(tmp_path / "missing")
+    skill = skills.Skill("wrong-card" if kind == "mismatched_card" else "sample-skill", "Safe text", path)
+    # Fail the old unbounded read before it can block on the FIFO.
+    monkeypatch.setattr(Path, "read_text", lambda *a, **k: pytest.fail("unbounded lazy read"))
+    with pytest.raises(ValueError, match="^skill_body_unavailable$"):
+        skill.body()
+
+
+@pytest.mark.parametrize("resources,allowed", [(255, True), (256, False)])
+def test_writer_final_entry_count_matches_parser_limit(tmp_path, resources, allowed):
+    folder = tmp_path / "sample-skill"
+    folder.mkdir()
+    for index in range(resources):
+        (folder / f"reference-{index}.txt").touch()
+    if allowed:
+        path = skills.write_skill("sample-skill", "Safe text", "Body", directory=tmp_path)
+        skill, problems = skills.parse_skill(path)
+        assert skill is not None and not problems
+        assert len(list(folder.iterdir())) == 256
+    else:
+        with pytest.raises(ValueError, match="^package_entry_limit$"):
+            skills.write_skill("sample-skill", "Safe text", "Body", directory=tmp_path)
+        assert len(list(folder.iterdir())) == resources
+
+
+def test_writer_partial_io_failure_removes_only_its_staging_file(tmp_path, monkeypatch):
+    original = os.fdopen
+    class PartialWrite:
+        def __init__(self, fd):
+            self.output = original(fd, "wb")
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            self.output.close()
+        def write(self, content):
+            self.output.write(content[:16])
+            raise OSError("private-canary")
+    monkeypatch.setattr(os, "fdopen", lambda fd, mode: PartialWrite(fd))
+    with pytest.raises(ValueError, match="^skill_write_failed$"):
+        skills.write_skill("sample-skill", "Safe text", "Body", directory=tmp_path)
+    assert not (tmp_path / "sample-skill").exists()
+
+
+def test_writer_publishes_complete_content_at_the_atomic_link(tmp_path, monkeypatch):
+    original = os.link
+    def inspect_link(src, dst, **kwargs):
+        folder = tmp_path / "sample-skill"
+        assert not (folder / "SKILL.md").exists()
+        staged = (folder / src).read_text()
+        assert staged.endswith("Required ending.\n")
+        assert "name: sample-skill" in staged
+        return original(src, dst, **kwargs)
+    monkeypatch.setattr(os, "link", inspect_link)
+    path = skills.write_skill("sample-skill", "Safe text", "Required ending.", directory=tmp_path)
+    assert [p.name for p in path.parent.iterdir()] == ["SKILL.md"]
+
+
+def test_serialization_delimiter_check_precedes_directory_creation(tmp_path, monkeypatch):
+    monkeypatch.setattr(skills, "_split_frontmatter", lambda _text: ("changed", "Body"))
+    with pytest.raises(ValueError, match="^skill_serialization_invalid$"):
+        skills.write_skill("sample-skill", "Safe text", "Body", directory=tmp_path)
+    assert not (tmp_path / "sample-skill").exists()
+
+
+def test_individually_valid_unicode_fields_still_obey_aggregate_byte_cap(tmp_path):
+    text = "\U0001f600" * 1024
+    with pytest.raises(ValueError, match="^frontmatter_too_large$"):
+        skills.write_skill("sample-skill", text, "Body", dict(agent=text, source=text, concept_from=text), tmp_path)
+    assert not (tmp_path / "sample-skill").exists()

@@ -2,7 +2,7 @@
 date: 2026-10-22
 system: codex
 rows: [WS-03]
-prs: []
+prs: [251]
 ---
 
 # WS-03 P0 compatibility candidate — 2026-10-22
@@ -19,6 +19,16 @@ the claim changed; frozen package/selection fixtures remain untouched and pass.
 No reserved numbers, out-of-scope changes, registry mutation or WS-20 edits.
 
 Next: independent exact-source Claude Max review and draft PR/CI. Feature merge,
-installation and acceptance require separate authority. SW-B/C remain2/12.
+installation and acceptance require separate authority. SW-B/C remain 2/12.
 See the dated candidate entry in the existing canonical Skills workspace plan
 for numerical bounds, evidence scope and remaining dependencies.
+
+## Review corrections
+
+Original #251 source4699a54 passed five CI checks; completed Claude Max review
+returned REVISE (minor), no Critical/High. Corrected resource-boundary/code tests,
+atomic writer and diagnostic/lazy-reader defects pass 346 offline regressions.
+The original verdict is preserved with author dispositions and caller evidence
+in the existing Skills receipt directory. Follow-up exact-source review and CI
+remain pending. WS-20 and WS-17 main changes are integrated without editing their
+content; no checkbox, provider, registry or installed-build changes.

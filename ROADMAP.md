@@ -776,14 +776,14 @@ Source: [Skills plan §12, SW-A…SW-L](docs/plans/MORTIMER_SKILLS_WORKSPACE_IMP
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
-- **Status:** in-progress: bounded P0 compatibility implementation on the separately claimed branch; documentation registration #248 landed as `edfa285` after independent review and five green checks. Candidate focused offline regression: 232 passed. Independent implementation review and PR CI remain pending; no feature merge, installation or acceptance advancement. SW-B/C remain the only accepted full gates (2/12); historical receipts remain unchanged.
+- **Status:** in-progress: bounded P0 compatibility implementation on the separately claimed branch; documentation registration #248 landed as `edfa285` after independent review and five green checks. Draft #251 original head passed five CI checks; independent review returned REVISE (minor). Corrections now pass 346 focused offline tests; fresh exact-source rereview and updated-head CI remain pending; no feature merge, installation or acceptance advancement. SW-B/C remain the only accepted full gates (2/12); historical receipts remain unchanged.
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.
 - **Where:** `codex/ws03-compatibility-p0-20261022`, based on verified main `edfa285`. Registration #248 and its reviewed head `71c2789` are historical. Separate documentation handoff #246 remains frozen.
 - **Plan:** `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`
 - **Scope:** This dispatch first claims `jarvis/agent_skills.py`, compatibility-only changes in `jarvis/skill_catalog.py` and `jarvis/skill_service.py`, at most one pure `jarvis/skill_compatibility.py`, focused `tests/unit/test_agent_skills.py`, `test_skill_catalog.py`, `test_skill_service.py`, `test_skill_selection.py`, `test_skill_injection_boundary.py`, a new compatibility test module and synthetic compatibility fixtures. Documentation: this WS-03 block, its canonical plan and WS-03 receipts/log. No package/configuration/registry activation, new schema/config key, migration, provider/auth/model routing, native UI, sandbox runtime or other workstream change is claimed. The broader historical Skills scope is retained in the canonical plan; additional source paths need separate coordination before expansion.
-- **Next step:** codex: obtain bounded independent Claude Max implementation review, resolve findings, publish draft and verify exact-head CI. larry: review the completed candidate before any feature merge; installation, runtime readback and remaining manual gates stay separately authorized. No WS-20 edits.
+- **Next step:** codex: finish focused independent rereview of the corrected #251 candidate and verify fresh exact-head CI. larry: review the completed candidate before any feature merge; installation, runtime readback and remaining manual gates stay separately authorized. No WS-20 edits.
 - **Updated:** 10-22 (P0 source slice and offline regressions; no live activation or gate closure)
 
 

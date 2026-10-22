@@ -16,6 +16,36 @@ activation, full acceptance, or release. Implement in a dedicated worktree;
 preserve concurrent work. Acceptance gates remain open until their full evidence
 is recorded.
 
+## 2026-10-22 — focused review correction candidate
+
+Main `6234949` integrated without conflict before edits; WS-20 enforcement and
+all non-WS-03 rows preserved. Claude's completed review of `4699a54` returned
+REVISE (minor), no Critical/High findings. Its original verdict remains unchanged.
+M1's concern about skipped async tests is rebutted by pytest.ini AUTO mode and
+six verbosely passing final-boundary cases; this is author evidence, not approval.
+
+Before editing assertions, the following P0-created test IDs are declared for
+strengthening from generic refusal to exact reason codes:
+- `test_skill_compatibility.py::test_unsupported_or_malformed_frontmatter_refuses_without_content`
+- `test_skill_compatibility.py::test_invalid_encoding_or_resource_limit_refuses`
+- `test_skill_compatibility.py::test_yaml_shape_and_metadata_resource_refusals_are_safe`
+
+No additional historical/frozen test outcome change is intended. Add scanner
+boundary evidence without treating schema-invalid depth/event fixtures as valid
+skills. Evaluate/fix atomic no-overwrite authoring, fixed I/O error reasons,
+round-trip checks, bounded lazy body reading and registry-error attribution.
+No executable resource support or activation capability is added. Record exact
+final tests and independently reviewed dispositions before calling this slice ready.
+
+Correction regression: **346 passed**, one dependency deprecation warning. New
+coverage reproduced 14 failures before fixes. The [correction receipt](../acceptance/skills-workspace/receipts/compatibility-p0-2026-10-22/AUTHOR_CORRECTIONS.md)
+records every M1–M4/L1–L8 disposition, exact caller evidence and the unmodified
+original REVISE verdict. Atomic no-overwrite authoring, bounded lazy reads, fixed
+I/O diagnostics and serializer checks are implemented; final independent rereview
+and updated-head CI remain separate. Exotic delimiter differences remain
+fail-closed; aggregate byte limits override otherwise-valid character lengths.
+No full-package compatibility or new activation capability is claimed.
+
 ## 2026-10-22 — P0 implementation candidate after registration
 
 Registration #248 merged as `edfa28527d467ccf12dba7de8577211a3e59764a` at

@@ -20,10 +20,12 @@ from jarvis.agent_skills import (
     read_skill_registry,
 )
 
+from jarvis.skill_compatibility import MAX_SKILL_BYTES
+
 MANIFEST = "mortimer.yaml"
 MAX_PACKAGE_FILES = 128
 MAX_PACKAGE_BYTES = 10 * 1024 * 1024
-MAX_TEXT_FILE_BYTES = 128 * 1024
+MAX_TEXT_FILE_BYTES = MAX_SKILL_BYTES
 SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 TOP_LEVEL_FIELDS = frozenset({
     "schema_version", "skill_id", "display_name", "category", "version",
