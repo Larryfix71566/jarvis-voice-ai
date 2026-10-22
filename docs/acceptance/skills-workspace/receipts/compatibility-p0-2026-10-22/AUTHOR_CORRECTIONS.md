@@ -36,8 +36,8 @@ selection fixtures are unchanged. No acceptance checkbox changed.
   injection_boundary, resources, authoring_validation, workspace_fixtures,
   runtime_inventory and subagent. Isolated synthetic paths; no provider inference.
 - Six final-injection parametrizations separately passed with verbose Mode.AUTO
-  evidence: unsupported-control, scripts, duplicate, alias, tag, unknown-metadata
-  (exact collected IDs retained in adjacent sanitized execution evidence).
+  evidence: control/scripts drift across legacy, V2 automatic and V2 explicit
+  selection (exact collected IDs retained in adjacent sanitized execution evidence).
 
 Writer scope is atomic file publication in the trusted local authoring directory,
 not a transaction against hostile concurrent ancestor replacement or process/power
