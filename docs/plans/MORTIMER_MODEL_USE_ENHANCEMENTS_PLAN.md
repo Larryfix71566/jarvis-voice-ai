@@ -1126,3 +1126,8 @@ Larry authorized publishing the independently reviewed isolated R3 patch as a dr
 Plan Library `libfile_502deeb949688191a3c41f02eafadb4c` version2; full isolated handoff `libfile_cd1e8c0339508191b0dd013bba2b0cc9` version1. Three exact Opus Max document reviews completed; final textual amendments self-checked, not fourth-reviewed. Independent code review found no blockers only within the narrowed foundation, human review required. Current evidence238 backend/16 native tests plus five skill matcher cases is source-specific, not live acceptance. Cross-system source review required before merge remains separate.
 
 Universal approval across config writers, durable model identity, runtime ACK and rollback are unimplemented. Harness switching must remain unavailable; selected metadata never proves actual active voice identity. Benchmark, model selection, provider permissions, installation and any later merge remain separate decisions. Existing current-release installation must not wait for this feature. No new plan/row or duplicate skill importer is introduced.
+
+
+### 2026-10-22 — claim alignment after cross-system review
+
+The earlier R3 claim description is historical. Current bounded scope reuses the unchanged status_models tool/schema; the proposed extra tool is withdrawn. The additive cached harness_brief read in jarvis/status/models.py also participates in existing daily collection and needs an injectable reader for isolation. Existing health probes, provider policy, registry/matcher semantics and installer remain unchanged. Larry authorized correcting the independent review findings and fresh review/CI on the draft; claim landing, merge and installation remain separate.
