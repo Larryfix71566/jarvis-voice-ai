@@ -1117,3 +1117,20 @@ verification: 302 passed / three existing prerequisite skips. Final frozen
 full verification and publication results are maintained in PR #239. This
 is source evidence only; WS-17 retains review/integration/installation and
 all runtime/private-route gates. The old interrupted run is not a pass.
+
+### 2026-10-22 — Codex alpha.11 offline compatibility continuation
+
+The installed Codex executable changed from 0.163.0-alpha.10.2 to
+0.163.0-alpha.11. WS-05 owns the minimal version-contract continuation in
+`jarvis/subscription.py` and its capability tests, isolated from PR #243.
+Current guard correctly refuses the unknown version. Bounded localhost-only
+positive and injected-unadvertised-tool probes passed with external network
+and credential reads denied, and 33 unchanged capability tests passed.
+Prepare the version admission plus regression coverage and require independent
+source review and offline verification before draft publication. The existing
+exact binary/model/catalog/invocation receipt still gates execution. Older
+live evidence is historical; activation remains blocked pending renewed
+exact-binary workload acceptance and the existing release/privacy gates.
+Both prior live-test allowances are used. Any renewed live test needs fresh
+bounded authorization; existing extra-usage confirmations remain recorded.
+No installation, configuration, account or service changes are authorized here.

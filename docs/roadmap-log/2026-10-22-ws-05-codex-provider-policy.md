@@ -23,3 +23,10 @@ single-registry-loader violation. Repaired by reusing the existing loader
 with an explicit protected path. Expanded focused tests: 302 passed / three
 prerequisite skips. Frozen full and CI results are recorded on #239; release
 owner retains review/integration/installation. No new live inference.
+
+Claimed alpha.11 offline compatibility continuation after main 636880e,
+within the existing WS-05 subscription/runtime scope and branch. Source is
+limited to exact version admission and related capability tests; preserve
+all runtime receipt/privacy gates. Independent source review and focused
+verification precede draft publication. No PR #243 merge, installation or
+live test; prior exact-binary live acceptance does not transfer to alpha.11.
