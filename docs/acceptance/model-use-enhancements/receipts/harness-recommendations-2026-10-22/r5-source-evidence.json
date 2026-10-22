@@ -61,9 +61,13 @@
     {
       "path": "tests/unit/test_model_preferences.py",
       "sha256": "eafba3e6c677a813579de24abb1fbddd5dd67b17f3c89ffe0b867ec0743c9efe"
+    },
+    {
+      "path": "tests/unit/test_model_route_contracts.py",
+      "sha256": "8ecfa2ba34f505fc2e464f8f7bb5561f0a2d133282f621b44c1ff47c098674a8"
     }
   ],
-  "focused_backend_passed": 210,
+  "focused_backend_passed": 257,
   "native_passed": 18,
   "matcher_cases_passed": 7,
   "package_revision": "8090fe89b6f92b7ec004c8705bad8865a9916707e3c97fe2ccb963268bcb5cd0",
@@ -78,8 +82,16 @@
     "R5_SWIFT_TESTS_PERMITTED.log": "c10015ef72b586b4c10586ed98f5f4fe406abcfd49cb57b4ccbff1ed12163b35",
     "R5_SKILL_VALIDATION.json": "6e265de7d38d0b9276f367bef0f6ad39644a9611830543f7fdae4d88166b2f6c",
     "R5_FOCUSED_FINAL.log": "b391072225e4430658080991c3241ea2d7995e08827b36654a5d401da8fb3d19",
-    "R5_FROZEN_FIXTURE_TESTS.log": "8faff11dc8a72e446945fdab52f023a93c57ea6b377f91c8900618754ffbdd9a"
+    "R5_FROZEN_FIXTURE_TESTS.log": "8faff11dc8a72e446945fdab52f023a93c57ea6b377f91c8900618754ffbdd9a",
+    "R5_REFUSAL_CONTRACT_TESTS.log": "d210b60f6e02b4d92e046fa495d62b2bf10e8b53f9367157c275b26d7388a7fa"
   },
   "frozen_fixture_tests_passed": 3,
-  "protected_status_fixture": "restored byte-for-byte to main; no scanner/pin changes"
+  "protected_status_fixture": "restored byte-for-byte to main; no scanner/pin changes",
+  "refusal_contract_correction": {
+    "cause": "0f6d62a CI expected quality refusal for an unbound legacy draft; early exact-approval refusal is intentional",
+    "runtime_change": false,
+    "focused_recheck_passed": 83,
+    "additional_distinct_cases": 47,
+    "coordination": "Provider owner notified before shared contract assertion edit; no provider runtime/policy changes"
+  }
 }

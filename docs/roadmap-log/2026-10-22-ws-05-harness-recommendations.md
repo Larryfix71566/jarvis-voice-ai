@@ -20,3 +20,8 @@ Initial published head49ebd29795b43422d02be685e77bdab8e1be7418 failed CI for the
 ## R5 cross-system corrections
 
 Addressed six review groups in the bounded preference/status/skill/UI surface; no shared provider policy edit.210 backend/18 native tests plus seven matcher cases pass. Fresh focused review and exact-head CI pending. Claim scope aligned in its separate draft; both histories preserved on merge. No merge/install/model switch or live benchmark.
+
+## R5 legacy refusal contract alignment
+
+
+CI refusal-contract correction: exact head0f6d62a produced6,911 unit passes and one old refusal-message expectation failure. Unbound legacy drafts now fail before validation/catalog access. Update only the expectation/name in test_model_route_contracts.py, retaining the staging quality-floor and no-saved-preference assertions and prohibiting catalog work.83 focused contract/preference/confirmation tests pass, adding47 distinct cases to the earlier210 (257 distinct backend cases total). Provider owner was notified; provider runtime/policy paths are unchanged. Fresh exact-head CI and focused review remain required.
