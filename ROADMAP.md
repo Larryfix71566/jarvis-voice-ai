@@ -1625,3 +1625,28 @@ records existing release/acceptance status, which is preserved here.
 - **Updated:** 10-20 (Claude implementation-readiness review incorporated; documentation only; future implementation remains parked)
 
 </details>
+
+
+## 12. Phone access — planned, not started
+
+<details id="ws-30">
+<summary>WS-30 — Private phone voice, results and roadmap access · provisional design</summary>
+
+Larry requested saving the revised phone-access draft in the existing plan
+folder and appending this initiative at the end of the roadmap on 2026-10-22.
+This entry records planned work only. WS-04 retains remote-access foundations;
+WS-17 retains console/result contracts, WS-05 provider/privacy readiness and
+WS-24 durable task recovery. No existing owner, scope or acceptance state changes.
+
+- **Owner:** `codex` for this documentation dispatch only; implementation owner unassigned
+- **Status:** proposed: planned, not started; revision 3 remains provisional, not approved for implementation or accepted; revision 2 received conditional provisional-adoption review, with final author amendments recorded
+- **Implemented by:** not implemented; Codex prepared the provisional design and incorporated both Fable reviews, retaining their exact reviewed-version provenance
+- **Remaining work / acceptance:** Resolve the explicit user decisions and preserve current acceptance-first priority. Separately dispatch owner/branch/scope before code, reserve shared identifiers before use and obtain any network/speech/provider authorization. Deliver both foreground voice and interactive cards/roadmap before claiming the phone goal complete; source, installed-build, phone and live acceptance remain distinct. No checkbox closes here.
+- **Model version:** Parent selected GPT-6 Astra for drafting; actual drafting runtime attribution is unverified. Both independent review receipts confirm `claude-fable-5-1` through authenticated Max with tools disabled and no automatic fallback. Follow-up on immutable revision 2 resolved all eight original findings at design level and found it ready for provisional adoption subject to decisions and two amendments. Revision 3 applies those author amendments plus context/media scheduling; these additions were not re-reviewed.
+- **Where:** documentation branch `codex/phone-access-plan-20261022`, based on fetched main `fccb760`; architecture evidence remains pinned to `b97a8b3`; isolated checkout; no implementation branch or runtime claim
+- **Plan:** [Provisional phone-access plan, revision 3](docs/plans/MORTIMER_PHONE_ACCESS_PLAN.md); source SHA-256 `65f4bfc6f4b0ccf3a177f9776109daf851da844a836dc7ca17bcdf8c9ac1ba5d`. The existing [WS-04 remote-access plan](docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md) remains authoritative for its foundations; reconcile adoption there rather than duplicating implementation ownership.
+- **Scope:** Documentation only: this appended end section, the revision-3 provisional draft saved at the linked path and `docs/roadmap-log/2026-10-22-ws-30-phone-access-intake.md`. Future source/UI/auth/schema/transport changes remain proposals, not locks or assignments. No service, credential, model invocation, paid API, network/VPN/port/security setting, deployment or shared-identifier change is authorized or reserved by this entry.
+- **Next step:** codex: retain immutable revision-2 review input and transparent revision-3 amendment history. larry: decide the provisional design choices; existing owners: finish or explicitly disposition current acceptance. Only a later bounded dispatch may start implementation; saving this plan is not design acceptance.
+- **Updated:** 10-22 UTC (Larry requested plan-folder storage and end-of-roadmap intake; implementation not started)
+
+</details>
