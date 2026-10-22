@@ -314,8 +314,8 @@ def test_saygm_existing_endpoint_normalization_preserved():
 @pytest.mark.parametrize('url', ['https://api.openai.com/v1','https://api.anthropic.com/v1',
     'https://other.openai.com/v1','https://other.anthropic.com/v1'])
 def test_registry_cannot_relabel_retired_provider(monkeypatch,url):
-    from jarvis import provider_access
-    monkeypatch.setattr(provider_access.yaml,'safe_load',lambda _: {'endpoints':{
+    from jarvis.agents import upgrade_agent
+    monkeypatch.setattr(upgrade_agent,'load_registry_layers',lambda _: {'endpoints':{
         'fixture':{'provider':'unretired','base_url':url}}})
     with pytest.raises(ProviderAccessError):
         require_api_access(provider='unretired',base_url=url)

@@ -1102,3 +1102,18 @@ Five new regression cases failed before the repair; the expanded focused
 suite passes 243 tests (including existing localhost-only redirect tests).
 Full offline gates and final publication CI remain pending. No live provider
 requests, account/configuration changes, service restart or installation.
+
+Follow-up verification: the first full run was interrupted after inherited
+Pipecat dotenv state blocked synthetic providers (175 failed / 3,699 passed /
+11 skipped). `pipecat/runner/run.py:140` was confirmed as the import-time
+dotenv caller without loading credentials in that diagnostic. Test-only
+`PYTHON_DOTENV_DISABLED=1 RUN_LIVE=0` isolates the installed environment;
+76 tests in sampled failing groups then passed. The isolated full run
+completed with 6,857 passes, 11 skips, two passing subtests and one genuine
+registry single-loader contract failure. Repaired by using the existing
+`load_registry_layers(DEFAULT_PROFILES_PATH)` explicitly, preserving protected
+path precedence and its validation without a second parser. Expanded focused
+verification: 302 passed / three existing prerequisite skips. Final frozen
+full verification and publication results are maintained in PR #239. This
+is source evidence only; WS-17 retains review/integration/installation and
+all runtime/private-route gates. The old interrupted run is not a pass.

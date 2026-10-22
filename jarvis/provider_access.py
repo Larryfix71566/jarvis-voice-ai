@@ -13,7 +13,6 @@ import json
 from collections.abc import Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from pathlib import Path
 
 import yaml
 from urllib.parse import urlsplit
@@ -79,9 +78,10 @@ def _eligible_api_endpoint(provider, base_url) -> bool:
            for domain in ("openai.com", "anthropic.com")):
         return False
     try:
-        registry = yaml.safe_load((Path(__file__).resolve().parents[1]
-                                   / "config/model_endpoints.yaml").read_text())
-        endpoints = registry["endpoints"]
+        from jarvis.agents.upgrade_agent import DEFAULT_PROFILES_PATH, load_registry_layers
+        # Explicit protected location wins over JARVIS_UPGRADE_MODELS. Reuse
+        # the single validated loader; never parse a second endpoint registry.
+        endpoints = load_registry_layers(DEFAULT_PROFILES_PATH)["endpoints"]
         if not isinstance(endpoints, dict):
             return False
         matches = {entry.get("provider") for entry in endpoints.values()
