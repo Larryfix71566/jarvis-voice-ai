@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status:** Bounded harness remediation is claimed only after the 2026-10-22 documentation amendment lands on main, on `codex/ws05-harness-remediation-20261022`; no repair source edits or tests yet. #242/#253 remain frozen and unmerged dependencies. Prior recorded status follows: Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: SUBSCRIPTION RETIREMENT STAGED 2026-10-21 — draft #232 contains opt-in runtime guards and a buffered native voice/tool adapter; activation and incremental-streaming acceptance remain blocked. Claim #230 is merged and all five claim CI checks passed. No deployment or runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
+**Status:** Bounded harness remediation is claimed on main via #257, with active branch `codex/ws05-harness-remediation-20261022` and its exact scope/CX-28 unchanged. #242/#253 remain frozen, unmerged dependencies at claim registration. Separately, reviewed Codex alpha.11 source from frozen #244 lands only after the current-main integration candidate is merged; sanitation/docs reconciliation review and fresh CI remain required. No runtime activation, installed-build or live acceptance follows. Prior recorded status follows: Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: SUBSCRIPTION RETIREMENT STAGED 2026-10-21 — draft #232 contains opt-in runtime guards and a buffered native voice/tool adapter; activation and incremental-streaming acceptance remain blocked. Claim #230 is merged and all five claim CI checks passed. No deployment or runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -1178,3 +1178,63 @@ installation or service operation is authorized by this amendment. The prior
 47-pass receipt is Claude VM evidence, not Mac or CI evidence. No acceptance
 checkbox closes. Separate release/restoration and WS-03 compatibility work
 continue under their existing owners.
+
+### 2026-10-22 — Codex alpha.11 offline compatibility continuation
+
+The installed Codex executable changed from 0.163.0-alpha.10.2 to
+0.163.0-alpha.11. WS-05 owns the minimal version-contract continuation in
+`jarvis/subscription.py` and its capability tests, isolated from PR #243.
+Current guard correctly refuses the unknown version. Bounded localhost-only
+positive and injected-unadvertised-tool probes passed with external network
+and credential reads denied, and 33 unchanged capability tests passed.
+Prepare the version admission plus regression coverage and require independent
+source review and offline verification before draft publication. The existing
+exact binary/model/catalog/invocation receipt still gates execution. Older
+live evidence is historical; activation remains blocked pending renewed
+exact-binary workload acceptance and the existing release/privacy gates.
+Both prior live-test allowances are used. Any renewed live test needs fresh
+bounded authorization; existing extra-usage confirmations remain recorded.
+No installation, configuration, account or service changes are authorized here.
+
+Minimal implementation adds only the exact alpha.11 version to the verified
+set and parameterizes receipt-required coverage for both .10.2 and .11.
+Focused capability/runtime tests pass 78/78. The new exact receipt validates;
+the old .10.2 receipt is rejected against .11. Public sanitized diagnostic:
+[offline receipt](../acceptance/model-use-enhancements/receipts/codex-alpha11-offline-2026-10-22.json).
+The complete local mock receipt remains uninstalled. Independent source review
+and final-head CI are pending at this implementation commit.
+
+Alpha.11 continuation verification: 182 focused offline tests pass, strict
+roadmap has zero errors/warnings, and independent tools-disabled Fable 5.1
+review of `b4ce39a` reports no blocking findings. [Review and dispositions](../acceptance/model-use-enhancements/receipts/codex-alpha11-review-2026-10-22.md).
+The diagnostic markers are informational collection metadata, not runtime
+authorization controls. Following reviewed version admission, an exact matching
+full diagnostic receipt can satisfy the capability check; separate operator
+flags and release/live acceptance still apply. Nothing here sets those flags
+or installs that receipt. Renewed exact-binary workload acceptance remains
+required before activation. Final publication CI is tracked on the draft PR.
+
+### 2026-10-22 — Alpha.11 sanitation and current-main integration
+
+Integrate frozen #244 `014f915` with coordinator-verified main `2944080`,
+preserving both full dated additions above and all harness ownership/CX-28
+boundaries. The alpha.11 runtime/test bytes remain the independently reviewed
+`b4ce39a` blobs. Remove raw personal launcher paths from the final public
+receipt; retain the original launcher digest as historical provenance, not a
+digest of transformed source. Correct the author disposition while preserving
+the original review findings. Previously published history is not rewritten.
+The public summary still lacks the catalog and cannot activate a runtime.
+
+The original #244 publication passed all five CI checks; those checks do not
+certify this new main combination. Fresh docs-delta review and publication CI
+are required here. The serial coordinator alone owns main integration; no
+installation, service/model change, live test or acceptance checkoff is included.
+
+Prospective-main lifecycle correction: the coordinator's synthetic merge of
+0ad6bb1 correctly makes frozen provider 014f915 an ancestor. The strict checker
+then rejects the historical provider branch in the active claimed Where field.
+Move only that completed branch and its complete lineage to an explicitly
+historical field. Keep the active harness Where, Owner, Status, Scope,
+Next step and CX-28 unchanged in meaning; all source/test blobs and acceptance
+checkboxes remain unchanged. The earlier Where-byte-equality receipt describes
+5889a92 only and is superseded for this one authorized factual relocation.
