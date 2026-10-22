@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** FOUNDATION LANDED; Larry selected error-failing roadmap CI with advisory warnings on 2026-10-22. The dated checker-policy registration below records this decision and bounded implementation scope. #249 contains documentation only; enforcement begins after its claim lands on main and requires its own tests/review/publication CI. Larry approved only the isolated registration merge after final review/CI; no implementation merge, product acceptance or deployment follows. The earlier acceptance inventories and source limits remain historical; remaining live evidence/Phase A/B exit stays open.
+**Status:** FOUNDATION LANDED; Larry’s error-failing/advisory-warning checker policy is implemented in this bounded candidate after registration #249 merged as `7b295cd`. The changed-source tests and proposed command are recorded below; exact-source Claude review and publication CI live in the PR. Enforcement becomes effective only after a separately authorized implementation merge. No product acceptance, branch-protection change or installation follows; final live evidence/Phase A/B exit remains open.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -627,3 +627,36 @@ controller, runbook and wider completion documents are not included in this
 registration's merge scope. Later integration must preserve this newer policy
 and claim rather than overwrite it with their dated decision-pending wording.
 No claim, evidence or accepted scope belonging to another workstream changes.
+
+
+## Checker enforcement candidate — 2026-10-22
+
+Documentation-only registration #249 merged at 16:21:40 UTC as
+`7b295cd92dfd331d49c08b723f622491e13f4dfa`. Main readback confirmed the exact
+reviewed tree and Codex claimed ownership, the branch
+`codex/ws20-checker-enforcement-20261022`, and the bounded workflow/test scope
+before implementation. Final registration review had no blockers; all five CI
+checks passed at `bd02062`, actual checkout `7341ea7`, identical full tree.
+The serial documentation merge slot was released to the WS-03 owner.
+
+This candidate removes `--warn-only` from the existing roadmap CI step and
+updates only its name/comment. The checker source, severities, optional checks,
+all other workflow jobs/triggers/permissions/action pins and branch protection
+are unchanged. Five command-level regression cases cover clean, error-only,
+warning-only, mixed and legacy advisory behavior using synthetic Git repositories
+and default `origin/main` resolution. The existing 31 tests plus these five
+pass (36 total). The test’s old advisory-only comment is corrected within scope.
+
+The [implementation log](../roadmap-log/2026-10-22-ws-20-checker-enforcement.md)
+records changed-source identity and validation. The PR carries the independent
+Claude review and actual CI checkout identity without changing a reviewed head
+to add its own metadata. Larry’s implementation-merge decision remains separate.
+A failing `allowlist` job blocks merges only under existing protection that
+requires that job; no protection setting is changed or assumed.
+
+Both current milestone checkboxes stay unchanged. The policy decision has been
+made and this implementation is reviewable; final enforcement disposition waits
+its own merge. Live/hardware/observation and owner-linked final Phase A/B evidence
+remain open. Frozen #247 retains the broader runbook and criterion reconciliation;
+its old decision-pending prose is historical and must not overwrite this policy
+when it is later integrated. #246/#247/#243 are not merged by this candidate.
