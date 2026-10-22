@@ -543,6 +543,24 @@ summary, its WS-17/20 status fields, dated joint-working plan/log, and the
 existing right-pane preview on `codex/roadmap-status-20261017`. This is
 documentation only; preserve other owners’ rows, checkboxes and pending #209.
 
+**Checker-policy decision — Larry, 2026-10-22 15:39:07 UTC:** errors fail CI;
+warnings remain advisory. Larry approved preparing the reviewed enforcement
+change, with no merge/deployment or branch-protection change. This separate
+registration proposal uses `docs/ws20-checker-policy-claim-20261022`; #247 stays
+frozen at `e284526`. B4 retains Claude ownership; Codex prepares documentation,
+synthetic verification and reviewable integration under the delegated WS-20
+workstream. Proposed implementation branch: `codex/ws20-checker-enforcement-20261022`,
+with Claude's bounded cross-review required. Scope is only the existing
+`.github/workflows/validate.yml` roadmap step's comment/name/invocation,
+directly related synthetic checker tests, and this existing plan/row/log.
+Preserve checker severity rules, all other jobs/triggers/permissions/action pins,
+branch protection and every product acceptance criterion. No policy source or
+workflow edit is applied by this registration. Under §0, this claim must reach
+main before the enforcement implementation is applied. Larry separately approved
+merging documentation-only #249 after final review and CI pass (2026-10-22 15:56:35 UTC); no broader dependency or implementation
+merge is included. The approved decision is recorded; its checklist
+milestone remains unchecked until the chosen behavior is implemented and verified.
+
 ### Acceptance checklist — remaining
 
 B1–B4 implementation is merged; the 72-entry migration is already verified.
@@ -556,16 +574,16 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
-- **Owner:** `codex` (bounded roadmap documentation); `claude` retains B4 and WS-13 ownership. Remaining WS-17 implementation belongs to Codex under Larry’s 10-07 assignment (CX-20); historical Claude attribution is preserved.
-- **Status:** claimed: Larry dispatched bounded acceptance-clearance evidence and safe-check execution on 2026-10-18. Existing foundation, #219 parked-card restoration and #220 clearance documentation remain landed; all accepted product scope and open live gates retain their state. Claim-only registration; no new acceptance.
+- **Owner:** `codex` (existing WS-20 documentation and bounded checker-enforcement integration on the registered branch); `claude` retains B4 authorship/ownership and required cross-review, plus WS-13 ownership. WS-17 release/install ownership is unchanged.
+- **Status:** claimed: Larry selected errors-fail/warnings-advisory CI and dispatched the bounded enforcement integration. This registration contains documentation only; implementation begins after this claim lands on main. No acceptance milestone is closed.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
-- **Remaining work / acceptance:** Final evidence is published via #209; acceptance owners resolve and retest their remaining gates. Larry decides whether the checker becomes blocking after the warning period. #172/#174 cleanup and #173 implementation handoffs are complete, not pending work.
+- **Remaining work / acceptance:** Implement the bounded approved checker invocation, verify clean/error/warning behavior and exact-source publication CI with Claude cross-review. Then record enforcement disposition separately from remaining owner live/physical/observation evidence and final Phase A/B exit. Both existing unchecked milestones remain open until fully evidenced.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `codex/acceptance-clearance-20261018`, based on main `b29c7aba431eb1c9de6a0aa092128a8ce133119d`; isolated worktree. Historical foundation/campaign/status branches remain recorded in the plan and logs.
+- **Where:** `codex/ws20-checker-enforcement-20261022`, registered through documentation-only PR #249, based directly on main `636880eabbe9dc756c30df7128d0a90c02d222bd`. Existing acceptance-clearance history remains in the plan; #246/#247 are separate unmerged documentation drafts, not dependencies of this claim.
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
-- **Scope:** Bounded acceptance-clearance documentation/evidence and safe non-mutating checks: ROADMAP current acceptance/status summary and this WS-20 block; dated progress in existing `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`; WS-20-specific `docs/roadmap-log/**`; `docs/acceptance/IMPLEMENTATION_STATUS.md`, `docs/acceptance/ACCEPTANCE_RUNBOOK.md` and WS-20 evidence under `docs/acceptance/command-console/receipts/`. Preserve every existing owner, checkbox, receipt, scope and decision. Existing CX-23 documentation boundary remains; do not edit other owners’ implementation/feature plans or WS-17’s verification evidence. No runtime code, checker enforcement, config, credentials, access, provider workload, production write, restart or deployment.
-- **Next step:** codex: after this claim lands, publish exact source/installed-artifact identity, reconcile reusable receipts and run safe checks in the isolated workspace; update evidence as it arrives. WS-28 owns cleanup repair; WS-17 owns exact-source cross-review and release verification. larry: retain live acceptance, checker and later deployment decisions.
-- **Updated:** 10-18 (Larry-authorized acceptance execution claim; no gate closed)
+- **Scope:** Additional approved checker-enforcement integration: only `.github/workflows/validate.yml` roadmap-step comment/name/invocation, directly related synthetic tests in `tests/unit/test_check_roadmap.py`, dated progress in the existing joint-working plan and WS-20-specific log/evidence, and this row. Preserve checker logic/severity, all other jobs/triggers/permissions/action pins, branch protection and every product criterion; Claude cross-review is required. Existing acceptance-clearance documentation scope remains ROADMAP current acceptance/status summary and this block, `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`, WS-20 `docs/roadmap-log/**`, `docs/acceptance/IMPLEMENTATION_STATUS.md`, `docs/acceptance/ACCEPTANCE_RUNBOOK.md` and WS-20 receipts under `docs/acceptance/command-console/receipts/`. Preserve all other owners, checkboxes and receipts; do not edit other feature plans or WS-17 verification evidence. No application runtime, config, credentials, access, provider workload, production write, restart, deployment or enforcement beyond the named roadmap CI step.
+- **Next step:** codex: after #249 lands and main readback confirms this exact claim, apply only the bounded enforcement delta, retain tests and obtain exact-source CI plus Claude review; do not merge the implementation without its separate authorization. claude: B4 cross-review. Existing acceptance owners retain live evidence and release decisions. No PR #246/#247/#243 merge is included.
+- **Updated:** 10-22 (approved error-failing policy and isolated registration; no workflow edit or gate closure)
 
 </details>
 
