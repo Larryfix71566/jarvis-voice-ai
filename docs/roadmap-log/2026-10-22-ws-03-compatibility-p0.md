@@ -65,3 +65,22 @@ or field, and explicitly reject case-varied scripts paths/shebang files even
 when declared. Clarify static inventory’s non-atomic limit, deterministic test
 bindings, baseline fixture-prefix absence and versioned framing. These are
 contract corrections only; no dependency source or acceptance changes.
+
+## Actual registered adapter dispatch
+
+Claim #261 (`5cfc4c9`) is on main as `aa03cd433a71caf6f3b862726a43864ee6686c93`; merge tree
+`68ff1c81fdf581ceb59c930cd0a11ec4010ac3dd` and main-first ownership were verified.
+The isolated implementation branch is `codex/ws03-offline-package-adapter-20261022`.
+Official Claude Code 2.1.291 authenticated through `claude.ai` Max began the
+tools-disabled returned-patch assignment at `2026-10-22T23:51:10.920535+00:00`. Requested model
+`claude-opus-5-5`; actual returned model and completion outcome are pending.
+No source has been applied and no new test result is claimed.
+
+Packet: 103,689 bytes; SHA-256 `f7410423c6f654dd79b6dc990de2d6a0fe861d83c7529c9e1f7bade5d57fedfa`. It contains only the
+registered claim/report contract and necessary excerpts from its seven read-only
+dependencies. No checkout access, credentials/private logs, API fallback,
+service/model change or live inference in Mortimer. Local execution receipt and
+owned process/session are retained by Codex; no local host paths are published.
+Codex reviews/applies/tests/publishes only the registered new files; the coordinator
+retains all merges. Acceptance remains 2/12. This dispatch is implementation
+authorship, not a completed patch, independent source approval or acceptance.
