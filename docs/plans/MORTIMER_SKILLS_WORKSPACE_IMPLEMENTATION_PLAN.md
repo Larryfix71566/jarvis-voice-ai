@@ -3174,3 +3174,81 @@ initial display-name lookup selected the retired Xcode-built web wrapper;
 opening the already-installed native app resolved that misleading startup
 screen without a rebuild or service restart. No settings or provider routes
 changed and no model was called by this check.
+
+
+## 2026-10-22 — claimed offline instruction-package adapter; source waits for main
+
+Evidence base: main `29440804baf40292d84acbb0798646e67d0c510a`, after #251 P0, #258 lifecycle correction and the coordinator's serial registrations. Larry's full-program direction selects the bounded profile below and explicitly registers Claude Max patch authorship under Codex review/apply/publication ownership. This claim changes documentation only; no source starts before it lands on main. Historical SW-B/C remain accepted2/12.
+
+### Remaining gates: separate code prerequisites from acceptance
+
+| Gate | Source prerequisite or existing seam | Evidence still requiring separate authority/environment |
+|---|---|---|
+| SW-A baseline | Existing package/selector/UI contracts; retain original fixtures, P0 regression evidence | Exact released app/backend baseline, voice/orb/sidecar/memory/Atlas/sharing observations with Larry |
+| SW-D truthful inspection | Existing event/API/native paths; typed compatibility-report propagation and known missing refusal trace are separate source slices | Actual failed/skipped/unknown/legacy runs and reconnect/native inspection; no process-map-to-success inference |
+| SW-E privacy | Content-free diagnostics and complete package/report canary tests; existing owner/source-to-sink contracts | Exact-build owner isolation, protected export/capture/secondary display evidence; no private content used here |
+| SW-F creator isolation | Existing Candidate, scoped authoring policy and offline validator; proposed adapter adds complete package/provenance/requirement reporting | Real offline VM lifecycle, network/credential containment, cancellation and no host fallback; route/auth/model prerequisites remain owner-held |
+| SW-G effectiveness | Existing frozen fixture/pairing/rubric/metrics code; adapter can emit package-validity evidence only | Six reviewed cases, both conditions twice =12pairs/24trials, blinded human quality/safety review and approved route/budget; no new inference |
+| SW-H lifecycle | Accepted-version history plus exact approval/atomic activation/readback/rollback are substantive future source work; admin currently refuses activation/rollback | Real cancel/restart/reconcile/activation/rollback against accepted versions; no activation grant in adapter |
+| SW-I voice/accessibility | Existing shared-action/navigation contracts; later report UI/actions require coordinated native/API claim | Voice, VoiceOver, keyboard, large text, motion/transparency/contrast observations |
+| SW-J displays | Existing identity/reconnect support | One/two physical displays, move/unplug/reopen/restart; no duplicate/orphan/focus theft |
+| SW-K performance | Preserve historical selector/rendering sub-budget evidence; deterministic affected-path regressions only | Target-build paired voice p95 regression<=50ms,100-sample sub-budgets,10-minute live-trace memory growth<=10MiB; no benchmark now |
+| SW-L release | Exact-source regression/review/CI and reproducible source/package/config fingerprints | Approved release process, installed/loaded identity, creator ready vs loaded, parent privacy/route gates and human handoff |
+
+This adapter contributes source evidence to SW-F/E and later D/H integration. It closes none of those gates by itself. Do not manufacture runtime readiness from static inventory or call existing dated acceptance current-build proof.
+
+### Selected profile and remaining decisions
+
+Selected first importer profile: **already-P0-compatible instruction text plus explicitly declared UTF-8 .md/.txt references**, supplied with a reviewed Mortimer sidecar, provenance/license and matcher fixtures. This is the authorized first bounded slice. Unsupported host invocation flags, tool restrictions requiring translation, hooks, scripts, binary assets, plugin/MCP services and dependencies remain blocked. No automatic metadata invention or discarded controls. This avoids broad P1 invocation/tool-policy changes to selector/Base and does not implement WS29 unification.
+
+Inputs are bounded immutable logical file records supplied by the caller, not a URL, archive extractor or arbitrary live-directory scanner. Start with synthetic fixtures only; selecting/downloading an external package is a later explicit step. A new target slug must be absent from the supplied baseline registry/package; updates to existing packages remain out of this first adapter. That keeps “disabled candidate” truthful without changing config.
+
+### Claim placement and exact scope
+
+- Claim documentation branch: `docs/ws03-offline-adapter-claim-20261022`, from actual main `2944080`.
+- Implementation branch named in Where: `codex/ws03-offline-package-adapter-20261022` only. Do not put the soon-to-be-merged claim branch in Where.
+- Canonical claim path: `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`, append this dated bounded slice; update existing ROADMAP WS03 block and existing WS03 log. No new workstream or separate plan.
+- Overall Owner Codex and existing human/acceptance owners are retained. This main claim explicitly assigns official Claude Code Max as patch author for the disjoint new files below, with Codex review/apply/publication. Claude receives a minimal sanitized repository packet in a fresh tools-disabled subscription invocation and returns a patch; it has no access to the Codex checkout, Git, host files or runtime. This narrow registered delegation is the explicit exception to generic cross-system working-folder restrictions; no broader ownership transfer or checkout access is granted.
+- Only new implementation file: `jarvis/skill_package_adapter.py`.
+- Only new test file: `tests/unit/test_skill_package_adapter.py`; bounded synthetic fixtures in `tests/fixtures/skill_package_adapter/` if needed.
+- Read-only dependencies: P0 `agent_skills.py`/`skill_compatibility.py`, `skill_catalog.py`, `skill_authoring_validation.py`, `skill_service.py`, `sandbox/artifacts.py` and existing scoped `selfedit/skill_policy.py`.
+- No edits to parser/catalog/selector/Base/delegate, provider/controller/subscription paths, creator worker/request ledger, admin routes, native UI, sandbox runtime, skills/**, registry/config, existing frozen fixtures, migrations or live services. If composition needs a dependency change, return the demonstrated limitation and seek a scoped amendment; do not silently extend this claim.
+- Internal report names and version are reserved in ROADMAP section3 by this claim. The report is inert evidence, not a new API or activation permission. No DB/config/protocol migration is included.
+
+### Bounded adapter behavior
+
+1. Validate bounded file records via existing `sandbox.artifacts.File`/`Candidate` path, collision, mode, byte and secret checks; enforce smaller Skills limits before materializing temporary data. No symlinks, archives, command interpolation, network, subprocesses or imported code. Keep full original bytes and raw manifests in a separate returned immutable evidence bundle; hashes use stable path/mode/content framing.
+2. Apply P0 unchanged. Reuse `parse_skill` and `inspect_package`; do not reimplement frontmatter semantics or change the accepted matrix. Preserve byte-identical body/resources; reject unsupported flags and executable packages rather than deleting them.
+3. Produce exhaustive feature/file dispositions: supported unchanged, explicit inert annotation, unsupported, unknown. Unknown behavioral/security controls or missing required resources block. Unknown descriptive data is retained and marked uninterpreted, never treated as authority; it does not relax P0's closed runtime frontmatter. No opaque file disappears from the source inventory. No claim to infer every natural-language dependency: incomplete declared requirements require review, not invented completeness.
+4. Compose an in-memory candidate against the supplied baseline using reviewed sidecar/fixture inputs and existing source provenance fields. Do not generate process/tool/invocation metadata from prose. Missing sidecar, license, immutable provenance or matcher cases yields a blocked report. No write to runtime skills/, registry, service state or request DB. Only bounded temporary materialization inside existing validators is permitted.
+5. Pass the candidate through `validate_skill_candidate(candidate, baseline=..., slug=...)`. Report every returned check and exact package/candidate fingerprints. Static configured-tool inventory is reported as static only; authentication, current tool sessions, source/privacy compatibility and runtime readiness remain unknown. Never turn a static pass into ready/active.
+6. Return complete source evidence, candidate (only when fully validated), report and test requirements. Reports live outside candidate hashed content, avoiding self-reference. Bind report to source/candidate/parser/adapter and supplied dependency-inventory identity; changing any input invalidates reuse. Unknown report version refuses. An error/cancellation returns no candidate marked usable; no activation, approval consumption or publication occurs.
+7. Existing readback/approval/activation APIs remain unchanged, including deliberate409 refusal. Later integration must bind this report to owner/request/digests and display it in Mortimer before review; this helper alone does not complete the end-to-end import journey.
+
+### Offline acceptance for this slice (not SW-A–L closure)
+
+- Portable synthetic package retains exact body/reference/license bytes and original manifest digest; deterministic report/candidate across repeated identical inputs; baseline registry byte-identical and no live writes.
+- Unsupported control, unknown required metadata, root scripts of every case/type represented, executable/binary/dependency files: deterministic block, complete disposition, no dropped requirement or execution.
+- Missing declared reference/license/sidecar/matcher fixture or tool-name mismatch/incomplete static inventory: specific report failure; no inferred grant/readiness.
+- Invalid UTF8, malformed/duplicate metadata, path traversal, Unicode/case collisions, file-vs-directory collisions, forbidden mode, symlink/archive input, count/file/aggregate caps and secret canaries refuse before unsafe materialization; diagnostic/report exports exclude content and host paths.
+- Source/candidate/mapping/version/fixture/inventory drift invalidates evidence. Unknown schema versions fail closed; no cache reuse across changed identity.
+- Existing slug, baseline registry drift and partial staging failure return blocked/no active mutation. Cancellation checked before returning a candidate; adapter has no persisted job to resurrect. Real request-race/restart/cancel/rollback remains SW-H.
+- Reuse P0 tests and existing validator/catalog/reference suites only as regressions; do not change their expected outcomes or historical acceptance counts. No model/provider/VM/host scripts in tests.
+
+### Claude Max task and sequencing
+
+After coordinator lands this matching claim and confirms disjoint scopes, use official authenticated Claude Code Max for one bounded implementation assignment: implement only the new adapter and synthetic tests against the frozen contract; return a patch and test rationale. Codex applies/reviews on the claimed isolated branch, runs offline tests, obtains independent review, publishes draft and verifies CI. Use tools-disabled patch generation with a minimal sanitized project packet; do not let Claude alter its own policy, grants, model selection or live state. Same subscription route only, no direct paidAPI/fallback. Larry authorizes bounded relevant repository context for this assignment through the existing subscription; do not repeat an in-scope packet approval request. Honor any actual tool denial and stop at genuinely new privacy/access boundaries. Do not include credentials, personal logs or unrelated repository content.
+
+Before implementation, verify actual-main claim, exact branch/owner/file locks and reserved report identifiers. Hold if any premise differs. No source work before this claim lands. Sole coordinator retains all merges. Installation, activation, model changes, live providers, real VM runs and broader package/script/service adapters require their separate decisions.
+
+### Concrete source references at the inspected main tree
+
+- `jarvis/skill_authoring_validation.py:54` frozen candidate validator; :101 fixed0644 candidate mode contract; :121 catalog+parse composition; :146 license/provenance; :202 static inventory; :216 unchanged registry check.
+- `sandbox/artifacts.py:45` path checks; :96 File; :107 Candidate immutable data/scanner bounds.
+- `jarvis/skill_catalog.py:172` companion manifest; :218 existing provenance fields; :290 inspection; :340 declared text reference validation.
+- `jarvis/agent_skills.py:283` bounded P0 parse; `jarvis/skill_compatibility.py` closed field/type/YAML contract.
+- `jarvis/skill_service.py:42` static inventory, :106 readiness unknown-vs-known distinction.
+- `jarvis/admin/server.py:4471` activation refusal, :4480 rollback refusal, :4637 versions readback limits; read-only for this lane.
+- Canonical plan section12 at :1190 onward contains full SW-A–L definitions; dated current claim inventory :268–279 preserves2/12. Older STATUS.md observations are historical, not current installation proof.
+
+P0 nonblocking0600 writer permissions and cleanup-message follow-ups remain separate; the adapter uses immutable Candidate records/validator, not write_skill, and must not silently fold those repairs into its claim.

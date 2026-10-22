@@ -40,3 +40,11 @@ PR #251 merged as `b3a5fa1100891cb756a32155a61f47ffcf7a35b3`; reviewed
 WS-03 lifecycle to landed and its next step to the remaining separately
 authorized work. Acceptance stays 2/12; no checkbox, owner, scope or runtime
 change. This entry supersedes the earlier pending-review/publication wording.
+
+## Offline adapter claim
+
+Register the bounded new adapter/test/synthetic-fixture lane and inert report
+identifiers before source work. Claude Max is delegated tools-disabled patch
+authorship without checkout access; Codex retains review/apply/publication.
+Reuse merged P0 unchanged. Source waits for main claim; no runtime/activation
+change and no advancement from historical2/12 acceptance.
