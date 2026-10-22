@@ -59,16 +59,30 @@ final class WindowVisibilityTests: XCTestCase {
     }
 
     private func waitForVisibleFixture(_ window: NSWindow, until condition: () -> Bool) {
-        // Activation-policy transitions can leave the owned test app hidden
-        // after its initial show request. Restore only this visible fixture;
-        // hide/minimize/close checks keep using the unmodified event pump.
-        // The original three-second bound and real OS/observer assertions stay.
+        // One visible report can precede a queued application hide. Require
+        // the existing 0.3 s settling period plus one 0.05 s event-pump turn
+        // to stay visible, inside the original three-second readiness bound.
+        // Only restore this positive fixture; intentional hide/minimize/close
+        // checks retain their unmodified pump and actual observer assertions.
+        var visibleSince: Date?
+        var settled = false
         pumpEvents(until: {
+            if NSApp.isHidden || !window.isVisible || !window.occlusionState.contains(.visible) {
+                visibleSince = nil
+            }
             if NSApp.isHidden { NSApp.unhideWithoutActivation() }
             if !window.isVisible { window.orderFrontRegardless() }
-            return !NSApp.isHidden && window.isVisible
-                && window.occlusionState.contains(.visible) && condition()
+            guard !NSApp.isHidden && window.isVisible
+                && window.occlusionState.contains(.visible) && condition() else {
+                visibleSince = nil
+                return false
+            }
+            let now = Date()
+            if visibleSince == nil { visibleSince = now }
+            settled = now.timeIntervalSince(visibleSince!) >= 0.3 + 0.05
+            return settled
         })
+        XCTAssertTrue(settled, "The owned fixture must settle visibly within the original three-second bound")
     }
 
     func testVisibleFixtureRecoversFromAnApplicationHideAfterShowing() throws {
@@ -92,10 +106,11 @@ final class WindowVisibilityTests: XCTestCase {
             app.unhideWithoutActivation()
             _ = app.setActivationPolicy(originalPolicy)
         }
-        // Independently prove this WindowServer can display the owned fixture.
+        // Establish the real visible fixture and observer after queued app
+        // events settle; the explicit hide below is still a separate phase.
         app.unhideWithoutActivation()
         show(window)
-        pumpEvents(until: { reports.last == true })
+        waitForVisibleFixture(window, until: { reports.last == true })
         XCTAssertTrue(window.isVisible)
         XCTAssertTrue(window.occlusionState.contains(.visible))
         XCTAssertEqual(reports.last, true)
@@ -110,6 +125,35 @@ final class WindowVisibilityTests: XCTestCase {
         XCTAssertTrue(window.isVisible)
         XCTAssertTrue(window.occlusionState.contains(.visible))
         XCTAssertEqual(reports.last, true, "Read the real observer after the owned window is restored")
+    }
+
+    func testVisibleFixtureRecoversFromADeferredApplicationHide() throws {
+        let originalPolicy = try prepareVisibleWindowServer()
+        defer { _ = NSApp.setActivationPolicy(originalPolicy) }
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 400, height: 180),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer {
+            NSApp.unhideWithoutActivation()
+            window.close()
+        }
+        NSApp.unhideWithoutActivation()
+        show(window)
+        pumpEvents(until: { window.occlusionState.contains(.visible) })
+        XCTAssertTrue(window.occlusionState.contains(.visible), "Establish a real visible fixture first")
+
+        var deliveredHiddenState = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.hide(nil)
+            self.pumpEvents(until: { NSApp.isHidden })
+            deliveredHiddenState = NSApp.isHidden
+        }
+        waitForVisibleFixture(window, until: { window.occlusionState.contains(.visible) })
+        pumpEvents(for: 0.3)
+        XCTAssertTrue(deliveredHiddenState, "The real late-hide event must have occurred")
+        XCTAssertFalse(NSApp.isHidden, "A first visible sample must not miss a pending application hide")
+        XCTAssertTrue(window.isVisible)
+        XCTAssertTrue(window.occlusionState.contains(.visible))
     }
 
     func testActualWindowHideShowAndDetachUpdateVisibility() throws {
