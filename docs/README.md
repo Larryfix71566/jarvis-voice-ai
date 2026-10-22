@@ -1,6 +1,7 @@
 # Documentation map
 
 - [Shared expandable roadmap](../ROADMAP.md) — editable source for Codex and Claude: ownership, implementation attribution, acceptance, next steps and completed milestones. Read the protocol and shared update format before any work; edit this source in your own branch, not a chat snapshot.
+- [Claude continuation and repository sync (2026-10-22)](plans/ROADMAP_JOINT_WORKING_PLAN.md#10-claude-continuation-and-repository-synchronization--2026-10-22) — exact PR/source inventory, complete testing proposal, Skills compatibility, ownership, installed-state limits and bounded next tasks. This is a dated snapshot; refresh current heads before work.
 - [Architecture reference](ARCHITECTURE.md) — current runtime ownership,
   trust boundaries, model routes, deployment paths and verification pointers.
 - [Repository map](REPO_MAP.md) — source tree navigation for agents and

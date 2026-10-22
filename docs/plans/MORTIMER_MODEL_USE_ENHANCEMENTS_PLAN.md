@@ -1117,3 +1117,14 @@ verification: 302 passed / three existing prerequisite skips. Final frozen
 full verification and publication results are maintained in PR #239. This
 is source evidence only; WS-17 retains review/integration/installation and
 all runtime/private-route gates. The old interrupted run is not a pass.
+
+
+## 2026-10-22 — Owner-coordinated continuation publication
+
+The WS-05 harness owner supplied the completed [exact-source Claude review and continuity receipt](../acceptance/model-use-enhancements/receipts/controller-testing-proposal-2026-10-22/harness-review-handoff.md) for documentation adoption. PR #242 at `d476905057fc29207338721ce9ec2a452cb2085d` received one tools-disabled official Claude Code 2.1.291 / Max review, requested and returned `claude-opus-5-5`, completed 15:05:17–15:07:43 UTC. All six prior finding groups closed, zero blocking findings; source ACCEPT with human review required. Earlier denied attempts did not execute. No source changed after review; native 18-test evidence is author-local, not Linux CI. The receipt preserves exact input/delta/report hashes, nonblocking dispositions and usage limits.
+
+The complete [controller testing proposal version 2](../acceptance/model-use-enhancements/receipts/controller-testing-proposal-2026-10-22/testing-plan-v2.md), SHA-256 `23fd4aed98c3e86a2d31ee4a4a0fa26568bd7de8c2a0fb7b330c8b8cce840343`, is now included as immutable evidence under this canonical plan. It remains PLAN ONLY: three historical document reviews, final clarifications self-checked rather than fourth-reviewed; no benchmark, model change or automatic adoption is authorized. The repository [continuation inventory](ROADMAP_JOINT_WORKING_PLAN.md#10-claude-continuation-and-repository-synchronization--2026-10-22) accounts for all related artifacts and scoped exclusions.
+
+System: Codex; documentation branch `docs/continuation-handoff-20261022`, coordinated with WS-05/CX-28. This additive note publishes source status only and does not edit the active provider/harness branches. Claim #241 at `985379f425dc717997fe502dadfd3aaee0b37662` and implementation #242 remain drafts/unmerged with their existing green CI. Human claim/merge decisions and deployment remain separate. Harness switching, voice confirmation, universal all-writer approval, exact runtime acknowledgement and rollback remain blocked/unimplemented. Direct OpenAI/Anthropic APIs remain excluded; other eligible APIs retain existing privacy/cost gates.
+
+Next: larry retains claim landing/merge/deployment decisions; codex verifies publication CI. The reviewer proposes a later bounded test-only `daily.collect` case with fake dependencies and real `model_access_status(registry=...)`, asserting no ambient readers, stable stub and quiet diff. This is not dispatched or executed. No duplicate source review is needed for unchanged runtime bytes.

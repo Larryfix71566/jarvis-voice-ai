@@ -1,0 +1,21 @@
+{
+  "snapshot_utc": "2026-10-22T14:57:04.138288+00:00",
+  "scope": "Main WS01-29 plus pending WS30phone and WS31REA. Includes deferred scope. No repo changes or tests.",
+  "overall": {
+    "closed": 7,
+    "total": 31,
+    "equal_weight_closed_workstream_percent": 23,
+    "partial_or_acceptance_open": 15,
+    "planned_implementation_not_started": 9,
+    "main_only_closed_fraction": "7/29 =24%",
+    "weighted_effort_completion": "Unknown. Closed-row fraction gives no partial credit, includes docs and product scopes, and is not percent coding complete."
+  },
+  "interface_release_acceptance": {
+    "checked": 19,
+    "total": 53,
+    "percent": 36,
+    "source": "RELEASE_READINESS.md at main636880e; reconciliation2026-10-18; overlapping criteria. No new checkbox closure inferred."
+  },
+  "denominator_caveat": "Per-row displayed checklists primarily contain remaining work. Raw4/116 is not an overall completion percentage. WS03 explicitly records2/12 fullgates despite1/11 displayed remaining/subcheck list. WS06 historical1/11 Maccheck does not establish an overall percentage.",
+  "publication_note": "Historical progress snapshot; PR states refreshed separately in canonical WS-20 continuation. The 31-row CSV omits long duplicate status history/private task identifiers; source/denominator labels preserved."
+}

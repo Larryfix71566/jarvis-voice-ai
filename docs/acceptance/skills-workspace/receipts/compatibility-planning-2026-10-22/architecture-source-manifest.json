@@ -1,0 +1,336 @@
+{
+  "scope": "Historical source-only architecture/reuse review; not a new scan or live test",
+  "reviewed_main": "f88f5f56d4b34bd35007f964dcc4047318144478",
+  "sources": [
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "ROADMAP.md",
+      "line": null,
+      "sha256": "b03e34a4399be86c4d8eb19e77519cfd42ada0dad8d366172547151dce94dab1"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/admin/server.py",
+      "line": 4420,
+      "sha256": "8186f73c6c52046004c9ba2f848360e077074ca4396c1c3196024dea958da5b4"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/agent_skills.py",
+      "line": 189,
+      "sha256": "b834a5566e0951b62b0c1f7d5b875c94430f6f9a1c2a20dc9e933a623c67ad43"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/agent_skills.py",
+      "line": 280,
+      "sha256": "b834a5566e0951b62b0c1f7d5b875c94430f6f9a1c2a20dc9e933a623c67ad43"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/agent_skills.py",
+      "line": 317,
+      "sha256": "b834a5566e0951b62b0c1f7d5b875c94430f6f9a1c2a20dc9e933a623c67ad43"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/agent_skills.py",
+      "line": 391,
+      "sha256": "b834a5566e0951b62b0c1f7d5b875c94430f6f9a1c2a20dc9e933a623c67ad43"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/agents/base.py",
+      "line": null,
+      "sha256": "c9a7ff2cc53e2b734b89fcc05cb854acbb4ea5fad41af887a5b331ff6d3ee36b"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/agents/base.py",
+      "line": 1076,
+      "sha256": "c9a7ff2cc53e2b734b89fcc05cb854acbb4ea5fad41af887a5b331ff6d3ee36b"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/agents/base.py",
+      "line": 1719,
+      "sha256": "c9a7ff2cc53e2b734b89fcc05cb854acbb4ea5fad41af887a5b331ff6d3ee36b"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/agents/delegate.py",
+      "line": null,
+      "sha256": "dc3af99a6f090c22199f521dd9e104bf1315fa05b1e3d07a67c14bbb56180604"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/bot/model_route_tool.py",
+      "line": null,
+      "sha256": "605fa4dd47e0a982d9eb4e2a90fb001af721f9741c3e838f3bc3a4e10e776e51"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/bot/pipeline.py",
+      "line": null,
+      "sha256": "ba392de6d1f4a9fa8edbf67707ba3bdc2a624f6ebd8bd81dcd1efb67b9a7374f"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/bot/subscription_llm.py",
+      "line": 1,
+      "sha256": "e8615061e5cc96ee190d0691c6ef13530d5574c57a98aef83d2c6f93475639e9"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/bot/transcript_log.py",
+      "line": 145,
+      "sha256": "138692926b3e0613807c871838b8ecbff013c01d2e5729a7b436c68853f599fe"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/council/council.py",
+      "line": 1,
+      "sha256": "a48da8e3a3526f918c9ca69ea131035247aa85ae83a7c97270a85b1ab9dad00b"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/db.py",
+      "line": null,
+      "sha256": "3a4af2463d3f44e88547a5bf4e6e7741b310ec9a0cc0034a3850ae37057c467c"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/memory.py",
+      "line": 83,
+      "sha256": "2ddb0b5f7ed4192bd3e123f01f8a07195952d46cf0551e802c58496942626869"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/memory_admission.py",
+      "line": null,
+      "sha256": "df4978abbc54895c2eb408df664b052034f0d066eb1348ebb6d3db7b014a3007"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/memory_automation.py",
+      "line": 25,
+      "sha256": "09e5d0680300826750ee8162562e8066ee4a8d8bbd515b7c625eec488f5c3ae9"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/memory_sweep.py",
+      "line": null,
+      "sha256": "456f59cd46219922ddf6c9d304ba94136ef7c14f89fbfe96f7d22cdf5e1de618"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/model_budget.py",
+      "line": 1,
+      "sha256": "ac5cd1ff550bef65ee4191d56f251429a094e37b6cdf0d2769915e2546c8c618"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/model_execution.py",
+      "line": 309,
+      "sha256": "b62aaf727da5abfa5760af2d4b3599c741b202f32681151b77974a4384f0a797"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/model_preferences.py",
+      "line": 98,
+      "sha256": "1234752bd2f11a114baed56eab386602fdcaf1951dd9495097e66acf0cc1fff7"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/model_routing.py",
+      "line": null,
+      "sha256": "64a3ec49dc469f6285571b1ed55cb4001ed26bdce19e079792d5763df06f018e"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/notices.py",
+      "line": null,
+      "sha256": "6443393636ea922bf7f9ccdd5b773aec17e58e17dfe3e5e15f1b945ce885c973"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/privacy_policy.py",
+      "line": 267,
+      "sha256": "ec82388674d7c82f50ea447713567cb717fd19ce820925b9b3558b57a4f86a97"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/procedures.py",
+      "line": 258,
+      "sha256": "710912b5fb3a818ba06a8d5adadbd71c7a744c9a37bb4b4ec497d7d8b8cd3402"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/procedures.py",
+      "line": 421,
+      "sha256": "710912b5fb3a818ba06a8d5adadbd71c7a744c9a37bb4b4ec497d7d8b8cd3402"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/provider_access.py",
+      "line": 57,
+      "sha256": "d602fa69ca9fdbbea5e07c166a1f2aa8be25df5e0a551bcc6baa31d7dc732c09"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/runlog/store.py",
+      "line": 1,
+      "sha256": "bc3f9161a42481466593827b4e484cd61f907d2426be87c6e6a74e0de73bb985"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/selfedit/allowlist.py",
+      "line": 14,
+      "sha256": "43b62b866ed4c0824a939194a0e450609efc0cab597d83eb85a13d95c389dfce"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/selfedit/proposals.py",
+      "line": 1,
+      "sha256": "52bdb0668029b6145bc64cf3bb6927357c75ce6aadfe7e366324078dd6697280"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/selfedit/service.py",
+      "line": null,
+      "sha256": "67b914fd21669f493d2f94be4f74c8b03fe1e4c13ed04f738ee292a58bbb9cda"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/skill_authoring_validation.py",
+      "line": 145,
+      "sha256": "761c83b5b8bfd89a32522022fbfecd3ffc53255720bf1b4f90c22c48dc6c48ee"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/skill_catalog.py",
+      "line": 244,
+      "sha256": "7d228ec456e929d0819c65f9f7b6e0c1a979ef9dc300161e4d44c9d0f8b8daca"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/skill_creator_agent.py",
+      "line": 36,
+      "sha256": "17e220dbcceae90159d8ed23e8130f6101ca6d7463eeff6e42cf1ac49e097d0e"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/skill_evaluation.py",
+      "line": 37,
+      "sha256": "96d47e3334933ced2d2229417d795212516fb4f8e455b83de0a6e6e2e3a5bed7"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/skill_evaluation_review.py",
+      "line": 19,
+      "sha256": "adbea2ca3aeea19a751aa484844ddec25a43f38487f97b24a1567d4cc92f6762"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/skill_requests.py",
+      "line": null,
+      "sha256": "5126e2b938cfd6f5d335198f07a9e4ddc5c321596f1a9c0cc46b7c2c4573d467"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/skill_resources.py",
+      "line": 72,
+      "sha256": "10c5e576b58db26ea46a12ed39e77747aea8532870efcd6c2b0baf6e7b4811c6"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/skill_selection.py",
+      "line": 319,
+      "sha256": "eaddc7932ccabb348e2c259a4e21bd3baf92045af4fbffad9b861fb7ce731ae7"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/skills/registry.py",
+      "line": null,
+      "sha256": "1f453205575d5a3bf16ede0725ccf682402dd6eac1eaff42ea51c0ca1b1f0066"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/status/build.py",
+      "line": null,
+      "sha256": "bcf3ff9ff84426e2dc9ea4efec40ef02ceaed55052fe8ee3c70e217740b112b1"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/status/daily.py",
+      "line": 71,
+      "sha256": "54095dc11ce05fcc9183eee8179b6a807acc1d0f5c0d3e76f237bef565c69131"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/subscription_readiness.py",
+      "line": 16,
+      "sha256": "d7df3cc3dd63cc17314d83a44b5b416bc484d4e3e987835285b4156d60ecdb82"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/usage_ledger.py",
+      "line": null,
+      "sha256": "4ef8441a0edf69e4e56de66149e7cc9d68cebf85debc5991471884c97e738974"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "jarvis/workflows.py",
+      "line": 1,
+      "sha256": "7f8abb80437f32e9a7745b42dd6b36ede5f135c63e27ed0d0d5b6a399b378f63"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift",
+      "line": null,
+      "sha256": "74c1486e391dfcd8673b41ad0e0e07156a6e5797de6586998aa19dbaa1680bba"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "sandbox/verify.py",
+      "line": 119,
+      "sha256": "f5f6bcbded0d95d2d021c302b399306630a0ad0916b17990a50e4670856cf55a"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "scripts/deploy_main.sh",
+      "line": null,
+      "sha256": "469d40d6d7aa592e76653bc9d7ddb249136a738f8609edccb4eb8fd32f4d9d86"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "skills/skill-creator/mortimer.yaml",
+      "line": null,
+      "sha256": "a4e21b40a7b1eb2af754878d16f874ad60679e91906fc3ca08b8162609a4de7d"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "tests/unit/test_agent_skills.py",
+      "line": null,
+      "sha256": "23e9c5cb59d6c7c0476fd051fddfd08baa694864c4e211f737b1e3b17e1a8c98"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "tests/unit/test_skill_injection_boundary.py",
+      "line": null,
+      "sha256": "ef4c86ceb3e40a0c4c6f962940edca32b79a48eaf89aa7f08ac8bf465aa1b977"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "tests/unit/test_skill_resources.py",
+      "line": null,
+      "sha256": "d060adb956d05c20bf968ec7eb83341ab5cf93e35293baaee734f01072b54c6a"
+    },
+    {
+      "revision": "f88f5f56d4b34bd35007f964dcc4047318144478",
+      "path": "tests/unit/test_skill_selection.py",
+      "line": null,
+      "sha256": "05d819c6a01bd11c336f308567fa289914f55438dfff6a4e1747988bbe08fbdc"
+    }
+  ]
+}

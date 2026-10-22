@@ -1,0 +1,32 @@
+workstream,title,completion,current_displayed_checklist_done,current_displayed_checklist_total,source
+WS-01,"WS-01 — Reliability, privacy and memory gaps · Codex","Unknown overall; source/foundation delivered, acceptance incomplete",0,6,main636880e
+WS-02,WS-02 — Subscription runtime isolation · Codex,"Unknown overall; source/foundation delivered, acceptance incomplete",0,6,main636880e
+WS-03,WS-03 — Skills Workspace and skill creator · Codex,17% of full acceptance gates (2/12); not coding completion,1,11,main636880e
+WS-04,WS-04 — Remote access · Codex; Larry decides activation,"Unknown overall; source/foundation delivered, acceptance incomplete",0,7,main636880e
+WS-05,"WS-05 — Model access: subscriptions, APIs and SAYGM · Codex","Unknown overall; source/foundation delivered, acceptance incomplete",0,10,main636880e
+WS-06,WS-06 — Self-service recovery and model registry · Claude implementation; Larry acceptance,"Unknown overall; source/foundation delivered, acceptance incomplete",0,7,main636880e
+WS-07,WS-07 — Voice workflows and Workflow Viewer · Claude,"Unknown overall; source/foundation delivered, acceptance incomplete",0,5,main636880e
+WS-08,"WS-08 — Crystal orb, single shell · Claude + Codex (accepted 09-30)",100% of named accepted scope,0,0,main636880e
+WS-09,WS-09 — Command Console and Atlas acceptance · Larry acceptance,"Unknown overall; source/foundation delivered, acceptance incomplete",0,11,main636880e
+WS-10,WS-10 — Automatic memory rollout · Claude + Codex implementation; Larry rollout,"Unknown overall; source/foundation delivered, acceptance incomplete",0,6,main636880e
+WS-11,WS-11 — Adaptive interface C8 acceptance · Larry acceptance,"Unknown overall; source/foundation delivered, acceptance incomplete",0,6,main636880e
+WS-12,WS-12 — CI upkeep before the Ubuntu 26 runner switch · Claude (accepted 10-02),100% of named accepted scope,0,0,main636880e
+WS-13,"WS-13 — T5 mail, calendar and brief: draft reconciled with main, waiting on Larry's decisions · Claude (review)","Unknown overall; source/foundation delivered, acceptance incomplete",0,5,main636880e
+WS-14,"WS-14 — Subscription probe: sign-in, command and category fixes · Claude (Codex post-merge review)",100% of named accepted scope,0,0,main636880e
+WS-15,WS-15 — Weather: fresh location and current radar · Claude (accepted 09-30),100% of named accepted scope,0,0,main636880e
+WS-16,WS-16 — Protected-window capture gate repair · Codex,100% of named accepted scope,0,0,main636880e
+WS-17,WS-17 — Command Console CC7a: conversation-first stage · Codex remaining implementation,"Unknown overall; source/foundation delivered, acceptance incomplete",0,11,main636880e
+WS-18,WS-18 — Native audio: survive an output switch during speech · Claude,100% of named accepted scope,1,1,main636880e
+WS-19,WS-19 — Repository review and unified roadmap reconciliation · Codex,100% of named accepted scope,0,0,main636880e
+WS-20,WS-20 — Roadmap joint working: catch-up and drift prevention · Claude + Codex,50% of current listed milestones (2/4); not total engineering effort,2,4,main636880e
+WS-21,"WS-21 — Supporting display transfer: one validated, confirmed route · Claude implementation, Codex review","Unknown overall; source/foundation delivered, acceptance incomplete",0,5,main636880e
+WS-22,WS-22 — Evidence-based investigation and development workflow · parked,0% of new implementation; planning separate,0,0,main636880e
+WS-23,WS-23 — Acceptance Verifier within Systems · Proposed,0% of new implementation; planning separate,0,4,main636880e
+WS-24,WS-24 — Durable task ownership and restart recovery · Proposed,0% of new implementation; planning separate,0,4,main636880e
+WS-25,WS-25 — Commitment review with Scheduler and Librarian · Proposed,0% of new implementation; planning separate,0,3,main636880e
+WS-26,WS-26 — Relevant events and useful follow-through · Proposed,0% of new implementation; planning separate,0,4,main636880e
+WS-27,"WS-27 — Subsequent enhancement design, sandbox voice evaluation and private local model · documentation only",0% of new implementation; planning separate,0,0,main636880e
+WS-28,WS-28 — Acceptance prerequisite: sandbox cleanup race and verifier fingerprint · Codex,"Unknown overall; source/foundation delivered, acceptance incomplete",0,0,main636880e
+WS-29,WS-29 — Unified Skills library with preserved policy and runtime controls · parked,0% of new implementation; planning separate,0,0,main636880e
+WS-30,"WS-30 — Private phone voice, results and roadmap access · provisional design",0% of new implementation; planning separate,0,0,draft240@87f163a
+WS-31,WS-31 — New apps and authorized feature recreation through Mortimer · proposed,0% of new implementation; planning separate,0,0,localREA@dd8e4f9

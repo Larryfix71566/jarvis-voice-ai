@@ -500,6 +500,10 @@ Source: [mail/calendar/brief plan §R.12](docs/plans/MORTIMER_MAIL_CALENDAR_BRIE
 <details id="ws-20">
 <summary>WS-20 — Roadmap joint working: catch-up and drift prevention · Claude + Codex</summary>
 
+**Repository continuity dispatch — 2026-10-22:** `codex` owns the sanitized repository handoff on `docs/continuation-handoff-20261022`. Scope: this additive WS-20 note, dated continuation in the existing joint-working plan, a discovery link in `docs/README.md`, WS-20-specific evidence/log, and the WS-05-owner-supplied immutable testing proposal/handoff under `docs/acceptance/model-use-enhancements/receipts/controller-testing-proposal-2026-10-22/`. The full plan is preserved as evidence under the existing canonical WS-05 plan; only the separately owner-coordinated append-only WS-05 plan entry, no active branch or runtime edit. Status: documentation proposed through this draft; existing acceptance ownership and checkboxes remain authoritative. Where: `docs/continuation-handoff-20261022`. Record exact PR/source heads, installed-versus-source limits, completed-versus-proposed checks, private exclusions, bounded next tasks and pending permissions. No other owner's runtime or active branch is edited. Next: codex verifies publication and accounts for gaps; larry retains merge/deployment and future runtime dispatch decisions. Updated: 2026-10-22.
+
+
+
 
 **Acceptance campaign authorization — Larry, 2026-10-17:** Codex runs the
 existing automated and live acceptance checks on
@@ -601,6 +605,9 @@ Source: [supporting-display plan §§4–5](docs/plans/MORTIMER_SUPPORTING_DISPL
 
 <details id="ws-05">
 <summary>WS-05 — Model access: subscriptions, APIs and SAYGM · Codex</summary>
+
+**Owner-coordinated documentation publication — 2026-10-22:** `codex` publishes the harness owner's completed exact-source review summary and full testing proposal v2 on `docs/continuation-handoff-20261022`. Scope: append-only progress/links in the existing WS-05 plan, immutable evidence under `docs/acceptance/model-use-enhancements/receipts/controller-testing-proposal-2026-10-22/`, and the shared WS-03/05/20 publication log. Status: documentation proposed through this draft; active provider/harness branches and all runtime ownership unchanged. Where: `docs/continuation-handoff-20261022`. Next: codex verifies publication; larry retains claim/merge/deployment decisions. No model/benchmark/activation authorization. Updated: 2026-10-22.
+
 
 ### Acceptance checklist — remaining
 
@@ -735,6 +742,10 @@ Sources: [subscription-isolation plan SR-1…SR-6 and completion criteria](docs/
 
 <details id="ws-03">
 <summary>WS-03 — Skills Workspace and skill creator · Codex</summary>
+
+**Documentation publication dispatch — 2026-10-22:** `codex` owns the sanitized compatibility addendum on `docs/continuation-handoff-20261022`: append only to the existing WS-03 plan; its 22-category CSV, 25 proposed acceptance cases and source-only evidence summary under `docs/acceptance/skills-workspace/receipts/compatibility-planning-2026-10-22/`; WS-03/20 dated publication log. Status: documentation proposed through this draft, runtime foundation/acceptance unchanged. Where: `docs/continuation-handoff-20261022`. This publishes planning artifacts; no importer, activation or runtime ownership claim is created. Next: codex verifies remote publication; larry reviews the proposal and later assigns a bounded implementation claim. Updated: 2026-10-22.
+
+
 
 ### Acceptance checklist — remaining
 
