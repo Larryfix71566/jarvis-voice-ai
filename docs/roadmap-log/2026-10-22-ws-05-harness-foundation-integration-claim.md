@@ -2,7 +2,7 @@
 date: 2026-10-22
 system: codex
 rows: [WS-05]
-prs: []
+prs: [266]
 ---
 
 # Current-main harness foundation integration claim
@@ -20,3 +20,17 @@ is only harness package inventory/pin count; no importer/matcher changes.
 Source integration follows claim landing, owner reconciliation, exact review
 and CI through the sole serial coordinator. No install, model change, live
 inference or new runtime authority. No new application tests in this claim.
+
+
+Current-main follow-up: additive reconciliation with ab31dfa preserves #259
+provider runtime/test blobs, historical lineage and all newer claims/receipts.
+Independent lifecycle finding corrected: registration branch provenance is
+outside active Where; only the live repair branch remains there. Strict
+prospective-main validation and exact docs-delta review precede integration.
+No source or checkbox changes; WS-03 exact inventory acknowledgement pending.
+
+Coordinator review R2 also corrected: canonical status now states exact
+eba2130 source review, 148 focused passes and terminal five-job CI, explicitly
+separating later-main integration and all runtime/acceptance gates. Earlier
+status paragraph is dated history. R1/R2 and additive current-main correction
+are subject to new exact-head review/CI.

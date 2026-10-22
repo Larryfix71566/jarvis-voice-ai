@@ -1,0 +1,9 @@
+# Canonical restoration diagnostics — source/synthetic evidence
+
+The registered WS17 continuation (#256) changes only failure diagnostics in the canonical deployer. After successful quarantine, errors identify the safe service/stage and exception class. Raw exception text, command output, settings and private records are never included. If quarantine fails, the helper does not claim services were quarantined.
+
+Ten injected stages fail their new diagnostic assertions against the unchanged base deployer; the quarantine-failure control passes. The corrected candidate passes all78 focused deployer tests. The [machine receipt](ws17-restoration-diagnostics-2026-10-22.json) binds exact file/log hashes and preserves coverage limits. A syntax-tree comparison confirms the restoration operational statements are identical after removing diagnostic stage assignments and normalizing only exception binding/error text: launch source, PID, cwd, effective policy, health, receipt, holds, whitelist, budgets and rollback behavior remain unchanged.
+
+The first focused attempt retained one incorrect injected-test trigger and two sandbox prerequisites; the trigger was corrected and existing loopback/tee tests rerun with their required execution access. The final credential/dotenv-free run passes78. Fake processes and temporary homes only; the local HTTP stub is synthetic. No real service operation, installation, additional live provider test or human acceptance occurs.
+
+This repairs loss of diagnostic context; it does not establish the actual incident cause or justify a startup retry. Independent exact-source review and publication CI remain required. Existing frozen snapshot runners must not be replaced; any later use requires the canonical target-bound release gates and separate operational authority.

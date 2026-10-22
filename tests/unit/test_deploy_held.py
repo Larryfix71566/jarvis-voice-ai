@@ -369,3 +369,78 @@ def test_no_loader_or_path_runtime_fallback_before_enable(held,change):
     p.write_bytes(plistlib.dumps(data));x.installed();x.sys.calls.clear()
     with pytest.raises(x.m.HeldError):x.h.restore(x.rb,[name])
     assert not any(a[0]=='launchctl' and a[1] in ('enable','bootstrap') for a in x.sys.calls)
+
+
+@pytest.mark.parametrize('failure,stage,kind',[
+    ('launch-policy','costs launch policy','RuntimeError'),
+    ('enable','costs enable','HeldError'),
+    ('bootstrap','costs bootstrap','HeldError'),
+    ('identity','costs process identity','OSError'),
+    ('environment','costs effective policy','HeldError'),
+    ('cwd','costs source cwd','HeldError'),
+    ('health','costs health','ConnectionRefusedError'),
+    ('policy-after-health','costs shutdown policy','RuntimeError'),
+    ('remaining-holds','remaining service holds','HeldError'),
+    ('receipt','restoration receipt','OSError'),
+])
+def test_restore_reports_safe_stage_only_after_verified_quarantine(held,monkeypatch,failure,stage,kind):
+    x=held;x.installed();before=x.h.policy_files();app=x.m.tree_digest(x.app)
+    secret='synthetic-secret-must-not-appear'
+    if failure=='launch-policy':
+        def refused(name):raise RuntimeError(secret)
+        monkeypatch.setattr(x.h,'prelaunch_source',refused)
+    elif failure in {'enable','bootstrap'}:
+        run=x.sys.run
+        def refused(argv,check=True):
+            if list(argv)[:2]==['launchctl',failure]:raise x.m.HeldError(secret)
+            return run(argv,check)
+        monkeypatch.setattr(x.sys,'run',refused)
+    elif failure=='identity':
+        job=x.h.job;injected=False
+        def refused(label):
+            nonlocal injected
+            if label==x.m.LABELS['costs'] and label in x.sys.jobs and not injected:
+                injected=True;raise OSError(secret)
+            return job(label)
+        monkeypatch.setattr(x.h,'job',refused)
+    elif failure=='environment':x.sys.env_mode='legacy'
+    elif failure=='cwd':x.sys.cwd=x.home/'unrelated-source'
+    elif failure=='health':
+        def refused(port,path):raise ConnectionRefusedError(secret)
+        monkeypatch.setattr(x.sys,'request',refused)
+    elif failure=='policy-after-health':
+        floor=x.h.floor;request=x.sys.request;health_checked=False
+        def health(port,path):
+            nonlocal health_checked
+            request(port,path);health_checked=True
+        def refused(policy):
+            if health_checked:raise RuntimeError(secret)
+            return floor(policy)
+        monkeypatch.setattr(x.sys,'request',health)
+        monkeypatch.setattr(x.h,'floor',refused)
+    elif failure=='remaining-holds':
+        hold=x.h.hold
+        def refused(subset=None):
+            if subset is not None:raise x.m.HeldError(secret)
+            return hold(subset)
+        monkeypatch.setattr(x.h,'hold',refused)
+    else:
+        write=x.m.private_json
+        def refused(path,data):
+            if Path(path).name=='local-restoration.json':raise OSError(secret)
+            return write(path,data)
+        monkeypatch.setattr(x.m,'private_json',refused)
+    with pytest.raises(x.m.HeldError) as caught:x.h.restore(x.rb,['costs'])
+    assert str(caught.value)==f'local restoration failed at {stage} ({kind}); services quarantined'
+    assert secret not in str(caught.value)
+    assert not x.sys.jobs and all(x.sys.flags[label]=='disabled' for label in [*x.m.LABELS.values(),x.m.CLEANUP])
+    assert not (x.rb/'local-restoration.json').exists()
+    assert x.sys.head==TARGET and x.h.policy_files()==before and x.m.tree_digest(x.app)==app
+
+
+def test_restore_never_claims_quarantine_when_quarantine_fails(held):
+    x=held;x.installed();x.sys.fail_health=True;x.sys.fail_bootout=x.m.LABELS['costs']
+    with pytest.raises(x.m.HeldError) as caught:x.h.restore(x.rb,['costs'])
+    assert 'services quarantined' not in str(caught.value)
+    assert x.m.LABELS['costs'] in x.sys.jobs
+    assert not (x.rb/'local-restoration.json').exists() and x.sys.head==TARGET
