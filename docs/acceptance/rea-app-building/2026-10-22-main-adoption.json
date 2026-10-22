@@ -1,0 +1,51 @@
+{
+  "checked_at_utc": "2026-10-22T23:54:24.482613+00:00",
+  "integration_base": "ab31dfa8ddf58ad0583afcb25dffd18afbee5765",
+  "refresh": "git fetch origin (all configured remote heads)",
+  "refs": {
+    "HEAD": "828f24b7b316d07b291b57f19d5a59b1588a12c9",
+    "origin/main": "ab31dfa8ddf58ad0583afcb25dffd18afbee5765",
+    "origin/codex/ws05-subscription-retirement-20261020": "014f915bd8f8ac9a5e187779601fe1718d7e21b5",
+    "origin/docs/rea-integration-publish-20261022": "b23b824ff15e450fae60535b38a95559eeda9396",
+    "origin/codex/phone-access-plan-20261022": "87f163a7619596104e27af0bf50a3b6b88d28809"
+  },
+  "frozen_rea": "b23b824ff15e450fae60535b38a95559eeda9396",
+  "reviewed_nr1": "eb413a25d80df202af8e6d0f04e737ef0463b992",
+  "nr1_review_verdict": "APPROVE static contract preparation only",
+  "main_roadmap_prefix_preserved_bytes": 250278,
+  "main_roadmap_prefix_sha256": "9b7484b2ee4fb8010e53c3b74527287c2e84eebfc6065bf54657c4d858498fd5",
+  "ws31_only_appended": true,
+  "phone_files_byte_identical": [
+    "docs/plans/MORTIMER_PHONE_ACCESS_PLAN.md",
+    "docs/reviews/ws30-phone-reconciliation-20261022/CLAUDE_REVIEW.md",
+    "docs/reviews/ws30-phone-reconciliation-20261022/FOLLOW_UP_REVIEW.md",
+    "docs/reviews/ws30-phone-reconciliation-20261022/README.md",
+    "docs/reviews/ws30-phone-reconciliation-20261022/follow-up-receipt.json",
+    "docs/reviews/ws30-phone-reconciliation-20261022/review-receipt.json",
+    "docs/roadmap-log/2026-10-22-ws-30-phone-access-intake.md",
+    "docs/roadmap-log/2026-10-22-ws-30-reconciliation.md"
+  ],
+  "research_sha256": {
+    "docs/interface-research/REA_INTEGRATION_RESEARCH_2026-10-22.md": "7bfd1630c6ac1a106f53c3604a06fae4818cbae0b2a62a064cde01eb3499ae37",
+    "docs/interface-research/REA_INTEGRATION_RESEARCH_2026-10-22.docx": "d57310f50fecaf1ebec459ca3828265b999d05b252b73bc8532fbd6ecd424882"
+  },
+  "nr1_section_11_unchanged_sha256": "fde73581c134add6c65e59db3dd7e038bc00106e01ba78e0d319f70719339131",
+  "prior_plan_body_preserved": true,
+  "future_source_files_absent": [
+    "jarvis/app_build_contract.py",
+    "tests/unit/test_app_build_contract.py",
+    "tests/fixtures/app_build_contract/new_idea_v1.json"
+  ],
+  "roadmap_check": {
+    "command": "python3 scripts/check_roadmap.py --main origin/main",
+    "exit": 0,
+    "stdout": "roadmap check: 0 errors, 0 warnings\n"
+  },
+  "local_links_checked": 13,
+  "pinned_source_links_checked": 11,
+  "runtime_operations": 0,
+  "source_implementation_tests_run": false,
+  "claude_contribution": false,
+  "reconciliation_review": "separate exact-candidate review required",
+  "required_ci": "pending draft publication"
+}
