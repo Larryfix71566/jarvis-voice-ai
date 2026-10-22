@@ -16,6 +16,53 @@ activation, full acceptance, or release. Implement in a dedicated worktree;
 preserve concurrent work. Acceptance gates remain open until their full evidence
 is recorded.
 
+## 2026-10-22 — P0 implementation candidate after registration
+
+Registration #248 merged as `edfa28527d467ccf12dba7de8577211a3e59764a` at
+16:43:49 UTC, reviewed head `71c2789`, all five CI checks successful. Main tree
+matched the reviewed candidate exactly; every non-WS-03 roadmap byte, including
+WS-20, was preserved. Source work began afterward on the separately claimed
+`codex/ws03-compatibility-p0-20261022` branch. #246 remains untouched.
+
+The candidate implements the closed frontmatter matrix below in a pure validator,
+with parser enforcement reused by legacy loading, V2 snapshots, catalog/readiness
+and final prompt revalidation. Unsupported metadata/controls and any casefolded
+root scripts entry refuse. YAML duplicates, aliases/anchors/tags, wrong types,
+non-mapping input and excessive complexity refuse with fixed diagnostic codes.
+Invalid CLI package labels use ordinals; catalog identity remains the validated
+slug. Existing package digest integrity checks still run before compatibility.
+The writer validates and serializes before candidate creation; quoted empty and
+ambiguous strings round-trip. Source text, package/configuration pins and activation
+controls are unchanged. There is no script execution, dependency install or tool grant.
+
+Numerical P0 bounds for focused review: SKILL.md 128 KiB (same as the existing
+catalog text cap), frontmatter 16 KiB before YAML, metadata strings 1,024 characters,
+128 YAML events, nesting depth four, 256 immediate package-root entries. Exact
+file/frontmatter byte limits are inclusive. Oversize input refuses as a whole;
+existing 20,000-character body guidance remains a warning, without truncation.
+Regular files only, nonblocking/no-follow reads and bounded byte reads protect the
+parser from special files and leaf symlinks. This does not introduce a general
+script sandbox or certify prose dependency completeness.
+
+Offline evidence: the first 40 new cases produced **36 failures / four passes**
+on unchanged main. The implementation plus expanded coverage passes **232 tests**
+across parser, compatibility, catalog/CLI, readiness, selection, last injection,
+references, authoring validation, frozen workspace fixtures and runtime inventory.
+One dependency deprecation warning is unrelated. Tests use isolated synthetic
+state and in-memory providers, no real inference or external scripts.
+Only the two pre-disclosed existing assertions changed:
+`TestParsing.test_scripts_are_detected` and
+`TestNoExecutionPath.test_a_bundled_script_is_never_read_or_run` now assert refusal;
+nonexecution and diagnostic privacy remain tested. No frozen fixture was edited
+or changed outcome. Other existing test assertions remain unchanged.
+
+Full-source bounded Claude Max review and exact-head CI are pending. These local
+results are author-run regression evidence, not full acceptance. The twelve-gate
+inventory below remains unchanged: SW-B/C historically accepted, all other gates
+open. P0 adds no native import review UI, complete resource adapter, executable
+sandbox, accepted version history or activation/rollback implementation. Those
+larger slices require their existing owner coordination and prerequisites.
+
 ## 2026-10-22 — WS-03 completion dispatch and bounded compatibility claim
 
 Status: documentation claim only; source implementation waits for the matching

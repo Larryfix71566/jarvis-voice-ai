@@ -293,9 +293,11 @@ def inspect_package(
         raise SkillPackageError("invalid_skill_directory")
     digest = _package_digest(directory)
     skill_path = directory / "SKILL.md"
-    skill, _problems = parse_skill(skill_path)
+    skill, problems = parse_skill(skill_path)
     if skill is None:
-        raise SkillPackageError("invalid_skill_instructions")
+        from jarvis.skill_compatibility import compatibility_reason
+
+        raise SkillPackageError(compatibility_reason(problems))
     if skill.name != directory.name:
         raise SkillPackageError("skill_directory_name_mismatch")
     metadata = _manifest(directory / MANIFEST, skill.name)

@@ -164,8 +164,9 @@ class TestParsing:
 
     def test_scripts_are_detected(self, tmp_path):
         path = make_skill(tmp_path, scripts=True)
-        skill, _ = parse_skill(path)
-        assert skill.has_scripts is True
+        skill, problems = parse_skill(path)
+        assert skill is None
+        assert problems == ["unsupported_scripts_entry"]
 
     def test_oversized_body_warns_but_still_loads(self, tmp_path):
         path = make_skill(tmp_path, body_extra="x" * 25_000)
@@ -432,12 +433,13 @@ class TestNoExecutionPath:
         make_skill(root, scripts=True)
         cfg = config_with(tmp_path, ["a-skill"])
         loaded = load_skills(root, cfg)
-        assert loaded and loaded[0].has_scripts is True
-        assert "skill_bundles_scripts" in caplog.text
+        assert loaded == []
+        assert "skill_invalid" in caplog.text
         assert "a-skill" not in caplog.text
         assert str(root) not in caplog.text
-        # The prompt carries the warning; the script content never appears.
-        assert "echo hi" not in loaded[0].as_prompt()
+        # No prompt can be created from an admitted package, and script text
+        # does not become diagnostic content either.
+        assert "echo hi" not in caplog.text
 
 
 class TestAuthoring:
