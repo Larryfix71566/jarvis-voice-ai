@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "runtime": "codex",
+  "model": "gpt-6-astra",
+  "executable": {
+    "path": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "sha256": "8a6dc3938a2f5d30cc19c50b9ccad83a5aa2ca4a2e3411665430bb78a917220a",
+    "version": "codex-cli 0.163.0-alpha.11"
+  },
+  "proof_kind": "installed_cli_loopback_mock",
+  "catalog_sha256": "cafea0443b92c59291e727e899596d90ae68a73462c7a45fa3bd93b3cd930756",
+  "invocation_sha256": "c73f1ecb5d468a8cf52f9098f7525908f8f31df5ecbaa3fc2f29c85c08ba3828",
+  "advertised_tools": [],
+  "terminal_success_without_error_items": true,
+  "api_credentials_absent": true,
+  "real_provider_calls": 0,
+  "provider_inference_performed": false,
+  "request_count": 1,
+  "candidate_runtime_diagnostic": true,
+  "production_activation_authorized": false,
+  "error_category": null,
+  "negative_unadvertised_tool_rejected": true,
+  "side_effect_absent": true,
+  "limits": [
+    "Local tool construction/parser evidence only.",
+    "No subscription account, model inference, allowance, overage or billing acceptance.",
+    "An explicit operator gate and matching binary/model/config/catalog are still required."
+  ],
+  "negative_probe": {
+    "negative_unadvertised_tool_rejected": true,
+    "explicit_matching_host_refusal": true,
+    "side_effect_absent": true,
+    "terminal_success_without_error_items": true,
+    "error_category": null,
+    "request_count": 2
+  },
+  "host_isolation": {
+    "external_network": "denied_by_macos_sandbox",
+    "existing_codex_credentials": "read_denied",
+    "existing_keychain_files": "read_denied",
+    "home": "temporary_empty",
+    "provider_inference": false
+  },
+  "observed_at_utc": "2026-10-22T04:07:54.870662+00:00",
+  "runtime_receipt_sha256": "789513dce7a5386455d402cae2a1ebfe726c1791583a9e828ca918e5c92399e3",
+  "scope": "Offline diagnostic only; not installed or configured as runtime capability receipt.",
+  "focused_tests": {
+    "passed": 182,
+    "skipped": 0,
+    "failed": 0,
+    "command": "PYTHON_DOTENV_DISABLED=1 RUN_LIVE=0 PYTHONDONTWRITEBYTECODE=1 python -m pytest tests/unit/test_subscription_capability.py tests/unit/test_subscription.py tests/unit/test_subscription_retirement.py tests/unit/test_subscription_voice.py tests/unit/test_subscription_tools.py -q -p no:cacheprovider",
+    "log_sha256": "c8bc2649024f4dd7c87a04aeda330bc23f043c9afc705e4fc72ce3f085c1b7fd",
+    "initial_tool_sandbox_result": "179 passed; three synthetic Unix socket bind failures (Operation not permitted). Same source passed all 182 in authorized host rerun."
+  },
+  "live_acceptance": "Old .10.2 live evidence is historical only. Alpha.11 activation remains blocked pending renewed exact-binary workload acceptance plus existing release/privacy gates; no new live test is authorized.",
+  "diagnostic_marker_semantics": "candidate_runtime_diagnostic and production_activation_authorized describe evidence collection; the validator does not treat them as authorization controls. After independently reviewed version admission, a matching full diagnostic receipt can satisfy the offline capability gate. Operator flags, release controls and renewed exact-binary workload acceptance remain separate; this patch sets none of them.",
+  "launcher_sha256": "a09c8bcc3f79607399d83a4e73746725240784ab838b51c5f4e81e966ae472b4",
+  "positive_probe_explicit_matching_host_refusal": false,
+  "review": {
+    "source_head": "b4ce39a2bba0dbe6c13723e311fae0bb3d7362d1",
+    "model": "claude-fable-5-1",
+    "verdict": "no_blocking_findings",
+    "tools_enabled": false,
+    "direct_api_credentials_inherited": false,
+    "subscription": "existing Claude Max",
+    "report": "codex-alpha11-review-2026-10-22.md"
+  },
+  "launcher_provenance": {
+    "original_launcher_sha256": "a09c8bcc3f79607399d83a4e73746725240784ab838b51c5f4e81e966ae472b4",
+    "digest_scope": "Original locally retained launcher bytes; not a digest of this summary or a sanitized example.",
+    "collection_method": "Temporary empty home, minimal environment, RUN_LIVE=0 and dotenv disabled. macOS sandbox denies external networking and reads of existing Codex credential storage and Keychain files; localhost mock transport only. Positive response and hostile unadvertised-tool probes use the installed executable.",
+    "publication_correction": "Raw launcher source removed from this final summary because it contained personal absolute paths. Original probe evidence and digest are preserved. Prior remote history is unchanged; no claim of historical deletion."
+  }
+}

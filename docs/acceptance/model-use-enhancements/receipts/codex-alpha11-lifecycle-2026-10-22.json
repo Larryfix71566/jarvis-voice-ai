@@ -1,0 +1,31 @@
+{
+  "reviewed_lifecycle_head": "0b02b0b2fefa137c028d415f704bcc8e55507584",
+  "previous_integration_head": "0ad6bb18bca9db73166e23bbf38b3116f52cb931",
+  "unchanged_fields": {
+    "Owner": true,
+    "Status": true,
+    "Scope": true,
+    "Next step": true
+  },
+  "active_where_preserved_without_historical_suffix": true,
+  "historical_suffix_preserved_verbatim": true,
+  "CX28_and_all_checkboxes_unchanged": true,
+  "runtime_test_bytes_unchanged": true,
+  "prospective_check": "scripts/check_roadmap.py --main HEAD: 0 errors,0 warnings; HEAD includes provider014f915 ancestry",
+  "prior_failure": "Coordinator synthetic merge99de866: active claimed Where referenced an already-merged provider branch. Old receipt describes pre-correction source only.",
+  "review": {
+    "source_head": "0b02b0b2fefa137c028d415f704bcc8e55507584",
+    "input_sha256": "c073f52399fe556db3aa6360e24fd2d975fb21bd26dcf7d4cc0c74ebbde1e517",
+    "requested_model": "claude-fable-5-1",
+    "returned_models": [
+      "claude-fable-5-1"
+    ],
+    "finished_at": "2026-10-22T23:27:39.899138+00:00",
+    "review_complete": true,
+    "exact_model_verified": true,
+    "tools_enabled": false,
+    "automatic_fallback": false,
+    "verdict": "no_blocking_findings"
+  },
+  "fresh_publication_ci": "Required for new final head; old0ad6bb1 results are historical only."
+}
