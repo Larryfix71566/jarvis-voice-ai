@@ -1229,3 +1229,12 @@ The original #244 publication passed all five CI checks; those checks do not
 certify this new main combination. Fresh docs-delta review and publication CI
 are required here. The serial coordinator alone owns main integration; no
 installation, service/model change, live test or acceptance checkoff is included.
+
+Prospective-main lifecycle correction: the coordinator's synthetic merge of
+0ad6bb1 correctly makes frozen provider014f915 an ancestor. The strict checker
+then rejects the historical provider branch in the active claimed Where field.
+Move only that completed branch and its complete lineage to an explicitly
+historical field. Keep the active harness Where, Owner, Status, Scope,
+Next step and CX-28 unchanged in meaning; all source/test blobs and acceptance
+checkboxes remain unchanged. The earlier Where-byte-equality receipt describes
+5889a92 only and is superseded for this one authorized factual relocation.

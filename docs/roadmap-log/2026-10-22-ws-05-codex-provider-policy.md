@@ -53,3 +53,9 @@ review with no blocking findings. Strict roadmap passes with 0 errors and 0 warn
 Structural assertions preserve both complete dated additions, all acceptance
 checkboxes, exact active harness fields/CX-28 and reviewed runtime/test blobs.
 Fresh publication CI remains pending; the serial coordinator alone owns merge.
+
+Coordinator prospective-main check rejected the historical provider branch
+in active Where after provider014f915 became an ancestor. Relocated only that
+branch and its full lineage to Historical provider source lineage; current
+harness claim, scope/CX-28 and runtime/test bytes remain unchanged. Independent
+docs-delta review and fresh publication CI are required for the corrected head.
