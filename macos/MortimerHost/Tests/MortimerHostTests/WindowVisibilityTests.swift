@@ -112,6 +112,35 @@ final class WindowVisibilityTests: XCTestCase {
         XCTAssertEqual(reports.last, true, "Read the real observer after the owned window is restored")
     }
 
+    func testVisibleFixtureRecoversFromADeferredApplicationHide() throws {
+        let originalPolicy = try prepareVisibleWindowServer()
+        defer { _ = NSApp.setActivationPolicy(originalPolicy) }
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 400, height: 180),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer {
+            NSApp.unhideWithoutActivation()
+            window.close()
+        }
+        NSApp.unhideWithoutActivation()
+        show(window)
+        pumpEvents(until: { window.occlusionState.contains(.visible) })
+        XCTAssertTrue(window.occlusionState.contains(.visible), "Establish a real visible fixture first")
+
+        var deliveredHiddenState = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            NSApp.hide(nil)
+            self.pumpEvents(until: { NSApp.isHidden })
+            deliveredHiddenState = NSApp.isHidden
+        }
+        waitForVisibleFixture(window, until: { window.occlusionState.contains(.visible) })
+        pumpEvents(for: 0.3)
+        XCTAssertTrue(deliveredHiddenState, "The real late-hide event must have occurred")
+        XCTAssertFalse(NSApp.isHidden, "A first visible sample must not miss a pending application hide")
+        XCTAssertTrue(window.isVisible)
+        XCTAssertTrue(window.occlusionState.contains(.visible))
+    }
+
     func testActualWindowHideShowAndDetachUpdateVisibility() throws {
         let originalPolicy = try prepareVisibleWindowServer()
         defer { _ = NSApp.setActivationPolicy(originalPolicy) }
