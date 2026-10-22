@@ -16,6 +16,82 @@ activation, full acceptance, or release. Implement in a dedicated worktree;
 preserve concurrent work. Acceptance gates remain open until their full evidence
 is recorded.
 
+## 2026-10-22 — WS-03 completion dispatch and bounded compatibility claim
+
+Status: documentation claim only; source implementation waits for the matching
+claim to land on main under ROADMAP §0.3. Owner: Codex, task
+`01a16137-c45f-7451-aeae-0c539af41015`, branch
+`codex/ws03-compatibility-20261022`, baseline `636880e`.
+Larry requested separate WS-03/WS-20 completion work and use of authenticated
+Claude Max for bounded implementation/review. WS-20 is excluded here.
+
+The compatibility contract and sanitized 22-category/25-proposed-case evidence
+are already published in draft #246 at `028b44e`; preserve them without
+copying or rewriting that publication. This first source slice, after its claim
+lands, is P0: strict bounded frontmatter parsing, explicit content-safe
+compatibility diagnostics, and refusal of unsupported/unknown execution or
+security controls on both legacy and V2 admission paths. It must preserve
+valid instruction-only packages and retained descriptive metadata, never
+silently treat ignored controls as supported. Inventory existing enabled
+packages first; no live rollout or registry mutation is included.
+
+Unknown/unsupported controls such as manual-only invocation and tool
+restrictions are blocked until their exact host semantics are implemented.
+Do not implement a partial translation that claims support. Tests must cover
+malformed/duplicate/type-invalid YAML, resource bounds, diagnostic privacy,
+legacy/V2 consistency, scripts/host controls, unchanged portable content and
+isolation of one invalid package from unrelated valid packages. Reuse existing
+catalog/readiness surfaces. No new configuration/schema identifier is reserved.
+If a final injection path can bypass validation, report the exact seam and
+coordinate its owner before extending this scope to `agents/base.py`.
+
+**Task split:** Codex owns integration and focused offline tests after landed
+claim. One bounded official Claude Code Max review examines sanitized project
+source and the proposed slice; no tools, private logs, direct API credentials,
+persistent grants or fallback. Preserve exact input/source hashes and returned
+model identity. A review is not implementation or acceptance evidence. The
+existing acceptance/release owner retains installed-build work; no competing
+voice/audio/VM tests are started.
+
+### Twelve-gate reconciliation (authoritative main 636880e)
+
+Historical accepted gates remain accepted at their recorded sources. Changed
+parser/selection behavior requires fresh regression evidence, without relabeling
+a partial new check as full acceptance. No new gate is accepted by this claim.
+
+| Gate | Current status | Code / offline work | Remaining acceptance or external prerequisite |
+|---|---|---|---|
+| SW-A baseline | Open | Preserve original packages and synthetic behavior; P0 regression evidence only | Exact-build full app/voice/memory/Atlas/sharing baseline with Larry |
+| SW-B package integrity | Historically accepted | Rerun affected integrity contracts after changes; add strict compatibility cases | Retain dated receipt; do not silently extend its accepted scope |
+| SW-C selection quality | Historically accepted | Rerun frozen positives/negatives and legacy/V2 refusals on changed source | Retain dated receipt; new invocation translations need their own evidence |
+| SW-D truthful inspection | Open | Existing trace/API tests; assess content-safe blocker presentation | Actual success/failure/skipped/unknown/legacy runs and reconnect/native trace; WS-04 owner identity |
+| SW-E privacy | Open | Canary tests through diagnostic/catalog/inventory boundaries; wrong-owner contracts | Full source-to-sink checks including protected exports/capture/secondary displays on exact build |
+| SW-F creator isolation | Open | Existing authoring validator and drift/cancel contracts; no script execution | Authorized real VM lifecycle and no network/credential/host fallback, source/model/auth readiness |
+| SW-G evaluation effectiveness | Open | Frozen fixture/rubric/evaluator integrity only; no inference in P0 | Separate route/budget authorization; 12 baseline/candidate pairs, human blinded review and required thresholds |
+| SW-H lifecycle/activation | Open | Existing recovery/idempotency tests; keep activation/rollback refusal until prerequisites | Durable accepted-version history, exact approval, atomic activation/readback, real restart/cancel/rollback |
+| SW-I voice/accessibility | Open | Existing shared-action/targeting/accessibility contracts, outside P0 UI edits | Larry's voice, VoiceOver, keyboard, large-type, contrast and platform-setting checks |
+| SW-J displays | Open | Existing result identity/reconnect contracts | One/two physical displays, unplug/reopen/restart with no duplicate/orphan/focus theft |
+| SW-K performance | Open; historical sub-budgets retained | Focused deterministic regressions; no competing benchmark | Exact-build paired voice p95 ≤50 ms regression and ten-minute live-trace growth ≤10 MiB; preserve timing provenance |
+| SW-L release/handoff | Open | Exact-source tests/review and reproducible handoff | Required release suites, app/backend/config/package identity, ready versus loaded readback and human release decision |
+
+Implementation remains distinct from test pass, source review, merge,
+deployment and acceptance. The next source slice is intentionally narrow;
+full import UI, controlled activation/runtime readback, binary assets,
+executable adapters and sandbox changes need an explicit larger-scope check.
+WS-29 consolidation, model switching, auto-installation, service grants,
+third-party script execution and live benchmarks are excluded.
+
+### Ownership and smallest unblock
+
+No active WS-03 source PR was found in the open PR inventory. The old
+`codex/ws03-live-acceptance-20260930` branch has no commits beyond current main.
+Draft #242 owns harness recommendation work and its package-count assertion
+in `test_agent_skills.py`; preserve it during integration, and do not change its
+package, registry or model paths. Draft #246 remains the separate frozen
+publication of this contract. The main claim rule has no draft-only exception.
+The smallest outstanding decision is review/merge of this documentation claim;
+it authorizes only the named P0 source work after landing, not runtime adoption.
+
 ## 1. Outcome and scope
 
 Larry can ask Mortimer to show its skills, inspect what a skill does, understand
