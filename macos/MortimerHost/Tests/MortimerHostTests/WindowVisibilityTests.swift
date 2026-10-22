@@ -5,7 +5,7 @@ import SwiftUI
 
 @MainActor
 final class WindowVisibilityTests: XCTestCase {
-    private func activateVisibleWindowServer() throws -> NSApplication.ActivationPolicy {
+    private func prepareVisibleWindowServer() throws -> NSApplication.ActivationPolicy {
         let app = NSApplication.shared
         guard !NSScreen.screens.isEmpty else {
             throw XCTSkip("requires an interactive WindowServer with at least one screen; this test process has none")
@@ -15,15 +15,8 @@ final class WindowVisibilityTests: XCTestCase {
             throw XCTSkip("the test process cannot activate as a regular app in this session")
         }
         app.finishLaunching()
-        app.activate(ignoringOtherApps: true)
-        let activationDeadline = Date().addingTimeInterval(2)
-        while !app.isActive && Date() < activationDeadline {
-            pumpEvents(for: 0.05)
-        }
-        guard app.isActive else {
-            _ = app.setActivationPolicy(originalPolicy)
-            throw XCTSkip("the test host cannot become the active app in this WindowServer session")
-        }
+        // A frontmost-app request before a fixture window exists is not a
+        // visibility prerequisite. Establish the real window state below.
         return originalPolicy
     }
 
@@ -65,8 +58,62 @@ final class WindowVisibilityTests: XCTestCase {
         window.orderFrontRegardless()
     }
 
+    private func waitForVisibleFixture(_ window: NSWindow, until condition: () -> Bool) {
+        // Activation-policy transitions can leave the owned test app hidden
+        // after its initial show request. Restore only this visible fixture;
+        // hide/minimize/close checks keep using the unmodified event pump.
+        // The original three-second bound and real OS/observer assertions stay.
+        pumpEvents(until: {
+            if NSApp.isHidden { NSApp.unhideWithoutActivation() }
+            if !window.isVisible { window.orderFrontRegardless() }
+            return !NSApp.isHidden && window.isVisible
+                && window.occlusionState.contains(.visible) && condition()
+        })
+    }
+
+    func testVisibleFixtureRecoversFromAnApplicationHideAfterShowing() throws {
+        let app = NSApplication.shared
+        guard !NSScreen.screens.isEmpty else {
+            throw XCTSkip("requires a real WindowServer screen for the synthetic hidden-owner fixture")
+        }
+        let originalPolicy = app.activationPolicy()
+        guard app.setActivationPolicy(.regular) else {
+            throw XCTSkip("the test process cannot use a regular application policy")
+        }
+        app.finishLaunching()
+        let view = WindowVisibilityView(frame: NSRect(x: 0, y: 0, width: 300, height: 160))
+        var reports: [Bool] = []
+        view.changed = { reports.append($0) }
+        let window = NSWindow(contentRect: view.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = view
+        defer {
+            window.close()
+            app.unhideWithoutActivation()
+            _ = app.setActivationPolicy(originalPolicy)
+        }
+        // Independently prove this WindowServer can display the owned fixture.
+        app.unhideWithoutActivation()
+        show(window)
+        pumpEvents(until: { reports.last == true })
+        XCTAssertTrue(window.isVisible)
+        XCTAssertTrue(window.occlusionState.contains(.visible))
+        XCTAssertEqual(reports.last, true)
+
+        // Reproduce a late hidden-owner state after the initial show request.
+        app.hide(nil)
+        pumpEvents(until: { app.isHidden && reports.last == false })
+        XCTAssertTrue(app.isHidden)
+        XCTAssertEqual(reports.last, false)
+        waitForVisibleFixture(window, until: { reports.last == true })
+        XCTAssertFalse(app.isHidden, "Visible fixture preparation must restore its own hidden application")
+        XCTAssertTrue(window.isVisible)
+        XCTAssertTrue(window.occlusionState.contains(.visible))
+        XCTAssertEqual(reports.last, true, "Read the real observer after the owned window is restored")
+    }
+
     func testActualWindowHideShowAndDetachUpdateVisibility() throws {
-        let originalPolicy = try activateVisibleWindowServer()
+        let originalPolicy = try prepareVisibleWindowServer()
         defer { _ = NSApp.setActivationPolicy(originalPolicy) }
         let view = WindowVisibilityView(frame: NSRect(x: 0, y: 0, width: 300, height: 160))
         var reports: [Bool] = []
@@ -76,7 +123,7 @@ final class WindowVisibilityTests: XCTestCase {
         defer { window.close() }
         window.contentView = view
         show(window)
-        pumpEvents(until: { reports.last == true })
+        waitForVisibleFixture(window, until: { reports.last == true })
         print("VISIBILITY_FIXTURE active=\(NSApp.isActive) screens=\(NSScreen.screens.count) onSpace=\(window.isOnActiveSpace) frame=\(window.frame) occlusion=\(window.occlusionState.rawValue)")
         XCTAssertTrue(window.isVisible)
         XCTAssertTrue(window.occlusionState.contains(.visible), "Fixture must have a visibly unoccluded window; policy=\(NSApp.activationPolicy()) hidden=\(NSApp.isHidden)")
@@ -85,7 +132,7 @@ final class WindowVisibilityTests: XCTestCase {
         pumpEvents(until: { reports.last == false })
         XCTAssertEqual(reports.last, false, "Ordering the window out must suspend animation")
         show(window)
-        pumpEvents(until: { reports.last == true })
+        waitForVisibleFixture(window, until: { reports.last == true })
         XCTAssertEqual(reports.last, true)
         window.miniaturize(nil)
         pumpEvents(until: { window.isMiniaturized && reports.last == false })
@@ -93,7 +140,7 @@ final class WindowVisibilityTests: XCTestCase {
         XCTAssertEqual(reports.last, false)
         window.deminiaturize(nil)
         show(window)
-        pumpEvents(until: { !window.isMiniaturized && reports.last == true })
+        waitForVisibleFixture(window, until: { !window.isMiniaturized && reports.last == true })
         XCTAssertFalse(window.isMiniaturized)
         XCTAssertEqual(reports.last, true)
         window.contentView = nil
@@ -112,7 +159,7 @@ final class WindowVisibilityTests: XCTestCase {
     }
 
     func testWaveStopsSamplingWhileWindowHiddenAndResumes() throws {
-        let originalPolicy = try activateVisibleWindowServer()
+        let originalPolicy = try prepareVisibleWindowServer()
         defer { _ = NSApp.setActivationPolicy(originalPolicy) }
         var samples = 0
         let view = NSHostingView(rootView: VoiceWaveView(voiceState: .speaking, presentation: {
@@ -126,7 +173,7 @@ final class WindowVisibilityTests: XCTestCase {
         defer { if window.isVisible { window.close() } }
         window.contentView = view
         show(window)
-        pumpEvents(until: { window.occlusionState.contains(.visible) })
+        waitForVisibleFixture(window, until: { window.occlusionState.contains(.visible) })
         pumpEvents(for: 0.3)
         let started = samples
         pumpEvents(for: 0.2)
@@ -139,7 +186,7 @@ final class WindowVisibilityTests: XCTestCase {
         pumpEvents(for: 0.2)
         XCTAssertEqual(samples, suspended, "A hidden wave must stop requesting animation samples")
         show(window)
-        pumpEvents(until: { window.occlusionState.contains(.visible) })
+        waitForVisibleFixture(window, until: { window.occlusionState.contains(.visible) })
         pumpEvents(for: 0.3)
         let resumed = samples
         pumpEvents(for: 0.2)
@@ -152,7 +199,7 @@ final class WindowVisibilityTests: XCTestCase {
     }
 
     func testReducedMotionKeepsVisibleWaveStatic() throws {
-        let originalPolicy = try activateVisibleWindowServer()
+        let originalPolicy = try prepareVisibleWindowServer()
         defer { _ = NSApp.setActivationPolicy(originalPolicy) }
         var samples = 0
         let view = NSHostingView(rootView: VoiceWaveAnimation(voiceState: .speaking, presentation: {
@@ -166,7 +213,7 @@ final class WindowVisibilityTests: XCTestCase {
         defer { window.close() }
         window.contentView = view
         show(window)
-        pumpEvents(until: { window.occlusionState.contains(.visible) })
+        waitForVisibleFixture(window, until: { window.occlusionState.contains(.visible) })
         pumpEvents(for: 0.3)
         XCTAssertTrue(window.occlusionState.contains(.visible))
         XCTAssertGreaterThan(samples, 0, "The reduced-motion view must still present its initial state")
