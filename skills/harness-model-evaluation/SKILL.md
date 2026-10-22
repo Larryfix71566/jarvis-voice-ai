@@ -1,6 +1,6 @@
 ---
 name: harness-model-evaluation
-description: Evaluate Mortimer harness controller models and subscription releases, including Claude Opus, Sonnet, Fable and Codex Sol or Astra. Compare controller evidence, plan synthetic evaluations, and explain exact harness model change confirmation.
+description: Evaluate Mortimer harness controller models and subscription releases, including Opus, Sonnet, Fable, Sol and Astra. Compare controller evidence, plan synthetic evaluations, and explain exact harness model change confirmation.
 ---
 
 # Harness model evaluation

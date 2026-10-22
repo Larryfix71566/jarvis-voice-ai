@@ -1238,3 +1238,12 @@ No global matcher/importer, provider, native, installer or routing change was
 made in this repair delta. Frozen dependency/source reviews remain historical;
 new source review and exact-head CI are required. No model was selected or
 changed. The sole merge coordinator retains merge authority.
+
+
+Candidate draft #264: Claude Max Opus 5.5 accepted exact runtime repair
+c2cd6d9, with five nonblocking observations retained in the owned receipt.
+Narrow follow-up improves committing-passive test coverage, both reported
+family-name negatives and explicit workspace modes; 148 focused tests pass.
+Runtime repair bytes are unchanged. Later package/test/docs edits require
+focused review and fresh publication-head CI; wider foundation landing,
+model selection and installation remain unapproved.

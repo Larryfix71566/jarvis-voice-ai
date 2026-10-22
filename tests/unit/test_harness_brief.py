@@ -198,11 +198,14 @@ def test_unsupported_ids_are_not_truncated_to_a_different_candidate(model):
     assert result["candidates"] == []
 
 
-def test_harness_matcher_cases_against_enabled_roster():
+@pytest.mark.parametrize("workspace_enabled", ["0", "1"])
+def test_harness_matcher_cases_against_enabled_roster(monkeypatch, workspace_enabled):
     from pathlib import Path
     from jarvis.agent_skills import load_skills, match_skill
     root = Path(__file__).resolve().parents[2]
     cases = json.loads((root / "tests/fixtures/skills_authoring/harness-model-evaluation/matcher-cases.json").read_text())
+    monkeypatch.delenv("JARVIS_AGENT_SKILLS_ENABLED", raising=False)
+    monkeypatch.setenv("JARVIS_SKILLS_WORKSPACE_ENABLED", workspace_enabled)
     skills = load_skills()
     assert any(s.name == "harness-model-evaluation" for s in skills)
     for case in cases["cases"]:

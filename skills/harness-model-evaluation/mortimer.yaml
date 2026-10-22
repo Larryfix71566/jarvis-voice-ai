@@ -16,7 +16,7 @@ reference_paths:
   - references/review-protocol.md
   - references/evidence-baseline.md
   - references/mortimer-integration.md
-example_ids: [daily-harness-brief, compare-subscription-models, model-confirmation, unrelated-weather, unrelated-email, generic-daily-brief, generic-daily-brief-today, switch-harness-opus, compare-opus-fable, switch-harness-astra, model-availability, unrelated-switch, unrelated-comparison, unrelated-switch-comparison]
+example_ids: [daily-harness-brief, compare-subscription-models, model-confirmation, unrelated-weather, unrelated-email, generic-daily-brief, generic-daily-brief-today, switch-harness-opus, compare-opus-fable, switch-harness-astra, model-availability, unrelated-switch, unrelated-comparison, unrelated-switch-comparison, unrelated-claude-fable, unrelated-claude-opus-email]
 related_workflow_ids: []
 compatible_with: []
 process:

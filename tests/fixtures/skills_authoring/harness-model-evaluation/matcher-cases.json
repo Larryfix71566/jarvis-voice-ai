@@ -2,6 +2,16 @@
   "schema_version": 1,
   "cases": [
     {
+      "id": "unrelated-claude-fable",
+      "request": "Tell me a fable about Claude",
+      "expect_selected": false
+    },
+    {
+      "id": "unrelated-claude-opus-email",
+      "request": "Ask Claude Opus to summarize my email",
+      "expect_selected": false
+    },
+    {
       "id": "daily-harness-brief",
       "request": "Give me the daily brief harness model recommendation",
       "expect_selected": true

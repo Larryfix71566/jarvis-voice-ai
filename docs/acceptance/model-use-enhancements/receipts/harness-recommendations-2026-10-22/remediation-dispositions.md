@@ -54,3 +54,35 @@ suite, live inference, CLI review, installed service operation or acceptance
 checkbox closure occurred. Claude contribution remains unused because the
 landed claim explicitly excludes new source transmission. Further source
 review, exact-head CI and any later feature merge remain distinct gates.
+
+
+## Claude follow-up dispositions
+
+Authenticated Max review of exact c2cd6d9 returned ACCEPT, no blockers; see
+[immutable review](claude-review-c2cd6d9.md). Its five observations are retained:
+
+1. Strengthen committing-passive coverage: use changed selection, probe the
+   lock independently inside publication as well as during the captured read,
+   signal refresh immediately before lock entry, and check the final selection
+   digest. No timing-based sleep was added.
+2. Both suggested family-name negatives reproduced. Remove the extra provider
+   brand tokens from the package description, retain required harness-family
+   positives, and add the two exact negatives to package metadata/fixtures.
+   This is bounded lexical matching, not proof against every arbitrary
+   two-family-word collision; semantic matcher redesign stays with WS-03.
+3. Clear the skills kill-switch variable in the roster test and run fixtures
+   under explicit workspace-off and workspace-on settings. The latter also
+   exercises package revision admission. Final pin is
+   `940fca8901409bbe5179ee5f3d69e123976268a883e77d50777d5d0b4f8b99d9`.
+4. Unbounded/Unicode numeric runs are pre-existing, not a regression. Defer
+   optional parser hardening; finite-family recognition does not promise a
+   closed catalog or prove eligibility. No authority is gained from parsing.
+5. Stale passive selection can conservatively produce selection_changed;
+   source dates/evidence survive. No change requested or made.
+
+Follow-up focused run: **148 passed in 3.84 seconds**, same seven modules and
+isolation controls. Runtime `jarvis/status/harness.py` bytes remain those
+reviewed by Claude; later package/test/documentation edits need their own
+focused review. The earlier 147-pass result and three negative controls remain
+historical evidence. No second Claude inference is required merely to repeat
+unchanged runtime review; final reviewer/head and CI are recorded in PR #264.

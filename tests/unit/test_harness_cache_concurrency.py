@@ -66,15 +66,32 @@ def _worker(path, mode, reached, proceed, result):
             seed_now = NOW - timedelta(hours=1)
             H.refresh_report(path, fetch=fetch, selection=selection, now=seed_now)
         elif mode == "locked_passive_read":
+            import fcntl
             original = H._raw
             def read(directory):
                 value = original(directory)
                 pause()
                 return value
             H._raw = read
-            H.run_passive(status_dir=path, selection=selection, now=NOW, notice=lambda *a: 1)
+            publish = H._publish
+            def locked_publish(directory, report):
+                # Independently prove the committing phase still owns the lock;
+                # an unchanged passive run would never exercise this path.
+                with (directory / H.LOCK_NAME).open("r+") as lock:
+                    with pytest.raises(BlockingIOError):
+                        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                publish(directory, report)
+            H._publish = locked_publish
+            H.run_passive(status_dir=path, selection=changed_selection, now=NOW, notice=lambda *a: -1)
         elif mode == "refresh":
-            reached.set()
+            from contextlib import contextmanager
+            writer_lock = H._writer_lock
+            @contextmanager
+            def entering_lock(directory):
+                reached.set()
+                with writer_lock(directory):
+                    yield
+            H._writer_lock = entering_lock
             seed(path, "claude-sonnet-5")
         elif mode == "partial_temp_write":
             from jarvis.status import daily
@@ -156,6 +173,7 @@ def test_writer_lock_covers_passive_read_through_commit(tmp_path, workers):
     passive.join(10)
     refresh.join(10)
     assert raw(tmp_path)["sources"][0]["models"] == ["claude-sonnet-5"]
+    assert raw(tmp_path)["configured_selection"]["digest"] == "a" * 64
 
 
 def test_fetch_does_not_hold_writer_lock_and_last_completion_wins(tmp_path, workers):
