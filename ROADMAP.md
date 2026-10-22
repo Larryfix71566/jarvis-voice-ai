@@ -543,7 +543,7 @@ summary, its WS-17/20 status fields, dated joint-working plan/log, and the
 existing right-pane preview on `codex/roadmap-status-20261017`. This is
 documentation only; preserve other owners’ rows, checkboxes and pending #209.
 
-**Checker-policy decision — Larry, 2026-10-22 15:39:07 UTC:** errors fail CI;
+**Historical registration and checker-policy decision — Larry, 2026-10-22 15:39:07 UTC:** errors fail CI;
 warnings remain advisory. Larry approved preparing the reviewed enforcement
 change, with no merge/deployment or branch-protection change. This separate
 registration proposal uses `docs/ws20-checker-policy-claim-20261022`; #247 stays
@@ -561,13 +561,15 @@ merging documentation-only #249 after final review and CI pass (2026-10-22 15:56
 merge is included. The approved decision is recorded; its checklist
 milestone remains unchecked until the chosen behavior is implemented and verified.
 
+**Enforcement closeout — 2026-10-22:** #250 merged as `6234949a524c84c91e6a459658cf02f290eac20e` after Larry’s explicit approval. Exact main readback and five CLI behavior cases passed; the real roadmap check reports zero errors/warnings. The historical registration note above is superseded by this [post-merge receipt](docs/roadmap-log/2026-10-22-ws-20-checker-enforcement.md#post-merge-enforcement-receipt--2026-10-22). **3 of 4 WS-20 milestones are complete**; this is not a product or code-completion percentage. Only the owner-evidence/Phase A/B milestone remains open.
+
 ### Acceptance checklist — remaining
 
 B1–B4 implementation is merged; the 72-entry migration is already verified.
 
 - [x] **Codex · documentation cleanup:** WS-10/11 lifecycle prefixes now describe their landed foundations while every acceptance gate stays open. The roadmap checker passes on this documentation candidate; the single Production line still matches the recorded `bde22bb` deployment. [Dated cleanup proof](docs/roadmap-log/2026-10-06-ws-20-codex-lifecycle-closeout.md).
 - [x] **Codex / Claude · observation:** The first ten published post-migration PR merges (#161/#162/#163/#165/#166/#167/#168/#164/#169/#170) and their recorded integration merges replay with no conflict in §8 or `docs/roadmap-log/`. Exact complete merge trees and unchanged §8 are verified; [receipt](docs/roadmap-log/2026-10-06-ws-20-codex-ten-pr-change-log-observation.md). Unrecorded manual history is not claimed.
-- [ ] **Larry · decision:** After the warn-only rollout period and owned corrections, decide whether the checker becomes a blocking CI gate; the chosen behavior is recorded and verified.
+- [x] **Larry · decision:** After the warn-only rollout period and owned corrections, decide whether the checker becomes a blocking CI gate; the chosen behavior is recorded and verified. Completed by Larry’s errors-fail/warnings-advisory decision and #250 merge `6234949`; see the exact post-merge receipt above.
 - [ ] **Each acceptance owner · evidence:** Link the remaining live checks to their own rows (WS-17, WS-18 and the other open gates); publish the final Phase A/B exit record without treating implementation as live acceptance.
 
 Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.md).
@@ -575,15 +577,15 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
 - **Owner:** `codex` (existing WS-20 documentation and bounded checker-enforcement integration on the registered branch); `claude` retains B4 authorship/ownership and required cross-review, plus WS-13 ownership. WS-17 release/install ownership is unchanged.
-- **Status:** landed via this PR: the existing roadmap CI step uses strict error exits and advisory warnings, per Larry’s 10-22 policy. Foundation B1–B4 remains complete; exact-source tests, review and CI are recorded in the associated PR. Product acceptance and final evidence closure remain open.
+- **Status:** landed: B1–B4 and checker enforcement #250 (`6234949`) are complete; this documentation closeout synchronizes the proven policy milestone. Three of four listed milestones are complete. Product acceptance and final owner evidence remain open.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
-- **Remaining work / acceptance:** Record the exact enforcement merge identity and record the disposition of the decision milestone against its source evidence; reconcile required owner live/physical/observation evidence and final Phase A/B exit. Both existing unchecked milestones remain unchanged by this implementation.
+- **Remaining work / acceptance:** Existing owners link the remaining live, hardware and observation checks to exact candidate receipts and publish the final Phase A/B exit record. Use the dated acceptance handoff in the existing plan; no failed, unavailable or unbuilt case is treated as passed.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `codex/ws20-checker-enforcement-20261022`, based on main `7b295cd92dfd331d49c08b723f622491e13f4dfa` after registration PR #249. The separate frozen #246/#247 drafts remain unmerged and are not dependencies.
+- **Where:** `codex/ws20-checker-enforcement-20261022`, documentation follow-up based on main `6234949a524c84c91e6a459658cf02f290eac20e` after approved enforcement #250. Frozen #246 (`028b44e`) and #247 (`e284526`) remain independent unmerged histories, not dependencies.
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
 - **Scope:** Additional approved checker-enforcement integration: only `.github/workflows/validate.yml` roadmap-step comment/name/invocation, directly related synthetic tests in `tests/unit/test_check_roadmap.py`, dated progress in the existing joint-working plan and WS-20-specific log/evidence, and this row. Preserve checker logic/severity, all other jobs/triggers/permissions/action pins, branch protection and every product criterion; Claude cross-review is required. Existing acceptance-clearance documentation scope remains ROADMAP current acceptance/status summary and this block, `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`, WS-20 `docs/roadmap-log/**`, `docs/acceptance/IMPLEMENTATION_STATUS.md`, `docs/acceptance/ACCEPTANCE_RUNBOOK.md` and WS-20 receipts under `docs/acceptance/command-console/receipts/`. Preserve all other owners, checkboxes and receipts; do not edit other feature plans or WS-17 verification evidence. No application runtime, config, credentials, access, provider workload, production write, restart, deployment or enforcement beyond the named roadmap CI step.
-- **Next step:** codex: record the enforcement merge identity and update only the matching decision milestone when its required evidence is confirmed; reconcile owner receipts for final Phase A/B exit. claude: retain B4 ownership and review future checker changes. larry: retain live acceptance and release decisions. WS-17 retains source/release/installation and live-evidence ownership; no #246/#247/#243 merge or runtime operation follows.
-- **Updated:** 10-22 (strict invocation and five CLI cases prepared after main registration; acceptance checkboxes preserved)
+- **Next step:** codex: reconcile eligible owner receipts and preserve frozen #246/#247 histories during later integration. WS-17 release owner: establish the eligible installed candidate before live sessions. larry: run the concise owner-gated acceptance sequence in the plan, then record outcomes; retain release decisions. claude: retain B4 ownership and WS-06 checklist/observation prerequisites. No deployment or unrelated merge follows from this closeout.
+- **Updated:** 10-22 (enforcement milestone synchronized from exact #250 post-merge receipt; remaining live/evidence gates open)
 
 </details>
 
