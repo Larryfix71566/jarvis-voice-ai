@@ -1080,3 +1080,14 @@ must remain unavailable rather than buying direct inference or leaking private
 data to OpenRouter. External review and bounded synthetic subscription tests
 are now approved, but no inference (including review) may run until paid-overage
 disabled confirmation is obtained. Login metadata does not establish that gate.
+
+### 2026-10-22 — Other-provider selective-policy correction (WS-05)
+
+Larry clarified that only direct Anthropic and OpenAI APIs are retired. Correct
+the OpenRouter-only allow rule using the protected endpoint registry plus the
+existing SAYGM endpoint contract. Unknown identities remain refused. Preserve
+SAYGM catalog-derived privacy, source floors, exact-payload admission, explicit
+routing, authentication and task budget gates. No endpoint/configuration edits,
+new calls, fallback, service operations or native/installer changes. WS-17 owns
+release integration. Both extra-usage confirmations are recorded and both
+bounded live-test allowances are used; this slice is synthetic/offline only.
