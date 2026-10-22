@@ -1,3 +1,10 @@
+---
+date: 2026-10-22
+system: codex
+rows: [WS-05]
+prs: []
+---
+
 # WS-05 — 2026-10-22
 
 Claimed bounded selective-policy correction on existing WS-05 branch after
