@@ -1,0 +1,10 @@
+{
+  "baseline": "636880eabbe9dc756c30df7128d0a90c02d222bd",
+  "other_workstreams_unchanged": true,
+  "all_acceptance_checkboxes_preserved": true,
+  "existing_canonical_plan_bytes_preserved": true,
+  "review_input_hash_matches": true,
+  "application_source_changes": 0,
+  "implementation_tests_run": 0,
+  "new_full_gates_accepted": 0
+}

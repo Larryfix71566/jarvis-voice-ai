@@ -20,3 +20,10 @@ Owner coordination confirmed #246 is frozen documentation, #242 owns harness
 recommendations, and WS-20 has a separate owner. No changes to their work.
 No new migration, config key, port, label or allow-list row is reserved.
 No merge, deployment, benchmark, provider change or imported code execution.
+
+One bounded Claude Max excerpt review returned REVISE; exact returned model
+was `claude-opus-5-5`. The canonical plan now fixes the enforcement seam,
+strictness and diagnostic contract; dispositions preserve the script-policy
+qualification. Final author edits are not independently re-reviewed. Six
+repository packages (five enabled) contain no scripts directory. Review and
+inventory receipts are in `docs/acceptance/skills-workspace/receipts/compatibility-claim-2026-10-22/`.

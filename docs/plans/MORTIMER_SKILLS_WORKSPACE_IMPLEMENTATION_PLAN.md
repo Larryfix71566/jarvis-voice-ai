@@ -53,7 +53,53 @@ model identity. A review is not implementation or acceptance evidence. The
 existing acceptance/release owner retains installed-build work; no competing
 voice/audio/VM tests are started.
 
-### Twelve-gate reconciliation (authoritative main 636880e)
+### P0 implementation contract clarified after excerpt review
+
+One bounded Claude Max review of the proposed claim and partial source excerpts
+returned REVISE. Its six findings and author dispositions are preserved in the
+WS-03 claim receipt directory. This is an advisory scope review, not a full-source
+or implementation review, and no acceptance evidence follows from it.
+
+- Enforce compatibility refusal in `parse_skill`, returning `None` for a blocked
+  package. Existing loader, catalog and final injection re-parses then reject it.
+  Catalog/readiness blockers alone are insufficient. Propagate a closed reason
+  code through catalog inspection; test the final boundary without changing
+  `agents/base.py` or `skill_selection.py`. If that seam is insufficient, stop
+  and coordinate the additional path rather than weaken refusal.
+- Bound file bytes before reading and frontmatter bytes before decoding YAML;
+  reject duplicate keys, anchors/aliases, custom tags, non-map roots and wrong
+  types before coercion. Use a closed list of supported descriptive fields and
+  bounded metadata scalar schemas derived from an explicit source inventory.
+  Unknown fields are blocked unless their recognized descriptive semantics are
+  established. Declared execution/security controls are unsupported in P0;
+  exact translations remain later work. Do not coerce them into strings.
+- Diagnostics use a closed vocabulary and trusted field labels/counts only.
+  Never echo unknown keys, values, package paths, YAML snippets or exception
+  messages. Cover parser/catalog/readiness/refusal/log sinks with canaries.
+  Unsupported tool names must not leak via readiness reasons.
+- The offline main inventory found six packages, five generally enabled, and
+  no `scripts/` directory. Preserve every existing valid package's outcome,
+  including the separately pinned creator; compare #242's pending harness
+  package before integrating it. Reject new packages with required or unresolved
+  script dependencies rather than preserving the old warning-only admission.
+  A mere `scripts/` directory cannot prove the dependency optional. Changes to
+  admission for any existing package require explicit review before merge.
+- The frozen #246 contract at `028b44e` remains the design reference. P0's exact
+  supported-field list and reason codes are reviewed implementation decisions,
+  not an assertion that #246 already defines executable schemas. Any changed
+  outcome in the frozen SW-B/SW-C positive/negative fixtures blocks P0 merge;
+  do not silently adjust fixtures or narrow a previously accepted gate.
+
+Known larger SW-D work remains outside P0: a refused parse can lose the optional
+skill trace event, and the runtime's generic refusal text may not identify the
+compatibility reason. The catalog must still expose a safe blocker; do not claim
+complete inspection UX from that alone. No activation/rollback refusal is removed.
+
+### Twelve-gate inventory as of main 636880e
+
+Only SW-A/B/C regression checks and SW-E diagnostic canaries are P0 work below.
+Other rows are completion inventory, not additional source authorization; their
+paths and prerequisites require a separately coordinated slice.
 
 Historical accepted gates remain accepted at their recorded sources. Changed
 parser/selection behavior requires fresh regression evidence, without relabeling
