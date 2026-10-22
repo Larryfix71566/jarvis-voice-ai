@@ -3,8 +3,9 @@
 Baseline main: `636880eabbe9dc756c30df7128d0a90c02d222bd`.
 This is documentation and read-only source inventory, not runtime implementation.
 
-- `review-input.txt` preserves the exact claim diff and project-source excerpts
-  sent to the reviewer. SHA-256 is in `review-receipt.json`.
+- `review-input.json` preserves the exact claim diff and project-source excerpts
+  in its UTF-8 `text` value. Decoding that value reproduces the input SHA-256
+  in `review-receipt.json`; JSON encoding preserves original whitespace.
 - `source-manifest.json` binds the full source files used for those excerpts.
 - `CLAUDE_REVIEW.md` is the unmodified response; `dispositions.md` distinguishes
   adopted findings, qualifications and a rejected script-admission suggestion.

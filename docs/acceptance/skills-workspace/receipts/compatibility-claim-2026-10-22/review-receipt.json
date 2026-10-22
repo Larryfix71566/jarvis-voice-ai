@@ -23,5 +23,6 @@
   "verdict": "REVISE",
   "final_author_amendments_re_reviewed": false,
   "benchmark_calls": 0,
-  "implementation_tests_run": 0
+  "implementation_tests_run": 0,
+  "input_artifact": "review-input.json: UTF-8 encoding of text value"
 }
