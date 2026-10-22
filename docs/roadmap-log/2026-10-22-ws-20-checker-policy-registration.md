@@ -217,3 +217,13 @@ in the existing WS-20 Owner/Status/Where/Scope fields, naming
 No other row, checkbox, workflow, checker or test source is edited.
 #246/#247 remain separate open drafts; their contents are neither lost nor merged.
 Final isolated-diff review and exact-head CI are recorded in the PR description.
+
+
+## After-merge branch-check correction
+
+A final integration check found that listing the registration branch in the
+claimed row’s `Where` field would make the checker report it as already merged
+after #249 lands. `Where` now names only the active implementation branch; the
+registration branch remains recorded in the decision/history above. A strict
+check using the candidate as the main ref simulates the registration being
+merged and passes. No checker logic or other row is changed.
