@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status:** Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: SUBSCRIPTION RETIREMENT STAGED 2026-10-21 — draft #232 contains opt-in runtime guards and a buffered native voice/tool adapter; activation and incremental-streaming acceptance remain blocked. Claim #230 is merged and all five claim CI checks passed. No deployment or runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
+**Status:** Bounded harness remediation is claimed only after the 2026-10-22 documentation amendment lands on main, on `codex/ws05-harness-remediation-20261022`; no repair source edits or tests yet. #242/#253 remain frozen and unmerged dependencies. Prior recorded status follows: Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: SUBSCRIPTION RETIREMENT STAGED 2026-10-21 — draft #232 contains opt-in runtime guards and a buffered native voice/tool adapter; activation and incremental-streaming acceptance remain blocked. Claim #230 is merged and all five claim CI checks passed. No deployment or runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -1117,3 +1117,64 @@ verification: 302 passed / three existing prerequisite skips. Final frozen
 full verification and publication results are maintained in PR #239. This
 is source evidence only; WS-17 retains review/integration/installation and
 all runtime/private-route gates. The old interrupted run is not a pass.
+
+
+### 2026-10-22 — Bounded PR #253 harness remediation claim
+
+Larry directed completion of the confirmed findings while preserving frozen
+#242 `d476905057fc29207338721ce9ec2a452cb2085d` and #253
+`a568f7dc282fff7436a4527feb7d162a2b021c81`. This is registration in the existing
+WS-05 plan, not another evaluator, plan, importer or model-selection policy.
+Claim #241 remains unmerged; current main names the provider-repair branch.
+ROADMAP §0.3 therefore blocks source edits until this precise amendment lands.
+Registration branch: `docs/claim-ws05-harness-remediation-20261022`; future
+candidate branch: `codex/ws05-harness-remediation-20261022`.
+
+Proposed repair and acceptance:
+
+1. Serialize every harness-report mutation across processes. Fetch documents
+   and deliver notices outside the critical section. Re-read evidence under
+   the lock; bind acknowledgement to the generation it delivered so a late
+   acknowledgement cannot replace a completed refresh. Reuse the existing
+   unique-temporary-file atomic writer. A timestamp reread alone is not a
+   transaction. Explicitly define overlapping refresh ordering and legacy
+   cache compatibility. Deterministic barrier tests cover both passive write
+   windows, failed delivery/retry, same timestamps, concurrent processes and
+   complete JSON reads. No exactly-once notice claim is made.
+2. Change only the harness skill description/example metadata and its own
+   fixture to select switch/comparison requests while retaining generic brief,
+   unrelated switch/comparison and availability negatives. Test against the
+   enabled roster without changing global matching, WS-03 importer/selector,
+   or activation. Update only this package's revision digest where required.
+   A score of 0.333 passes 0.30 but fails the separate two-shared-token gate;
+   correct the receipt's explanation.
+3. Recognize supported short numeric Claude IDs while preserving token
+   boundaries and finite family coverage. Unsupported speculative suffixes
+   remain excluded. Documented mentions never establish account eligibility,
+   readiness, quality, latency or permission to upgrade. Only direct
+   Anthropic/OpenAI APIs are excluded; separately authorized other providers
+   retain existing privacy, identity and cost gates.
+4. Isolate #253's daily test from ambient layers, access configuration,
+   environment and health metadata without replacing the real default
+   access-status collector. Preserve the negative control and established
+   daily health coverage. Correct timeout wording: a client timeout/window
+   close does not cancel the synchronous server refresh; complete publication
+   may still occur. Runtime cancellation propagation is outside this slice.
+
+The exact changed-file list and owner boundaries are in WS-05 Scope/CX-28.
+No new migration, config key, port, launchd label, endpoint, tool or allow-list
+privilege is reserved. The existing report may gain internal generation
+metadata; old caches must be handled explicitly. This does not create a new
+approval mechanism or enable switching. All harness model changes remain
+blocked pending the existing all-writer/runtime contract.
+
+Validation order after claim landing: focused credential-free offline tests
+with synthetic providers and denied network/subprocess access, then exact-diff
+review and required exact-head CI on an authorized integration candidate.
+Avoid competing full suites with release work. Main conflicts outside this
+scope return to the relevant owner rather than expanding the repair. No new
+source transmission, live provider test/benchmark, model change, merge,
+installation or service operation is authorized by this amendment. The prior
+47-pass receipt is Claude VM evidence, not Mac or CI evidence. No acceptance
+checkbox closes. Separate release/restoration and WS-03 compatibility work
+continue under their existing owners.
