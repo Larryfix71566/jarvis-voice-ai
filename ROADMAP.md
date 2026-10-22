@@ -1273,7 +1273,7 @@ Internal inert report `kind = skill_package_compatibility`, `schema_version = 1`
 `adapter_version = p0-text-v1`; fields `source_digest`, `inputs_digest`,
 `baseline_digest`, nullable `candidate_digest`, nullable `validation_snapshot_digest`,
 `report_digest`, `parser_fingerprint`, `inventory_digest`, `dispositions`,
-`blockers`, and `validation`. SHA-256 identity uses deterministic canonical framing:
+`blockers`, and `validation`. SHA-256 identity uses deterministic canonical framing fixed by schema version 1; a framing change requires a schema-version change:
 
 - `source_digest`: every original source record, framed by logical path, mode and bytes; includes original source manifests/file inventory.
 - `inputs_digest`: all reviewed sidecar/provenance/license/matcher records, target slug and selected profile, even when no payload can be produced.

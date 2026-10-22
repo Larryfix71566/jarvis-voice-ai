@@ -58,3 +58,10 @@ without rewriting. The revised reservation defines every digest, static
 inventory scope, secret-refusal redaction and no-readiness invariant. Keep
 P0’s three Low follow-ups separate. The candidate still changes no source,
 checkbox or accepted gate; focused rereview and fresh CI follow this revision.
+
+Focused rereview of `b22d235` resolved B1/B2/B3 but retained REVISE for file-level
+classification ambiguity. Close the payload allowlist, block every unknown file
+or field, and explicitly reject case-varied scripts paths/shebang files even
+when declared. Clarify static inventory’s non-atomic limit, deterministic test
+bindings, baseline fixture-prefix absence and versioned framing. These are
+contract corrections only; no dependency source or acceptance changes.
