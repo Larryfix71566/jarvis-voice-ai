@@ -1650,3 +1650,26 @@ WS-24 durable task recovery. No existing owner, scope or acceptance state change
 - **Updated:** 10-22 UTC (Larry requested plan-folder storage and end-of-roadmap intake; implementation not started)
 
 </details>
+
+## 13. REA-assisted app building — planned, not started
+
+<details id="ws-31">
+<summary>WS-31 — New apps and authorized feature recreation through Mortimer · proposed</summary>
+
+Larry requested preserving the REA research and implementation plan, clarified
+that REA should help Mortimer build new apps or recreate authorized app features,
+and requested this plan at the end of the roadmap on 2026-10-22. This append
+follows pending WS-30 phone access without changing existing priorities or entries.
+
+- **Owner:** `codex` for this documentation dispatch only; implementation, isolation and acceptance owners unassigned
+- **Status:** proposed: planned, not started; documentation proposed for repository publication through this draft; no implementation or activation authorized
+- **Implemented by:** not implemented; Codex preserved the original research and authored the phased app-building plan
+- **Remaining work / acceptance:** Preserve acceptance-first priority. Confirm the reference/use case and exact dependency/rights; review package compatibility using the verified existing Skill loader; separately assign owner/branch/scope. Pass G0–G3B for bounded static analysis, specification handoff, independent app building and behavioral verification. Runtime/native G4 is optional and separately authorized. User reviews exact candidate before release; no existing gate closes here.
+- **Model version:** drafting runtime not independently recorded; no REA plan independent review or model benchmark performed
+- **Where:** `docs/rea-integration-publish-20261022`, sanitized publication of original local source `dd8e4f9`; current main `636880eabbe9dc756c30df7128d0a90c02d222bd` plus unchanged pending phone PR #240 head `87f163a7619596104e27af0bf50a3b6b88d28809`. This draft depends on #240; no implementation branch
+- **Plan:** [REA app-building integration plan](docs/plans/MORTIMER_REA_INTEGRATION_PLAN.md), with [complete preserved research](docs/interface-research/REA_INTEGRATION_RESEARCH_2026-10-22.md) and [original DOCX](docs/interface-research/REA_INTEGRATION_RESEARCH_2026-10-22.docx)
+- **Scope:** Documentation only: this appended end section, the linked plan/research files and `docs/roadmap-log/2026-10-22-ws-31-rea-app-building-plan.md`. New-app planning without a reference may skip REA. Future code, tool/service integration, imported Skill enablement, provider calls, dependency installation, reference execution, repository creation, publication and deployment require their own authorization. No runtime identifier is reserved and no other owner is reassigned.
+- **Next step:** larry: review the plan and choose the initial app-building outcome; existing owners: finish applicable acceptance. Later assigned implementer: refresh main and pending documentation, reconcile WS-22/24/29 and existing App Builder/Skills/provider contracts, obtain bounded scope and pass the phase gates before any activation. Codex publishes the authorized documentation draft; Larry retains merge and implementation decisions.
+- **Updated:** 10-22 UTC (sanitized draft publication authorized; phone dependency preserved; implementation not started)
+
+</details>
