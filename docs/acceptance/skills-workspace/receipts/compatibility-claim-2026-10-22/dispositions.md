@@ -2,8 +2,8 @@
 
 The exact excerpt review returned **REVISE** through Claude Max, with returned
 model `claude-opus-5-5`. This is a review of a claim and partial source excerpts,
-not a full-source review, implementation review or acceptance. The final author
-amendments below have not been independently re-reviewed. No code changed.
+not a full-source review, implementation review or acceptance. At the time of this first disposition, the author
+amendments below had not been independently re-reviewed. No code changed.
 
 | Finding | Disposition |
 |---|---|
@@ -17,3 +17,27 @@ amendments below have not been independently re-reviewed. No code changed.
 No acceptance gate advanced; SW-B/C remain the only two accepted full gates.
 Repository-main claim remains the source-edit prerequisite. Current provider,
 acceptance installation, WS-20 and publication #246 work remain isolated.
+
+## Second review of 9413b5e — corrections for fresh review
+
+The second independent verdict is preserved unmodified in
+`rereview-9413b5e/CLAUDE_REVIEW.md`. All five CI checks passed on that exact head.
+This correction changes documentation only:
+
+- Script admission is now deterministic for all packages: any package-root
+  `scripts` entry refuses without following links or reading script contents.
+  The two existing admission tests and their intentional new refusal expectation
+  are named in the plan. Script non-execution and historical evidence remain.
+  Harmless instruction/code examples and supported text references remain usable.
+- The plan fixes the initial frontmatter/metadata allowlist and observed types.
+  Unknown fields cannot become implicitly supported; reviewed additions remain
+  possible for known harmless metadata. Full package compatibility is not claimed.
+- The original evidence files were already committed. They were omitted from the
+  second review packet, not missing from the repository. Decoded input and source
+  hashes verify. The next packet includes the original receipt/manifest/input and
+  the second review artifacts, plus the corrected claim and relevant source.
+- ROADMAP retains the historical bde22bb Versions subcheck pointer. No checkbox
+  or gate changes. Source work still waits for the claim on main.
+
+The parent expressly requested these recoverable claim corrections and fresh
+review/CI. No source implementation or merge permission is inferred.

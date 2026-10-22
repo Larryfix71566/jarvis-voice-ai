@@ -11,9 +11,11 @@ This is documentation and read-only source inventory, not runtime implementation
   adopted findings, qualifications and a rejected script-admission suggestion.
 - `package-inventory.json` records repository metadata field names and script
   directory presence for the six packages; it reads no live settings or logs.
-- The final author-amended claim was not independently re-reviewed.
+- `rereview-9413b5e/` preserves the second unmodified REVISE review, exact input,
+  source hashes, metadata type inventory and five passing CI checks for that head.
+  The subsequent correction requires a fresh review; prior verdicts stay historical.
 
-Only one source/scope review ran through the authenticated Max subscription,
+Two source/scope reviews ran through the authenticated Max subscription,
 with tools/MCP/hooks disabled and no direct API credentials or fallback.
 No live benchmark, imported script execution or implementation test ran.
 No user-dependent acceptance passed; all twelve gates are inventoried in the

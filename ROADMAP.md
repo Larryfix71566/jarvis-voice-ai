@@ -758,7 +758,7 @@ Source: [Skills plan §12, SW-A…SW-L](docs/plans/MORTIMER_SKILLS_WORKSPACE_IMP
 **Workstream:** Skills Workspace and skill creation (T6; supersedes `MORTIMER_SKILL_AUTHORING_PLAN.md`). Its own view, separate from the Workflow Viewer (Larry, 09-27)
 
 - **Owner:** `codex`
-- **Status:** claimed for the bounded compatibility slice once this documentation claim lands on main; runtime implementation has not started. Foundation and historical Versions wording evidence remain unchanged; SW-B/C remain the only accepted full gates (2/12).
+- **Status:** claimed for the bounded compatibility slice once this documentation claim lands on main; runtime implementation has not started. Foundation and the historical `bde22bb` Versions wording subcheck ([receipt](docs/acceptance/skills-workspace/receipts/versions-wording-2026-10-06/receipt.md)) remain unchanged; SW-B/C remain the only accepted full gates (2/12). The plan fixes the P0 field/type matrix and deterministic script-package refusal, explicitly disclosing two changed test expectations before implementation; full package compatibility is not claimed.
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Codex; Larry for human review and physical acceptance
 - **Model version:** not recorded; do not infer from system name.

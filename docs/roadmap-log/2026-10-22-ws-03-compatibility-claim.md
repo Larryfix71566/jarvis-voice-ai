@@ -2,7 +2,7 @@
 date: 2026-10-22
 system: codex
 rows: [WS-03]
-prs: []
+prs: [248]
 ---
 
 # WS-03 compatibility claim preparation — 2026-10-22
@@ -24,6 +24,14 @@ No merge, deployment, benchmark, provider change or imported code execution.
 One bounded Claude Max excerpt review returned REVISE; exact returned model
 was `claude-opus-5-5`. The canonical plan now fixes the enforcement seam,
 strictness and diagnostic contract; dispositions preserve the script-policy
-qualification. Final author edits are not independently re-reviewed. Six
+qualification. That first amended claim was subsequently independently re-reviewed below. Six
 repository packages (five enabled) contain no scripts directory. Review and
 inventory receipts are in `docs/acceptance/skills-workspace/receipts/compatibility-claim-2026-10-22/`.
+
+The independent re-review of exact `9413b5e` returned REVISE while all five
+GitHub checks passed. The next documentation correction fixes deterministic
+script-package refusal and a closed field/type matrix, discloses two intentional
+test-expectation changes, and preserves instruction/text-reference support.
+It records the second review and supplies the previously omitted but already
+committed hash evidence. Fresh independent review and exact-head CI remain
+required for the corrected claim. No source edits, merge or acceptance change.

@@ -1,0 +1,61 @@
+{
+  "baseRefName": "main",
+  "headRefOid": "9413b5e0343750c0b8bcb610cd88c6c2af2836a9",
+  "isDraft": true,
+  "mergeStateStatus": "CLEAN",
+  "number": 248,
+  "state": "OPEN",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-22T15:36:04Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39806332940/job/119920430392",
+      "name": "allowlist",
+      "startedAt": "2026-10-22T15:35:56Z",
+      "status": "COMPLETED",
+      "workflowName": ".github/workflows/validate.yml"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-22T15:36:17Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39806332941/job/119920429457",
+      "name": "knowledge-base",
+      "startedAt": "2026-10-22T15:35:56Z",
+      "status": "COMPLETED",
+      "workflowName": "Knowledge base"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-22T15:36:04Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39806332896/job/119920429100",
+      "name": "controller-tests",
+      "startedAt": "2026-10-22T15:35:56Z",
+      "status": "COMPLETED",
+      "workflowName": "Sandbox controller"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-22T15:36:03Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39806332940/job/119920430712",
+      "name": "policy-tests",
+      "startedAt": "2026-10-22T15:35:56Z",
+      "status": "COMPLETED",
+      "workflowName": ".github/workflows/validate.yml"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-22T15:50:09Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/39806332940/job/119920430754",
+      "name": "validate",
+      "startedAt": "2026-10-22T15:35:56Z",
+      "status": "COMPLETED",
+      "workflowName": ".github/workflows/validate.yml"
+    }
+  ],
+  "url": "https://github.com/Larryfix71566/jarvis-voice-ai/pull/248"
+}
