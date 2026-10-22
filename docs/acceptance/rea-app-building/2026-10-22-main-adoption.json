@@ -47,5 +47,6 @@
   "source_implementation_tests_run": false,
   "claude_contribution": false,
   "reconciliation_review": "separate exact-candidate review required",
-  "required_ci": "pending draft publication"
+  "required_ci": "pending draft publication",
+  "nr1_section_11_hash_extraction": "UTF-8 of plan.split('## 11.', 1)[1].split('## 12.', 1)[0].rstrip(); approved input uses split('## 11.', 1)[1].rstrip(). Excludes literal delimiter '## 11.' and trailing section-separator whitespace only."
 }
