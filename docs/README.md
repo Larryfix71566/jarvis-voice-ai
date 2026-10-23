@@ -1,5 +1,6 @@
 # Documentation map
 
+- [Full testing proposal and sanitized continuation](plans/ROADMAP_JOINT_WORKING_PLAN.md#historical-continuity-adoption-and-current-authority--2026-10-22) — complete historical testing plan v2, controller handoff and Skills planning evidence, with current owner/gate limits.
 - [Shared expandable roadmap](../ROADMAP.md) — editable source for Codex and Claude: ownership, implementation attribution, acceptance, next steps and completed milestones. Read the protocol and shared update format before any work; edit this source in your own branch, not a chat snapshot.
 - [Architecture reference](ARCHITECTURE.md) — current runtime ownership,
   trust boundaries, model routes, deployment paths and verification pointers.
