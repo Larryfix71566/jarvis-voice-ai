@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** FOUNDATION AND CHECKER ENFORCEMENT LANDED (#250, `6234949`); 3/4 WS-20 milestones evidenced, with checkbox synchronization retained in frozen #252. Dated all-31 program/serial-receipt update below is documentation only, based on main `2944080`; proposed future lanes are not implementation claims. Live/hardware/observation evidence, final Phase A/B and release remain open.
+**Status:** FOUNDATION AND CHECKER ENFORCEMENT LANDED (#250, `6234949`); 3/4 WS-20 milestones evidenced; the proven policy checkbox and exact receipt are selectively synchronized from frozen #252. Dated all-31 program/serial-receipt update below is documentation only, based on main `2944080`; proposed future lanes are not implementation claims. Live/hardware/observation evidence, final Phase A/B and release remain open.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -771,3 +771,158 @@ live/hardware/observation evidence and Phase A/B exit remain open. Later serial
 integration must preserve both this newer dated program and the frozen
 additive evidence; never restore older pending-policy or installed-state prose
 as current fact.
+
+
+## Historical continuity adoption and current authority — 2026-10-22
+
+This dated adoption is based on main `ab31dfa8ddf58ad0583afcb25dffd18afbee5765`. It makes the
+complete testing proposal and sanitized continuation material discoverable in
+the repository, preserving all nine attachment files byte-for-byte from frozen
+[#246 at `028b44e`](https://github.com/Larryfix71566/jarvis-voice-ai/tree/028b44e11acff9dff3e00380e1624c8657ce545c).
+These are dated evidence attachments to existing plans, not a second plan,
+parallel tracker, new claim, acceptance result or instruction to execute tests.
+The current roadmap row and its canonical plan remain authoritative.
+The original attachment README describes #246's own proposed canonical-plan
+appendix; adopting its unchanged bytes does not adopt that appendix or assert
+it is on current main. Owner-maintained pointers remain separate.
+
+### Complete controller testing proposal and sanitized Claude continuation
+
+- [Complete testing plan v2](../acceptance/model-use-enhancements/receipts/controller-testing-proposal-2026-10-22/testing-plan-v2.md): **105,892 bytes, 854 lines**, full technical text and original review appendices; SHA-256 `23fd4aed98c3e86a2d31ee4a4a0fa26568bd7de8c2a0fb7b330c8b8cce840343`.
+- [Historical provenance and limits](../acceptance/model-use-enhancements/receipts/controller-testing-proposal-2026-10-22/README.md), [sanitized owner handoff](../acceptance/model-use-enhancements/receipts/controller-testing-proposal-2026-10-22/harness-review-handoff.md), and [historical review state](../acceptance/model-use-enhancements/receipts/controller-testing-proposal-2026-10-22/harness-review-state.json) retain their original source identities.
+
+The complete plan is **PLAN ONLY**. Three historical Claude document reviews
+occurred; the third verdict was REVISE. The final author clarifications were not
+reviewed a fourth time. Historical source ACCEPT is tied to its exact input,
+not the testing plan or any later implementation. Old installed/source snapshots
+and the handoff's proposed next assignment are historical: #253 already contains
+daily offline test work. Do not redispatch that task from the old handoff.
+
+The harness owner directs continuation through current repair
+[#264](https://github.com/Larryfix71566/jarvis-voice-ai/pull/264) and main-integration claim
+[#266](https://github.com/Larryfix71566/jarvis-voice-ai/pull/266), subject to their own exact-head review,
+dependency and sole-coordinator gates. This pointer does not claim either has
+merged. The existing [WS-05 canonical plan](MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md)
+and current row control source scope; their contents are not changed here.
+Historical proposal reviews do not review #264. All plan G1–G5 prerequisites,
+source/binary/workload eligibility, account/quota/privacy and execution decisions
+remain applicable. Model switching, live inference, benchmarks, installation
+and service operations are not authorized by this adoption. No new Claude run
+or test run occurred for these documents.
+
+### Historical Skills planning, with current implementation preserved
+
+The Skills owner approved these five sanitized original attachments under their
+dated provenance: [publication summary](../acceptance/skills-workspace/receipts/compatibility-planning-2026-10-22/publication-summary.md),
+[source manifest](../acceptance/skills-workspace/receipts/compatibility-planning-2026-10-22/architecture-source-manifest.json),
+[gap matrix](../acceptance/skills-workspace/receipts/compatibility-planning-2026-10-22/gap-matrix.csv),
+[25 proposed cases](../acceptance/skills-workspace/receipts/compatibility-planning-2026-10-22/proposed-acceptance-cases.csv),
+and [reuse proof](../acceptance/skills-workspace/receipts/compatibility-planning-2026-10-22/reuse-proof-summary.json).
+The 25 cases are proposals, not passed tests. Landed #251 P0, #258 lifecycle and
+#261 adapter contract supersede older P0-pending prose; **2/12 accepted full
+Skills gates remains unchanged**. The Skills owner owns a dated discovery pointer
+in the [existing canonical plan](MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md).
+No row or canonical Skills plan is edited by this adoption.
+
+The complete 164-line historical appendix remains accessible in the
+[immutable #246 canonical-plan snapshot](https://github.com/Larryfix71566/jarvis-voice-ai/blob/028b44e11acff9dff3e00380e1624c8657ce545c/docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md).
+It is not pasted over the current plan. All original attachment SHA-256 values
+and source Git blobs are recorded below for exact adoption verification.
+
+| Attachment | SHA-256 | Source Git blob |
+|---|---|---|
+| `README.md` | `fcef9f70e7e0664ed51740262c304937401f28c75140fad9d88b7828504f1cd2` | `086ed48f5fed05aa471bae2ebccddb2b1b77a244` |
+| `harness-review-handoff.md` | `2a0821973ac2bebb96b175ecd4fbc4712c7a2951ad96368af83c820403676c33` | `550fda35c345d2b6b4b8977075307682ff522710` |
+| `harness-review-state.json` | `4e92e35c1eee83ae22f8c7305f5ce3c3c6dd0053a12edd996ff086e3c35f54c9` | `20255a9b4d6de6b0b65e6f4f8f53053b541bfaaf` |
+| `testing-plan-v2.md` | `23fd4aed98c3e86a2d31ee4a4a0fa26568bd7de8c2a0fb7b330c8b8cce840343` | `793315418ebfb60da29bede2e164e164496fcffd` |
+| `architecture-source-manifest.json` | `e028223231c3d3b05271192870a4081eebfcd4404fcca4aeae05c0e9eaa2db30` | `230dcbabfaee8bf2c585ec824f531bc6a94760b4` |
+| `gap-matrix.csv` | `d1b985e89208e3c57231e311f89ecb587bbe437f47ecc5cae299fb781ac962a2` | `bc61df2edc6c5c93df3fc9ec064dada37994c412` |
+| `proposed-acceptance-cases.csv` | `cd09f213350d1c9dd4dc98d40aed3066c85b58118b1a1c508e527fca3b77bf80` | `1b1761cc5f58bbe5fbd573f8323ab5a4436c4dc3` |
+| `publication-summary.md` | `006f58008659ea11fa0d693a5331a5fa0de8aa301cbd3f44fb19d1ae600fdd51` | `650ccf311e42144beb7ec2715fb547f50d6762b3` |
+| `reuse-proof-summary.json` | `835e83c8f5f719ffc6b26240d47161fa030a6f3248ef60dd6155667fdca247c6` | `da29ae408c09e05da9a362158411f14e13b80a81` |
+
+### Frozen histories and remaining evidence
+
+Frozen #246 `028b44e11acff9dff3e00380e1624c8657ce545c`, #247 `e28452676c38c989308668fe3377c79ac9cd2635` and #252 `86d079f74de6b3bb07d2f05deeec18a516f472ea` remain unchanged.
+This is selective attachment/discovery adoption, not a whole-branch merge.
+The original [#246 WS-20 continuation section](https://github.com/Larryfix71566/jarvis-voice-ai/blob/028b44e11acff9dff3e00380e1624c8657ce545c/docs/plans/ROADMAP_JOINT_WORKING_PLAN.md)
+and [dated roster/methodology](https://github.com/Larryfix71566/jarvis-voice-ai/tree/028b44e11acff9dff3e00380e1624c8657ce545c/docs/roadmap-log/2026-10-22-continuity-evidence)
+remain historical references. The current 31-row inventory remains in the
+[WS-24 canonical plan §5](MORTIMER_DURABLE_TASK_RECOVERY_PLAN.md#5-complete-roadmap-dispatch-snapshot--2026-10-22);
+no second current roster is created.
+
+The newer program update above and **3/4 evidenced WS-20 milestones** remain
+authoritative over old 2/4 or policy-pending snapshots. The exact #252 enforcement
+receipt/checkbox and #247 UI2-23 runbook alignment are separately reviewed
+adoption components, not implied by importing these attachments. #247's cleanup
+review and completion maps remain immutable historical evidence; current
+owner repairs and their prerequisites supersede any older readiness wording.
+Source integration never proves installed behavior. The latest owner-attested
+installed c63ecce/no-app/services-and-cleanup-held state is a dated observation,
+not a new probe here. #262 diagnostics source alone did not restore or deploy it.
+Live/hardware/observation evidence and final Phase A/B remain open.
+
+
+## Enforcement milestone closeout and acceptance handoff — 2026-10-22
+
+**Selective adoption from frozen #252.** The exact enforcement receipt and practical checklist below are historical source evidence; this adoption performs no new tests, live acceptance or host operations. The newer dated program above remains intact. Current owner claims control subsequent work; #262 diagnostics source does not establish restored services.
+
+**Result: 3/4 listed WS-20 milestones complete.** Lifecycle cleanup and the ten-merge
+observation were already complete. Larry’s checker-policy decision is now
+implemented, merged and verified. Only the owner-evidence/final Phase A/B exit
+milestone remains open. This denominator measures four differently sized
+milestones; it is not 75% of coding, effort or product acceptance.
+
+### Exact enforcement evidence
+
+Larry approved #250 merge at 17:27:47 UTC. Reviewed head
+`6dc5a15b3b4ce1491ceb53e68ed0c29cc2e03c66` merged at 17:29:19 UTC as
+`6234949a524c84c91e6a459658cf02f290eac20e`. All five source CI checks passed;
+main, approved head and CI checkout share tree
+`bfaf0fcf27a9e9ad0076c0804dd4b3604e7c6b06`. From a clean checkout of that
+exact merge, the five existing CLI cases passed (31 other cases deselected),
+the real roadmap check returned zero errors/warnings, and workflow readback
+confirmed the strict invocation. The [complete post-merge receipt](../roadmap-log/2026-10-22-ws-20-checker-enforcement.md#post-merge-enforcement-receipt--2026-10-22)
+records identities, behavior and limits. This closes only the policy milestone;
+it proves no installed-app or live behavior. No branch-protection setting changed.
+
+### Larry’s next acceptance steps and owner dependencies
+
+This is a short execution order, not a replacement for the complete
+[canonical release criteria](../acceptance/adaptive-interface/RELEASE_READINESS.md)
+or the existing §9 obligation inventory. Every row below is still open where
+its governing criterion is open; none was run by this closeout. Stop at a
+blocking failure and let its owner resolve it before continuing affected cases.
+
+| Order / owner | Dependency the owner must supply | Larry’s action and required result |
+|---|---|---|
+| 0 · WS-17 release owner + Larry | One eligible candidate: reviewed/verified source, approved release path, actual app/backend/configuration identities and loaded-version receipt. Source-only #250 does not establish installation. UI2-14/15/16 verification, rollback and loaded-version obligations stay with that owner. | Confirm readiness with the release owner before starting live cases. Any remaining approval or physical host prerequisite stays in the existing release workflow; this document authorizes no installation/restart. |
+| 1 · WS-17 / Larry · UI2-24 | Eligible candidate and an owner-prepared inventory of distinct results. | Use voice and pointer to select, close, pin/unpin and reopen; check pinned-first Recents, one console row/no tab strip, ambiguity/stale refusal and preservation of open/pinned items beyond the display limit. Record intended and actual result IDs. |
+| 2 · WS-17 / Larry · UI2-25 | Same candidate; owner can establish result identities, freshness age and fetch counts. | Request original-location weather, another city, then original again: two identities, fresh reuse within 15 minutes with reference line and no extra fetch. After actual expiry, verify refresh in place under the same identity. No clock manipulation. |
+| 3 · WS-17 / Larry, with WS-09/11 dependent checks · UI2-22/23 then 04/09/13 | Steps 1–2 usable; complete canonical subcase list and relevant sharing/protected-content prerequisites. | Run five spoken turns including a reply over 160 characters; preserve both speakers’ full ordered words and required focus/protected behavior. Exercise cards/open/Back/compare/pin/close; current-request results including fresh cache open, while unrelated/background/superseded/stale/cancelled arrivals preserve focus, unread state and New notice. Check the supporting display’s sole renderer. A subset cannot close either parent criterion. |
+| 4 · WS-21 + WS-01/09/11 owners / Larry | Required physical displays/topologies and each owner’s complete transfer/recovery/audio/accessibility cases; eligible candidate. | Exercise the supported display transfer, missing/stale/protected-target refusal, disconnect/rehome and named physical cases. Unavailable hardware stays unavailable, never passed. Reuse already accepted WS-18 output-switch evidence only where source/scenario applicability matches; do not repeat it merely for paperwork. |
+| 5 · Each feature owner / Larry | Only ready, enabled features with their existing source/access/auth/provider prerequisites and complete owner-supplied cases. | Run the ready security/routing/audio/sharing and other owner-linked cases. Unbuilt creator/onboarding/mail stages and parked enhancements remain feature-specific dependencies, not new global release gates or immediate Larry chores. |
+| 6 · WS-17 release owner / Larry; separately Claude / Larry for WS-06 | Frozen installed candidate for UI2-17. Claude must first map WS-06’s missing eleven-item checklist into its existing plan; its distinct observation and tier decision remain separate. | Record five days of the new candidate’s daily use, interruptions, failures and fixes; a material fix starts a new candidate record/period. Keep WS-06’s separate week of no unsolicited commands and its remaining named checks separate. Elapsed time alone is not evidence. |
+| 7 · WS-20 recorder + every acceptance owner / Larry | Applicable source/installed/configuration identities and complete per-criterion receipts from the rows above and the existing inventory. | Review the final reconciliation: close only evidenced subcriteria, retain failed/missing/hardware cases and any explicitly permitted release exceptions, then record Phase A/B exit disposition. Larry’s release acceptance remains separate from source checks. |
+
+Each receipt needs criterion/subpart, actor/date, source and installed app/backend
+identity, relevant configuration, scenario/expected result, actual outcome,
+coverage limits and owner disposition. Reused receipts need applicability
+review; limitations remain gaps unless the governing criterion permits a named
+exception and Larry records it. Keep private operational evidence local.
+
+### Frozen history and integration boundary
+
+#246 remains at `028b44e11acff9dff3e00380e1624c8657ce545c`; #247 remains at
+`e28452676c38c989308668fe3377c79ac9cd2635`. Both were read back open and unchanged
+before this closeout. This main-based documentation delta neither rewrites nor
+merges their continuation, source-review, runbook or cleanup evidence. Their
+policy-pending and 2/4 statements describe their older snapshots. Later
+integration must preserve their additive histories and this newer 3/4 milestone
+record; it must not restore the old policy-pending wording or close live gates.
+The canonical UI2-23 current-request exception is already on main; the checklist
+above follows that criterion without depending on #247’s unmerged runbook edit.
+
+No workflow, checker, tests, installed runtime, services or model settings change
+in this closeout. No new live acceptance, release exception or unrelated merge
+is inferred.
