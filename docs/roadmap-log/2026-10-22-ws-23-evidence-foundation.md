@@ -25,3 +25,10 @@ No WS-24 coupling, verifier/profile execution, storage, runtime wiring, model,
 credential, installed/live change or acceptance closure. Future tests are
 proposed, not passes; registration checks and independent review are recorded
 separately. The sole serial coordinator retains publication/integration.
+
+## Implementation start — 2026-10-23 UTC
+
+Matching claim #267 landed as `4c02709204b4f3e5330311b58e0406d2e47444e3`.
+The retained Codex dispatcher started the isolated registered implementation lane
+on that verified main. No source or test result is claimed by this progress entry;
+the pure module, independent review and publication checks remain pending.
