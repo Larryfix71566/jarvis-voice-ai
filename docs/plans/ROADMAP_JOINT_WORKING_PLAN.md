@@ -1,6 +1,6 @@
 # Roadmap joint working: catch-up and drift prevention (WS-20)
 
-**Status:** FOUNDATION AND CHECKER ENFORCEMENT LANDED (#250, `6234949`); 3/4 WS-20 milestones evidenced, with checkbox synchronization retained in frozen #252. Dated all-31 program/serial-receipt update below is documentation only, based on main `2944080`; proposed future lanes are not implementation claims. Live/hardware/observation evidence, final Phase A/B and release remain open.
+**Status:** FOUNDATION AND CHECKER ENFORCEMENT LANDED (#250, `6234949`); 3/4 WS-20 milestones evidenced; the proven policy checkbox and exact receipt are selectively synchronized from frozen #252. Dated all-31 program/serial-receipt update below is documentation only, based on main `2944080`; proposed future lanes are not implementation claims. Live/hardware/observation evidence, final Phase A/B and release remain open.
 **Owners:** Claude: B4 checker, its own rows, this plan. Codex: B1–B3 protocol and change-log move, its own rows, review of B4. Larry: merges, deploys, Mac checks, approval of the protocol change.
 **Recorded:** 2026-10-02 against main `cfa0d2d` and open PR #152 (WS-19 close).
 **Author:** Claude (Cowork) · **Approver:** Larry
@@ -861,3 +861,68 @@ Source integration never proves installed behavior. The latest owner-attested
 installed c63ecce/no-app/services-and-cleanup-held state is a dated observation,
 not a new probe here. #262 diagnostics source alone did not restore or deploy it.
 Live/hardware/observation evidence and final Phase A/B remain open.
+
+
+## Enforcement milestone closeout and acceptance handoff — 2026-10-22
+
+**Selective adoption from frozen #252.** The exact enforcement receipt and practical checklist below are historical source evidence; this adoption performs no new tests, live acceptance or host operations. The newer dated program above remains intact. Current owner claims control subsequent work; #262 diagnostics source does not establish restored services.
+
+**Result: 3/4 listed WS-20 milestones complete.** Lifecycle cleanup and the ten-merge
+observation were already complete. Larry’s checker-policy decision is now
+implemented, merged and verified. Only the owner-evidence/final Phase A/B exit
+milestone remains open. This denominator measures four differently sized
+milestones; it is not 75% of coding, effort or product acceptance.
+
+### Exact enforcement evidence
+
+Larry approved #250 merge at 17:27:47 UTC. Reviewed head
+`6dc5a15b3b4ce1491ceb53e68ed0c29cc2e03c66` merged at 17:29:19 UTC as
+`6234949a524c84c91e6a459658cf02f290eac20e`. All five source CI checks passed;
+main, approved head and CI checkout share tree
+`bfaf0fcf27a9e9ad0076c0804dd4b3604e7c6b06`. From a clean checkout of that
+exact merge, the five existing CLI cases passed (31 other cases deselected),
+the real roadmap check returned zero errors/warnings, and workflow readback
+confirmed the strict invocation. The [complete post-merge receipt](../roadmap-log/2026-10-22-ws-20-checker-enforcement.md#post-merge-enforcement-receipt--2026-10-22)
+records identities, behavior and limits. This closes only the policy milestone;
+it proves no installed-app or live behavior. No branch-protection setting changed.
+
+### Larry’s next acceptance steps and owner dependencies
+
+This is a short execution order, not a replacement for the complete
+[canonical release criteria](../acceptance/adaptive-interface/RELEASE_READINESS.md)
+or the existing §9 obligation inventory. Every row below is still open where
+its governing criterion is open; none was run by this closeout. Stop at a
+blocking failure and let its owner resolve it before continuing affected cases.
+
+| Order / owner | Dependency the owner must supply | Larry’s action and required result |
+|---|---|---|
+| 0 · WS-17 release owner + Larry | One eligible candidate: reviewed/verified source, approved release path, actual app/backend/configuration identities and loaded-version receipt. Source-only #250 does not establish installation. UI2-14/15/16 verification, rollback and loaded-version obligations stay with that owner. | Confirm readiness with the release owner before starting live cases. Any remaining approval or physical host prerequisite stays in the existing release workflow; this document authorizes no installation/restart. |
+| 1 · WS-17 / Larry · UI2-24 | Eligible candidate and an owner-prepared inventory of distinct results. | Use voice and pointer to select, close, pin/unpin and reopen; check pinned-first Recents, one console row/no tab strip, ambiguity/stale refusal and preservation of open/pinned items beyond the display limit. Record intended and actual result IDs. |
+| 2 · WS-17 / Larry · UI2-25 | Same candidate; owner can establish result identities, freshness age and fetch counts. | Request original-location weather, another city, then original again: two identities, fresh reuse within 15 minutes with reference line and no extra fetch. After actual expiry, verify refresh in place under the same identity. No clock manipulation. |
+| 3 · WS-17 / Larry, with WS-09/11 dependent checks · UI2-22/23 then 04/09/13 | Steps 1–2 usable; complete canonical subcase list and relevant sharing/protected-content prerequisites. | Run five spoken turns including a reply over 160 characters; preserve both speakers’ full ordered words and required focus/protected behavior. Exercise cards/open/Back/compare/pin/close; current-request results including fresh cache open, while unrelated/background/superseded/stale/cancelled arrivals preserve focus, unread state and New notice. Check the supporting display’s sole renderer. A subset cannot close either parent criterion. |
+| 4 · WS-21 + WS-01/09/11 owners / Larry | Required physical displays/topologies and each owner’s complete transfer/recovery/audio/accessibility cases; eligible candidate. | Exercise the supported display transfer, missing/stale/protected-target refusal, disconnect/rehome and named physical cases. Unavailable hardware stays unavailable, never passed. Reuse already accepted WS-18 output-switch evidence only where source/scenario applicability matches; do not repeat it merely for paperwork. |
+| 5 · Each feature owner / Larry | Only ready, enabled features with their existing source/access/auth/provider prerequisites and complete owner-supplied cases. | Run the ready security/routing/audio/sharing and other owner-linked cases. Unbuilt creator/onboarding/mail stages and parked enhancements remain feature-specific dependencies, not new global release gates or immediate Larry chores. |
+| 6 · WS-17 release owner / Larry; separately Claude / Larry for WS-06 | Frozen installed candidate for UI2-17. Claude must first map WS-06’s missing eleven-item checklist into its existing plan; its distinct observation and tier decision remain separate. | Record five days of the new candidate’s daily use, interruptions, failures and fixes; a material fix starts a new candidate record/period. Keep WS-06’s separate week of no unsolicited commands and its remaining named checks separate. Elapsed time alone is not evidence. |
+| 7 · WS-20 recorder + every acceptance owner / Larry | Applicable source/installed/configuration identities and complete per-criterion receipts from the rows above and the existing inventory. | Review the final reconciliation: close only evidenced subcriteria, retain failed/missing/hardware cases and any explicitly permitted release exceptions, then record Phase A/B exit disposition. Larry’s release acceptance remains separate from source checks. |
+
+Each receipt needs criterion/subpart, actor/date, source and installed app/backend
+identity, relevant configuration, scenario/expected result, actual outcome,
+coverage limits and owner disposition. Reused receipts need applicability
+review; limitations remain gaps unless the governing criterion permits a named
+exception and Larry records it. Keep private operational evidence local.
+
+### Frozen history and integration boundary
+
+#246 remains at `028b44e11acff9dff3e00380e1624c8657ce545c`; #247 remains at
+`e28452676c38c989308668fe3377c79ac9cd2635`. Both were read back open and unchanged
+before this closeout. This main-based documentation delta neither rewrites nor
+merges their continuation, source-review, runbook or cleanup evidence. Their
+policy-pending and 2/4 statements describe their older snapshots. Later
+integration must preserve their additive histories and this newer 3/4 milestone
+record; it must not restore the old policy-pending wording or close live gates.
+The canonical UI2-23 current-request exception is already on main; the checklist
+above follows that criterion without depending on #247’s unmerged runbook edit.
+
+No workflow, checker, tests, installed runtime, services or model settings change
+in this closeout. No new live acceptance, release exception or unrelated merge
+is inferred.
