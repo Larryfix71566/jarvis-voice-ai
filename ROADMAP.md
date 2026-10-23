@@ -268,7 +268,7 @@ These are existing decisions from the linked blocks; recommendations/defaults ar
 
 ## 0. Protocol (binding for every system)
 
-Systems: **`claude`** (Cowork or Claude Code), **`codex`**, **`larry`** (steps only a human can do).
+Systems: **`claude`** (Cowork or Claude Code), **`codex`**, **`kimi`** (Kimi Work on the Mac), **`larry`** (steps only a human can do).
 
 1. **Read this file on `origin/main` before any work.** If your branch is behind `origin/main`, merge main first. Never trust a plan's own "baseline" line over current main.
 2. **No row, no work.** Every change belongs to exactly one row in §2. If no row fits, stop and ask Larry. Add a row yourself only when Larry's task tells you to.
@@ -282,15 +282,15 @@ Systems: **`claude`** (Cowork or Claude Code), **`codex`**, **`larry`** (steps o
 10. **Write your row for its after-merge state.** In the PR, describe what will be true once it merges: for example, `landed via PR #N` (or `landed via this PR` before a number exists), never `review` or `awaiting merge` as the lasting row status. Record the branch and PR in `Where`; record the exact merge commit in a subsequent status update when known. Update the existing plan's status header and dated progress to agree. A `checked` or `verified` claim names the ref or deployed revision checked, so later readers can distinguish evidence from current state.
 11. **Status hierarchy:** this file (owner, state) > plan status header (design status) > receipts (evidence). When they disagree, correct the plan header, unless this file is the one that's wrong.
 12. **Attribution:** every PR body names the system and its session link.
-13. **Everything in progress has a block, including work that isn't code** (reviews, option write-ups, plan edits, guided Mac checks). Add it as `proposed` before starting and mark it `claimed` when you start. If the work produces no PR of its own, update the block through a docs-only PR at the end of the session. Both systems re-read §2 at the start of every session, because the other system may have changed it.
+13. **Everything in progress has a block, including work that isn't code** (reviews, option write-ups, plan edits, guided Mac checks). Add it as `proposed` before starting and mark it `claimed` when you start. If the work produces no PR of its own, update the block through a docs-only PR at the end of the session. All systems re-read §2 at the start of every session, because another system may have changed it.
 
 **Joint-working rules (WS-20 Phase C):**
 
-- **C1 — Session start:** Both systems fetch main, read this file on `origin/main`, and run `python3 scripts/check_roadmap.py` once the WS-20 B4 checker lands. Fix findings in your own rows first; report other owners' findings in a change-log entry without editing their rows.
-- **C2 — Row ownership:** Each system edits its own workstream blocks. The actor recording evidence may update Larry-owned acceptance blocks (WS-09, WS-10, WS-11). Shared §3–§5 may be edited by either system with a logged explanation. The one-time B2 mechanical sweep of current-production wording is assigned to Codex; other owners review only that wording.
+- **C1 — Session start:** All systems fetch main, read this file on `origin/main`, and run `python3 scripts/check_roadmap.py` once the WS-20 B4 checker lands. Fix findings in your own rows first; report other owners' findings in a change-log entry without editing their rows.
+- **C2 — Row ownership:** Each system edits its own workstream blocks. The actor recording evidence may update Larry-owned acceptance blocks (WS-09, WS-10, WS-11). Shared §3–§5 may be edited by any system with a logged explanation. The one-time B2 mechanical sweep of current-production wording is assigned to Codex; other owners review only that wording.
 - **C3 — Cross-review:** A PR that changes the other system's code waits for that system's review, as CX-13 and CX-15 already require case by case. A docs-only PR limited to the author's own row may merge on green checks.
 - **C4 — PR age:** An open PR older than two days names its next step and actor in its row or is closed. Its owner resolves conflicts.
-- **C5 — Handoffs:** `Next step` names `claude:`, `codex:`, or `larry:`. Handoffs travel through main and PRs under rule 9; Claude still does not run git on the Mac.
+- **C5 — Handoffs:** `Next step` names `claude:`, `codex:`, `kimi:`, or `larry:`. Handoffs travel through main and PRs under rule 9; Claude still does not run git on the Mac.
 
 Claude has one extra rule: it never runs `git` against the Mac repo (see `CLAUDE.md`). Larry commits.
 
@@ -304,10 +304,10 @@ Claude has one extra rule: it never runs `git` against the Mac repo (see `CLAUDE
 ---
 
 
-### Shared update format (Codex and Claude)
+### Shared update format (all systems)
 
 This Markdown file is the editable source for the expandable roadmap. GitHub
-renders the `<details>` sections; both systems can read and edit the same plain
+renders the `<details>` sections; all systems can read and edit the same plain
 text in their **own** checkout. There is no separate JSON database or HTML copy
 to keep synchronized. Chat views are dated snapshots derived from this file,
 not a second status authority.
@@ -320,7 +320,7 @@ For each update:
    **Owner**, **Status**, **Implemented by**, **Remaining work / acceptance**,
    **Model version**, **Where**, **Plan**, **Scope**, **Next step**, and **Updated**.
 3. Separate the system that built a feature from the person/system validating
-   it. `codex` and `claude` are systems; record an exact model only when the run
+   it. `codex`, `claude` and `kimi` are systems; record an exact model only when the run
    or handoff identifies it. Use “not recorded” or “unassigned” instead of guesses.
 4. Keep unfinished acceptance, dormant activation, and proposed assignments in
    §2/§5/§7. Put completed milestones in §6 at the **bottom**. A landed feature
@@ -343,6 +343,7 @@ Claude’s work or enable any runtime feature.
 |---|---|---|---|
 | `codex` | Isolated worktrees under `~/Documents/Codex/2026-09-09/can/work/`; the active branch for each task is named in its §2 block. | Codex pushes a scoped branch and opens a PR; Larry may also push a human-only protection change | `AGENTS.md` |
 | `claude` | Cowork: Linux VM plus a bridge to the Mac, never runs git on the Mac. Claude Code: a GitHub clone. | A branch or patch plus a commit-message file; Larry commits and pushes unless the session has GitHub access | `CLAUDE.md` |
+| `kimi` | Isolated worktrees under `~/Documents/kimi/workspace/kimi-work/`; the active branch for each task is named in its §2 block. | Kimi pushes scoped branches and opens PRs; Larry reviews and merges | `AGENTS.md` |
 | `larry` | The Mac, production, the vault, GitHub | Merges PRs; deploys with `scripts/deploy_main.sh` | — |
 
 ---
@@ -360,11 +361,23 @@ Claude’s work or enable any runtime feature.
 
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
 
+<details id="ws-32">
+<summary>WS-32 — Roadmap reader growth repair · Kimi</summary>
 
+**Workstream:** Larry approved Kimi claim registration on 2026-10-23 after exact main `c2e3c74a2f08dbe925303d19e6822383d53ddd73` reproduced two roadmap-reader failures: the canonical 259,344-byte roadmap exceeds the generic 256,000-byte file limit. Restore complete bounded roadmap reads without trimming source or weakening other guards.
 
+- **Owner:** `kimi`
+- **Status:** claimed via this PR (registration only; implementation not started). Register Kimi and the future repair branch; no reader or test code is changed by the claim. Registration branch: `docs/ws32-roadmap-reader-claim-20261023`.
+- **Implemented by:** not started; Kimi prepared this registration only
+- **Remaining work / acceptance:** After this claim lands on main, reproduce the failure on the implementation base, add a roadmap-specific bounded read limit and focused regressions, then run the roadmap/agent/repo suites and full offline validation. Acceptance requires complete current-repository projection, explicit refusal beyond the new bound, unchanged generic file limits and no silent workstream loss. Independent review and exact-head CI precede Larry's merge; no deployment or live acceptance is included.
+- **Model version:** not recorded; do not infer from system name
+- **Where:** `fix/ws32-roadmap-reader-limit-20261023` (future implementation branch; create only after this claim lands)
+- **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.2; add only WS-32 dated progress during implementation
+- **Scope:** `mcp_servers/mcp_repo/logic.py` roadmap read-limit handling only; directly related `tests/unit/test_mcp_repo_logic.py`, `tests/unit/test_roadmap_reader.py` and `tests/unit/test_roadmap_event.py`; this WS-32 block, WS-32 dated entries in the existing plan and WS-32 `docs/roadmap-log/` entries. Preserve the 256,000-byte limit for every other path, stat-before-read and second-read race checks, path/secret guards, complete-card semantics, 512 KiB snapshot and 600 KiB display-event ceilings, sensitive-turn behavior and all other APIs. No roadmap content trimming, `jarvis/agents/base.py` change, UI/provider/configuration/credential/access change, live test, deployment or acceptance-checkbox closure.
+- **Next step:** larry: review and merge this docs-only claim. kimi: only after it lands, create the named implementation branch from current main, implement the bounded repair and verify it.
+- **Updated:** 10-23 (Larry-approved registration; exact-main failure reproduced; no implementation)
 
-
-
+</details>
 
 <details id="ws-28">
 <summary>WS-28 — Acceptance prerequisite: sandbox cleanup race and verifier fingerprint · Codex</summary>
