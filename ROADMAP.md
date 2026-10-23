@@ -1011,15 +1011,15 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 - [ ] Demonstrate that verification cannot repair code, change criteria or authorize a release.
 
 - **Owner:** `codex`; retained dispatcher owns the isolated offline evidence contract; existing acceptance and other source owners remain unchanged
-- **Status:** claimed via this PR after merge: pure evidence-applicability contract only; no runner, automated profile, production wiring or acceptance is delivered by this registration
-- **Implemented by:** Documentation preparation from #255; this claim registers a future unused pure module and synthetic tests, not completed verification behavior
-- **Remaining work / acceptance:** Implement and independently review the bounded contract after main registration. All four future acceptance criteria remain open; supplied-metadata comparison cannot establish real receipt authenticity, installed identity, physical observation or human acceptance
-- **Model version:** not selected; choose eligible models by workload/privacy during planning
-- **Where:** `codex/ws23-verifier-foundation-20261022` (future implementation branch; source work begins only after this registration is on main)
+- **Status:** landed via this PR (source-only after-merge state): unused pure evidence-applicability evaluator and focused synthetic tests. No runner, automated profile, production wiring or product acceptance is delivered; exact-source independent review and publication CI are separate integration gates
+- **Implemented by:** Codex under merged claim #267 (`4c02709`); 25 focused standard-library unit tests pass on the candidate. Documentation preparation from #255 and the registration history remain preserved
+- **Remaining work / acceptance:** Obtain exact-source independent review and publication CI before serial integration. All four future acceptance criteria remain open; supplied-metadata comparison cannot establish real receipt authenticity, installed identity, physical observation or human acceptance. Real adapters and any automated profile need separate claims and existing acceptance/access gates
+- **Model version:** implementation model not recorded; the evaluator invokes no model or provider
+- **Where:** `codex/ws23-verifier-foundation-20261022`, isolated candidate after claim #267 merged as `4c02709204b4f3e5330311b58e0406d2e47444e3`; no production importer or activation
 - **Plan:** [Canonical plan](docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md); existing historical requirements and acceptance gates retained
 - **Scope:** Only new `jarvis/acceptance_evidence.py`, new `tests/unit/test_acceptance_evidence.py` with inline synthetic fixtures, this WS-23 block, existing `docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md` and `docs/roadmap-log/2026-10-22-ws-23-evidence-foundation.md`. No verifier/VM execution, production importer, Systems/prompt/tool, storage, WS-24 module, runbook/criteria, provider, config, scripts, native, shared-test or other-owner edits
-- **Next step:** codex: after main registration, implement the deterministic contract and focused offline tests; retain applicable observed failures even when prerequisites are unknown, while unmet prerequisites block positive results. Obtain exact-source independent review and publication CI before serial integration. Larry and existing owners retain acceptance and release decisions
-- **Updated:** 10-22 (offline evidence foundation claim under the expanded all-current-and-future-roadmap dispatch; no source code, activation or checkbox changes)
+- **Next step:** codex: hand the immutable source/test candidate to the independent reviewer and sole serial coordinator; resolve findings within this scope and obtain required publication checks. Later receipt adapters remain unclaimed. Larry and existing owners retain acceptance/release decisions; no live or human checkbox closes
+- **Updated:** 10-23 UTC (unused source contract and 25 focused offline tests; independent review/publication CI separate; every checkbox preserved)
 
 
 ### Prior ownership/intake checkpoint (preserved history)
