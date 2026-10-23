@@ -60,11 +60,12 @@ LATE_RESULT_RELAYED_NOTE = (
 
 
 class LateResultNeutralizer(BaseObserver):
-    def __init__(self, *, enabled: bool = True) -> None:
+    def __init__(self, *, enabled: bool = True, sources=None) -> None:
         super().__init__()
         self._enabled = enabled
         self._pending: list[dict] = []
         self._relaying = False
+        self._sources = sources
 
     @property
     def enabled(self) -> bool:
@@ -94,7 +95,11 @@ class LateResultNeutralizer(BaseObserver):
             return
         if isinstance(frame, (LLMFullResponseEndFrame, InterruptionFrame)) and self._relaying:
             for message in self._pending:
-                message["content"] = LATE_RESULT_RELAYED_NOTE
+                if self._sources is None:
+                    message["content"] = LATE_RESULT_RELAYED_NOTE
+                else:
+                    self._sources.rewrite(message,
+                        lambda item: item.update(content=LATE_RESULT_RELAYED_NOTE))
             logger.info(
                 "late_result_neutralized count=%d via=%s",
                 len(self._pending), type(frame).__name__,

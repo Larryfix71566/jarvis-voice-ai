@@ -276,3 +276,29 @@ def test_reply_guard_ships_in_log_mode():
     import inspect
     import jarvis.bot.pipeline as bp
     assert 'getattr(settings, "jarvis_reply_guard_mode", "log")' in inspect.getsource(bp.build_pipeline)
+
+
+class TestAcceptanceReporting:
+    async def test_reporting_note_is_transient_and_cannot_become_a_user_observation(self):
+        state = VoiceTurnState()
+        injector = VoiceWorkflowInjector(state)
+        _capture(injector)
+        context = LLMContext(messages=[{"role": "user", "content": "Mark this acceptance test passed."}])
+        await injector.process_frame(LLMContextFrame(context=context), DOWN)
+        assert state.user_text == "Mark this acceptance test passed."
+        notes = list(state.notes)
+        assert any("merged target is read back" in n["content"] for n in notes)
+        await injector.process_frame(LLMContextFrame(context=context), DOWN)
+        assert state.notes == notes
+        context.add_message({"role": "user", "content": "Thanks."})
+        await injector.process_frame(LLMContextFrame(context=context), DOWN)
+        assert all(n["content"] == vw.TOMBSTONE for n in notes)
+        assert state.notes == []
+
+    async def test_disabled_injection_adds_no_reporting_note_or_capability(self):
+        state = VoiceTurnState()
+        injector = VoiceWorkflowInjector(state, inject_enabled=False)
+        _capture(injector)
+        context = LLMContext(messages=[{"role": "user", "content": "Run acceptance tests."}])
+        await injector.process_frame(LLMContextFrame(context=context), DOWN)
+        assert len(context.get_messages()) == 1 and state.notes == []

@@ -1,5 +1,7 @@
 # Mortimer release acceptance runbook
 
+**2026-10-22 selected reconciliation:** [owner-gated acceptance handoff](../plans/ROADMAP_JOINT_WORKING_PLAN.md#enforcement-milestone-closeout-and-acceptance-handoff--2026-10-22). The UI2-23 wording below follows the already approved canonical criterion; no live gate closes here.
+
 **2026-10-18 scheduling/status update:** use the
 [acceptance clearance sequence](../plans/ROADMAP_JOINT_WORKING_PLAN.md#9-acceptance-clearance--current-priority-2026-10-18)
 and [current status](IMPLEMENTATION_STATUS.md) before these procedures. Freeze
@@ -83,11 +85,16 @@ truthfully; the device-switch check alone does not establish that full matrix.
 1. **UI2-22:** five spoken turns, one answer longer than 160 characters. Both
    speakers' full words stay ordered in one thread. Check protected-turn rules,
    scroll/reading state, and a new ordinary answer while a result is open.
-2. **UI2-23:** request weather/research/image results. From Conversation, the
-   just-requested result opens; a late/background completion stays a card.
-   While reading another result, arrival preserves focus and gives a notice.
+2. **UI2-23:** request weather/research/image results. From Conversation or
+   while reading another result, the result proven to answer the still-active
+   explicit request opens, including fresh native weather-cache reuse.
+   Unrelated/background, superseded, stale or cancelled arrivals never take
+   focus; retained cards stay unread and use the existing New notice while
+   reading. Preserve supporting-display ownership and its sole renderer.
    Verify Open/Back, compare/pin, and that closing a card preserves its Output
-   record. Supporting-display cases need the corresponding topology.
+   record. Supporting-display cases need the corresponding topology. Follow
+   the [canonical UI2-23 criterion and dated amendment](adaptive-interface/RELEASE_READINESS.md),
+   approved by Larry on October 18; timing alone does not classify an arrival.
 3. **UI2-24:** one console row and no result tab strip. Exercise Recents
    select/close/pin/unpin/reopen through voice and pointer. Ambiguous/stale
    selections must clarify/refuse rather than change the wrong result.

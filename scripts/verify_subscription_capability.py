@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import http.server
 import json
+import subprocess
 import sys
 import tempfile
 import threading
@@ -25,7 +26,11 @@ from jarvis.subscription import (
     _codex_text,
     _json_digest,
     _run_sync,
+    _file_digest,
+    _subscription_env,
+    _temp_cwd,
     codex_runtime_identity,
+    resolve_provider_executable,
 )
 
 PROBE_TOKEN = "MORTIMER_LOCAL_CAPABILITY_FIXTURE_OK"
@@ -34,7 +39,7 @@ NEGATIVE_TOOL_NAME = "exec_command"
 
 
 def installed_host_refusal(payload: Any) -> bool:
-    """Exact 0.160.0 native response; never print/retain a request or output.
+    """Exact verified native response; never print/retain a request or output.
 
     The installed binary contains the public `unsupported call: ` literal.
     Its matching-call function output is an explicit host refusal even when
@@ -65,8 +70,28 @@ def bundled_catalog(executable: str, model: str) -> dict[str, Any]:
     return {"models": matches}
 
 
-def probe(model: str, *, timeout: float = 30, negative: bool = False) -> dict[str, Any]:
-    identity = codex_runtime_identity()
+def candidate_identity() -> dict[str, str]:
+    """Inspect an unverified binary for this loopback diagnostic only.
+
+    This does not modify CODEX_VERIFIED_VERSIONS or the production receipt
+    validator. A successful fixture still cannot authorize a new runtime.
+    """
+    selected = resolve_provider_executable("codex")
+    if selected is None:
+        raise ValueError("Codex executable unavailable")
+    executable = Path(selected).resolve()
+    with _temp_cwd() as cwd:
+        result = subprocess.run([str(executable), "--version"], cwd=cwd,
+            env=_subscription_env(cwd), capture_output=True, text=True, timeout=5)
+    version = result.stdout.strip()
+    if result.returncode or not version.startswith("codex-cli ") or len(version) > 100:
+        raise ValueError("Codex candidate identity unavailable")
+    return {"path": str(executable), "sha256": _file_digest(executable), "version": version}
+
+
+def probe(model: str, *, timeout: float = 30, negative: bool = False,
+          candidate_runtime: bool = False) -> dict[str, Any]:
+    identity = candidate_identity() if candidate_runtime else codex_runtime_identity()
     catalog = bundled_catalog(identity["path"], model)
     requests: list[dict[str, Any]] = []
     canary_directory = tempfile.TemporaryDirectory(prefix="mortimer-no-tool-canary-", dir="/tmp")
@@ -178,6 +203,8 @@ def probe(model: str, *, timeout: float = 30, negative: bool = False) -> dict[st
         "terminal_success_without_error_items": success and valid_request,
         "api_credentials_absent": credential_absent, "real_provider_calls": 0,
         "provider_inference_performed": False, "request_count": len(requests),
+        "candidate_runtime_diagnostic": candidate_runtime,
+        "production_activation_authorized": False,
         "error_category": error_category,
         "negative_unadvertised_tool_rejected": bool(explicit_refusal and side_effect_absent),
         "explicit_matching_host_refusal": bool(explicit_refusal),
@@ -193,11 +220,14 @@ def main() -> int:
     parser.add_argument("--model", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--timeout", type=float, default=30)
+    parser.add_argument("--candidate-runtime", action="store_true",
+                        help="Inspect an unverified binary with loopback fixtures; never enable it")
     args = parser.parse_args()
     if not 1 <= args.timeout <= 60:
         parser.error("timeout must be from 1 to 60 seconds")
-    receipt = probe(args.model, timeout=args.timeout)
-    negative = probe(args.model, timeout=args.timeout, negative=True)
+    receipt = probe(args.model, timeout=args.timeout, candidate_runtime=args.candidate_runtime)
+    negative = probe(args.model, timeout=args.timeout, negative=True,
+                     candidate_runtime=args.candidate_runtime)
     receipt["negative_unadvertised_tool_rejected"] = negative["negative_unadvertised_tool_rejected"]
     receipt["negative_probe"] = {key: negative[key] for key in (
         "negative_unadvertised_tool_rejected", "explicit_matching_host_refusal",

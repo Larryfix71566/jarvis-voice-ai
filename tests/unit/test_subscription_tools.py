@@ -44,9 +44,10 @@ async def test_flag_without_native_receipt_cannot_launch(monkeypatch):
     ("unadvertised_host_tool_rejected", "true"), ("api_credentials_absent", "true"),
     ("schema_version", True), ("tool_schema_sha256", "changed"),
     ("protocol_source", {"version": "other"}), ("isolation_env_sha256", "changed")])
-def test_native_receipt_requires_exact_proof_and_typed_booleans(monkeypatch, tmp_path, field, value):
+@pytest.mark.parametrize("runtime_version", ["2.1.290 (Claude Code)", "2.1.291 (Claude Code)"])
+def test_native_receipt_requires_exact_proof_and_typed_booleans(monkeypatch, tmp_path, field, value, runtime_version):
     req = request()
-    identity = {"path": "/fixture/claude", "version": "2.1.290 (Claude Code)", "sha256": "b" * 64}
+    identity = {"path": "/fixture/claude", "version": runtime_version, "sha256": "b" * 64}
     monkeypatch.setattr(T, "claude_tool_runtime_identity", lambda: identity)
     proof = {"schema_version": 1, "provider": "claude", "model": route().model,
         "executable": identity, "protocol": T.PROTOCOL, "tool_names": ["fixture"],
@@ -513,3 +514,34 @@ async def test_receipt_validation_wait_cannot_start_a_session_after_quarantine(m
     with pytest.raises(T.SubscriptionRuntimeError, match="launch refused"):
         await task
     assert client.active_requests == {}
+
+
+@pytest.mark.parametrize("version,known", [
+    ("2.1.290 (Claude Code)", True),
+    ("2.1.291 (Claude Code)", True),
+    ("2.1.292 (Claude Code)", False),
+    ("2.1.291-preview (Claude Code)", False),
+])
+def test_native_identity_requires_only_probed_versions(monkeypatch, tmp_path, version, known):
+    binary = tmp_path / "claude"
+    binary.write_bytes(b"synthetic executable identity; never launched")
+    monkeypatch.setattr(T.shutil, "which", lambda _name: str(binary))
+    monkeypatch.setattr(T.subprocess, "run", lambda *_a, **_k: SimpleNamespace(returncode=0, stdout=version + "\n"))
+    if known:
+        identity = T.claude_tool_runtime_identity()
+        assert identity == {"path": str(binary.resolve()), "version": version, "sha256": T._file_digest(binary)}
+    else:
+        with pytest.raises(SubscriptionCapabilityError, match="no verified contract"):
+            T.claude_tool_runtime_identity()
+
+
+def test_offline_version_probe_cannot_authorize_native_workload(monkeypatch, tmp_path):
+    identity = {"path": "/fixture/claude", "version": "2.1.291 (Claude Code)", "sha256": "b" * 64}
+    monkeypatch.setattr(T, "claude_tool_runtime_identity", lambda: identity)
+    path = tmp_path / "offline.json"
+    path.write_text(json.dumps({"record_kind": "offline-native-version-protocol",
+        "runtime": identity, "result": "PASS", "not_workload_capability_receipt": True}))
+    monkeypatch.setenv(T.TOOLS_ENABLED_ENV, "1")
+    monkeypatch.setenv(T.TOOL_CAPABILITY_RECEIPT_ENV, str(path))
+    with pytest.raises(SubscriptionCapabilityError, match="acceptance does not match"):
+        T._validate_native_receipt(route().model, ["fixture"], request().tools)

@@ -116,6 +116,8 @@ class Orchestrator:
         if client_factory is not None:
             self._client = client_factory(settings)
         else:
+            from jarvis.provider_access import require_api_access
+            require_api_access(getattr(settings, "jarvis_llm_access_mode", None))
             self._client = AsyncOpenAI(
                 api_key=settings.openai_api_key, base_url=settings.openai_base_url
             )
@@ -275,6 +277,8 @@ class Orchestrator:
         tool_calls_total = 0
         reply = STUCK_MESSAGE
         for _ in range(MAX_TOOL_ITERATIONS):
+            from jarvis.provider_access import require_api_access
+            require_api_access(getattr(self._settings, "jarvis_llm_access_mode", None))
             extra: dict[str, Any] = {}
             if self._temperature is not None:
                 extra["temperature"] = self._temperature

@@ -1,0 +1,46 @@
+{
+  "source": "a67223926e9daf3e618b85753baa66bd783a7ee8",
+  "base": "636880eabbe9dc756c30df7128d0a90c02d222bd",
+  "tests": [
+    {
+      "test": "testVisibleFixtureRecoversFromAnApplicationHideAfterShowing",
+      "original_assertions": 9,
+      "unchanged": true,
+      "sha256": "8bb96a25f97edc2dd631c61c2ef0d5350fb6dce0fee8065704199a932a4f0e76"
+    },
+    {
+      "test": "testActualWindowHideShowAndDetachUpdateVisibility",
+      "original_assertions": 10,
+      "unchanged": true,
+      "sha256": "480670b3938ab3500ff3a9010a9aa0e1c1f3b4d17a9dbb5abf0de4c40fadc74a"
+    },
+    {
+      "test": "testStoppedObserverCannotDeliverQueuedState",
+      "original_assertions": 1,
+      "unchanged": true,
+      "sha256": "d9f88bb1790f954213a4487fbbb5d6f437b4207658165b246a7ae9ef41d96f23"
+    },
+    {
+      "test": "testWaveStopsSamplingWhileWindowHiddenAndResumes",
+      "original_assertions": 5,
+      "unchanged": true,
+      "sha256": "13f29fed23be300dd5723dadd02dd508864efe16276174d3f99040ae3eb048e0"
+    },
+    {
+      "test": "testReducedMotionKeepsVisibleWaveStatic",
+      "original_assertions": 3,
+      "unchanged": true,
+      "sha256": "a442adc8094762d7f96bdae03d2a7aa20767bc1175d9ffbb4c3533d91890e1ff"
+    }
+  ],
+  "all_original_assertions_unchanged": true,
+  "original_skip_conditions_unchanged": true,
+  "readiness_bound_seconds": 3,
+  "new_regression_bytes_identical_to_valid_red845cb34": true,
+  "negative_wait_clauses_unchanged": [
+    "pumpEvents(until: { !window.occlusionState.contains(.visible) })",
+    "pumpEvents(until: { app.isHidden && reports.last == false })",
+    "pumpEvents(until: { window.isMiniaturized && reports.last == false })"
+  ],
+  "product_observer_and_wave_source_unchanged": true
+}

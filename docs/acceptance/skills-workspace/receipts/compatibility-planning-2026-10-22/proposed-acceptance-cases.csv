@@ -1,0 +1,26 @@
+id,case,required_result,execution_status
+AT01,unchanged portable package,Body/source hashes preserved; one declared text reference works; disabled candidate has zero registry effects.,proposed_not_run
+AT02,malformed parser input,"Duplicate keys, malformed YAML, tags, alias amplification, invalid UTF-8/types fail deterministically with no side effects.",proposed_not_run
+AT03,no unclassified field,"Unknown top-level and nested execution flags block; harmless recognized descriptive extension is visibly retained, not interpreted.",proposed_not_run
+AT04,path and archive adversaries,"Traversal, symlink races, hardlink/special entries, case collisions and decompression bombs refuse before extraction/read.",proposed_not_run
+AT05,required dependency completeness,"Missing asset, nested reference, undeclared script or unresolved host URI blocks; optional decoration has explicit disposition.",proposed_not_run
+AT06,bounded content,File/package/prompt limits reject; no truncated “success”; secret canaries absent from diagnostics and exported reports.,proposed_not_run
+AT07,manual invocation,Automatic primary/support match and forged model-explicit request fail; authenticated user action works; hidden/manual settings remain independent.,proposed_not_run
+AT08,tool restriction,"Forbidden tool absent from schema and refused at dispatch, including injected calls, delegated attempts and support-skill escalation.",proposed_not_run
+AT09,semantic tool mapping,"Same name/wrong schema, missing auth, unavailable runtime or narrowed argument mismatch prevents readiness; no fuzzy fallback.",proposed_not_run
+AT10,host constructs,"Hook, dynamic shell and fork directives produce explicit unsupported verdict, never execution or implied equivalent behavior.",proposed_not_run
+AT11,typed arguments,Missing/wrong args refuse; shell metacharacters stay literal data; placeholders cannot expose environment/credentials.,proposed_not_run
+AT12,resource integrity,"Declared text reads exact bytes; missing/changed package, traversal and budget exhaustion refuse; affected run reports incomplete.",proposed_not_run
+AT13,scripts/services,Required script blocked on legacy and V2; importing plugin/MCP manifests starts/installs/authenticates nothing.,proposed_not_run
+AT14,prompt injection,"“Ignore policy,” fake approval and tool-install instructions in every source/evidence field cannot mutate grants, policy or registry.",proposed_not_run
+AT15,approval binding,"Any source/candidate/report/tool-schema/policy/parser/registry drift invalidates approval; expiry, replay and wrong owner refuse.",proposed_not_run
+AT16,cancellation/crash,Cancel before commit prevents late activation/publication; after commit status is honest; restart reconciles exactly once.,proposed_not_run
+AT17,runtime acknowledgement,Saved config without runtime ACK stays pending; wrong revision/session ACK fails; reconnect cannot claim stale loaded state.,proposed_not_run
+AT18,bypass/version migration,Old clients and legacy flags cannot activate new required semantics; unsupported reader version blocks; existing packages get explicit inventory outcomes.,proposed_not_run
+AT19,shared context,Primary/support restrictions intersect; unresolved/cyclic dependencies and incompatible required tools reject rather than escalate.,proposed_not_run
+AT20,model/provider policy,"Unsupported requested model/route refuses without fallback, paid direct API use, model switch or service creation.",proposed_not_run
+AT21,rollback,Restore exact accepted compatible set; preserve requests/audit/user data; revoked policy remains revoked; failed restore disables affected skill.,proposed_not_run
+AT22,UI and accessibility,Every source requirement appears with disposition/reason/test; blocks disable activation; voice/pointer/keyboard refer to the same exact candidate.,proposed_not_run
+AT23,outcome equivalence,A reviewed fixture for every promised behavior verifies required outputs/artifacts and dependencies; “tool returned success” alone cannot pass.,proposed_not_run
+AT24,responsiveness,Import/validation off voice path; retain existing SW-K selection/navigation and paired full-voice latency budgets on authorized exact build.,proposed_not_run
+AT25,isolation and export,Wrong owner cannot inspect source/evidence; malicious asset/output cannot escape staging or trigger renderer actions; cleanup failure remains visible.,proposed_not_run

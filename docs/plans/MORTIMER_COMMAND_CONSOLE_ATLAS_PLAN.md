@@ -1,6 +1,6 @@
 # Mortimer — Command Console, Knowledge Atlas, and voice-first sharing
 
-**Status:** UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
+**Status:** Deferred-hide test-only programme `a672239` is verified: all12 original offline checks, six actual-window focused tests/zero skips, independent source review/no blockers and all5 programme-head CI pass. Native582/five prerequisite skips/zero failures. [Terminal evidence](../acceptance/command-console/receipts/ws17-native-deferred-hide-2026-10-22.md) preserves original nonpasses; receipt-only metadata and actual-host/install/live/human gates remain distinct. Historical status follows: Bounded deferred-hide native fixture follow-up is staged for this PR (landed after merge gates). Combined `636880e` original profile is11/12, with a real late application hide reproduced by a full native trace; additive `845cb34` regression is red with three failed assertions/zero skips. Green/full/review/CI remain pending and no runtime or human acceptance closes. [Evidence](../acceptance/command-console/receipts/ws17-native-deferred-hide-2026-10-22.md). Historical status follows: Native visibility prerequisite repair is staged for this PR (landed after required merge gates): five focused real-window tests pass with zero skips; the late-hidden regression is red before/green after; all original assertions and bounds remain. Runtime observer/application bytes are unchanged. Full verification, installed-development identity and live/human acceptance remain separate. Historical status follows:  Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: Frozen current-request implementation `fbfb669` has completed all twelve original independent checks, exact-source Claude follow-up with **No blocking findings**, and all five source CI checks. [Final scrubbed evidence](../acceptance/command-console/receipts/ws17-current-request-final-2026-10-19.md). Documentation-only publication, publication-head CI and separate merge/release/live gates are distinguished below. Historical status follows: Claim #225 merged as `c244963` at 00:08:12 UTC on 2026-10-19; current-request implementation is claimed on `codex/ws17-current-request-arrival-20261018`, with wire reservation committed before code. Historical status follows: Larry approved the current-request foreground exception at 23:44 UTC on 2026-10-18 (CX-25); claim registration is prepared on `docs/ws17-arrival-claim-20261018` for review only. Implementation waits for the claim on main. The dated amendment below supersedes the prior no-jump rule only for the still-active explicit request. Historical status follows: UI2-24/25 repair claimed on `codex/ws17-ui2-24-25-repair-20261017` per Larry’s #213 dispatch (10-17); claim #214 merged as `bd7fca0`; implementation is in progress. Earlier WS-17 CC7a implementation landed through PR #198,
 merge `d5d3e7e` on 2026-10-10, after the WS-13 plan prerequisite #196 merged
 as `5c1eb1e`. Main runtime/tests/configuration/dependencies/runner/ownership
 files match the independently verified `59d57ea` exactly; source review,
@@ -2708,3 +2708,933 @@ explicitly unaccepted physical/permission cases. No test/profile/budget waiver.
 UI2-14 technical evidence is complete; rollback drill, separate deployment/loaded
 identity, UI2-24/25 then 22/23 and 04/09/13, physical checks, real observations
 and final acceptance remain open. No production change or deployment occurred.
+
+### 2026-10-18 — Proposed current-request foreground exception (CX-25)
+
+Current main `d38c886` and the open PR inventory were refreshed before this
+proposal. Only #224 (independent-verification documentation) was open; this
+proposal does not alter its branch or receipts. WS-28 owns cleanup only.
+WS-17 owns the arrival files, but its current registered branch is reserved
+for review/verification. The proposed implementation branch is
+`codex/ws17-current-request-arrival-20261018`; it remains inactive until Larry
+approves this claim and it lands on main.
+
+The approved §7.2 table says a new result while reading raises a New notice
+without taking the stage. The UI2-23 checklist explicitly includes weather
+requested while reading. Selecting a requested answer from that stage is
+therefore a design amendment requiring Larry's decision, rather than an
+unconditional bug fix under the existing rule. This proposal preserves that
+rule and all acceptance checkboxes until the decision is recorded.
+
+**Proposed policy for approval:** A result proven to complete the still-active
+explicit request may open from the results stage, including native fresh-cache
+reuse. A newer user request, explicit cancellation, stale/unknown request
+identity or an unrelated/background completion removes foreground eligibility.
+Define a deterministic single foreground winner for duplicate/multiple arrivals;
+never infer current ownership from recency alone. Preserve the sole supporting-
+display renderer and explicit display-transfer ownership. Do not introduce a
+second durable task system for this bounded UI repair.
+
+**Required synthetic verification after approval:** Exercise actual router,
+conversation/run binding, store and native weather-reuse paths for
+Spartanburg → Atlanta → cached Spartanburg. Assert two stable UUIDs, correct
+active result at each requested completion, unchanged fetch/expiry on a cache
+hit and one reference. Add controlled races for a newer turn before completion,
+late/background and unknown-run arrivals, cancel-before-completion,
+duplicate/multiple arrivals and display ownership. The witness must fail on
+the original caller chain where the proposed behavior differs; isolated store
+assumptions are insufficient. No paid provider call, live history fixture or
+production logs are needed.
+
+No source/test edit, acceptance waiver, new wire identifier, credential,
+installation, merge, deployment or restart is authorized by this claim-only
+proposal. If caller analysis requires WS-05-owned paths or a new wire field,
+obtain the precise coordination/reservation first. Existing exact-source
+cross-review and release gates still apply to any eventual repair.
+
+
+### 2026-10-18 — Larry approves the foreground exception; claim awaits main
+
+Larry approved the proposed current-request foreground behavior and publication
+of this roadmap/ownership update to `Larryfix71566/jarvis-voice-ai` for review
+at 23:44 UTC. This approves the policy described immediately above. It does
+not approve merging the claim or a runtime PR, deployment, restart or changes
+to live history. The proposed implementation branch remains inactive until the
+claim is on main. The current UI2-23 checklist reflects the approved exception;
+its original no-jump rule is retained in §7.2 and the preceding dated history.
+
+Classification correction: an unread named-city arrival while another result
+was active matched the prior no-jump rule. That observation alone did not
+prove a UI2-24 failure; the earlier diagnostic classification was too broad.
+UI2-24 actions remain untested and UI2-25 has only partial identity/cache
+proof, with full reopen/stale-refresh acceptance still open. No observation
+is erased and no parent acceptance checkbox closes. This entry contains no
+production log, transcript, service metadata or private operational receipt.
+
+The exact originally prepared documentation commit `6102f01` was published
+once after Larry's explicit consent. Current main remains `d38c886`; only
+draft #224 was open at refresh. Subsequent source changes require the main
+claim, actual caller-chain regressions, exact-source cross-review and the
+existing independent release gates. No implementation or runtime operation
+ran during claim publication.
+
+
+### 2026-10-18 — Canonical unchecked UI2-23 criterion aligned
+
+Claim review found that the roadmap described the approved exception while
+`docs/acceptance/adaptive-interface/RELEASE_READINESS.md` still required the
+prior unconditional weather-while-reading no-jump behavior. The authorized
+policy-docs correction aligns that canonical unchecked criterion with the
+active-request exception and background/cancellation/focus protections. It
+links back to the dated approval and preserves the old rule in plan history.
+No checkbox state changes or implementation/live pass are claimed.
+
+
+### 2026-10-19 — Claim landed; current-request protocol reserved before code
+
+Larry explicitly approved marking ready and merging documentation-only #225
+at 00:07:29 UTC. Verified exact head `d8fd399`, five successful checks and no
+conflict; normal merge completed at 00:08:12 UTC as `c244963`. Refreshed main
+and started registered branch `codex/ws17-current-request-arrival-20261018` in
+an isolated worktree. #224 remains separate; no runtime PR merge or production
+change is authorized.
+
+Caller inspection found that timestamps/run-start ordering alone cannot prove
+current ownership for direct and detached results. Reserve §3's bounded
+`console/turn` and optional `origin_request_id` before code. The host binds an
+accepted final transcription's existing timestamp/user ID to an immutable
+request at the actual user-aggregator context frame; the native client matches
+that input identity instead of a recency window. A later user start/final,
+cancellation, missing identity or old sequence invalidates foreground authority.
+Tool-call and detached-task bindings must retain the original request, and
+only the first eligible result for a request may change foreground. Cache
+identity/fetch/expiry remain owned by the existing native weather store.
+Preserve legacy rendering as unread cards and WS-21 sole-renderer ownership.
+
+This reservation commit changes documentation only. Required caller-chain,
+reorder, cancellation, supersession and multiple-arrival witnesses precede
+source review; no provider call, install or production action is part of it.
+
+
+### 2026-10-19 — Implementation checkpoint; native verification unresolved
+
+On the registered isolated branch, the candidate binds accepted input identity
+at the actual user-aggregator frame, captures immutable tool-call ownership
+(including reused sequential runners/detached tasks), adds host-only origin
+to display/cache messages, and admits one native foreground winner. Native
+selection uses exact input/request identity and cancellation/supersession,
+without changing weather content IDs, source fetch times or cache expiry.
+No model/endpoint setting, credential, production source/history or service
+was changed. Wire reservation `b587cd5` precedes code; claim metadata was
+reconciled in `9f83788` (roadmap checker zero errors/warnings).
+
+Existing focused Python selection: 51 passed, zero failures. Five new public
+synthetic real-frame/callback/transport provenance tests pass, covering exact
+old/new tool ownership, detached event preservation, cancellation, missing
+host identity and repeated-input continuation. An initial synthetic frame
+used Pipecat's default `finalized=False`; the fixture was corrected to the
+installed Flux emitter's actual `finalized=True` shape. No assertion weakened.
+
+Native compilation completed in 28.08 seconds using an isolated copy of the
+existing locked WebRTC 120.0.0 dependency (revision matches Package.resolved);
+no dependency download/install or production write. SwiftPM's nested sandbox
+was unavailable inside the execution sandbox; compilation used its temporary
+subprocess-sandbox-disable option within the outer filesystem sandbox. The
+first focused XCTest execution aborts with signal 6, "freed pointer was not
+the last allocation", after one case passes. This is unresolved, not a skip
+or native pass. Next: reproduce the abort against baseline/isolated cases,
+complete native caller-chain race/cancellation/multiple-arrival regressions,
+then full required checks, exact-source independent review and a runtime PR.
+No runtime PR, source-review transmission, merge, deployment or restart yet.
+
+
+### 2026-10-19 — Baseline comparison resolves the XCTest environment blocker
+
+The exact baseline `c244963`, same Swift 6.4 compiler, dependency cache and
+focused command, reproduces the identical signal-6 abort at the same async
+XCTest boundary under the execution sandbox. The identical command on the
+normal host passes all eight baseline cases. Candidate focused verification
+on the host subsequently passes 41 tests, including actual SDK/router cache,
+foreground, late/cancelled, duplicate-winner and supporting-owner workflows.
+Crash and failed assertion runs remain in local evidence; no skip, assertion
+waiver, memory/runtime-check disable or production change resolved the abort.
+
+Real SDK inspection exposed two races absent from the initial manual probes:
+worker observers are queued asynchronously, and function lifecycle events are
+also asynchronous. The candidate now uses the public synchronous
+`on_before_push_frame` hooks on the accepted input/user aggregator and captures
+call ownership before the real SDK's function dispatcher. It ignores duplicate
+generic speaking signals after final input; exact host cancellation carries
+a request/sequence fence. Actual SDK frame/aggregator/dispatch tests cover those
+boundaries. The final focused Python selection passes 135 tests. Input retention
+is bounded to 64 segments/64 KiB and 64 request boundaries; failed UI delivery
+cannot stall voice indefinitely. Additional native malformed/foreign session,
+cancel-before-start and independent Atlas navigation cases are ready for the
+final-source full suite. No raw production logs enter source/review packets.
+
+Next: freeze this source, run full Python/JarvisKit/MortimerHost checks, obtain
+exact-source independent cross-review and publish a reviewable runtime PR.
+Runtime merge, deployment and live acceptance remain Larry's separate decisions.
+
+
+### 2026-10-19 — Compatibility marker reserved before code
+
+An older native client's closed weather-reuse argument schema rejects the new
+optional origin field even though its underlying cache remains valid. Reserve
+`foreground_request_version = 1` in native inventory before implementing the
+capability check. Send the origin argument only when that exact native marker
+is present, and keep it outside model-facing inventory. Legacy clients retain
+their existing cache schema/behavior; current release clients still enforce
+exact current-request foreground. No action, permission, source-policy,
+configuration or account expansion is involved.
+
+
+### 2026-10-19 — Baseline witness and final-source verification restart
+
+At 00:54 UTC main remains `c244963`; only unrelated verification documentation
+PR #224 is open. The same public synthetic SDK/transport/router/store witness
+(`CurrentRequestForegroundWitnessTests`, SHA-256
+`2ae7515a675f4dc9cf9d164af9420924fe2fe7d7cb008d119b072be5e3b96551`)
+fails the baseline runtime's two second-city foreground assertions and passes
+the candidate. Baseline used a temporary test-only overlay, removed afterward;
+its tracked source is unchanged. This proves the requested policy difference,
+not a deployed/live acceptance pass.
+
+The first full Python run under the execution sandbox retained 126 failures,
+6,668 passes, 15 skips and four errors. Local socket/process restrictions account
+for the permission failures; a clean normal-host baseline selection passes all
+182 representative cases. Two fake STT fixtures lacked the real FrameProcessor
+event API and now inherit that API. No product fallback or assertion waiver was
+added. The final clean focused selection passes 206 tests, including real blocked
+UI-send timeout and old/new-client cache compatibility without exposing the
+host capability marker to the model.
+
+The first full native run retained 571 tests, six skips and nine failed
+assertions in six cases. Those old foreground expectations and synthetic
+private-input provenance fixtures now follow the approved request policy.
+The 36 affected cases pass; original private capture/no-outbound assertions
+remain intact. Full clean-host Python, JarvisKit and MortimerHost checks will
+run on the frozen source before independent review/PR. Failed runs remain local
+and are not replaced by focused results. No live requirement is closed here.
+
+
+### 2026-10-19 — Full-suite results retained; upstream broadcast repair
+
+Frozen `6d777eb` completes normal-host MortimerHost: 572 executed, five existing
+prerequisite skips, zero failures (138.108 s); JarvisKit: 235 passed, zero
+failures (6.649 s). Three native skips need external displays and two need the
+test host active in WindowServer. None close physical acceptance.
+
+The clean Python attempt finishes 6,797 passed / 15 skipped / five failures.
+All five reproduce on unchanged baseline (81 other cases pass): the installed
+Pipecat runner calls `load_dotenv(override=True)` during collection and discovers
+settings above its interpreter. A test-process-only `PYTHON_DOTENV_DISABLED=1`
+prevents that external file discovery while keeping explicit Settings parsing
+and every assertion active. With credential environment excluded and RUN_LIVE=0,
+full Python completes 6,802 passed / 15 skipped / zero failures, two subtests
+passed (246.27 s). The original failed logs/baseline reproduction and frozen
+source hashes remain local; no product settings/file was changed for isolation.
+
+Review preparation then exposes a real candidate defect outside the original
+test seam: the aggregator broadcasts a generic speaking start upstream as well
+as downstream. That upstream instance crosses the accepted input processor,
+erasing accepted final input. Linking the actual SDK processors reproduces it;
+the strengthened test fails before repair. A second negative case shows copied
+context text could mint another token from the same accepted input.
+
+The repair records bounded exact aggregator-origin frame IDs before SDK delivery
+and ignores their upstream echoes at the accepted source. It consumes accepted
+input when granting its one boundary; original boundary continuations retain
+their immutable token, while copied/injected boundaries acquire none. Both red
+cases now pass and all 207 focused Python checks pass. No new wire identifier,
+processor, permission or model/setting change is needed. Native source/tests
+are byte-identical to tested `6d777eb`; full Python must repeat on this repair.
+
+The prepared `6d777eb` source-review packet is explicitly withheld and has not
+been transmitted. A new exact-source packet will replace it after verification.
+Required independent review/verification, runtime PR and Larry's separate
+merge/deployment/live acceptance remain open.
+
+
+### 2026-10-19 — Reviewed frozen source and complete independent comparison
+
+Frozen `0f2af66` passes full local Python (6,803 passed / 15 existing skips),
+207 focused checks, and all twelve original ordered independent VM checks
+against approved `08c0635`. Candidate unit suite: 6,606 passed / 11 skips; native
+app: 572 executed / eight prerequisite skips / zero failures; library: 235 passed.
+Local native source/tests are byte-identical to tested `6d777eb` (572 app cases /
+five prerequisite skips / zero failures). Source/receipt/log fingerprints were
+verified, newly owned clones removed and preexisting assets preserved. No
+production source, installed artifact, settings or running service was changed.
+
+Claude Code 2.1.291 / `claude-sonnet-5` completed an approved tools-disabled full
+static source/test review and bounded same-source finding reconciliation. Final
+verdict: no blocking findings; original Finding 1 INVALID, 2–4 NON-BLOCKING.
+The source-only packets and synthetic contract probes contain no production
+records. The conservative uncorrelatable-final revocation, mixed-version
+foreground limitation and historical test helpers remain explicit tradeoffs.
+Reviewer test execution is not claimed; no full second review is inferred.
+
+[Scrubbed verification/review receipt](../acceptance/command-console/receipts/ws17-current-request-2026-10-19.md)
+records all twelve actual commands and hashes, source identity, baseline witness,
+original findings and limits without private runtime records or raw reasoning.
+This publication adds only documentation/evidence after the freeze; verify every
+runtime/test blob still matches `0f2af66`. Final-head CI is a separate gate.
+Runtime merge, deployment and affected UI2-23/24/25 acceptance remain separate
+Larry decisions; no acceptance checkbox closes.
+
+Publication-only contract check: 95 existing roadmap reader/console/event,
+repository-map and coordination-checker tests pass; roadmap checker reports
+zero errors/warnings and diff whitespace checks pass. No runtime/test change
+after `0f2af66` is introduced by this evidence commit.
+
+
+### 2026-10-19 — Additional read-only review: ordinary-window winner defect
+
+Draft #226 published `639edd5`, whose runtime/tests equal reviewed `0f2af66`.
+Further review identifies a P2 not covered by its weather-only winner scenario:
+a closed supporting window queues a pointer but renders the answer on main;
+the defer incorrectly treats that pointer as an external renderer. Exact
+ordinary-window repeats also resolve an existing workspace owner while the
+defer checks the provisional new UUID. Both allow another same-request result
+to take focus. Two synthetic real SDK/router tests reproduce nine failed
+assertions, including repeated-owner cases with the display closed and open.
+
+The bounded repair uses the same `isPresented` predicate as WorkspaceView's
+return locator, the resolved displayed workspace owner and actual main view.
+It preserves display/store/source guards and does not change result identity.
+All 31 affected router/conversation regressions pass. Original failures remain
+local. A second P2 concerning real SDK assistant-aggregator upstream tool
+continuations is being validated separately; it is not yet declared repaired.
+The old source's review/VM results are historical evidence. Changed runtime
+requires refreshed affected tests, final-source review and independent checks
+before final readiness; #226 stays draft, unmerged and undeployed.
+
+
+### 2026-10-19 — Actual upstream tool-continuation reproduction and repair
+
+Four actual PipelineWorker flows reproduce the second P2: a real SDK function
+result enters the real assistant aggregator, which creates a fresh UPSTREAM
+LLMContextFrame on its own processing task. The old wrapper scopes DOWNSTREAM
+only, so the second inference/tool gets no origin. Failures reproduce for the
+current request, a bot-speaking deferred flush, a newer accepted user request
+and an explicitly cancelled original request. These are not manual downstream
+continuation probes; original failed runs remain local.
+
+The repair retains bounded immutable dispatch bindings beyond the handler's
+return and uses the SDK's public synchronous assistant before/after-process and
+before-push hooks. Accepted in-progress/result frames establish causal pending
+ownership, including the real BotStoppedSpeaking deferred flush. A fresh
+upstream frame carries that ownership; the existing provider wrapper scopes
+LLMContextFrame in either direction. Conflicting reused call IDs and mixed or
+unknown pending ownership fail closed instead of adopting the newest shared
+user context. Handler/cancellation scope stays immutable. No SDK private-field
+patch, new pipeline node/order, model/provider setting or source-policy change.
+
+All fourteen provenance tests pass after repair (four new red→green real SDK
+flows plus ten existing cases). Native winner follow-up remains the separately
+committed 31-pass slice. Broader/full affected checks, final-source independent
+review and a fresh unchanged twelve-check VM comparison must follow this new
+source freeze; historical `0f2af66` evidence is not promoted to final clearance.
+No merge, deployment, production action or acceptance closure.
+
+
+### 2026-10-19 — Deferred interruption lifecycle follow-up
+
+A bounded caller review identified stale `assistant_pending` ownership after the
+real assistant aggregator resets its deferred bot-stopped flush on
+`InterruptionFrame`. A deterministic real PipelineWorker regression waits for
+the actual BotStartedSpeaking processing event, completes result A while
+speaking, processes interruption, then dispatches request B. On unchanged
+`c5c5b45`, B's fresh upstream context has no request binding (one failing
+regression); this is a valid P2 availability/focus defect, not a source grant.
+An earlier fixture run exposed a bot-speaking scheduling race; its failed log
+is retained locally and is not treated as product evidence.
+
+The repair retires only the abandoned pending batch on the public synchronous
+interruption hook. Immutable dispatch and still-running ownership remain. All
+16 provenance tests pass, including actual interruption while an uncancelled
+old tool still runs and the existing superseded/cancelled/deferred cases.
+Preceding `c5c5b45` full host evidence: Python 6,807 passed / 15 skipped;
+MortimerHost 574 executed / five prerequisite skips / zero failures; JarvisKit
+235 passed. Native source is unchanged by this follow-up; full backend, final
+exact-source review and twelve-check independent verification refresh next.
+Historical receipts do not clear this changed runtime. No merge, deployment,
+restart, production change or live acceptance closure.
+
+
+### 2026-10-19 — Existing roadmap refresh renderer/winner follow-up
+
+The current-request roadmap-refresh early branch retained the old queued
+`supportingContent` check. A real SDK/router regression covers open and closed
+supporting windows, refreshed stable roadmap identity, then a second same-token
+ordinary result. On unchanged `e29973d` runtime it fails seven assertions:
+closed-window fallback remains on Conversation and later arrivals take over
+the renderer. This is the same approved one-winner contract, not a new feature.
+The minimal repair uses the existing actual-renderer predicate: an already
+visible supporting answer consumes the winner; otherwise the existing roadmap
+owner can open on the main fallback while independent navigation is preserved.
+No panel is reopened or moved. All 39 affected actual-router/roadmap/provenance
+native tests pass.
+
+The offline `e29973d` verification was deliberately stopped at its exact owned
+child after reproduction. The owner runner reached terminal, retained its
+partial logs/receipt, deleted its newly owned VMs and verified all preexisting
+assets unchanged. It is superseded/source-changed, not passed. The full Python
+6,809/15-skip pass remains exact `e29973d` evidence; Python is unchanged by this
+native repair. Full affected native checks, new exact-source review and a fresh
+original twelve-check VM comparison follow the new freeze.
+
+Claude's completed exact `e29973d` source report contains six findings requiring
+bounded disposition: conservative final-input revocation, chunk correlation,
+background supporting behavior, pinned SDK echo assumptions, old heuristic
+helpers and theoretical repeated UUIDs. Original report is preserved. Native
+and Python contract probes confirm multi-chunk final-timestamp correlation and
+conservative revocation/recovery; policy/remaining caller reconciliation stays
+open pending the actual reviewer verdict. No acceptance, merge or deployment.
+
+
+### 2026-10-19 — Cache-hit renderer/winner follow-up
+
+Before starting another VM comparison, the same early-branch audit checked a
+retained public weather owner queued to the supporting display. A real
+SDK/router regression covers both actual window states, a valid current cache
+hit and a later ordinary result from the same request. On `8ac4f30` runtime it
+fails eight assertions: a closed window leaves the cache answer off main with
+no reopen reference; both states leave the winner unconsumed so the later
+answer changes renderer ownership. This is the same current-request contract.
+
+The minimal router-only repair uses the existing actual-renderer predicate
+after the fully validated cache hit. A visible supporting answer consumes the
+winner without a duplicate main renderer/reference. A queued owner with its
+window closed can select the existing main fallback when independent
+navigation permits; only actual main presentation records the cache reference.
+No source/cache guard, TTL, fetch timestamp, UUID, store query or display panel
+changes. All 58 affected cache/TTL/privacy/router/roadmap/provenance tests pass.
+
+Full preceding `8ac4f30` native suite: 575 executed, six environment/prerequisite
+skips, zero failures. Three missing-display skips and three activation skips
+remain open; no blanket reuse of the earlier five-skip count. Python and
+JarvisKit remain unchanged from their passing exact-source checks. No VM was
+started for `8ac4f30`; the superseded `e29973d` attempt stays non-passing. New
+source review/full affected native/twelve-check verification remain required.
+The six original source findings and bounded disposition review are preserved;
+no production, acceptance, merge, deployment or restart change.
+
+
+### 2026-10-19 — Complete bounded arrival-exit inventory and shared renderer repair
+
+After executor recovery, main remains `c244963` and WS-17 ownership/branch is
+unchanged. Every arrival exit in the claimed router was checked once against
+the same attested-current-request/single-winner contract:
+
+| Existing exit | Retention/presentation and winner rule | Bounded evidence |
+|---|---|---|
+| Valid cache hit | Keep all store cache/source guards; show stable owner on main fallback or consume its actual supporting renderer; record cache reference only for actual main reopen | Open/closed supporting-window cache regression, TTL/privacy/identity suite |
+| Applied roadmap refresh | Same stable owner; actual supporting renderer or permitted main fallback consumes winner | Open/closed roadmap refresh regression |
+| Fresh structured weather | Retain/upsert first, then use shared fallback; preserve actual supporting ownership and independent navigation | Structured fresh quiet-upsert in both window states |
+| Legacy weather/generic drawer | Retain and keep Output behavior; same fallback and common presentation accounting | Legacy fresh quiet-upsert in both window states and existing drawer/privacy tests |
+| Ordinary window/new/repeated owner | Keep existing display apply/owner resolution; when closed, exact repeated owner can reopen from Conversation; consume only actual renderer | New/fallback/repeated owner regressions, strengthened return-to-Conversation case |
+| Protected-local window | Keep local-only receive and sink boundary; same main fallback if attested, never supporting apply | Existing protected-local/actual-router tests |
+| Graph window | Keep existing graph route; common actual `.memoryGraph` presentation accounting | Existing graph and privacy/source contracts; physical presentation remains separate |
+| Unknown/late/cancelled, refused cache/failed refresh | Retain or reject under existing guards; no fallback promotion and no fabricated winner | Existing negative, cancellation, replay and policy tests |
+
+A red run on unchanged `2d619d6` runtime reported 19 assertions across fresh
+quiet upserts and exact ordinary reuse from Conversation. Fifteen are real
+presentation/winner failures. Four were an incorrect new fixture expectation
+that the shared reference list was empty: established fresh fetches already
+append an Updated reference there. The corrected test requires exactly one
+reference for the stable result ID, an Updated prefix and no Reopened prefix;
+it preserves the distinction between fresh-update and cache reuse. Raw runs
+remain local. All 59 affected native caller/cache/TTL/privacy/roadmap cases pass.
+
+One shared router helper now computes actual main/supporting presentation and
+one guarded helper selects the permitted main fallback. The store's source
+validation, cache query, TTL, UUID/fetch timestamps, panel ownership and wire
+contracts are unchanged. Python and JarvisKit bytes remain unchanged.
+
+The preceding `2d619d6` full run has five failures retained explicitly:
+ScreenCaptureKit -3811 audio/video capture failure and four window-visibility
+assertions. Both failing test files are byte-identical to `c244963`; unchanged
+baseline classification and final-source full repeat are pending. No permission
+or assertion relaxation is used. Claude's bounded `8ac4f30` report confirms
+all six original findings NON-BLOCKING with documented coverage caveats and
+finds the concrete sibling-renderer gap addressed here. Final changed-source
+review, full affected native/CI and one fresh twelve-check VM run remain open.
+No live acceptance, merge, deployment, restart or production change.
+
+
+### 2026-10-19 — Multi-panel ownership must gate store selection first
+
+The executor resumes and the corrected reference-kind tests pass (59 affected
+cases). The preceding frozen `0deeb30` full native run passes 577 tests, five
+explicit display/activation prerequisite skips, zero failures, including capture
+and actual visibility. Both failing test files match main `c244963` exactly;
+its focused run reproduces three visibility assertions with inactive fixture,
+while baseline capture passes. The earlier five candidate failures are retained
+as host-session failures; none is rewritten as a pass or waived.
+
+A bounded independent static review identifies one reachable multi-panel case
+not covered by pointer-equals-owner fixtures. Layout 2's actual visible stage
+can render both weather A and B while `supportingContent` names B. Fresh or
+cached A reaches Store.receive/queryWeatherReuse first; its equality-only
+comparison may select A on main before the later helper observes the real
+supporting renderer. The native router regression exercises structured fresh,
+legacy fresh and cached A from both Conversation and a third reader result,
+asserts both panels are actually presented, and reproduces 12 main-state
+assertion failures on `0deeb30`. No physical topology is claimed by this fixture.
+
+The minimal repair computes main-selection eligibility from actual supporting
+visibility before any store receive/cache invocation. Every admitted receive
+exit uses that main-only flag; original host request eligibility remains
+separate for common winner accounting. A visible supporting A therefore
+consumes the winner without changing main or the B pointer. Closed-window
+fallback behavior remains in the shared helper. Store/source/cache/TTL/panel
+logic is unchanged. All 60 affected native tests pass, including the six real
+multi-panel scenarios and previous same-owner/open/closed/fresh/cache cases.
+
+The completed prior native pass and running prior-source Claude/CI outcomes
+remain scoped to `0deeb30`; new-source full native/review/CI and the single
+fresh twelve-check VM run follow this repair. No new VM has been started for
+these superseded source freezes. No merge, deployment, restart, production or
+acceptance change; cleanup job remains paused.
+
+
+### 2026-10-19 — Already-selected current owner read-state follow-up
+
+Exact `7b530c5` full native verification passes 578 tests, five prerequisite
+skips, zero failures; all five exact-commit GitHub checks pass. Its bounded
+Claude review confirms the multi-panel functional repair and all six original
+items NON-BLOCKING, then reports a narrower cosmetic self-unread/arrival-notice
+case when main has already selected A and A/B are both visible externally.
+
+The actual-router control proves fresh structured and legacy updates mark the
+already-selected A unread and offer Show for itself (four failed assertions).
+The alleged symmetric cache case does not reproduce: with A already active,
+queryWeatherReuse skips its arrival mutation. Both outcomes are preserved; the
+new test also retains the passing cache control. An initial test-only async
+XCTest compile error is retained separately and not counted as product failure.
+
+The bounded repair keeps strict pre-store supporting visibility suppression.
+After validated current retention, the shared helper may reselect only the same
+already-selected owner, using existing select(id) read/notice acknowledgement.
+It changes no owner, comparison, panel, independent navigation or source/cache
+guard. Other readers and Conversation still follow actual supporting ownership.
+All 61 affected tests pass. New-source full native, bounded exact-source review,
+CI and original twelve-check VM verification refresh next. Prior-source
+verdicts, failed runs and green CI remain scoped to their original revisions.
+No VM started for these superseded freezes; no merge/deployment/production or
+acceptance change.
+
+
+### 2026-10-19 — Final frozen-source verification complete; documentation publication
+
+Frozen implementation `fbfb669c9e30ceee1845097b1bca1c3fb935ac93` completes
+all twelve original ordered independent checks against protected baseline
+`08c0635`, unchanged image/profile/runner, and candidate fingerprint
+`bbe9d25c39ee472a69e2fa01c4b2ebc371e6e895785487e784f6c8da1ba81f96`. Candidate backend:
+6,612 passed / 11 skipped. Candidate native:
+579 executed / 8 explicit prerequisite skips / zero failures.
+Both newly owned VM resources were removed, frozen source remained unchanged,
+and existing assets were preserved. No global prune, cleanup-job activation,
+production mutation or deployment occurred.
+
+Host native on exact source: 579 executed / five display/activation prerequisite
+skips / zero failures. All 61 affected native and 88 roadmap/source/event cases
+pass; strict frozen-source roadmap drift is zero errors/warnings. Full host
+Python is 6,809 passed / 15 skipped on `e29973d`; Python/tests and JarvisKit are
+byte-identical to that tested source. The current VM repeats its original
+candidate checks independently. All five frozen-source GitHub checks pass.
+
+Claude Code 2.1.291 / `claude-sonnet-5` completes the bounded final-source
+follow-up with **No blocking findings**, tools/MCP/hooks/persistence disabled,
+no reviewer-executed tests. The report composes with preserved full `e29973d`
+review and intervening bounded dispositions; it is not a new whole-repository
+audit. All six original findings remain NON-BLOCKING. Validated native
+renderer/cache/roadmap/multi-panel/read-state findings are repaired with actual
+red/green witnesses. The fresh selected-owner read-state defect reproduces;
+the reviewer's symmetric cache generalization does not. Historical failed runs,
+test-fixture corrections and host-session classification remain in prior entries.
+The interrupted `e29973d` VM stays non-passing; `0f2af66` evidence is historical.
+
+[Final scrubbed receipt](../acceptance/command-console/receipts/ws17-current-request-final-2026-10-19.md)
+records full fingerprints, all original commands/durations/log hashes,
+source/test manifest and review hashes/limits without raw logs, private installed
+metadata or reviewer reasoning. This publication changes ROADMAP/docs only;
+program/test bytes must remain identical to frozen `fbfb669`. Publication-head
+CI is checked independently on PR226. No acceptance checkbox or owner changes.
+
+Larry retains separate merge and deployment decisions. Exact release/rollback
+and loaded-build proof precede the short fail-fast UI2-24/25 session, then
+affected UI2-23/22 and dependent UI2-04/09/13. Missing physical prerequisites,
+five-day release observation and the separate WS-06 week remain real evidence
+requirements, with no calendar-only or test-total closure.
+
+
+### 2026-10-21 — Approved bounded acceptance repair and integrated release
+
+Larry approved the complete six-part repair plan after the multi-turn/weather
+session: named-city intent must not become device-local weather; verify the
+foreground-selection cause before altering its semantics; distinguish speech
+barge-in from explicit task cancellation and avoid duplicate delegations; make
+roadmap/build/acceptance/test claims match verified evidence; use existing
+persistence and reviewed canonical Git updates; review and deploy one integrated
+release after coordinating active WS-05 subscription retirement. A dedicated
+guided acceptance wizard remains excluded. This is authorization and scope, not
+a record that any repair, test, review, deployment or visual acceptance passed.
+
+Branch `codex/ws17-acceptance-repair-20261021` starts at main `005e2a4`. Claim
+must land before runtime edits. CX-27 records overlap: `pipeline.py` weather,
+request, console and reporting adapters belong to this repair, while WS-05
+retains LLM construction/provider/subscription/authentication/billing. Any
+needed delegate/Base/Registry cancellation/source integration waits for a
+bounded coordinated handoff. No migration, flag, port, label or wire-contract
+identifier is introduced by this claim.
+
+Use only invented/public synthetic regression fixtures. Raw production logs,
+location fixes and operational deployment metadata remain local. Reproduce
+both named-city failures and actual current-result selection before changing
+behavior; test fresh, cached, corrective, unrelated, cancelled and superseded
+arrivals. Preserve supporting ownership, one presentation winner, native UUIDs,
+original fetch time, TTL and source/privacy rules.
+
+Existing durable conversation/run records can support operator observations;
+they are not canonical checkbox updates. Report separately: operator reported
+pass, evidence verified, reviewed Git update merged/read back. If the current
+agent has no approved test executor, say that clearly and give a bounded
+operator/development handoff. Repository searches and historical receipts must
+never be described as newly executed tests. No permission expansion or new
+acceptance engine is included. Investigate inventory 503s and memory warnings
+separately unless evidence proves a causal link.
+
+Review uses only permitted internal mechanisms until any additional required
+external-source disclosure is explicitly authorized. Required full suites and
+independent verification remain binding. Final deployment is authorized after
+those gates, with a fresh rollback snapshot, but held until subscription
+migration is complete and parent confirms no competing deployment. Then one
+focused live session checks roadmap main-window presentation, multi-turn
+references, predictable interruption/cancellation, Spartanburg/Atlanta reuse,
+and persisted observations with truthful reviewed-update status. Human/visual
+criteria stay open until Larry supplies their observations.
+
+
+### 2026-10-21 — Weather dispatch repair and bounded reproduction
+
+Claim #231 merged as `3061408`. The WS-05 handoff committed in `504f911`
+permits delegate/Base/Registry acceptance work; provider paths and pipeline
+readiness guard remain WS-05's. Synthetic Python reproduction failed three
+named/stale dispatch cases with one local control passing. Request-bound
+weather intent now refuses wrong local/generated-city dispatch before any
+lookup, fetch or display. Expanded focused verification passes 208 tests
+(eight deprecation warnings); two real native SDK/router/store witnesses pass.
+One witness confirms first-wrong-result consumption, so the opening rule is
+preserved. An intermediate “weather there” failure is repaired and retained.
+
+The [dated log](../roadmap-log/2026-10-21-ws-17-codex-acceptance-repair.md)
+records limits and outstanding gates. No human/visual closure or production
+change. Continue explicit cancellation/deduplication and evidence/reporting
+repairs, then freeze an integrated candidate for full verification/review/CI.
+
+
+### 2026-10-21 — Explicit task control and duplicate suppression
+
+Weather commit `5286327` is published in draft #233; its exact-source focused
+repeat passes 208 tests. Four task-control cases reproduce before repair.
+Existing delegation ownership now tracks pending operations per session,
+refuses exact duplicate starts, preserves speech-barge-in survival, and accepts
+bounded explicit task-stop commands only from the correlated accepted-input
+boundary. Multiple pending tasks require a choice unless the user explicitly
+says all. Cancellation requests do not claim rollback or completed work;
+cancelled orphaned tasks produce no late success. Notes expire at the next
+accepted turn. Combined focused verification: 223 passed, eight deprecation
+warnings. No new wire/tool/config or durable task framework. Continue truthful
+roadmap/build/acceptance/test reporting, then full integrated gates.
+
+
+### 2026-10-21 — Truthful reporting, lifecycle timing and runner handoff
+
+The existing Supervisor/Developer/console guidance now identifies formatted
+roadmap results, actual installed-build authority, the three acceptance
+reporting states, reviewed selfedit/readback and a truthful missing-test-runner
+handoff. No new executor grant or guided wizard. Transient acceptance notes
+expire; content-free request identities and monotonic terminal duration enable
+bounded live trace correlation. The 710-test affected group passes (ten
+warnings, including an inherited test-callback warning). Prompt compliance
+still needs observation. Read-only 503 investigation identifies guarded
+endpoint possibilities but not the production branch; memory parsing remains
+separate. Full suites, independent exact-source verification/review, CI and
+coordinated provider integration are next; live criteria stay open.
+
+
+### 2026-10-21 — Full backend and final-source compatibility follow-up
+
+Full host Python on `cdc8672` passes 6,846 tests, 15 skips and two subtests
+(19 warnings). Preserve the non-passing full-native stalled run and local
+stack evidence; repeat in a fresh bounded test process. Existing public local
+weather evaluation phrases reveal two additional parser regressions, repaired
+with the qualifier guard and retained in the 215-pass affected group. Refresh
+full checks on this final source. WS-05's committed `763bfe1` handoff expands
+its pipeline boundary to provider-selection constructors as well as the early
+readiness guard; neither region is edited by acceptance. Delegate/Base/Registry
+acceptance ownership remains unchanged. Final integration/review/release waits
+for coordinated provider readiness; no human or visual criterion closes.
+
+
+### 2026-10-21 — Time-before-place refusal correction and fresh freeze
+
+`30bbcea` full backend: 6,848 passes/15 skips/two subtests; all five CI checks
+pass. Five actual bound-intent Registry/cache/privacy checks pass. Further
+static/synthetic review finds five failing authority cases around time-before-
+place and hidden multiple targets. Trailing-time handling and named-target
+precedence are corrected; 898 affected tests and all 55 synthetic phrase cases
+pass. These do not establish unrestricted natural-language/model compliance.
+
+The early independent `30bbcea` run is intentionally interrupted before checks
+for this proven repair; owned cleanup and preservation checks pass. Its result
+stays non-passing. The bounded full native repeat times out at 600 seconds;
+retain its stack/log/deadline evidence and run an isolated actual-capture
+control. No skips or security settings are changed. Freeze the repaired source,
+repeat full backend/original independent profile and regenerate the static
+source packet. Parent owns pending external-review consent; no transmission.
+
+
+### 2026-10-21 — Stop-turn dispatch backstop and native diagnostic limits
+
+`b1db9a9` full backend passes 6,856 tests/15 skips/two subtests. Two synthetic
+adapter failures prove fresh delegation was possible on an explicit stop turn.
+The accepted immutable request now refuses that dispatch with the same bounded
+parser used for cancellation; ordinary speech interruption retains its behavior.
+The 901-test affected group passes. No new tool, wire field or durable state.
+
+The complete one-worker isolated native diagnostic schedules 580 cases and
+fails: two actual ScreenCaptureKit capture cases (`-3811`) and two per-test
+VoiceDisplayAudit processes crashing at unchanged nil-NSApp WindowLookup.
+The fresh capture control fails despite permission preflight. Preserve all
+original non-passing host runs; do not relabel them as passes or change tests,
+permissions or production. Refresh final frozen source backend/CI/original
+independent profile and exact source review. Parent owns pending transmission
+consent and provider integration. Live/physical criteria remain open.
+
+
+### 2026-10-21 — Frozen automation complete, host/review/integration held
+
+Frozen `d242ba4`: full host backend 6,859 passes/15 skips/two subtests, five CI
+passes, strict metadata zero errors/warnings. Original twelve independent checks
+pass after supported fresh recovery; candidate backend 6,662 passes/11 skips/two
+subtests, native 580 executed/eight skips/zero failures. The
+[scrubbed receipt](../acceptance/command-console/receipts/ws17-acceptance-repair-2026-10-21.md)
+records exact commands/fingerprints/log hashes/source manifest and native limits.
+
+Interrupted attempts and host native/capture failures remain non-passing. A
+post-VM serial capture still fails SCK-3811 despite preflight and no competing
+test. No permission change, waiver or production mutation. Final owned cleanup
+and preservation pass; paused cleanup stays paused. Parent owns pending static
+source consent; no packet sent. Provider owns tool-dispatch preview resolution,
+retaining stop refusal plus source-policy scope. Review/reverify combined source.
+No release before required review/host-native/provider gates or human closure.
+This docs publication keeps runtime/test bytes at `d242ba4`; publication CI is
+separate. One focused Larry session follows release gates, then real observation.
+
+
+### 2026-10-21 — Integrated offline verification complete
+
+Provider preview `794a298` is fetched and verified by actual tree/parent graph
+and content equivalence with provider `b1f07a2` plus acceptance `d242ba4`.
+Stop-turn refusal remains inside source-policy/run-log scope. All twelve original
+independent checks pass; candidate backend 6,728 passes/11 skips/two subtests,
+native 580 executed/eight prerequisite skips/zero failures, JarvisKit 235 passes.
+Full combined host backend: 6,925 passes/15 skips/two subtests, 19 warnings,
+244.89s. Exact commands, hashes, manifests and limits are in the
+[integrated receipt](../acceptance/command-console/receipts/ws05-ws17-integrated-2026-10-21.md).
+Owned cleanup and unchanged source/settings/production/prior-asset checks pass;
+no tests remain active and paused cleanup stays paused. Owner-supplied 421-test
+conflict check was inspected, not independently rerun. Earlier non-passing runs
+remain unchanged; no unrun integrated CI or cross-review verdict is inferred.
+
+Host UI/capture needs an unlocked awake interactive desktop before a meaningful
+recheck; historical SCK failures are not proven explained. No new permission or
+unchanged retry. Parent-managed source-review/live consent and runtime/overage
+proof remain pending; protected full-context export still needs an eligible
+private/local route or activation remains held. No merge/deploy or human/visual
+checkbox closure. One focused session follows release gates, then actual release
+and WS-06 observation. This docs publication keeps runtime/test bytes at `d242ba4`.
+
+Validation: strict combined-source roadmap against explicit main `3061408` has zero errors/warnings (no warn-only flag); missing origin/main in the handoff was resolved by the full hash. Publication contracts pass 57 tests/two warnings/3.58s; all 144 checkbox and29 owner lines and standalone runtime/test bytes remain unchanged.
+
+
+### 2026-10-21 — Host native verification resumed and passed
+
+On `f3aa78b` (native bytes identical to combined `794a298`), actual-window
+capture passes one test/zero failures; full original host native passes
+580 executed/five prerequisite skips/zero failures in138.065s. Both exact-head
+PR CI sets were green. The [updated receipt](../acceptance/command-console/receipts/ws05-ws17-integrated-2026-10-21.md)
+records commands/hashes and preserves earlier non-passing attempts. No security,
+production-service or provider change by acceptance; no human checkbox closes.
+
+Larry explicitly authorizes both merges. Provider selective direct-API guard is
+being revised to preserve OpenRouter after immediate shutdown; require immutable
+new source/checks/exact cross-system review before merge. Interface confirmation,
+private route and live runtime/latency/overage are separate deployment/activation
+gates. No legacy service restart or subscription inference before cost gate.
+Prepared old-preview review packet remains local/untransmitted.
+
+
+### 2026-10-21 — Revised combined selective guard verification
+
+Exact revised preview `e74e4b8` (provider `fec3d51` plus acceptance program
+`d242ba4`, publication `a7a269a`) passes all twelve original independent checks.
+Candidate backend6,764passes/11skips/two subtests; native580executed/eight
+prerequisite skips/zero failures; JarvisKit235passes. Combined affected group
+457passes; full integration197passes/fourskips. The initial command-restricted
+integration attempt remains non-passing; one unchanged supported repeat passes.
+Original profile/image/runner/baseline/fixtures and source scanner unchanged;
+owned cleanup/preservation pass. See [revised receipt](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md).
+
+Paired PR integration reuses the exact verified pipeline resolution and has
+identical non-documentation bytes to `e74e4b8`. Current input heads had five CI
+passes each; publication-head CI remains separate. Required exact-source cross-
+system review is not completed; no verdict or live acceptance is inferred.
+Operational records stay local. No checkbox closure; parent UI2/hardware/release/
+observation gates remain separate. Both implementation merges are authorized
+subject to required gates; row/header wording describes the after-merge state.
+
+
+### 2026-10-21 — Bounded canonical selective-restoration tool scope
+
+Larry's existing complete-plan and selective-restoration approval covers the
+recoverable canonical deployment prerequisite. WS17 records before code: only
+`deploy_main.sh` held install/local restore/held rollback and synthetic deployment
+contracts. WS04's historical authenticated-health integration remains unchanged;
+no other active owner locks this path. Preserve all denied/human-only file tiers,
+application runtime bytes and live/private/cost gates. No deployment execution.
+
+
+### 2026-10-21 — Canonical held deployment prerequisite implemented
+
+Following registration `1f864e6`, the protected canonical deployer gains
+install-held, explicitly limited local restoration and frozen rollback-held.
+Application/provider/native/config/dependency/cleanup bytes remain at207bb8b.
+The [source/synthetic receipt](../acceptance/command-console/receipts/ws17-held-deployment-tool-2026-10-21.md)
+records92 focused passes, syntax checks, actual generated Bash rollback in fake
+HOME, no-restart/no-settings-or-DB-restore and source/receipt/lease/hold failures.
+No live action, new permission, private operational record or acceptance closure.
+Required final-head CI and exact source review remain distinct.
+
+Prelaunch source correction: three failing regressions on `162c9d1` now pass;
+canonical local launch arguments/cwd and known runtime are required before
+enable/bootstrap, loader overrides/foreign KB paths refuse, and the helper uses
+isolated no-site Python. Final focused group92passes/4.74s. Final publication CI
+and required exact-source review remain separate; no live action or checkbox.
+
+
+### 2026-10-21 — Bounded verifier exit-status repair
+
+Existing WS17 canonical-deployer scope: require the Swift process exit status
+before accepting its final tally, and stream the captured native log to its
+existing private log file during execution. Add synthetic actual-Bash regressions
+for nonzero exits with a prior passing subsuite and log visibility while blocked.
+No test assertion/profile, application runtime, timeout, permission or acceptance
+criterion changes. Independent source review and final CI precede another deploy.
+
+Synthetic red/green complete: three failures/ten controls before;98 focused passes
+after. Only the verifier status/log handling and its synthetic tests change.
+Required new exact-source review and publication CI precede a retry.
+
+
+### 2026-10-21 — Narrow verified native-version compatibility
+
+Register before code: only the2.1.291 native verified-version entry and tests/
+offline evidence. Actual installed-binary synthetic loopback positive and hostile
+rounds pass with no real inference and no production admission change. Preserve
+unknown-version refusal and every exact request/model/schema/binary receipt,
+privacy/source, route, flag and activation gate. No new contract or private grant.
+The canonical Swift verifier fix merged as `dd112eb` after98 focused passes,
+five CI passes and independent static review with no blocking findings.
+
+Exact2.1.291 compatibility added after actual positive/hostile loopback proof.
+The replayable fixture uses synthetic HOME/auth/model endpoint/callbacks only,
+with no gate mutation or real inference. One red compatibility case/three
+controls before;330 affected tests pass/11.26s after. Unknown versions, exact
+request receipts, source/privacy and activation remain closed by default.
+Required new source review/CI precede merge; no human criterion closes.
+
+
+### 2026-10-21 — Frozen compatibility verification and source review complete
+
+Frozen `e9c30b0` / merged code `63c5cde` passed all twelve original independent
+checks with unchanged profile/runner/image/dependencies/protected fixtures.
+Backend: 6,838 passed, 11 skipped, two subtests; native: 580 executed, eight
+prerequisite skips, zero failures; JarvisKit: 235 passed. All five exact-head CI checks pass; independent static
+source review reports with no blocking findings. Owned cleanup, source and preservation pass.
+The [scrubbed source receipt](../acceptance/command-console/receipts/ws17-native291-source-verification-2026-10-21.md)
+records hashes/results and keeps runtime/private/live/human/observation limits
+explicit. Metadata publication changes no verified application/test/config bytes
+and closes no checkbox. Historical non-passing attempts remain non-passing.
+
+
+### 2026-10-22 — Native visibility prerequisite continuation registered
+
+Codex owns the narrow test-host visibility diagnosis on
+`codex/ws17-native-visibility-20261022` after the claim merges. Frozen baseline
+`b97a8b3` retains its prior source/VM evidence. The native full-suite run exposed
+a hidden/inactive synthetic fixture; a focused prerequisite skip is not a pass.
+Reproduce before changing code, preserve every original assertion and distinguish
+fixture readiness from observer behavior. Initial implementation scope is the
+existing WindowVisibilityTests file; the observer changes only if a causal app
+defect is proven. No additional live inference, settings or human acceptance
+change. New source/test bytes require applicable review and verification.
+
+
+### 2026-10-22 — Hidden-after-show regression reproduced before repair
+
+Claim #237 merged as `fccb760`. On the registered implementation branch,
+a real WindowServer regression establishes a visible synthetic window and its
+actual observer, then hides the owned test app after its initial show request.
+The original preparation leaves it hidden: one test/four failed assertions/zero
+skips. Existing hide/show/miniaturize/detach/animation assertions and observer
+source are unchanged. The proposed correction remains test-only and must pass
+the original full gate; a focused skip cannot substitute for a pass.
+
+
+### 2026-10-22 — Restore actual fixture state, preserving product assertions
+
+The fixture checked frontmost activation before creating its window, despite
+the observer correctly using visible/unoccluded/unhidden state. A late hide
+after the first show left the fixture hidden during its original wait. A real
+WindowServer regression reproduces that state with four assertion failures,
+zero skips. Preparation now restores only its owned fixture while waiting for
+actual OS visibility and the real observer callback, within the unchanged
+three-second bound. Initial screen/regular-policy prerequisites remain; the
+unnecessary frontmost-app skip is removed. All four original tests retain
+every assertion, and all five focused tests now execute and pass with no skips.
+No product observer or app runtime code changed. The
+[synthetic receipt](../acceptance/command-console/receipts/ws17-native-visibility-fixture-2026-10-22.md)
+pins the exact test bytes and red/green evidence; full/review/CI/release gates
+remain separate. No human acceptance checkbox closes.
+
+
+### 2026-10-22 — Deferred application hide after first visible sample
+
+The final combined original profile at `636880e` failed its native-app gate while eleven other checks passed. Three focused five-case traces did not reproduce it, but the bounded full-native trace confirmed a visible/unhidden fixture became hidden/invisible306ms after readiness. The queued hide origin remains unproven; this is an observed test-host state change, not an application-observer defect. The real regression at `845cb34` proves initial visibility and actual delayed hiding, then fails three assertions with zero skips against the old helper. Test-only source `334cf19` now requires visible settling for the existing0.3s plus one0.05s event turn inside the original3s bound, without changing original assertions or negative cases. Focused/full original verification, independent exact-source review and CI precede normal merge/release. Preserve earlier failures and all human/live/private-route/hardware/observation gates.
+
+
+The first focused gate at `157f195` executed six cases/zero skips and failed three initial-visibility assertions in the immediate-hide regression; the added deferred-hide case passed. The original full profile did not start. Follow-up test-only `00fa4a0` routes that remaining positive precondition through the settled helper, preserving its actual WindowServer/observer assertions and deliberate-hide phase. Previous failures and the pending current-source green/full/review/CI gates remain explicit.
+
+
+Terminal verification on `a672239`: focused6/zero skips and all12 original comparisons PASS; backend6,858/11skips, native582/five prerequisite skips/zero failures, source/old-asset preservation PASS and both owned VMs deleted. Independent exact-source review has no blockers; all5 programme-head CI pass with identical actual checkout tree. This final metadata publication preserves the tested programme and does not rerun or relabel those results. Actual-host verification, normal held installation and human/full-context/workload/hardware/observation criteria remain separately gated.
+
+### 2026-10-22 current-main integration before #243 merge
+
+Integrated main `6234949` into the isolated native fixture repair without conflicts, preserving WS03 registration and WS20 errors-fail/warnings-advisory policy. Product/native fixture bytes are unchanged from the prior full-profile verified programme; added checker CLI tests and CI policy receive refreshed integration gates. Larry's specific #243 merge approval does not waive physical-host verification, guarded installation, privacy or live/human acceptance. Source/synthetic review and publication CI must complete before the authorized merge retry.
+
+### 2026-10-22 bounded canonical-deployer continuation claim
+
+Register `codex/ws17-restoration-diagnostics-20261022` from main `c63ecce` before code edits. The canonical local-restoration catch currently discards the failed operation and exception class after quarantine; that source-level diagnostic gap is reproduced with synthetic processes. An outside-repository diagnostic-only proposal preserves quarantine and discloses service/stage plus class, never raw exception text. Its added assertion fails against current source and all55 held-deployer synthetic tests pass with the proposal. This is preparation, not applied source or a verdict on an actual startup cause.
+
+After this claim lands, diagnose the failed stage and repair only a causally established restoration defect, retaining all current source, policy, identity, health and rollback gates. Do not swap the runner tied to an existing snapshot or use an alternate launcher. Required review and exact-source CI plus a canonical target-bound release precede actual use. No provider/model/credential/security/harness changes, additional live tests, cleanup invocation or human checkbox closure. New PR254 source concerns remain separate owner findings; this claim does not implement its suggested roadmap/history/cleanup changes or adopt its installation prose.
+
+Registration lifecycle wording is written for its after-merge state only; executable implementation remains pending. Check the prospective merge tree as main, as well as current-main validation, so the registration does not introduce a claimed-but-merged branch error under the strict policy.
+
+### 2026-10-22 registered diagnostic-only implementation
+
+Registration #256 landed as `1408e844189fb430d56c33056b4b7fca8573fd78` before code edits. Refreshed through main `2944080`, preserving the WS03 and WS05 registrations. The helper now reports safe service/stage and exception class after verified quarantine; no raw exception text is disclosed, and failed quarantine never claims success. Ten new stage cases fail on the base and all78 focused offline deployer tests pass on the candidate. The [source/synthetic receipt](../acceptance/command-console/receipts/ws17-restoration-diagnostics-2026-10-22.md) records hashes, initial nonpasses and exact coverage. Operational AST, checks, budgets, whitelist and readiness/launch behavior are unchanged. Actual failed-step cause is not established; no speculative startup fix, actual restoration/restart/install/live provider call or human acceptance is included. Independent source review and exact-head CI precede coordinator handoff; the coordinator alone owns merges.

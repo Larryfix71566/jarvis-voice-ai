@@ -359,6 +359,11 @@ def _validate_policy(workload: str, raw: dict[str, Any]) -> WorkloadPolicy:
     fallbacks = tuple(str(item) for item in raw.get("fallback_routes", ()))
     if any(item not in ROUTES for item in fallbacks):
         raise ModelRouteError(f"workload {workload!r} has an unknown fallback route")
+    from jarvis.provider_access import ProviderAccessError, require_route_access
+    try:
+        require_route_access(route, fallback_routes=fallbacks)
+    except ProviderAccessError as exc:
+        raise ModelRouteError(str(exc)) from None
     capabilities = tuple(str(item) for item in raw.get("capabilities", ("text",)))
     standing_floor = _STANDING_QUALITY_FLOORS.get(workload, "mid")
     minimum_quality = raw.get("minimum_quality_tier", standing_floor)
@@ -388,6 +393,15 @@ def resolve_policy(workload: str, *, explicit_profile: str | None = None,
         raise ModelRouteError(f"unknown workload {workload!r}")
     raw = dict(data.get("defaults") or {})
     raw.update(workloads.get(workload) or {})
+    from jarvis.provider_access import subscription_only
+    if subscription_only() and not skill_eval:
+        # Explicit/saved choices below still win and are validated, never
+        # silently converted from a user's paid-route selection.
+        candidate = (data.get("subscription_defaults") or {}).get(workload)
+        if candidate:
+            if not isinstance(candidate, dict) or set(candidate) - {"route", "profile"}:
+                raise ModelRouteError("subscription defaults may select only route and profile")
+            raw.update(candidate)
     from jarvis.storage_context import preferences_enabled
     if (not skill_eval and include_preferences
             and preferences_enabled(os.environ.get("JARVIS_MODEL_PREFERENCES_ENABLED", "1") != "0")):
@@ -819,6 +833,14 @@ def _validate_client_endpoint(resolved: ResolvedModelRoute) -> None:
                               resolved.route.credential_env)
         except SayGMError as exc:
             raise ModelRouteError(str(exc)) from exc
+    # Reject forged endpoint contracts before reading any environment value.
+    # The billing policy still runs before credential lookup/client creation.
+    from jarvis.provider_access import ProviderAccessError, require_route_access
+    try:
+        require_route_access(route.name, provider=resolved.provider,
+                             base_url=resolved.base_url, resolved=True)
+    except ProviderAccessError as exc:
+        raise ModelRouteError(str(exc)) from None
 
 
 def make_route_client(resolved: ResolvedModelRoute, *, timeout: float | None = 60,

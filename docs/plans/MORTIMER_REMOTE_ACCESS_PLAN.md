@@ -1,6 +1,6 @@
 # Mortimer Remote Access Plan — per-client bearer tokens on every endpoint, Tailscale tunnel, fail-closed binds
 
-**Status:** Dormant Addendum R1 implementation deployed at `539f8f6`, 2026-09-28. Addendum R2's local-only bind guard is implemented on the WS-04 branch; token onboarding is specified but not yet implemented or activated. Remote activation remains undecided; enabled-mode acceptance is open. Original plan drafted 2026-08-26. Implements roadmap track **T2** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.2). Gate: **G2**.
+**Status:** Documentation preparation registration, 2026-10-22, on `docs/roadmap-preparation-claims-20261022`; no provisioning implementation claim. Dormant R1 deployed at `539f8f6` on 2026-09-28; R2 guard merged as `a39136a` and deployed in `7c4637e` on 10-02, as recorded in the dated reconciliation below. Token onboarding method, implementation, credential preparation and activation remain open. Remote activation remains undecided; enabled-mode acceptance is open. Original plan drafted 2026-08-26. Implements roadmap track **T2** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.2). Gate: **G2**.
 
 **Author / origin.** Larry, quoted in the roadmap's origin block: *"ios app for remote connection to the AI Assistant via VPN tunnel for security"* and *"I want this data available to the AI and myself but secured from any intruder."* Roadmap R4 states the principle this plan implements: *"Token auth on every endpoint, even inside the tunnel. Why: a VPN authenticates devices, not callers; any app on a joined phone could otherwise call `/api/selfedit/run`."*
 
@@ -2888,3 +2888,54 @@ provisioner and proposed R2 stdin-to-Keychain provisioning helper remain
 unimplemented; credential preparation, local activation, remote binding and
 live acceptance remain separate open gates. No code, test, credential,
 provider or production setting changed, and no new live acceptance is claimed.
+
+### 2026-10-22 — Bounded onboarding preparation (Codex)
+
+Read-only analysis at `c63ecce97108787c55ef55fad73d32236694cc65` establishes the
+following reusable source behavior. No auth operation, credential read, private
+log inspection or application test was executed by this preparation task.
+
+| Component | Source finding | Consequence for proposed supervised preparation |
+|---|---|---|
+| `jarvis/auth.py`, `_cmd_add` | Commits a token hash before printing plaintext once; duplicate names remain forbidden after revocation. | Reuse the token contract through a nonprinting in-process boundary; do not capture plaintext CLI output in logs. |
+| `tests/unit/test_auth.py` | Existing assertions cover valid/unknown/revoked tokens, absent plaintext DB storage, duplicate refusal, hash-free listing, active counts, service headers and switch parsing. | These are inspected foundation tests, not newly executed proof of coordinated provisioning. |
+| `jarvis/vault.py` | Encrypted temporary envelope, mode 0600, atomic replace and locking; `set_secret` overwrites a named value. | A separate precheck plus setter is not atomic create-only storage. Design concurrent-change refusal explicitly. |
+| `macos/JarvisKit/Sources/JarvisKit/KeychainStore.swift` | Existing setter updates entries and returns Void; reader returns nil for unsuccessful lookup. Service/account remain the K1 convention. | Distinguish confirmed absence from locked/denied/unreadable storage; require actual readback. Log wording alone cannot prove success. |
+| `jarvis/bind.py` | Auth disabled and remote-bind disabled independently force loopback; non-loopback requires both and an active token. | Local auth does not require remote exposure. Preparation must change neither flag. |
+
+Larry still chooses supervised setup, one-time CLI or Mac pairing. The existing
+R2 recommendation does not make that choice. Pairing adds a different minting
+surface and requires its own design review. A standalone disposable-only first
+slice is proposed if supervised preparation is chosen; installer integration
+stays with WS-17 and requires explicit scope coordination.
+
+Proposed synthetic vectors, all **unexecuted**:
+
+1. Fresh disposable DB/vault/Keychain namespace creates two distinct identities,
+   stores only hashes in DB, verifies exact readback and changes no flags.
+2. Existing vault or Keychain entry refuses before creating identities and
+   preserves existing values. Concurrent changes cannot be overwritten.
+3. Locked, denied or unreadable Keychain fails explicitly; ambiguous nil is not
+   confirmed absence.
+4. Failure after DB, vault or Keychain write cleans/revokes only this attempt's
+   attributable state; unrelated entries are unchanged.
+5. Interrupted retry cannot silently remint; it reports nonsecret incomplete-state
+   identifiers and bounded recovery instructions.
+6. Secret transport uses stdin, never argv, logs, receipts or plaintext temporary
+   files. Receipts contain masked/presence verdicts only.
+7. Auth/remote-switch combinations retain existing loopback/refusal behavior.
+8. Separately authorized later activation verifies bare-request refusal,
+   authenticated paths, immediate revocation, socket binding and rollback.
+
+Before implementation, a fresh main claim must name the selected method, branch
+and exact paths. Conditional supervised paths include the reusable auth boundary,
+proposed `scripts/provision_local_auth.py`, focused disposable tests and a narrow
+stdin-to-Keychain helper/target. Any vault or Keychain semantic changes need
+explicit scope. No installer, auth middleware, provider/model, Skills creator,
+credential or live-acceptance ownership is acquired by this documentation.
+
+WS-01 physical/live acceptance remains with existing owners. WS-10 still needs
+the actual classifier, eligible dedicated memory route, effective stage and
+WS-05 privacy prerequisites. Shadow cannot mutate live memory/prompts; the first
+20 actual decisions and existing 100-candidate/five-model-call daily limits are
+not satisfied by these synthetic vectors. No live acceptance checkbox changes.

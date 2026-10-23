@@ -1,0 +1,90 @@
+{
+  "source": "b136a2a66032b17082776a01353abe67e352c31e",
+  "scope": "pure loader/catalog/selection/resource functions with synthetic temporary fixtures; no runtime session, no inference, no script execution",
+  "checks": [
+    {
+      "check": "standard frontmatter/body accepted; original bytes unchanged",
+      "passed": true
+    },
+    {
+      "check": "host extension fields do not become model/tool grants",
+      "passed": true
+    },
+    {
+      "check": "unregistered package is inert",
+      "passed": true
+    },
+    {
+      "check": "legacy registered plain package loads reusable instruction body",
+      "passed": true
+    },
+    {
+      "check": "v2 refuses plain package without Mortimer metadata",
+      "passed": true
+    },
+    {
+      "check": "v2 refuses unavailable required host tool",
+      "passed": true
+    },
+    {
+      "check": "v2 selects adapted metadata with admitted host tool",
+      "passed": true
+    },
+    {
+      "check": "Claude disable-model-invocation field is not enforced by Mortimer selection",
+      "passed": true
+    },
+    {
+      "check": "pinned package loads without changing SKILL.md",
+      "passed": true
+    },
+    {
+      "check": "declared text reference reads through pinned resource path",
+      "passed": true
+    },
+    {
+      "check": "refuses ../secret.md",
+      "passed": true
+    },
+    {
+      "check": "refuses assets/picture.png",
+      "passed": true
+    },
+    {
+      "check": "refuses scripts/run.py",
+      "passed": true
+    },
+    {
+      "check": "refuses references/undeclared.md",
+      "passed": true
+    },
+    {
+      "check": "package revision drift refuses loading",
+      "passed": true
+    },
+    {
+      "check": "bundled scripts block v2 readiness",
+      "passed": true
+    },
+    {
+      "check": "legacy body warns scripts unavailable and never includes script source",
+      "passed": true
+    },
+    {
+      "check": "discovery examines only immediate package folders",
+      "passed": true
+    },
+    {
+      "check": "Mortimer reserved vendor name rule rejects otherwise simple package",
+      "passed": true
+    }
+  ],
+  "network_subprocess_database_attempts": "forbidden by audit hook",
+  "source_files": {
+    "jarvis/agent_skills.py": "b834a5566e0951b62b0c1f7d5b875c94430f6f9a1c2a20dc9e933a623c67ad43",
+    "jarvis/skill_catalog.py": "7d228ec456e929d0819c65f9f7b6e0c1a979ef9dc300161e4d44c9d0f8b8daca",
+    "jarvis/skill_resources.py": "10c5e576b58db26ea46a12ed39e77747aea8532870efcd6c2b0baf6e7b4811c6",
+    "jarvis/skill_selection.py": "eaddc7932ccabb348e2c259a4e21bd3baf92045af4fbffad9b861fb7ce731ae7"
+  },
+  "publication_note": "Historical author-reported 19 synthetic checks; not rerun by sync task. No live acceptance."
+}

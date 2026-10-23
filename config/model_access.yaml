@@ -8,6 +8,25 @@ defaults:
   fallback_routes: []
   capabilities: [text, tools]
 
+# Staged retirement selections. Only used with JARVIS_LLM_ACCESS_MODE set
+# to subscription_only; capability/privacy gates are deliberately unchanged.
+# Existing explicit/saved paid selections are refused, never rewritten.
+subscription_defaults:
+  voice_supervisor: {route: subscription}
+  scheduler: {route: subscription}
+  librarian: {route: subscription}
+  analyst: {route: subscription}
+  systems: {route: subscription}
+  developer: {route: subscription}
+  app_builder: {route: subscription}
+  memory: {route: subscription}
+  memory_shadow: {route: subscription}
+  background: {route: subscription}
+  council: {route: subscription}
+  planning: {route: subscription}
+  research_synthesis: {route: subscription}
+  vision: {route: subscription}
+
 routes:
   subscription:
     adapter: subscription_runtime

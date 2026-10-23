@@ -351,7 +351,8 @@ final class WorkspaceStoreTests: XCTestCase {
     }
 
     /// Larry, 10-03: asking again from the conversation opens the new answer,
-    /// even when an earlier result is active; asking while reading does not.
+    /// even when an earlier result is active. Larry's 10-18 exception also
+    /// opens the current answer while reading; unrelated arrivals stay unread.
     func testEachAnswerAskedForFromTheConversationOpens() throws {
         let store = WorkspaceStore()
         store.quietArrivals = true
@@ -364,8 +365,13 @@ final class WorkspaceStoreTests: XCTestCase {
         XCTAssertNil(store.arrivalNoticeID)
         let whileReading = try result()
         store.receive(whileReading, answersCurrentRequest: true)
-        XCTAssertEqual(store.activeID, research.id, "While reading a result, even an answer does not take over.")
-        XCTAssertEqual(store.arrivalNoticeID, whileReading.id)
+        XCTAssertEqual(store.activeID, whileReading.id, "The attested current answer opens while reading.")
+        XCTAssertNil(store.arrivalNoticeID)
+        let late = try result()
+        store.receive(late, answersCurrentRequest: false)
+        XCTAssertEqual(store.activeID, whileReading.id, "Unrelated arrivals retain the reader.")
+        XCTAssertEqual(store.arrivalNoticeID, late.id)
+        XCTAssertTrue(store.unreadIDs.contains(late.id))
     }
 
     /// Codex review of #169: a result nobody vouched for as the current

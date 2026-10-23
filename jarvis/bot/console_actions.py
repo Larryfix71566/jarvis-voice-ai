@@ -63,7 +63,9 @@ CONSOLE_ACTION_SCHEMA = {
             "period all/this_week/last_seven_days. Across facets AND, within arrays OR. Replace for a new request; "
             "refine only for an explicit narrowing; ask about ambiguous refinements. Focus clears conflicting facets. "
             "Refresh reads the local source without a model call. If no roadmap result exists, delegate Developer "
-            "to repo_read_file ROADMAP.md first. Never claim applied filters or refresh before native confirmation. "
+            "to repo_read_file ROADMAP.md first: the read emits a formatted roadmap result. "
+            "Select that result for the main window; no separate render tool is needed. "
+            "Never claim applied filters or refresh before native confirmation. "
             "For roadmap_control read inventory for its UUID; args.operation is replace (standalone request), "
             "refine (also/only those), clear, focus (one workstreams ID, clears conflicting filters), or refresh. "
             "Filter arrays owners/authors accept codex, claude, larry, unassigned; authors means historical Implemented by. "
@@ -188,6 +190,7 @@ def _resolve_observed_reference(reference: str, snapshot: dict) -> tuple[str | N
 
 def _disclosed_inventory(data: dict, *, scope: str | None = None) -> tuple[dict, str] | None:
     """Keep exactly what is returned, without saving an undisclosed truncated tail."""
+    data = {key: value for key, value in data.items() if key != "foreground_request_version"}
     if type(data.get("revision")) is not int or data["revision"] < 0:
         return None
     try:

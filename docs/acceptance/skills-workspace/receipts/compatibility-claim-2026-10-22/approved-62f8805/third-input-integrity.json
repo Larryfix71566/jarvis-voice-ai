@@ -1,0 +1,7 @@
+{
+  "input_artifact": "../corrected-claim-review/review-input.json",
+  "input_file_sha256": "a5bb40b8c2b4ae1dbd451d02defb65da2576e3255321cad1c361e43c144dd929",
+  "receipt": "../rereview-7f34dde/review-receipt.json",
+  "decoded_input_sha256": "c973b3ca793555f017afd0d87f0c866df274c0c4126d1f9df098de437fa1f362",
+  "matches_receipt": true
+}

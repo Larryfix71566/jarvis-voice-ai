@@ -16,6 +16,286 @@ activation, full acceptance, or release. Implement in a dedicated worktree;
 preserve concurrent work. Acceptance gates remain open until their full evidence
 is recorded.
 
+## 2026-10-22 — focused review correction candidate
+
+Main `6234949` integrated without conflict before edits; WS-20 enforcement and
+all non-WS-03 rows preserved. Claude's completed review of `4699a54` returned
+REVISE (minor), no Critical/High findings. Its original verdict remains unchanged.
+M1's concern about skipped async tests is rebutted by pytest.ini AUTO mode and
+six verbosely passing final-boundary cases; this is author evidence, not approval.
+
+Before editing assertions, the following P0-created test IDs are declared for
+strengthening from generic refusal to exact reason codes:
+- `test_skill_compatibility.py::test_unsupported_or_malformed_frontmatter_refuses_without_content`
+- `test_skill_compatibility.py::test_invalid_encoding_or_resource_limit_refuses`
+- `test_skill_compatibility.py::test_yaml_shape_and_metadata_resource_refusals_are_safe`
+
+No additional historical/frozen test outcome change is intended. Add scanner
+boundary evidence without treating schema-invalid depth/event fixtures as valid
+skills. Evaluate/fix atomic no-overwrite authoring, fixed I/O error reasons,
+round-trip checks, bounded lazy body reading and registry-error attribution.
+No executable resource support or activation capability is added. Record exact
+final tests and independently reviewed dispositions before calling this slice ready.
+
+Correction regression: **346 passed**, one dependency deprecation warning. New
+coverage reproduced 14 failures before fixes. The [correction receipt](../acceptance/skills-workspace/receipts/compatibility-p0-2026-10-22/AUTHOR_CORRECTIONS.md)
+records every M1–M4/L1–L8 disposition, exact caller evidence and the unmodified
+original REVISE verdict. Atomic no-overwrite authoring, bounded lazy reads, fixed
+I/O diagnostics and serializer checks are implemented; final independent rereview
+and updated-head CI remain separate. Exotic delimiter differences remain
+fail-closed; aggregate byte limits override otherwise-valid character lengths.
+No full-package compatibility or new activation capability is claimed.
+
+## 2026-10-22 — P0 implementation candidate after registration
+
+Registration #248 merged as `edfa28527d467ccf12dba7de8577211a3e59764a` at
+16:43:49 UTC, reviewed head `71c2789`, all five CI checks successful. Main tree
+matched the reviewed candidate exactly; every non-WS-03 roadmap byte, including
+WS-20, was preserved. Source work began afterward on the separately claimed
+`codex/ws03-compatibility-p0-20261022` branch. #246 remains untouched.
+
+The candidate implements the closed frontmatter matrix below in a pure validator,
+with parser enforcement reused by legacy loading, V2 snapshots, catalog/readiness
+and final prompt revalidation. Unsupported metadata/controls and any casefolded
+root scripts entry refuse. YAML duplicates, aliases/anchors/tags, wrong types,
+non-mapping input and excessive complexity refuse with fixed diagnostic codes.
+Invalid CLI package labels use ordinals; catalog identity remains the validated
+slug. Existing package digest integrity checks still run before compatibility.
+The writer validates and serializes before candidate creation; quoted empty and
+ambiguous strings round-trip. Source text, package/configuration pins and activation
+controls are unchanged. There is no script execution, dependency install or tool grant.
+
+Numerical P0 bounds for focused review: SKILL.md 128 KiB (same as the existing
+catalog text cap), frontmatter 16 KiB before YAML, metadata strings 1,024 characters,
+128 YAML events, nesting depth four, 256 immediate package-root entries. Exact
+file/frontmatter byte limits are inclusive. Oversize input refuses as a whole;
+existing 20,000-character body guidance remains a warning, without truncation.
+Regular files only, nonblocking/no-follow reads and bounded byte reads protect the
+parser from special files and leaf symlinks. This does not introduce a general
+script sandbox or certify prose dependency completeness.
+
+Offline evidence: the first 40 new cases produced **36 failures / four passes**
+on unchanged main. The implementation plus expanded coverage passes **232 tests**
+across parser, compatibility, catalog/CLI, readiness, selection, last injection,
+references, authoring validation, frozen workspace fixtures and runtime inventory.
+One dependency deprecation warning is unrelated. Tests use isolated synthetic
+state and in-memory providers, no real inference or external scripts.
+Only the two pre-disclosed existing assertions changed:
+`TestParsing.test_scripts_are_detected` and
+`TestNoExecutionPath.test_a_bundled_script_is_never_read_or_run` now assert refusal;
+nonexecution and diagnostic privacy remain tested. No frozen fixture was edited
+or changed outcome. Other existing test assertions remain unchanged.
+
+Full-source bounded Claude Max review and exact-head CI are pending. These local
+results are author-run regression evidence, not full acceptance. The twelve-gate
+inventory below remains unchanged: SW-B/C historically accepted, all other gates
+open. P0 adds no native import review UI, complete resource adapter, executable
+sandbox, accepted version history or activation/rollback implementation. Those
+larger slices require their existing owner coordination and prerequisites.
+
+## 2026-10-22 — WS-03 completion dispatch and bounded compatibility claim
+
+Status: documentation claim only; source implementation waits for the matching
+claim to land on main under ROADMAP §0.3. Owner: Codex, task
+`01a16137-c45f-7451-aeae-0c539af41015`, branch
+`codex/ws03-compatibility-p0-20261022` after this claim lands; registration
+PR #248 uses `codex/ws03-compatibility-20261022`, baseline `636880e`.
+Larry requested separate WS-03/WS-20 completion work and use of authenticated
+Claude Max for bounded implementation/review. WS-20 is excluded here.
+
+The compatibility contract and sanitized 22-category/25-proposed-case evidence
+are already published in draft #246 at `028b44e`; preserve them without
+copying or rewriting that publication. This first source slice, after its claim
+lands, is P0: strict bounded frontmatter parsing, explicit content-safe
+compatibility diagnostics, and refusal of unsupported/unknown execution or
+security controls on both legacy and V2 admission paths. It must preserve
+valid instruction-only packages and retained descriptive metadata, never
+silently treat ignored controls as supported. Inventory existing enabled
+packages first; no live rollout or registry mutation is included.
+
+Unknown/unsupported controls such as manual-only invocation and tool
+restrictions are blocked until their exact host semantics are implemented.
+Do not implement a partial translation that claims support. Tests must cover
+malformed/duplicate/type-invalid YAML, resource bounds, diagnostic privacy,
+legacy/V2 consistency, scripts/host controls, unchanged portable content and
+isolation of one invalid package from unrelated valid packages. Reuse existing
+catalog/readiness surfaces. No new configuration/schema identifier is reserved.
+If a final injection path can bypass validation, report the exact seam and
+coordinate its owner before extending this scope to `agents/base.py`.
+
+**Task split:** Codex owns integration and focused offline tests after landed
+claim. One bounded official Claude Code Max review examines sanitized project
+source and the proposed slice; no tools, private logs, direct API credentials,
+persistent grants or fallback. Preserve exact input/source hashes and returned
+model identity. A review is not implementation or acceptance evidence. The
+existing acceptance/release owner retains installed-build work; no competing
+voice/audio/VM tests are started.
+
+### P0 implementation contract clarified after excerpt review
+
+Three bounded Claude Max reviews of the claim and partial source excerpts returned
+REVISE. The latest reviewed `7f34dde`; the corrections below address its six
+documentation findings as well as the earlier script and field-schema findings.
+All reviews and input/source receipts are preserved in the WS-03 claim receipt
+directory. The fourth independent review of `62f8805` returned APPROVE and
+closed all six findings; its unmodified response/receipt and author-prepared
+implementation notes derived from its non-blocking follow-ups are retained. A subsequent registration-only correction
+separates the future implementation branch from the claim publication branch,
+so the main-first claim does not immediately become a merged-branch drift error.
+The fifth independent review APPROVED that delta at `16d3dd5`. WS-20 claim #249
+then landed as `7b295cd`; its three documentation files were integrated unchanged.
+Normal and simulated-post-merge checks both pass 0/0. The integrated publication
+head receives final focused review and fresh CI before the separately approved
+documentation-only merge. These are advisory reviews, not
+full-source or implementation reviews; no acceptance evidence follows from them.
+
+- Enforce compatibility refusal in `parse_skill`, returning `None` for a blocked
+  package. Existing loader, catalog and final injection re-parses then reject it.
+  Catalog/readiness blockers alone are insufficient. Propagate a closed reason
+  code through catalog inspection; test the final boundary without changing
+  `agents/base.py` or `skill_selection.py`. If that seam is insufficient, stop
+  and coordinate the additional path rather than weaken refusal.
+- Bound file bytes before reading and frontmatter bytes before decoding YAML;
+  reject duplicate keys, anchors/aliases, custom tags, non-map roots and wrong
+  types before coercion. The closed P0 field/type matrix below is authoritative;
+  additions require a reviewed plan amendment, not an implementer's judgment
+  that an unknown key is descriptive. Declared execution/security controls are
+  unsupported in P0; exact translations remain later work. Do not coerce them
+  into strings. Numerical resource limits and safe reason codes require focused
+  implementation review; they cannot expand the accepted field set.
+- Diagnostics use a closed vocabulary and trusted field labels/counts only.
+  Never echo unknown keys, values, package paths, YAML snippets or exception
+  messages. Cover parser/catalog/readiness/refusal/log sinks and compatibility
+  failure output in CLI `--validate`/`--list`/`--explain` with canaries. Invalid
+  package labels in those diagnostics must not echo directory names or paths.
+  Normal valid inventory/task explanations retain their existing local purpose;
+  this is not a redesign of the operator CLI.
+  Unsupported tool names must not leak via readiness reasons.
+- The offline main inventory found six packages, five generally enabled, and
+  no `scripts/` directory. Preserve every existing valid package's outcome,
+  including the separately pinned creator; compare #242's pending harness
+  package before integrating it. P0 refuses every package with a `scripts`
+  entry at its package root, including an empty directory, file or symlink,
+  through `parse_skill` on all admission paths. Detect it by listing package-root
+  entries without following links, matching `entry.name.casefold() == "scripts"`
+  so case-sensitive and case-insensitive filesystems agree. The parser checks
+  only entries, without traversing or reading script contents. The existing
+  catalog integrity digest may still traverse and hash package bytes, including
+  script files; it never executes, decodes, injects or displays them. Keep existing
+  integrity reason precedence, such as `symlink_in_package`. This conservative rule
+  has no new-versus-existing exception and does not infer optionality. Declared
+  executable dependencies in frontmatter are outside the supported matrix and
+  also refuse. Prose/code examples alone are not executable declarations: do
+  not scan ordinary instruction text for shell words or reject harmless examples.
+  Scripts elsewhere, executable assets and host plugins are not supported by
+  this slice; accepting text never certifies them or grants execution. Packages
+  outside the repository need inventory before any rollout.
+- The frozen #246 contract at `028b44e` remains the design reference, not an
+  executable schema. Two known tests in `tests/unit/test_agent_skills.py`
+  intentionally need changed expectations after the claim lands:
+  `TestParsing.test_scripts_are_detected` currently expects an admitted skill;
+  `TestNoExecutionPath.test_a_bundled_script_is_never_read_or_run` currently
+  expects a loaded skill plus a warning. The new contract expects refusal in
+  both, while retaining assertions that the parser never reads script contents,
+  scripts are never executed or injected, and private paths never leak through
+  compatibility diagnostics. Integrity hashing remains as described above.
+  This behavior change is disclosed
+  for review of this claim; it is not an unnoticed test weakening. Historical
+  SW-B/C receipts stay unchanged and do not certify the new behavior. Rerun
+  affected integrity/selection contracts. These are the two known admission
+  changes, not an exhaustive list of assertion updates. List any other changed
+  assertion by test ID in the implementation record before modifying it, and
+  summarize it in the implementation PR, including catalog script blockers,
+  diagnostic text or CLI output. Any additional changed frozen fixture
+  outcome stops implementation for coordination before modifying that fixture.
+
+#### P0 supported frontmatter and resource matrix
+
+This is a bounded instruction-only compatibility slice, not full Agent Skills,
+Claude, Codex, OpenAI plugin or hosted-service compatibility. The six-package
+inventory at `636880e` confirms the listed existing metadata types. No automatic
+service installation, tool grants, registry enablement or model change follows.
+
+| Feature | P0 disposition | Exact scope |
+|---|---|---|
+| `name` | Supported unchanged | Required string; retain existing slug, reserved-name and 64-character validation. No scalar coercion. |
+| `description` | Supported unchanged | Required nonempty string, existing 1,024-character maximum. No scalar coercion. |
+| `metadata` | Supported with closed schema | Optional mapping; absence/empty mapping accepted. Present null/list/scalar refuses. Only the five subkeys below are admitted. |
+| `metadata.agent`, `.source`, `.concept_from` | Supported unchanged | Optional strings retained as descriptive data under bounded validation; present null refuses. They grant no routing, identity, permission or provenance authority. |
+| `metadata.promoted_successes`, `.promoted_failures` | Supported unchanged | Optional integers, excluding booleans; present null refuses. Retain values as descriptive data, not acceptance evidence. |
+| Other top-level or metadata keys, including otherwise portable optional fields | Explicitly unsupported in P0 | Refuse with a safe diagnostic; preserve source, never silently discard or guess a translation. Reviewed schema expansion may later admit known harmless descriptions. |
+| Invocation/tool/model/security controls, hooks, executable dependency declarations | Explicitly unsupported in P0 | Refuse regardless of true/false or apparently harmless values. No partial translation or ambient tool grant. |
+| Valid Markdown instructions, code examples and harmless links | Supported as text | Preserve existing body content/normalization; do not execute commands, fetch links, infer grants or treat text as policy. Text preservation is not proof that every instruction can be fulfilled. |
+| Existing bounded text references declared through the current package manifest | Preserve existing support | Keep existing containment, revision, size and read-only handling. A harmless `references/` directory alone is not a script trigger. Do not add automatic reference import, arbitrary fetching or executable handling. |
+| `scripts` entry at package root | Explicitly unsupported | Casefolded entry-name detection; any entry type refuses even if empty or claimed optional. The parser does not traverse/read scripts; the existing catalog digest may hash bytes without execution or injection. Applies equally to registered, pinned and new packages; integrity reason precedence is preserved. |
+| Binary/executable assets, full plugins/MCP servers and hosted services | Unsupported by this slice | Existing package validators still apply. No automatic install, execution or access. P0 text admission must never be presented as certification of these resources; adapters and required-resource completeness need separately scoped work. |
+| Unknown dependency semantics in natural-language instructions | Unknown, not certified | P0 does not infer a complete dependency graph from prose. No full-package compatibility/activation claim is allowed; future import/activation must resolve required resources before approval. Existing manually reviewed instruction use retains its current boundaries. |
+
+The matrix applies to `SKILL.md` frontmatter only. It does not replace or loosen
+the existing companion-manifest schema or reference containment checks. Preserve
+original source bytes/digests; blocked candidates stay unavailable, and there is
+no registry or live activation change in this claim. Safe diagnostic codes must
+distinguish unsupported from malformed without echoing unknown field names.
+
+`write_skill` and `skill_from_procedure`, already in the claimed module, must
+emit only matrix fields using type-safe YAML serialization or refuse before
+writing. A genuine empty agent string stays a quoted string, never YAML null.
+Round-trip tests cover empty agent and YAML-ambiguous descriptions such as `yes`
+and `2026-10-22`; invalid metadata cannot leave a partially written candidate.
+Before coding, confirm the six packages' `name`/`description` are YAML strings
+under the same inventory/stop rule. Update the module docstring to describe this
+instruction-only subset; no drop-in community compatibility claim may remain.
+Creator/VM adapters outside the claimed module remain separate SW-F work; assess
+their draft compatibility there without changing them in P0.
+
+Known larger SW-D work remains outside P0: a refused parse can lose the optional
+skill trace event, and the runtime's generic refusal text may not identify the
+compatibility reason. The catalog must still expose a safe blocker; do not claim
+complete inspection UX from that alone. No activation/rollback refusal is removed.
+
+### Twelve-gate inventory as of main 636880e
+
+Only SW-A/B/C regression checks and SW-E diagnostic canaries are P0 work below.
+Other rows are completion inventory, not additional source authorization; their
+paths and prerequisites require a separately coordinated slice.
+
+Historical accepted gates remain accepted at their recorded sources. Changed
+parser/selection behavior requires fresh regression evidence, without relabeling
+a partial new check as full acceptance. No new gate is accepted by this claim.
+
+| Gate | Current status | Code / offline work | Remaining acceptance or external prerequisite |
+|---|---|---|---|
+| SW-A baseline | Open | Preserve original packages and synthetic behavior; P0 regression evidence only | Exact-build full app/voice/memory/Atlas/sharing baseline with Larry |
+| SW-B package integrity | Historically accepted | Rerun affected integrity contracts after changes; add strict compatibility cases | Retain dated receipt; do not silently extend its accepted scope |
+| SW-C selection quality | Historically accepted | Rerun frozen positives/negatives and legacy/V2 refusals on changed source | Retain dated receipt; new invocation translations need their own evidence |
+| SW-D truthful inspection | Open | Existing trace/API tests; assess content-safe blocker presentation | Actual success/failure/skipped/unknown/legacy runs and reconnect/native trace; WS-04 owner identity |
+| SW-E privacy | Open | Canary tests through diagnostic/catalog/inventory boundaries; wrong-owner contracts | Full source-to-sink checks including protected exports/capture/secondary displays on exact build |
+| SW-F creator isolation | Open | Existing authoring validator and drift/cancel contracts; no script execution | Authorized real VM lifecycle and no network/credential/host fallback, source/model/auth readiness |
+| SW-G evaluation effectiveness | Open | Frozen fixture/rubric/evaluator integrity only; no inference in P0 | Separate route/budget authorization; 12 baseline/candidate pairs, human blinded review and required thresholds |
+| SW-H lifecycle/activation | Open | Existing recovery/idempotency tests; keep activation/rollback refusal until prerequisites | Durable accepted-version history, exact approval, atomic activation/readback, real restart/cancel/rollback |
+| SW-I voice/accessibility | Open | Existing shared-action/targeting/accessibility contracts, outside P0 UI edits | Larry's voice, VoiceOver, keyboard, large-type, contrast and platform-setting checks |
+| SW-J displays | Open | Existing result identity/reconnect contracts | One/two physical displays, unplug/reopen/restart with no duplicate/orphan/focus theft |
+| SW-K performance | Open; historical sub-budgets retained | Focused deterministic regressions; no competing benchmark | Exact-build paired voice p95 ≤50 ms regression and ten-minute live-trace growth ≤10 MiB; preserve timing provenance |
+| SW-L release/handoff | Open | Exact-source tests/review and reproducible handoff | Required release suites, app/backend/config/package identity, ready versus loaded readback and human release decision |
+
+Implementation remains distinct from test pass, source review, merge,
+deployment and acceptance. The next source slice is intentionally narrow;
+full import UI, controlled activation/runtime readback, binary assets,
+executable adapters and sandbox changes need an explicit larger-scope check.
+WS-29 consolidation, model switching, auto-installation, service grants,
+third-party script execution and live benchmarks are excluded.
+
+### Ownership and smallest unblock
+
+No active WS-03 source PR was found in the open PR inventory. The old
+`codex/ws03-live-acceptance-20260930` branch has no commits beyond current main.
+Draft #242 owns harness recommendation work and its package-count assertion
+in `test_agent_skills.py`; preserve it during integration, and do not change its
+package, registry or model paths. Draft #246 remains the separate frozen
+publication of this contract. The main claim rule has no draft-only exception.
+The smallest outstanding decision is review/merge of this documentation claim;
+it authorizes only the named P0 source work after landing, not runtime adoption.
+
 ## 1. Outcome and scope
 
 Larry can ask Mortimer to show its skills, inspect what a skill does, understand
@@ -2894,3 +3174,83 @@ initial display-name lookup selected the retired Xcode-built web wrapper;
 opening the already-installed native app resolved that misleading startup
 screen without a rebuild or service restart. No settings or provider routes
 changed and no model was called by this check.
+
+
+## 2026-10-22 — claimed offline instruction-package adapter; source waits for main
+
+Evidence base: main `29440804baf40292d84acbb0798646e67d0c510a`, after #251 P0, #258 lifecycle correction and the coordinator's serial registrations. Larry's full-program direction selects the bounded profile below and explicitly registers Claude Max patch authorship under Codex review/apply/publication ownership. This claim changes documentation only; no source starts before it lands on main. Historical SW-B/C remain accepted 2/12.
+
+### Remaining gates: separate code prerequisites from acceptance
+
+| Gate | Source prerequisite or existing seam | Evidence still requiring separate authority/environment |
+|---|---|---|
+| SW-A baseline | Existing package/selector/UI contracts; retain original fixtures, P0 regression evidence | Exact released app/backend baseline, voice/orb/sidecar/memory/Atlas/sharing observations with Larry |
+| SW-D truthful inspection | Existing event/API/native paths; typed compatibility-report propagation and known missing refusal trace are separate source slices | Actual failed/skipped/unknown/legacy runs and reconnect/native inspection; no process-map-to-success inference |
+| SW-E privacy | Content-free diagnostics and complete package/report canary tests; existing owner/source-to-sink contracts | Exact-build owner isolation, protected export/capture/secondary display evidence; no private content used here |
+| SW-F creator isolation | Existing Candidate, scoped authoring policy and offline validator; proposed adapter adds complete package/provenance/requirement reporting | Real offline VM lifecycle, network/credential containment, cancellation and no host fallback; route/auth/model prerequisites remain owner-held |
+| SW-G effectiveness | Existing frozen fixture/pairing/rubric/metrics code; adapter can emit package-validity evidence only | Six reviewed cases, both conditions twice = 12 pairs / 24 trials, blinded human quality/safety review and approved route/budget; no new inference |
+| SW-H lifecycle | Accepted-version history plus exact approval/atomic activation/readback/rollback are substantive future source work; admin currently refuses activation/rollback | Real cancel/restart/reconcile/activation/rollback against accepted versions; no activation grant in adapter |
+| SW-I voice/accessibility | Existing shared-action/navigation contracts; later report UI/actions require coordinated native/API claim | Voice, VoiceOver, keyboard, large text, motion/transparency/contrast observations |
+| SW-J displays | Existing identity/reconnect support | One/two physical displays, move/unplug/reopen/restart; no duplicate/orphan/focus theft |
+| SW-K performance | Preserve historical selector/rendering sub-budget evidence; deterministic affected-path regressions only | Target-build paired voice p95 regression ≤50 ms, 100-sample sub-budgets,10-minute live-trace memory growth ≤10 MiB; no benchmark now |
+| SW-L release | Exact-source regression/review/CI and reproducible source/package/config fingerprints | Approved release process, installed/loaded identity, creator ready vs loaded, parent privacy/route gates and human handoff |
+
+This adapter contributes source evidence to SW-F/E and later D/H integration. It closes none of those gates by itself. Do not manufacture runtime readiness from static inventory or call existing dated acceptance current-build proof.
+
+### Selected profile and remaining decisions
+
+Selected first importer profile: **already-P0-compatible instruction text plus explicitly declared UTF-8 .md/.txt references**, supplied with a reviewed Mortimer sidecar, provenance/license and matcher fixtures. This is the authorized first bounded slice. Unsupported host invocation flags, tool restrictions requiring translation, hooks, scripts, binary assets, plugin/MCP services and dependencies remain blocked. No automatic metadata invention or discarded controls. This avoids broad P1 invocation/tool-policy changes to selector/Base and does not implement WS29 unification.
+
+Inputs are bounded immutable logical file records supplied by the caller, not a URL, archive extractor or arbitrary live-directory scanner. Start with synthetic fixtures only; selecting/downloading an external package is a later explicit step. A new target slug must be absent from the supplied baseline registry, package and `tests/fixtures/skills_authoring/<slug>/` prefix; updates to existing packages remain out of this first adapter. The result is an **unregistered, non-materialized, non-loadable package payload**, not a disabled registry entry. Any later materialization/discovery/activation path remains separately gated under SW-H.
+
+### Claim placement and exact scope
+
+- Claim documentation branch: `docs/ws03-offline-adapter-claim-20261022`, from actual main `2944080`.
+- Implementation branch named in Where: `codex/ws03-offline-package-adapter-20261022` only. Do not put the soon-to-be-merged claim branch in Where.
+- Canonical claim path: `docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md`, append this dated bounded slice; update existing ROADMAP WS03 block and existing WS03 log. No new workstream or separate plan.
+- Overall Owner Codex and existing human/acceptance owners are retained. This main claim explicitly assigns official Claude Code Max as patch author for the disjoint new files below, with Codex review/apply/publication. Claude receives a minimal sanitized repository packet in a fresh tools-disabled subscription invocation and returns a patch; it has no access to the Codex checkout, Git, host files or runtime. Larry’s 2026-10-22 bounded delegation is registered here before source work; it grants no working-folder access, so it requires no exception to the AGENTS.md cross-system folder restriction.
+- Only new implementation file: `jarvis/skill_package_adapter.py`.
+- Only new test file: `tests/unit/test_skill_package_adapter.py`; bounded synthetic fixtures in `tests/fixtures/skill_package_adapter/` if needed.
+- Read-only dependencies: P0 `agent_skills.py`/`skill_compatibility.py`, `skill_catalog.py`, `skill_authoring_validation.py`, `skill_service.py`, `sandbox/artifacts.py` and existing scoped `selfedit/skill_policy.py`.
+- No edits to parser/catalog/selector/Base/delegate, provider/controller/subscription paths, creator worker/request ledger, admin routes, native UI, sandbox runtime, skills/**, registry/config, existing frozen fixtures, migrations or live services. If composition needs a dependency change, return the demonstrated limitation and seek a scoped amendment; do not silently extend this claim.
+- Internal report names and version are reserved in ROADMAP section 3 by this claim. The report is inert evidence, not a new API or activation permission. No DB/config/protocol migration is included.
+
+### Bounded adapter behavior
+
+1. Validate bounded file records via existing `sandbox.artifacts.File`/`Candidate` path, collision, mode, byte and secret checks. Use catalog limits `MAX_PACKAGE_FILES=128`, `MAX_PACKAGE_BYTES=10*1024*1024`, `MAX_TEXT_FILE_BYTES=128*1024`; retain P0 `MAX_FRONTMATTER_BYTES=16*1024` and all parser structure limits. Bound auxiliary source-evidence and reviewed-input records by the same count/aggregate/per-file limits independently, before temporary materialization; baseline/full snapshot remain subject to existing Candidate limits. Only regular 0644 records are accepted. No symlinks, archives, command interpolation, network, subprocesses or imported code. Keep original bytes and manifests in a separate bounded immutable evidence bundle. Return raw evidence only after every source and auxiliary record passes bounded scanning; if full scanning is impossible, omit it. On secret-scan refusal, return only digests, ordinals and fixed codes: no raw evidence, candidate or validator detail containing source content.
+2. Apply P0 unchanged. Reuse `parse_skill` and `inspect_package`; do not reimplement frontmatter semantics or change the accepted matrix. Preserve the **entire SKILL.md**, including frontmatter, and all accepted resource bytes exactly. Any frontmatter key outside P0’s closed contract blocks; never move, rewrite or delete it to make parsing pass. Unsupported flags and executable packages are refused.
+3. Produce exhaustive feature/file dispositions: supported unchanged, explicit inert annotation, unsupported, unknown. Unknown behavioral/security controls and missing required resources block. P0-supported descriptive metadata remains unchanged under its existing type rules. Non-frontmatter manifests/annotations stay in separate evidence with their dispositions; unknown descriptive fields are uninterpreted, not runtime metadata or authority. This first profile has no general upstream-manifest translator: any unclassified field blocks candidate production until a later explicitly supported classification exists. Harmless descriptive text is not characterized as executable or granted control semantics. The package file set is closed: exactly `SKILL.md`, reviewed `mortimer.yaml`, the declared license path, and manifest-declared `reference_paths`; license/reference files must have `.md` or `.txt` suffixes (case-insensitive). Every other source file at any depth receives an unsupported or unknown disposition and blocks, even if retained in evidence. Any unknown disposition, field or file, blocks this profile. Reject a path component equal to `scripts` case-insensitively and a file beginning with a shebang after leading whitespace, even if declared as a reference/license. Do not rely on the existing validator’s script prefix or extension denylist. Code examples inside ordinary instruction/reference prose remain inert text, not an executable capability. No opaque file disappears from the inventory. Do not infer completeness of natural-language dependencies; incomplete declared requirements block for review.
+4. Maintain two distinct representations. The returned **package-only payload** contains only the new `skills/<slug>/` files, with no registry/config or baseline files. For the existing validator only, build an in-memory **validation snapshot** by composing the unchanged supplied baseline, that package and reviewed matcher fixtures at the validator’s scoped fixture path. The snapshot retains baseline `config/skills.yaml` byte-for-byte because `validate_skill_candidate` requires it; it is never returned as an import payload or written live. Baseline is immutable. Do not generate process/tool/invocation metadata from prose. Missing reviewed sidecar, license, immutable provenance or matcher cases blocks. Only bounded temporary materialization inside existing validators is permitted; no runtime skills/, registry, service state or request DB write.
+5. Call `validate_skill_candidate(validation_snapshot, baseline=..., slug=...)`. Report every returned check using fixed content-free names/codes; do not export raw exception strings or unsafe detail text. Bind the nested receipt’s `candidate_digest` to the **validation snapshot**, while top-level `candidate_digest` means the returned package-only payload. The additional `validation_snapshot_digest` makes this distinction explicit. Static configured-tool inventory means exact tool names plus completeness, read through the existing host helper, never candidate-supplied authority. Capture and compare those facts before/after validation; changed or incomplete inventory blocks, intentionally stricter than the validator even when no tools are required. Equal before/after facts do not prove an atomic snapshot of the validator’s internal read (A→B→A remains possible); this report is static evidence only and later activation must revalidate its own trusted inventory. No injected alternative inventory or helper monkeypatching in production. Authentication, current tool sessions, source/privacy compatibility and runtime readiness remain unknown. Never emit a ready/approved/active state.
+6. Return bounded source evidence, package-only payload (only on all checks passing), report and test requirements. Reports live outside hashed payload content. Reserve identities as defined in ROADMAP section 3: original source, all reviewed auxiliary inputs/target/profile, supplied baseline, package payload, validation snapshot, parser/dependency implementation and static inventory facts. A changed identity invalidates reuse, including sidecar/provenance/license/matcher changes on blocked results with no payload. Unknown schema versions refuse. On error or cancellation return no payload; no activation, approval consumption or publication occurs. Cancellation is an optional trusted host-supplied check callable evaluated at bounded stages and immediately before return; it is never imported from package text. Callback failure also blocks. No persisted job is created.
+7. Existing readback/approval/activation APIs remain unchanged, including deliberate 409 refusal. Later integration must bind this report to owner/request/digests and display it in Mortimer before review; this helper alone does not complete the end-to-end import journey.
+
+### Offline acceptance for this slice (not SW-A–L closure)
+
+- Portable synthetic package retains exact SKILL.md/reference/license bytes and original manifest digest; deterministic report/candidate across repeated identical inputs; baseline and its registry byte-identical, returned payload contains no config/registry, validation snapshot preserves baseline config, and no live writes.
+- Unsupported control, unknown required metadata, scripts in root or nested paths with case-varied names/extensions, executable/binary/dependency files: deterministic block, complete disposition, no dropped requirement or execution.
+- Missing declared reference/license/sidecar/matcher fixture or tool-name mismatch/incomplete static inventory: specific report failure; no inferred grant/readiness.
+- Invalid UTF-8, malformed/duplicate metadata, path traversal, Unicode/case collisions, file-vs-directory collisions, forbidden mode, symlink/archive input, count/file/aggregate caps and secret canaries refuse before unsafe materialization; diagnostic/report exports exclude content and host paths.
+- Source/inputs/baseline/package/snapshot/parser/adapter/schema/fixture/inventory drift invalidates evidence. Unknown schema versions fail closed; no cache reuse across changed identity.
+- Existing slug, baseline registry drift and validator temporary-staging failure return blocked/no active mutation. Cancellation checked before returning a candidate; adapter has no persisted job to resurrect. Real request-race/restart/cancel/rollback remains SW-H.
+- Reuse P0 tests and existing validator/catalog/reference suites only as regressions; do not change their expected outcomes or historical acceptance counts. No model/provider/VM/host scripts in tests. Test-only monkeypatching of static inventory is permitted at both adapter and validator bindings to create deterministic complete/incomplete/drift cases; production never does this. Generate synthetic secret canaries at test runtime, not as committed credential-shaped fixture bytes, and add no scanner exemptions.
+
+### Claude Max task and sequencing
+
+After coordinator lands this matching claim and confirms disjoint scopes, use official authenticated Claude Code Max for one bounded implementation assignment: implement only the new adapter and synthetic tests against the frozen contract; return a patch and test rationale. Codex applies/reviews on the claimed isolated branch, runs offline tests, obtains independent review, publishes draft and verifies CI. The implementation packet contains this claim section, the exact listed read-only dependency files (only necessary excerpts where sufficient), and no other repository or private content. New tests are authored from those documented interfaces; any additional helper context requires a scoped claim amendment. Record packet manifest/digest, exact main claim and actual returned Claude model identifier in the existing WS-03 log at dispatch/completion. Use tools-disabled patch generation; do not let Claude alter its own policy, grants, model selection or live state. Same subscription route only, no direct paid API/fallback. Larry authorizes bounded relevant repository context for this assignment through the existing subscription; do not repeat an in-scope packet approval request. Honor any actual tool denial and stop at genuinely new privacy/access boundaries. Do not include credentials, personal logs or unrelated repository content.
+
+Before implementation, verify actual-main claim, exact branch/owner/file locks and reserved report identifiers. Hold if any premise differs. No source work before this claim lands. Sole coordinator retains all merges. Installation, activation, model changes, live providers, real VM runs and broader package/script/service adapters require their separate decisions.
+
+### Concrete source references at the inspected main tree
+
+- `jarvis/skill_authoring_validation.py:54` frozen candidate validator; :101 fixed 0644 candidate mode contract; :121 catalog+parse composition; :146 license/provenance; :202 static inventory; :216 unchanged registry check.
+- `sandbox/artifacts.py:45` path checks; :96 File; :107 Candidate immutable data/scanner bounds.
+- `jarvis/skill_catalog.py:172` companion manifest; :218 existing provenance fields; :290 inspection; :340 declared text reference validation.
+- `jarvis/agent_skills.py:283` bounded P0 parse; `jarvis/skill_compatibility.py` closed field/type/YAML contract.
+- `jarvis/skill_service.py:42` static inventory, :106 readiness unknown-vs-known distinction.
+- `jarvis/admin/server.py:4471` activation refusal, :4480 rollback refusal, :4637 versions readback limits; read-only for this lane.
+- Canonical plan section 12 at :1190 onward contains full SW-A–L definitions; dated current claim inventory :268–279 preserves 2/12. Older STATUS.md observations are historical, not current installation proof.
+
+P0 nonblocking 0600 writer permissions, cleanup-message and edge-case evidence follow-ups remain separate; the adapter uses immutable Candidate records/validator, not write_skill, and must not silently fold those repairs into its claim.
+
+Historical handoff #246 remains frozen; #248 is the landed P0 ownership registration. #251 supplied the source change; #258 corrected only its post-merge lifecycle wording. Neither is rewritten by this claim.

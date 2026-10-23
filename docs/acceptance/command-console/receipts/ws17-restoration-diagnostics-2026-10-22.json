@@ -1,0 +1,42 @@
+{
+  "schema": "ws17.restoration-diagnostics.v1",
+  "base": "29440804baf40292d84acbb0798646e67d0c510a",
+  "changed_executable_files": {
+    "scripts/deploy_main.sh": "937e891142e0a13665920cebb657d399ffa78312ad77d667abf529ffed5f8231",
+    "tests/unit/test_deploy_held.py": "3a4197d20a963f9f6bf4df7edc834ec5c96417addf6241c522e9ab41c6063893"
+  },
+  "red": {
+    "at": "2026-10-22T23:17:44.946050+00:00",
+    "base": "29440804baf40292d84acbb0798646e67d0c510a",
+    "baseline_script_sha256": "469d40d6d7aa592e76653bc9d7ddb249136a738f8609edccb4eb8fd32f4d9d86",
+    "tested_new_test_file_sha256": "3a4197d20a963f9f6bf4df7edc834ec5c96417addf6241c522e9ab41c6063893",
+    "failed": 10,
+    "passed": 1,
+    "deselected": 54,
+    "returncode": 1,
+    "log_sha256": "f4c2e67bdd63a7f19e636680c8e3008c3050106e8ec2da18c929ec540ceeb3f2",
+    "scope": "Injected diagnostic failures against unchanged base script; no real service operations"
+  },
+  "green": {
+    "passed": 78,
+    "seconds": 4.78,
+    "suites": [
+      "tests/unit/test_deploy_held.py",
+      "tests/unit/test_deploy_main.py"
+    ],
+    "log_sha256": "0d030091ce09a80b805b947e3ba61c8a155df757df34b511aa8bd824ad24c601",
+    "environment": "Credential/dotenv-free; fake launchctl/processes and temporary homes; existing loopback HTTP stub only"
+  },
+  "preservation": {
+    "restore_operational_ast_identical_except_stage_assignments_exception_binding_and_safe_error_text": true,
+    "all_existing_source_policy_identity_health_receipt_rollback_checks_and_budgets": true,
+    "no_readiness_retry_or_launch_semantics_change": true
+  },
+  "syntax": "bash-n andembeddedPythoncompilePASS",
+  "coverage": "Offline injected behavior only; not actual incident root cause or service availability",
+  "unresolved": "Actual failed restoration step/cause remains unknown; revised source requires independent review and exact-head CI. No installation/restoration/live provider test authorized in this slice.",
+  "earlier_nonpasses": "Initial focused run had one injected-test trigger error, corrected without product changes, and two sandbox prerequisites (loopback bind/tee); retained locally. Final focused rerun outside sandbox passes78.",
+  "real_service_operations": 0,
+  "live_provider_tests": 0,
+  "human_acceptance_closed": false
+}

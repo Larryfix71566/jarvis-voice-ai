@@ -89,15 +89,36 @@ COMMAND_ENV = {
 }
 
 
+_BUNDLED_CODEX = Path("/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex")
+
+
 def provider_command(which: str) -> str:
-    """The configured CLI for `which` ('claude' or 'codex'), else its bare name."""
+    """Configured command name, shared by diagnostics and invocation builders."""
     return os.environ.get(COMMAND_ENV[which]) or which
+
+
+def resolve_provider_executable(which: str) -> str | None:
+    """Explicit command, PATH command, then the installed macOS Codex bundle.
+
+    Discovery grants no capability/authentication. Exact executable/version
+    receipts still gate execution. An explicit broken override never falls
+    through to a different executable.
+    """
+    selected = shutil.which(provider_command(which))
+    if selected is not None or os.environ.get(COMMAND_ENV[which]):
+        return selected
+    if (which == "codex"
+            and _BUNDLED_CODEX.is_file() and os.access(_BUNDLED_CODEX, os.X_OK)):
+        return str(_BUNDLED_CODEX)
+    return None
 
 _CODEX_NO_TOOL_VERIFICATION_ENV = "JARVIS_CODEX_SUBSCRIPTION_NO_TOOLS_VERIFIED"
 CODEX_CAPABILITY_RECEIPT_ENV = "JARVIS_CODEX_SUBSCRIPTION_CAPABILITY_RECEIPT"
-CODEX_VERIFIED_VERSIONS = frozenset({"codex-cli 0.160.0"})
+CODEX_VERIFIED_VERSIONS = frozenset({"codex-cli 0.160.0", "codex-cli 0.163.0-alpha.10.2", "codex-cli 0.163.0-alpha.11"})
 _CODEX_CATALOG_ARGUMENT = "<mortimer-pinned-model-catalog>"
-# These names were checked against the installed 0.160.0 feature registry.
+# These controls passed installed-CLI loopback positive and hostile-tool
+# probes on 0.160.0, 0.163.0-alpha.10.2 and 0.163.0-alpha.11. Each request requires an
+# exact binary/model/catalog/invocation receipt, not a version match alone.
 # Code Mode's host remains enabled: the selected model requires it even when
 # the model-visible tool registry is empty. Disabling the host emits an error
 # item, which our strict completion parser correctly rejects.
@@ -144,8 +165,7 @@ def _file_digest(path: Path) -> str:
 
 def codex_runtime_identity() -> dict[str, str]:
     """Inspect executable identity only; never read an authentication store."""
-    command = provider_command("codex")
-    selected = shutil.which(command)
+    selected = resolve_provider_executable("codex")
     if selected is None:
         raise SubscriptionCapabilityError("Codex subscription command is unavailable")
     executable = Path(selected).resolve()

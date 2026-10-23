@@ -41,7 +41,9 @@ from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import (OutputTransportMessageUrgentFrame, LLMContextFrame,
-    LLMFullResponseStartFrame, LLMFullResponseEndFrame, InterruptionFrame)
+    LLMFullResponseStartFrame, LLMFullResponseEndFrame, InterruptionFrame,
+    TranscriptionFrame, UserStartedSpeakingFrame, BotStoppedSpeakingFrame,
+    FunctionCallInProgressFrame, FunctionCallResultFrame, FunctionCallCancelFrame)
 from pipecat.observers.base_observer import BaseObserver
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.pipeline.pipeline import Pipeline
@@ -71,6 +73,7 @@ from jarvis.agents.delegate import (
     build_delegate_tool,
     drain_detached,
     foreground_delegation_count,
+    task_stop_command,
 )
 from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.connect_greeting import ConnectGreeting  # noqa: E402
@@ -93,6 +96,7 @@ from jarvis.bot.follow_up import (
 from jarvis.bot.status_tool import build_system_status_tool
 from jarvis.bot.weather_tool import build_local_weather_tool
 from jarvis.bot.weather_reuse import WeatherReuseBridge, current_weather_reuse, weather_reuse_scope
+from jarvis.bot.weather_intent import WeatherIntent, accepted_weather_intent, current_weather_intent
 from jarvis.bot.device_location import DeviceLocation, resolve_location, summarize_location
 from jarvis import ambient_weather
 from jarvis.bot.console_actions import build_console_action_tool, _disclosed_inventory
@@ -105,6 +109,7 @@ from jarvis.bot.console_protocol import (
 from jarvis.bot.console_protocol import hello as console_hello
 from jarvis.bot.console_session import ConsoleSession
 from jarvis.privacy_policy import DataPolicy, make_tool_execution_scope, validate_tool_result
+from jarvis.voice_sources import VoiceSources, ClassifiedText, UNKNOWN, source_scope, text_policy, bound_context_type
 from jarvis.runlog.context import get_run_id
 from jarvis.bot.costs_tool import build_cost_summary_tool
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
@@ -206,6 +211,239 @@ from jarvis.usage_ledger import provider_from_base_url, record_call
 from jarvis.vision import execution_route_summary, resolve_vision_execution_route
 
 _logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ForegroundRequest:
+    request_id: str
+    sequence: int
+    input_timestamp: str
+    input_user_id: str
+    weather_intent: WeatherIntent | None = None
+    task_stop: bool = False
+
+
+_foreground_request: ContextVar[ForegroundRequest | None] = ContextVar(
+    "foreground_request", default=None)
+_FOREGROUND_FRAME_KEY = "mortimer_foreground_request"
+
+
+class ForegroundRequests:
+    """Session-local input provenance; no transcript persistence or time heuristic.
+
+    Bind at the actual user-aggregator output, before a mutable context can
+    acquire another turn. Each LLM frame and tool call retains that immutable
+    binding, including sequential runners and detached delegation children.
+    """
+    def __init__(self, transport: Any, session_id: str, generation: str) -> None:
+        self.transport, self.session_id, self.generation = transport, session_id, generation
+        self.input_source: Any = None
+        self.user_aggregator: Any = None
+        self.parts: list[str] = []
+        self.input_chars = 0
+        self.input_overflow = False
+        self.input_identity: tuple[str, str] | None = None
+        self.sequence = 0
+        self.current: ForegroundRequest | None = None
+        self.previous_weather_intent: WeatherIntent | None = None
+        self.control_input: Callable[[str], str | None] | None = None
+        self.control_note: dict | None = None
+        self.boundaries: list[tuple[dict, ForegroundRequest]] = []
+        self.calls: dict[str, ForegroundRequest | None] = {}
+        self.seen_starts: list[int] = []
+        self.aggregator_starts: list[int] = []
+        self.assistant_aggregator: Any = None
+        # Retain bounded immutable dispatch ownership after the handler has
+        # returned; the SDK processes its result on another persistent task.
+        self.continuation_calls: dict[str, ForegroundRequest | None] = {}
+        self.assistant_running: dict[str, ForegroundRequest | None] = {}
+        self.assistant_pending: dict[str, ForegroundRequest | None] = {}
+        self.assistant_frame: ContextVar[Any] = ContextVar("foreground_assistant_frame", default=None)
+
+    def install(self, input_source: Any, user_aggregator: Any, assistant_aggregator: Any = None) -> None:
+        self.input_source, self.user_aggregator = input_source, user_aggregator
+        # Unlike worker observers and function lifecycle events, this public
+        # SDK hook is awaited synchronously before downstream frame delivery.
+        input_source.add_event_handler("on_before_push_frame", self.before_push)
+        user_aggregator.add_event_handler("on_before_push_frame", self.before_push)
+        if assistant_aggregator is not None:
+            self.assistant_aggregator = assistant_aggregator
+            # These are public synchronous SDK hooks. Observe the actual
+            # result-processing task before it creates a fresh UPSTREAM
+            # context, including a deferred bot-stopped flush.
+            assistant_aggregator.add_event_handler("on_before_process_frame", self.before_assistant_frame)
+            assistant_aggregator.add_event_handler("on_after_process_frame", self.after_assistant_frame)
+            assistant_aggregator.add_event_handler("on_before_push_frame", self.before_push)
+
+    async def before_assistant_frame(self, _source, frame) -> None:
+        self.assistant_frame.set(frame)
+        if isinstance(frame, InterruptionFrame):
+            # The SDK resets its deferred bot-stopped flush on interruption.
+            # Retire only that abandoned batch; still-running/late calls keep
+            # their immutable original dispatch ownership.
+            self.assistant_pending.clear()
+        elif isinstance(frame, FunctionCallInProgressFrame):
+            self.assistant_running[frame.tool_call_id] = self.continuation_calls.get(frame.tool_call_id)
+            while len(self.assistant_running) > 256:
+                self.assistant_running.pop(next(iter(self.assistant_running)))
+        elif isinstance(frame, FunctionCallCancelFrame):
+            self.assistant_running.pop(frame.tool_call_id, None)
+            self.assistant_pending.pop(frame.tool_call_id, None)
+        elif isinstance(frame, FunctionCallResultFrame) and frame.tool_call_id in self.assistant_running:
+            request = self.assistant_running[frame.tool_call_id]
+            properties = frame.properties
+            if properties is None or properties.is_final:
+                self.assistant_running.pop(frame.tool_call_id, None)
+            # Respect the public result callback's explicit no-continuation
+            # contract. Queue/group and bot-speaking decisions stay SDK-owned.
+            run_llm = properties.run_llm if properties and properties.run_llm is not None else frame.run_llm
+            if frame.result and run_llm is not False:
+                self.assistant_pending[frame.tool_call_id] = request
+                while len(self.assistant_pending) > 256:
+                    self.assistant_pending.pop(next(iter(self.assistant_pending)))
+
+    async def after_assistant_frame(self, _source, _frame) -> None:
+        self.assistant_frame.set(None)
+
+    async def announce(self, request: ForegroundRequest, state: str) -> None:
+        try:
+            await asyncio.wait_for(send_app_message(self.transport, {
+                "type": "console/turn", "version": 1, "session_id": self.session_id,
+                "generation": self.generation, "request_id": request.request_id,
+                "sequence": request.sequence, "state": state,
+                "input_timestamp": request.input_timestamp, "input_user_id": request.input_user_id,
+            }), timeout=0.25)
+        except Exception:
+            # A broken UI channel cannot stall voice or grant foreground.
+            # Without the exact start envelope the native sink stays closed.
+            _logger.info("foreground_request_delivery_unconfirmed")
+
+    async def cancel(self, request: ForegroundRequest | None) -> None:
+        if request is not None:
+            if self.current == request:
+                self.current = None
+            await self.announce(request, "cancelled")
+
+    async def before_push(self, source, frame) -> None:
+        if isinstance(frame, UserStartedSpeakingFrame):
+            if source is self.user_aggregator:
+                # The real aggregator broadcasts both directions. Its upstream
+                # instance subsequently crosses the accepted source too; record
+                # exact frame identity before SDK delivery so that echo cannot
+                # erase an already accepted final transcript or cancel its turn.
+                self.aggregator_starts = (self.aggregator_starts + [frame.id])[-64:]
+                return
+            if source is not self.input_source or frame.id in self.aggregator_starts:
+                return
+            # The same frame crosses several processors. A later hop must
+            # not erase the accepted transcription accumulated in between.
+            if frame.id not in self.seen_starts:
+                self.seen_starts = (self.seen_starts + [frame.id])[-64:]
+                self.parts = []
+                self.input_chars = 0
+                self.input_overflow = False
+                self.input_identity = None
+                await self.cancel(self.current)
+            return
+        if isinstance(frame, TranscriptionFrame) and source is self.input_source:
+            text = frame.text.strip()
+            timestamp, user_id = str(frame.timestamp or ""), str(frame.user_id or "")
+            if (getattr(frame, "finalized", True) and text and timestamp
+                    and len(timestamp) <= 128 and len(user_id) <= 128):
+                if self.input_overflow or len(self.parts) >= 64 or self.input_chars + len(text) > 65536:
+                    self.parts = []; self.input_identity = None; self.input_overflow = True
+                    return
+                self.parts.append(text)
+                self.input_chars += len(text)
+                self.input_identity = (timestamp, user_id)
+            return
+        if not isinstance(frame, LLMContextFrame):
+            return
+        if source is self.assistant_aggregator:
+            cause = self.assistant_frame.get()
+            actual_result = isinstance(cause, FunctionCallResultFrame) and cause.tool_call_id in self.assistant_pending
+            deferred_result = isinstance(cause, BotStoppedSpeakingFrame)
+            request = None
+            if actual_result or deferred_result:
+                owners = set(self.assistant_pending.values())
+                # Bundled results from different/unknown requests have no
+                # single owner. Never infer the newest user from shared context.
+                if len(owners) == 1 and None not in owners:
+                    request = next(iter(owners))
+                self.assistant_pending.clear()
+            frame.metadata[_FOREGROUND_FRAME_KEY] = request
+            return
+        if source is not self.user_aggregator:
+            return
+        messages = frame.context.get_messages()
+        boundary = next((m for m in reversed(messages) if is_real_user_message(m)), None)
+        request = next((r for m, r in self.boundaries if m is boundary), None)
+        if request is None and boundary is not None and self.input_identity is not None:
+            # Exact accepted-input equality is correlation, never semantic
+            # classification or a model's claim to own a newer request.
+            normalized = lambda value: " ".join(value.split())
+            if normalized(boundary["content"]) == normalized(" ".join(self.parts)):
+                if self.control_note is not None:
+                    self.control_note["content"] = "[system] Prior task status superseded."
+                    self.control_note = None
+                if self.control_input is not None:
+                    note = self.control_input(boundary["content"])
+                    if note:
+                        # Keep the actual user message last for existing voice
+                        # workflow tracking. The note contains lifecycle facts,
+                        # not task text or private output, and expires next turn.
+                        self.control_note = {"role": "user", "content": "[system] " + note}
+                        messages.insert(next(i for i, m in enumerate(messages) if m is boundary), self.control_note)
+                self.sequence += 1
+                intent = accepted_weather_intent(boundary["content"], self.previous_weather_intent)
+                request = ForegroundRequest(str(uuid.uuid4()), self.sequence, *self.input_identity,
+                    weather_intent=intent, task_stop=task_stop_command(boundary["content"]) is not None)
+                self.previous_weather_intent = intent
+                self.boundaries = (self.boundaries + [(boundary, request)])[-64:]
+                self.current = request
+                # One accepted input grants one boundary. A copied context or
+                # repeated injected text cannot mint a second foreground token.
+                self.input_identity = None
+                self.parts = []; self.input_chars = 0
+                await self.announce(request, "started")
+        # Even a later continuation of an old context keeps its old token.
+        frame.metadata[_FOREGROUND_FRAME_KEY] = request
+
+    def bind_calls(self, calls) -> None:
+        request = _foreground_request.get()
+        for call in calls:
+            call_id = str(call.tool_call_id)
+            binding = request
+            if call_id in self.continuation_calls and self.continuation_calls[call_id] != request:
+                binding = None  # Conflicting reused IDs cannot borrow a newer request.
+            self.calls[call_id] = binding
+            self.continuation_calls[call_id] = binding
+        while len(self.calls) > 256:
+            self.calls.pop(next(iter(self.calls)))
+        while len(self.continuation_calls) > 256:
+            self.continuation_calls.pop(next(iter(self.continuation_calls)))
+
+
+def request_bound_service(service_class, requests: ForegroundRequests):
+    """Keep provider/model construction unchanged; scope its real frame call."""
+    class RequestBoundService(service_class):
+        async def run_function_calls(self, calls):
+            # Pipecat's event handlers run in detached tasks. Binding there
+            # races its function runner; do this synchronously before the
+            # real SDK dispatch (including a reused sequential runner).
+            requests.bind_calls(calls)
+            return await super().run_function_calls(calls)
+
+        async def process_frame(self, frame, direction):
+            if isinstance(frame, LLMContextFrame):
+                request = frame.metadata.get(_FOREGROUND_FRAME_KEY)
+                token = _foreground_request.set(request if isinstance(request, ForegroundRequest) else None)
+                try:
+                    return await super().process_frame(frame, direction)
+                finally:
+                    _foreground_request.reset(token)
+            return await super().process_frame(frame, direction)
+    return RequestBoundService
 
 
 # Only successful weather tool execution marks a request. No task-text or
@@ -322,6 +560,8 @@ class WeatherContextMinimizer(FrameProcessor):
     def minimize(self, context: Any) -> None:
         self.context = context
         messages = context.get_messages()
+        sources = getattr(self, "sources", None)
+        source_snapshot = [(message, sources.message_policy(message)) for message in messages] if sources else []
         boundaries = [i for i, message in enumerate(messages) if is_real_user_message(message)]
         if not boundaries:
             return
@@ -366,6 +606,8 @@ class WeatherContextMinimizer(FrameProcessor):
                     self.late_notes = [note for note in self.late_notes if note is not message]
             elif affected and message.get("role") == "assistant" and message.get("content"):
                 message["content"] = _WEATHER_CONTEXT_NOTE
+        for message, policy in source_snapshot:
+            sources.bind(message, policy)
         self.weather_calls.difference_update(consumed)
         self.ready_calls.difference_update(consumed)
         self.relay_turns = [turn for turn in self.relay_turns if any(turn is msg for msg in messages[cutoff:])]
@@ -413,7 +655,10 @@ def _weather_candidate_inventory(data: dict, subject_key: str) -> dict | None:
         except (KeyError, ValueError, TypeError, AttributeError):
             return None
         matches.append({"id": identity, "subject_key": subject_key})
-    return {"revision": data["revision"], "results": matches}
+    projected = {"revision": data["revision"], "results": matches}
+    if type(data.get("foreground_request_version")) is int and data["foreground_request_version"] == 1:
+        projected["foreground_request_version"] = 1
+    return projected
 
 
 def _log_best_effort_failure(
@@ -445,6 +690,8 @@ class Runtime:
     # the inbound content transfer. Set by build_pipeline for this session.
     console_generation: str = ""
     weather_context: Any = field(default_factory=WeatherContextMinimizer)
+    voice_sources: Any = field(default_factory=VoiceSources)
+    foreground_requests: Any = None
     # Command Console state is created per pipeline in build_pipeline() and
     # read by run_session()'s message handlers. It lives here because the
     # two functions share no scope: #80 read these as build_pipeline locals
@@ -546,6 +793,8 @@ def connection_greeting_note(timezone: str, now: datetime | None = None) -> str:
 def adapt_to_pipecat(
     name: str, dict_handler, *, runlog_enabled: bool = False,
     session_id: str | None = None, weather_context: WeatherContextMinimizer | None = None,
+    foreground_requests: ForegroundRequests | None = None,
+    sources: VoiceSources | None = None,
 ):
     """Adapt a jarvis tool handler to pipecat's calling convention.
 
@@ -566,6 +815,9 @@ def adapt_to_pipecat(
     async def wrapper(params):
         _logger.info("supervisor_tool tool=%s", name)
         tool_call_id = str(getattr(params, "tool_call_id", "") or "")
+        request = foreground_requests.calls.get(tool_call_id) if foreground_requests is not None else None
+        foreground_token = _foreground_request.set(request)
+        intent_token = current_weather_intent.set(request.weather_intent if request else None)
         runlog = RunLogger(
             str(uuid.uuid4()), "supervisor", "Mortimer",
             "supervisor direct tool execution", session_id=session_id,
@@ -578,8 +830,22 @@ def adapt_to_pipecat(
         weather_token = (_weather_context_call.set(_WeatherContextCall(weather_context, tool_call_id))
                          if weather_context is not None else None)
         try:
-            with run_logger_scope(runlog):
-                result = await dict_handler(params.arguments)
+            input_policy = (sources.policy_for_context(sources.context)
+                            if sources is not None and sources.context is not None else UNKNOWN)
+            with source_scope(input_policy) as result_sources:
+                with run_logger_scope(runlog):
+                    if name == "delegate_task" and request is not None and request.task_stop:
+                        result = "REFUSED: this is an explicit task cancellation turn. No new delegated work was started."
+                    else:
+                        result = await dict_handler(params.arguments)
+                if type(result) is ClassifiedText:
+                    result_sources.observe(result.policy)
+                elif not result_sources.observations:
+                    result_sources.observe(UNKNOWN)
+            if sources is not None:
+                sources.tool_result(tool_call_id, result, result_sources.policy or UNKNOWN)
+            if type(result) is ClassifiedText:
+                result = str(result)
             task = asyncio.current_task()
             if task is not None and task.cancelling():
                 raise asyncio.CancelledError
@@ -598,6 +864,8 @@ def adapt_to_pipecat(
             await params.result_callback(result)
             runlog.finish("supervisor tool completed")
         except asyncio.CancelledError:
+            if foreground_requests is not None:
+                await foreground_requests.cancel(request)
             if not result_known:
                 runlog.tool_outcome_unknown(
                     name, tool_call_id, reason_code="cancelled_after_return",
@@ -615,6 +883,10 @@ def adapt_to_pipecat(
             runlog.finish(f"FAILED: supervisor tool raised ({error_type}).")
             raise
         finally:
+            if foreground_requests is not None:
+                foreground_requests.calls.pop(tool_call_id, None)
+            _foreground_request.reset(foreground_token)
+            current_weather_intent.reset(intent_token)
             if weather_token is not None:
                 _weather_context_call.reset(weather_token)
 
@@ -624,6 +896,8 @@ def adapt_to_pipecat(
 def register_supervisor_tool(
     llm, name: str, dict_handler, *, runlog_enabled: bool = False,
     session_id: str | None = None, weather_context: WeatherContextMinimizer | None = None,
+    foreground_requests: ForegroundRequests | None = None,
+    sources: VoiceSources | None = None,
 ) -> None:
     """Register one direct Supervisor tool under a single spelling of its
     name — passing it twice invites a handler registered under the wrong
@@ -633,6 +907,7 @@ def register_supervisor_tool(
         adapt_to_pipecat(
             name, dict_handler, runlog_enabled=runlog_enabled,
             session_id=session_id, weather_context=weather_context,
+            foreground_requests=foreground_requests, sources=sources,
         ),
     )
 
@@ -934,9 +1209,16 @@ def build_pipeline(
     WebRTC case passes None and keeps its connection-level handler.
     """
     settings = runtime.settings
+    # This adapter has no verified native subscription streaming/tool path.
+    # Refuse before constructing any voice resource, without an API fallback.
+    from jarvis.provider_access import require_voice_readiness
+    require_voice_readiness(getattr(settings, "jarvis_llm_access_mode", None))
+    if runtime.voice_sources.context is not None:
+        runtime.voice_sources = runtime.voice_sources.for_new_context()
     pusher = pusher or FramePusher()
     console_generation = str(uuid.uuid4())
     runtime.console_generation = console_generation
+    runtime.foreground_requests = ForegroundRequests(transport, runtime.session_id, console_generation)
     console_ready = runtime.console_ready
     console_inventory_revision = runtime.console_inventory_revision
     # One bounded acknowledgement future per request. The console tool waits
@@ -989,6 +1271,7 @@ def build_pipeline(
         user_text=lambda: runtime.voice_state.user_text,
     )
     creator_dispatcher = delegate_handler.run_skill_creator
+    runtime.foreground_requests.control_input = delegate_handler.control_input
     # MORTIMER_VOICE_WORKFLOWS_PLAN.md D16 — getattr with the production
     # defaults, because tests build this pipeline from SimpleNamespace
     # settings that predate these two fields.
@@ -1082,6 +1365,7 @@ def build_pipeline(
         def refused(code: str) -> dict:
             return {"status": "refused", "code": code}
 
+        origin = _foreground_request.get()
         if _voice_is_sensitive():
             return refused("protected_turn")
         if not console_ready["value"]:
@@ -1132,6 +1416,8 @@ def build_pipeline(
                     return refused("invalid_reply")
                 args = {"subject_key": subject_key, "tool": tool, "days": days,
                         "units": units, "ordinary_turn": True}
+                if origin is not None and data.get("foreground_request_version") == 1:
+                    args["origin_request_id"] = origin.request_id
                 if run_id is not None:
                     args["run_id"] = run_id
                 reply = await request("weather_reuse", args, target, observed_revision=revision)
@@ -1247,7 +1533,9 @@ def build_pipeline(
         if user_agg is None:  # pragma: no cover - pipeline always sets it
             _logger.warning("clipboard_inject_dropped reason=no_context")
             return
-        user_agg.add_messages([{"role": "user", "content": text}])
+        message = {"role": "user", "content": str(text)}
+        runtime.voice_sources.bind(message, text_policy(text))
+        user_agg.add_messages([message])
 
     def _clipboard_call(path: str, post: bool = False) -> dict:
         """One owner of the armed flag: the sidecar. The bot could run
@@ -1295,6 +1583,8 @@ def build_pipeline(
     # 4,096-token cache floor (below it, caching silently stops), and
     # whether the Stage A1 cap raise actually cleared the tier-cap drops.
     memory_stats: dict = {}
+    from jarvis.memory import classify_memory_context
+    memory_snapshot = classify_memory_context(render_memory_context(stats=memory_stats))
     system_prompt = build_supervisor_prompt(
         jarvis_name=settings.jarvis_name,
         user_name=settings.jarvis_user_name,
@@ -1303,7 +1593,7 @@ def build_pipeline(
         agent_catalog=agent_catalog,
         model_catalog=render_model_catalog(),
         voice_catalog=catalog_summary(catalog),
-        memory_context=render_memory_context(stats=memory_stats),  # U2.5
+        memory_context=str(memory_snapshot),  # U2.5; source binding retained below
         voice=True,
         # U5/U6: the addendum ships only when the tool does — a prompt
         # describing an unregistered tool would invite hallucinated calls.
@@ -1366,9 +1656,19 @@ def build_pipeline(
     # base_url routes there. Everything else keeps OpenAILLMService
     # unchanged. Lazy import: google-genai is an optional dependency and a
     # non-Google deployment must not need it installed.
-    if "generativelanguage.googleapis.com" in (settings.openai_base_url or ""):
+    from jarvis.provider_access import subscription_only
+    if subscription_only() or getattr(settings, "jarvis_llm_access_mode", None) == "subscription_only":
+        # Candidate integration only: the early readiness guard still blocks
+        # activation. No ordinary-turn boolean may authorize the full context.
+        from jarvis.bot.subscription_llm import SubscriptionVoiceLLMService
+        from jarvis.model_routing import resolve_model_route
+        llm = request_bound_service(SubscriptionVoiceLLMService, runtime.foreground_requests)(
+            resolved=resolve_model_route("voice_supervisor"),
+            sources=runtime.voice_sources, session_id=runtime.session_id,
+        )
+    elif "generativelanguage.googleapis.com" in (settings.openai_base_url or ""):
         from pipecat.services.google.llm import GoogleLLMService
-        llm = GoogleLLMService(
+        llm = request_bound_service(GoogleLLMService, runtime.foreground_requests)(
             api_key=settings.openai_api_key,
             model=settings.openai_model,
         )
@@ -1396,7 +1696,7 @@ def build_pipeline(
         # fixed there applies here too), so a future non-default
         # Anthropic-compatible base_url is honoured on Path A the same
         # way it already is on Path B, not by accident.
-        llm = AnthropicLLMService(
+        llm = request_bound_service(AnthropicLLMService, runtime.foreground_requests)(
             api_key=settings.openai_api_key,
             client=AsyncAnthropic(
                 api_key=settings.openai_api_key,
@@ -1410,7 +1710,7 @@ def build_pipeline(
         _logger.info("supervisor_llm_service service=anthropic model=%s prompt_caching=on",
                      settings.openai_model)
     else:
-        llm = OpenAILLMService(
+        llm = request_bound_service(OpenAILLMService, runtime.foreground_requests)(
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
             model=settings.openai_model,
@@ -1421,6 +1721,7 @@ def build_pipeline(
             runlog_enabled=bool(getattr(settings, "jarvis_runlog_enabled", False)),
             session_id=runtime.session_id,
             weather_context=runtime.weather_context if name in {"delegate_task", "local_weather"} else None,
+            foreground_requests=runtime.foreground_requests, sources=runtime.voice_sources,
         )
 
     register_voice_tool("delegate_task", weather_delegate_handler if command_console_enabled else delegate_handler)
@@ -1501,8 +1802,11 @@ def build_pipeline(
             weather=local_weather_on,
         )
     ]
-    context = LLMContext(
-        messages=[{"role": "system", "content": system_prompt}],
+    system_message = {"role": "system", "content": system_prompt}
+    runtime.voice_sources.bind(system_message, memory_snapshot.policy)
+    runtime.weather_context.sources = runtime.voice_sources
+    context = bound_context_type()(
+        sources=runtime.voice_sources, messages=[system_message],
         tools=ToolsSchema(standard_tools=standard_tools),
     )
     # Tier 2 (MORTIMER_VOICE_ISOLATION_TIER12_PLAN.md §4.3) — a local
@@ -1573,9 +1877,8 @@ def build_pipeline(
     # inject_late_result, including its in-flight deferral: a context push
     # mid-delegation makes the model answer around a hole (2026-09-05).
     async def _reply_guard_correction(note_text: str) -> None:
-        message = {"role": "user", "content": note_text}
+        message = runtime.voice_sources.append(aggregators.user(), note_text)
         runtime.voice_state.notes.append(message)
-        aggregators.user().add_messages([message])
         if foreground_delegation_count():
             _logger.info("reply_guard_correction_deferred_inflight delegations=%d",
                          foreground_delegation_count())
@@ -1607,7 +1910,7 @@ def build_pipeline(
     # nothing.
     if speaker_gate_state is not None:
         async def _inject_speaker_drop_note(text: str) -> None:
-            aggregators.user().add_messages([{"role": "user", "content": text}])
+            runtime.voice_sources.append(aggregators.user(), text)
 
         speaker_transcript_gate = TranscriptGate(
             speaker_gate_state,
@@ -1621,6 +1924,7 @@ def build_pipeline(
     # the conversations table (the memory sweep folds that table into
     # long-term memory — observed live 2026-08-21: TV dialogue persisted).
     runtime.speaker_gate = speaker_transcript_gate
+    runtime.foreground_requests.install(speaker_transcript_gate or stt, aggregators.user(), aggregators.assistant())
 
     transcript = TranscriptLogger(session_id=runtime.session_id)
 
@@ -1714,6 +2018,14 @@ async def send_app_message(transport: Any, message: dict) -> None:
     way -- this is the one sender, and parity between the two client
     paths rests on it (docs/acceptance/adaptive-interface/C6-parity.md).
     """
+    if message.get("type") == "display" and isinstance(message.get("display"), dict):
+        payload = dict(message["display"])
+        payload.pop("origin_request_id", None)
+        if (request := _foreground_request.get()) is not None:
+            payload["origin_request_id"] = request.request_id
+            _logger.info("display_dispatch request_id=%s request_sequence=%d",
+                         request.request_id, request.sequence)
+        message = {**message, "display": payload}
     await transport.output().send_message(
         OutputTransportMessageUrgentFrame(message=_wrap_rtvi(message)))
 
@@ -1883,7 +2195,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # appends to the shared context so the note surfaces naturally on
             # the next real user turn instead of triggering an immediate,
             # unprompted spoken reply.
-            aggregators.user().add_messages([{"role": "user", "content": text}])
+            runtime.voice_sources.append(aggregators.user(), text)
 
         async def handle_voice_consent(text: str) -> bool:
             """Consume only an exact final user phrase for a pending offer."""
@@ -1930,7 +2242,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         # Constructed here so inject_late_result below can arm it; the
         # settings flag is the kill switch.
         late_neutralizer = LateResultNeutralizer(
-            enabled=settings.jarvis_late_result_neutralize_enabled,
+            enabled=settings.jarvis_late_result_neutralize_enabled, sources=runtime.voice_sources,
         )
         observers = [
             TranscriptObserver(runtime.session_id, only_from=runtime.speaker_gate,
@@ -2004,11 +2316,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # connected (late results, daily status) ride on the greeting,
             # once — take_pending marks them delivered, so it runs here,
             # when the greeting is actually sent.
+            pending_notices = notices.take_pending()
             greeting_note = (connection_greeting_note(settings.jarvis_timezone)
-                             + notices.render_for_greeting(notices.take_pending()))
-            aggregators.user().add_messages([{
-                "role": "user", "content": greeting_note,
-            }])
+                             + notices.render_for_greeting(pending_notices))
+            # Persisted notice rows have no authenticated policy field. They
+            # may originate in a local-only task; do not lower that floor.
+            greeting_policy = (DataPolicy("local_only", "unclassified-persisted-notices")
+                               if pending_notices else UNKNOWN)
+            runtime.voice_sources.append(aggregators.user(), greeting_note, policy=greeting_policy)
             await aggregators.user().push_context_frame()
 
         greeting = ConnectGreeting(_send_greeting)
@@ -2063,7 +2378,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
 
         async def inject_context(text: str) -> None:
             # D-008: same 1.4 context-injection pattern as the greeting.
-            aggregators.user().add_messages([{"role": "user", "content": text}])
+            runtime.voice_sources.append(aggregators.user(), text)
             await aggregators.user().push_context_frame()
 
         async def inject_late_result(text: str) -> bool:
@@ -2077,7 +2392,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # neutralizer so its imperative dies with the relay turn. The
             # dict handed to add_messages is the one the neutralizer later
             # rewrites — pipecat's LLMContext keeps the caller's objects.
-            message = {"role": "user", "content": text}
+            message = {"role": "user", "content": str(text)}
+            runtime.voice_sources.bind(message, text_policy(text))
             late_neutralizer.arm(message)
             runtime.weather_context.arm_late_note(message)
             aggregators.user().add_messages([message])

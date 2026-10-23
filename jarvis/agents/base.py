@@ -1028,6 +1028,8 @@ class SubAgent:
         model = model if model is not None else self._model
         start = time.perf_counter()
         acquired_policy: DataPolicy | None = None
+        from jarvis.voice_sources import observe_source, UNKNOWN
+        observe_source(policy_floor or UNKNOWN)
 
         def raise_if_cancelled() -> None:
             # Some provider/tool adapters catch CancelledError during cleanup
@@ -1497,6 +1499,7 @@ class SubAgent:
                 remaining = max(
                     0.001, self._timeout_s - (time.monotonic() - start)
                 )
+                observe_source(policy)
                 execution = await execute_chat(
                     ModelExecutionRequest(
                         workload=resolved_route.workload,
@@ -1729,6 +1732,7 @@ class SubAgent:
                             runlog.mark_sensitive()
                             raise
                         acquired_policy = strictest(source_policy, acquired_policy or policy)
+                        observe_source(acquired_policy)
                         if acquired_policy.level in {"confidential", "local_only"}:
                             holder = current_sensitive_turn.get()
                             if holder is not None:

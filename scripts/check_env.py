@@ -58,6 +58,15 @@ def load_env() -> dict[str, str]:
     return env
 
 
+def require_model_api_access(env: dict[str, str] | None = None) -> None:
+    """Use the effective .env policy before any standalone LLM API probe."""
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from jarvis.provider_access import require_api_access
+    effective = load_env() if env is None else env
+    require_api_access(effective.get("JARVIS_LLM_ACCESS_MODE"))
+
+
 def http_status(url: str, headers: dict[str, str] | None = None,
                 method: str = "GET", payload: dict | None = None,
                 read_limit: int = 4096) -> tuple[int | None, str]:
@@ -147,6 +156,10 @@ def model_key_probe(base_url: str, api_key: str, model: str) -> tuple[str, str]:
     Never logs, prints, or returns the key, not even a prefix: the value
     appears only in the Authorization header of the request it makes.
     """
+    try:
+        require_model_api_access()
+    except ValueError as exc:
+        return "blocked", str(exc)
     body = json.dumps({
         "model": model,
         "max_tokens": 16,
@@ -233,6 +246,11 @@ def check_model_keys(env: dict[str, str], pre_vault_env: set[str],
     returns 401 meaning only "not an OpenAI key." Grouping by key alone
     made exactly that mistake and produced a false "renew this key."
     """
+    try:
+        require_model_api_access(env)
+    except ValueError as exc:
+        report(None, "Model API probes disabled", str(exc))
+        return
     try:
         registry = _load_model_registry()
     except FileNotFoundError:
@@ -598,12 +616,20 @@ def main() -> int:
     report(v >= (3, 11), "Python >= 3.11", f"found {v.major}.{v.minor}.{v.micro}")
 
     # 2. Required env vars present
-    missing = [name for name in REQUIRED_VARS if not env.get(name)]
+    api_blocked = False
+    try:
+        require_model_api_access(env)
+    except ValueError:
+        api_blocked = True
+    missing = [name for name in REQUIRED_VARS if not env.get(name)
+               and not (api_blocked and name == "OPENAI_API_KEY")]
     report(not missing, "Required env vars present",
            f"missing: {', '.join(missing)}" if missing else "all set")
 
     # 3. LLM reachable
-    if env.get("OPENAI_API_KEY"):
+    if api_blocked:
+        report(False, "LLM readiness", "API probes disabled; subscription readiness is not verified here")
+    elif env.get("OPENAI_API_KEY"):
         base = env.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
         headers = {"Authorization": f"Bearer {env['OPENAI_API_KEY']}"}
         if "anthropic" in base:

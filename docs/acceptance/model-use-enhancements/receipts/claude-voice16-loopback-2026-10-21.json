@@ -1,0 +1,38 @@
+{
+  "runtime": {
+    "path": "/Users/larryfix/.local/share/claude/versions/2.1.290",
+    "version": "2.1.290 (Claude Code)",
+    "sha256": "b8412a3826b2dc8ecb1c0605970c28dea28355de5faa740407dd881acdd40237"
+  },
+  "model": "claude-haiku-4-5",
+  "tool_count": 16,
+  "tool_schema_sha256": "ec213581d54801172f9079927da2dcca538a5a0dfe73684024bb57cb6dcd9e71",
+  "all_optional_tools_enabled": true,
+  "provider_inference_performed": false,
+  "real_provider_calls": 0,
+  "activation_authorized": false,
+  "limits": [
+    "Local protocol/schema evidence, not real-model tool choice, latency, account billing, or production feature-switch receipt."
+  ],
+  "tool_roundtrip": true,
+  "cleanup_verified": true,
+  "http_observations": [
+    {
+      "schema_matches": true,
+      "model_matches": true,
+      "only_synthetic_credential": true
+    },
+    {
+      "schema_matches": true,
+      "model_matches": true,
+      "only_synthetic_credential": true
+    }
+  ],
+  "source_head": "336c5ca0b5a15da4b58fde47703743afa868665c",
+  "host_isolation": {
+    "external_network": "denied_by_macos_sandbox",
+    "existing_credential_files": "read_denied",
+    "home": "temporary_empty",
+    "tool_handlers": "synthetic_stub_only"
+  }
+}

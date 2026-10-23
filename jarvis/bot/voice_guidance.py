@@ -26,6 +26,7 @@ push_frame test seam as speaker_gate.py.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any, Awaitable, Callable, Coroutine
 
@@ -89,6 +90,24 @@ def is_real_user_message(message: Any) -> bool:
             and not content.lstrip().startswith("[system]"))
 
 
+def acceptance_reporting_guidance(text: str) -> str | None:
+    """Bounded reporting reminder; never grants tools or asserts evidence."""
+    if not re.search(r"\b(?:roadmap|acceptance|tests?|testing)\b", text, re.I):
+        return None
+    return (
+        "[system] Acceptance/reporting: reading ROADMAP.md can emit a formatted roadmap result. "
+        "Inspect console inventory and select that result for the main window; do not infer a missing renderer "
+        "from the absence of a tool called render. Use system_status topic build for installed-build evidence; "
+        "a roadmap deployment header records history, not the loaded build. Distinguish 'you reported a pass', "
+        "'evidence verified' and 'canonical roadmap updated'. Existing conversation/run records are observations, "
+        "not checkbox writes. Use the existing reviewed selfedit documentation PR workflow for authorized updates; "
+        "claim a saved canonical checkbox only after the merged target is read back. "
+        "Do not promise to run tests before an approved executor is available. A repository search/read is not "
+        "an executed test; report the actual command, source/build and result, or the exact missing runner "
+        "and bounded development handoff. Do not turn missing hardware or human observation into a pass."
+    )
+
+
 class VoiceWorkflowInjector(FrameProcessor):
     def __init__(self, state: VoiceTurnState, *, inject_enabled: bool = True,
                  gate: dict | None = None, **kwargs: Any) -> None:
@@ -121,6 +140,11 @@ class VoiceWorkflowInjector(FrameProcessor):
             logger.info("voice_explicit_command_ask")
         if not self._inject_enabled:
             return
+        reporting = acceptance_reporting_guidance(self._state.user_text)
+        if reporting is not None:
+            note = {"role": "user", "content": reporting}
+            context.add_message(note)
+            self._state.notes.append(note)
         wf = match_voice_workflow(user_text=self._state.user_text)
         if wf is None:
             return

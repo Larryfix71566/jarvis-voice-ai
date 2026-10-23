@@ -32,6 +32,7 @@ from typing import Any, Awaitable, Callable
 from jarvis.bot.device_location import APPROXIMATE_ACCURACY_M, REASONS
 from jarvis.bot.display import build_display_payload
 from jarvis.bot.status_tool import _turn_is_protected
+from jarvis.bot.weather_intent import current_weather_intent
 from jarvis.bot.weather_reuse import (
     WeatherReuseBridge, current_weather_reuse, local_weather_subject_key, weather_display_metadata,
 )
@@ -182,6 +183,11 @@ def build_local_weather_tool(
 
         if blocked():
             return PROTECTED_TURN_REFUSAL
+        intent = current_weather_intent.get()
+        if intent is not None and intent.kind != "local":
+            return ("local_weather failed: named or unclear weather target; device location is not the requested place. "
+                    "For a named city delegate to analyst with the exact city from the user's request; "
+                    "otherwise ask which place. No location lookup, fetch or display occurred.")
         try:
             found = await locate(False)
         except Exception:  # noqa: BLE001 — never raised into the turn
