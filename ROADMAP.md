@@ -572,6 +572,17 @@ The coordinator alone handles serial merges; the parent remains Larry’s decisi
 contact. #250 enforcement is proven (3/4 milestones evidenced); #252 retains
 its separate checkbox synchronization and final acceptance checklist.
 
+**Stage A continuity publication — 2026-10-22:** Codex publishes the complete
+historical testing proposal and nine sanitized controller/Skills attachments
+from frozen #246 on the existing `docs/ws20-program-receipts-20261022` branch,
+refreshed from main `ab31dfa`. The coordinator reserved the single docs-map
+link; both feature owners agreed to byte-exact historical adoption, keeping
+canonical-plan pointers with their owners. The [dated publication log](docs/roadmap-log/2026-10-22-ws-20-continuity-stage-a.md)
+records scope, source identities and review limits. This publication leaves
+Stage B (#252 policy-checkbox/receipt and #247 runbook alignment) separate,
+with every checkbox and other owner plan unchanged. No whole frozen branch
+merge, source implementation or new execution authority is included.
+
 ### Acceptance checklist — remaining
 
 B1–B4 implementation is merged; the 72-entry migration is already verified.
@@ -586,15 +597,15 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 **Workstream:** Larry, 10-02: bring the roadmap and open PRs up to date so Claude and Codex can work on it together, and stop the roadmap drifting. Larry chose: each system fixes its own rows; the change log moves out of `ROADMAP.md`, one production line, rows written as they read after merge, and a drift checker; the plan lives in the repo.
 
 - **Owner:** `codex` (existing WS-20 documentation and bounded checker-enforcement integration on the registered branch); `claude` retains B4 authorship/ownership and required cross-review, plus WS-13 ownership. WS-17 release/install ownership is unchanged.
-- **Status:** landed: checker enforcement #250 (`6234949`) and foundation B1–B4; this documentation publishes the dated all-31 program/receipt update from main `2944080`. Proposed lanes remain gated; product acceptance and final Phase A/B evidence remain open.
+- **Status:** landed via this PR (documentation only): complete historical testing plan v2 and sanitized continuation attachments are discoverable through the existing joint plan; foundation B1–B4 and #250 checker enforcement remain landed. The newer all-31 program is preserved. Three of four WS-20 milestones remain evidenced; Stage B checkbox synchronization and final owner evidence/Phase A/B stay separate.
 - **Implemented by:** Codex (B1–B3); Claude (B4)
 - **Remaining work / acceptance:** Reconcile frozen #252’s proven enforcement receipt and checkbox synchronization additively; 3/4 milestones are evidenced, while both existing unchecked boxes are preserved here. Retain owner-linked live/physical/observation evidence and final Phase A/B exit. Future work needs its matching claims and prerequisites; this factual update closes no gate.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `docs/ws20-program-receipts-20261022`, documentation-only from main `29440804baf40292d84acbb0798646e67d0c510a`; no new source implementation branch. Historical enforcement branch `codex/ws20-checker-enforcement-20261022` remains frozen at #252 `86d079f`. Separate #246/#247 histories remain unchanged and are not inherited.
+- **Where:** `docs/ws20-program-receipts-20261022`, Stage A documentation continuation refreshed from main `ab31dfa8ddf58ad0583afcb25dffd18afbee5765`; prior #260 program receipt remains intact. Nine attachment bytes are selectively adopted from #246 `028b44e`; #246/#247/#252 heads remain frozen and no whole branch is inherited. Historical enforcement branch remains frozen at #252 `86d079f`.
 - **Plan:** `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`
 - **Scope:** Additional approved checker-enforcement integration: only `.github/workflows/validate.yml` roadmap-step comment/name/invocation, directly related synthetic tests in `tests/unit/test_check_roadmap.py`, dated progress in the existing joint-working plan and WS-20-specific log/evidence, and this row. Preserve checker logic/severity, all other jobs/triggers/permissions/action pins, branch protection and every product criterion; Claude cross-review is required. Existing acceptance-clearance documentation scope remains ROADMAP current acceptance/status summary and this block, `docs/plans/ROADMAP_JOINT_WORKING_PLAN.md`, WS-20 `docs/roadmap-log/**`, `docs/acceptance/IMPLEMENTATION_STATUS.md`, `docs/acceptance/ACCEPTANCE_RUNBOOK.md` and WS-20 receipts under `docs/acceptance/command-console/receipts/`. Preserve all other owners, checkboxes and receipts; do not edit other feature plans or WS-17 verification evidence. No application runtime, config, credentials, access, provider workload, production write, restart, deployment or enforcement beyond the named roadmap CI step.
-- **Next step:** codex: preserve additive owner receipts and the dated program; reconcile frozen #246/#247/#252 through the sole serial coordinator, without concurrent merges. claude: retain existing ownership and prepare only the agreed bounded lanes after exact claims/dependencies. larry: decide concrete unresolved choices through the parent and retain live acceptance/release decisions. No deployment, live test or source edit follows from this document.
-- **Updated:** 10-22 (all-31 program and verified serial receipt adopted; other owners and every checkbox preserved)
+- **Next step:** codex: verify publication review/CI and hand the exact candidate to the sole serial coordinator; after verified adoption on main, notify the Skills/harness owners for their own canonical-plan pointers. Keep Stage B a separate evidence-reviewed delta and preserve frozen histories. claude: retain current source ownership and gates. larry: retain concrete decisions through the parent and live acceptance/release authority. No runtime, live test or model change follows.
+- **Updated:** 10-22 (Stage A historical attachment adoption and discovery; every checkbox and other owner plan preserved)
 
 
 </details>

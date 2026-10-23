@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "repository": "Larryfix71566/jarvis-voice-ai",
+  "pr": 242,
+  "head": "d476905057fc29207338721ce9ec2a452cb2085d",
+  "review_base": "edeed6bae032eb0b7a5421715c69abf4744129ea",
+  "provider_base": "636880eabbe9dc756c30df7128d0a90c02d222bd",
+  "claim_head": "985379f425dc717997fe502dadfd3aaee0b37662",
+  "review": {
+    "status": "completed",
+    "requested_model": "claude-opus-5-5",
+    "returned_models": [
+      "claude-opus-5-5"
+    ],
+    "exact_model_verified": true,
+    "cli_version": "2.1.291",
+    "auth_method": "claude.ai",
+    "subscription_type": "max",
+    "tools_enabled": false,
+    "api_credentials_inherited": false,
+    "fallback": false,
+    "input_bytes": 329488,
+    "input_sha256": "b730ffe2df223b1a6ebc57d726c9c587fdecca7d1cf7f93810116ed32e3e9936",
+    "delta_sha256": "651b7ef09374483736af68298c336b933be9d0b264d9c4b12dc51ea747e9b0a5",
+    "input_unchanged": true,
+    "started_at": "2026-10-22T15:05:17.611269+00:00",
+    "finished_at": "2026-10-22T15:07:43.658044+00:00",
+    "recommendation": "merge",
+    "workflow_label": "human_review_required",
+    "source_verdict": "accept",
+    "blocking_findings": 0,
+    "prior_finding_groups_closed": 6,
+    "assessment_schema_validation": "passed without normalization",
+    "assessment_sha256": "82e1cc5a98a7c9c459db5f1dec64e95f5f0bb3f2bbdd2bcec4a1186e6bc2d2ba",
+    "report_sha256": "585b6449127a9b3ce4afa0f2ce80ead718f0306384ae10b3a2a26ad7b3fc1b96",
+    "ratings": {
+      "impact": "high",
+      "likelihood": "moderate",
+      "protection": "partial",
+      "recoverability": "easy",
+      "confidence": "moderate"
+    }
+  },
+  "usage": {
+    "review_calls": 1,
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 128155,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 14680,
+    "thinking_tokens": 8553,
+    "subscription_remaining": "unknown",
+    "note": "Provider counters do not determine remaining subscription allowance. No claim of paid API billing."
+  },
+  "ci": {
+    "head": "d476905057fc29207338721ce9ec2a452cb2085d",
+    "all_five_jobs": "passed",
+    "validate_run": 39719641230,
+    "validate_job": 119629884624,
+    "sandbox_run": 39719641219,
+    "knowledgebase_run": 39719641473,
+    "unit_passed": 6912,
+    "unit_skipped": 11,
+    "unit_subtests_passed": 2,
+    "integration_passed": 197,
+    "integration_skipped": 4,
+    "offline_evals_passed": 13,
+    "latency_fixture": "passed",
+    "frontend_build": "passed"
+  },
+  "native": {
+    "execution": "author-local; not GitHub Linux CI",
+    "passed": 18,
+    "failures": 0,
+    "source_and_log_hashes_match_reviewed_receipt": true
+  },
+  "nonblocking_dispositions": [
+    {
+      "id": "N1",
+      "observation": "Old R5 evidence says review/CI pending",
+      "disposition": "Historical receipt preserved; this dated exact-source summary records completed review/CI. Sync owner may append docs-only status with fresh publication-head CI."
+    },
+    {
+      "id": "N2",
+      "observation": "Claim wording implies daily collect reads cached harness evidence",
+      "disposition": "Clarified: collect supplies registry and gets stable stub; separate run_passive reads cached report. No health check removed."
+    },
+    {
+      "id": "N3",
+      "observation": "Legacy-confirm comment says revalidates",
+      "disposition": "Historical stale comment only; legacy tokens now refuse first, v1 fully validates. No source edit for this review."
+    },
+    {
+      "id": "N4",
+      "observation": "Legacy refusal ordering changes error text",
+      "disposition": "No weakened protection; quality staging/no-save assertions retained."
+    },
+    {
+      "id": "N5",
+      "observation": "Cosmetic skill wording and roadmap update wording",
+      "disposition": "Nonblocking; leave reviewed source/pin unchanged. Any skills/runtime/native change requires focused review and fresh CI."
+    }
+  ],
+  "claim_verdict": "Aligned; acceptable for separate human landing decision. Claim CI separately verified green by author, not supplied to reviewer.",
+  "next_claude_task": "Proposed offline test-only patch using fake daily deps and the real model_access_status(registry=...) path, proving no harness.read_report/configured_selection calls and a stable access_status.harness_brief stub with quiet daily diff. Requires bounded assignment/ownership; not executed.",
+  "remaining": [
+    "Human claim landing and merge decision",
+    "Separate deployment decision; no installation authorization",
+    "Universal all-writer approval/runtime exact readback/rollback remain unimplemented; harness switching stays blocked"
+  ],
+  "source_changes_after_review": 0,
+  "live_benchmarks": 0,
+  "model_changes": 0,
+  "merged": false,
+  "installed": false,
+  "prior_denials": "Two earlier transmissions denied before execution; explicit payload/destination permission enabled this one completed call. No bypass."
+}
