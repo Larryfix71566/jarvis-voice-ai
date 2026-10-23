@@ -3273,3 +3273,20 @@ owned process/session are retained by Codex; no local host paths are published.
 Codex reviews/applies/tests/publishes only the registered new files; the coordinator
 retains all merges. Acceptance remains 2/12. This dispatch is implementation
 authorship, not a completed patch, independent source approval or acceptance.
+
+## 2026-10-23 — author timeout and unchanged-packet recovery
+
+The first registered author invocation ended at `2026-10-23T00:06:11.337284+00:00` after
+its 900-second timeout (return 143), with empty stdout/stderr and no parseable
+patch. Its owned process group was confirmed absent before recovery. This is
+not implementation or review success.
+
+Attempt 2 actually started at `2026-10-23T00:07:46.762946+00:00` through the same official
+Code 2.1.291/Max subscription, tools-disabled/no-checkout/no-API-fallback route,
+with a 1,800-second timeout and local streaming capture. The packet is unchanged:
+103,689 bytes; SHA-256 `f7410423c6f654dd79b6dc990de2d6a0fe861d83c7529c9e1f7bade5d57fedfa`; original source base `aa03cd4`.
+Startup announces `claude-opus-5-5` and an empty tool list. Final model identity,
+patch and outcome remain pending. No quota or policy refusal was reported by
+attempt 1. No source has been applied or new test result claimed; 2/12 remains
+unchanged. Current main is integrated while preserving the supplied dependency
+packet; its hashes will be rechecked before applying a returned patch.
