@@ -1,6 +1,10 @@
 # Model Use Enhancements
 
-**Status:** Bounded harness remediation is in progress on `codex/ws05-harness-remediation-20261022` under claim #257, merged as `29440804baf40292d84acbb0798646e67d0c510a`. #242/#253 remain frozen and unmerged dependencies. Prior recorded status follows: Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: SUBSCRIPTION RETIREMENT STAGED 2026-10-21 — draft #232 contains opt-in runtime guards and a buffered native voice/tool adapter; activation and incremental-streaming acceptance remain blocked. Claim #230 is merged and all five claim CI checks passed. No deployment or runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
+**Status (after PR #264 integration):** Recommendation-only harness foundation and bounded repair land as source through the sole coordinator; installation, active runtime identity, model switching and live acceptance remain unverified. Main claim #266 is verified at `67438c3a66827616a1f91cf692a98245a262813e`; this candidate reconciles that main and preserves provider #259/#267 plus the newer claims. Original eba2130 reviews/CI are historical evidence; exact combined review and CI must complete before source merge. WS-03 acknowledged only the exact harness roster/pin-count edits in `tests/unit/test_agent_skills.py` (blob `a4d8c6cc44bed71bd405c9006fba238102bb9115`); further shared-test changes require coordination. No model or runtime configuration is changed.
+
+**Status (historical candidate checkpoint, 2026-10-22):** Recommendation-only source candidate [#264](https://github.com/Larryfix71566/jarvis-voice-ai/pull/264) at `eba21305564b905299d4e59a761f6d4ca90bd2db` contains the bounded repair: 148 focused offline tests pass, independent exact-head review accepts it, and all five CI jobs pass. Validation run39872658534 checked test-merge `541acd746868caae4d04be1545837468a9ff6e78` into main1043b96: 7,038 unit passes/11 skips/two subtests; 197 integration passes/four skips; 13 offline evals; fixture latency and frontend pass. Claude Max exact Opus5.5 accepted unchanged runtime at c2cd6d9; later package/test/docs changes were independently reviewed, not claimed as Claude-rereviewed. Supplemental foundation claim #266 registers the exact inherited foundation once landed, preserving active repair ownership. It is reconciled with main `ab31dfa8ddf58ad0583afcb25dffd18afbee5765`, including landed provider #259 (`575e41f`). WS-03 acknowledgement, claim landing and fresh current-main combined verification precede source integration through the sole coordinator. Harness switching stays blocked; no installed-build, runtime activation, model change, live inference or acceptance closure follows.
+
+**Historical status (before current integration registration):** Bounded harness remediation is claimed on main via #257, with active branch `codex/ws05-harness-remediation-20261022` and its exact scope/CX-28 unchanged. #242/#253 remain frozen, unmerged dependencies at claim registration. Separately, reviewed Codex alpha.11 source from frozen #244 lands only after the current-main integration candidate is merged; sanitation/docs reconciliation review and fresh CI remain required. No runtime activation, installed-build or live acceptance follows. Prior recorded status follows: Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: SUBSCRIPTION RETIREMENT STAGED 2026-10-21 — draft #232 contains opt-in runtime guards and a buffered native voice/tool adapter; activation and incremental-streaming acceptance remain blocked. Claim #230 is merged and all five claim CI checks passed. No deployment or runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
 **Origin:** Larry's model-access, subscription, SAYGM, orchestrator, and latency discussions; implementation plan preserved from the conversation at Larry's request.
 **Scope:** Manual subscription/API selection, SAYGM integration, privacy-aware routing, and preservation of Mortimer's existing behavior. Voice-provider replacement is a separate decision requiring testing.
@@ -1247,3 +1251,227 @@ family-name negatives and explicit workspace modes; 148 focused tests pass.
 Runtime repair bytes are unchanged. Later package/test/docs edits require
 focused review and fresh publication-head CI; wider foundation landing,
 model selection and installation remain unapproved.
+
+### 2026-10-22 — Codex alpha.11 offline compatibility continuation
+
+The installed Codex executable changed from 0.163.0-alpha.10.2 to
+0.163.0-alpha.11. WS-05 owns the minimal version-contract continuation in
+`jarvis/subscription.py` and its capability tests, isolated from PR #243.
+Current guard correctly refuses the unknown version. Bounded localhost-only
+positive and injected-unadvertised-tool probes passed with external network
+and credential reads denied, and 33 unchanged capability tests passed.
+Prepare the version admission plus regression coverage and require independent
+source review and offline verification before draft publication. The existing
+exact binary/model/catalog/invocation receipt still gates execution. Older
+live evidence is historical; activation remains blocked pending renewed
+exact-binary workload acceptance and the existing release/privacy gates.
+Both prior live-test allowances are used. Any renewed live test needs fresh
+bounded authorization; existing extra-usage confirmations remain recorded.
+No installation, configuration, account or service changes are authorized here.
+
+Minimal implementation adds only the exact alpha.11 version to the verified
+set and parameterizes receipt-required coverage for both .10.2 and .11.
+Focused capability/runtime tests pass 78/78. The new exact receipt validates;
+the old .10.2 receipt is rejected against .11. Public sanitized diagnostic:
+[offline receipt](../acceptance/model-use-enhancements/receipts/codex-alpha11-offline-2026-10-22.json).
+The complete local mock receipt remains uninstalled. Independent source review
+and final-head CI are pending at this implementation commit.
+
+Alpha.11 continuation verification: 182 focused offline tests pass, strict
+roadmap has zero errors/warnings, and independent tools-disabled Fable 5.1
+review of `b4ce39a` reports no blocking findings. [Review and dispositions](../acceptance/model-use-enhancements/receipts/codex-alpha11-review-2026-10-22.md).
+The diagnostic markers are informational collection metadata, not runtime
+authorization controls. Following reviewed version admission, an exact matching
+full diagnostic receipt can satisfy the capability check; separate operator
+flags and release/live acceptance still apply. Nothing here sets those flags
+or installs that receipt. Renewed exact-binary workload acceptance remains
+required before activation. Final publication CI is tracked on the draft PR.
+
+### 2026-10-22 — Alpha.11 sanitation and current-main integration
+
+Integrate frozen #244 `014f915` with coordinator-verified main `2944080`,
+preserving both full dated additions above and all harness ownership/CX-28
+boundaries. The alpha.11 runtime/test bytes remain the independently reviewed
+`b4ce39a` blobs. Remove raw personal launcher paths from the final public
+receipt; retain the original launcher digest as historical provenance, not a
+digest of transformed source. Correct the author disposition while preserving
+the original review findings. Previously published history is not rewritten.
+The public summary still lacks the catalog and cannot activate a runtime.
+
+The original #244 publication passed all five CI checks; those checks do not
+certify this new main combination. Fresh docs-delta review and publication CI
+are required here. The serial coordinator alone owns main integration; no
+installation, service/model change, live test or acceptance checkoff is included.
+
+Prospective-main lifecycle correction: the coordinator's synthetic merge of
+0ad6bb1 correctly makes frozen provider 014f915 an ancestor. The strict checker
+then rejects the historical provider branch in the active claimed Where field.
+Move only that completed branch and its complete lineage to an explicitly
+historical field. Keep the active harness Where, Owner, Status, Scope,
+Next step and CX-28 unchanged in meaning; all source/test blobs and acceptance
+checkboxes remain unchanged. The earlier Where-byte-equality receipt describes
+5889a92 only and is superseded for this one authorized factual relocation.
+
+### 2026-10-22 — Exact recommendation foundation integration registration
+
+Latest Larry program direction permits completing source integration through
+the sole serial coordinator; it does not bypass ownership or verification.
+This is a documentation-only supplement on current main `1043b9661852deb50af7fe9a82df68e491907df2`.
+Old claim #241 remains open/unmerged at
+`985379f425dc717997fe502dadfd3aaee0b37662`, based on `636880e`; its old branch
+would replace the newer repair ownership. Do not merge it blindly. #257
+landed at `29440804baf40292d84acbb0798646e67d0c510a` and independently covers
+the narrow repair only. This supplement adds only the inventoried frozen
+recommendation foundation to the existing active repair branch. It does not
+retroactively claim the original draft was landed.
+
+**Ancestry and exact comparison.** #242 `d476905057fc29207338721ce9ec2a452cb2085d`
+contains the old #241 commits; it was merged locally with main2944080 as
+`a3b4107f07e2d8a581cdf304bf172a8fb379eaf0`. The two repair commits are
+`c2cd6d9e2a23b8591c0a6615472f662b31165957` and
+`eba21305564b905299d4e59a761f6d4ca90bd2db` (#264). #253
+`a568f7dc282fff7436a4527feb7d162a2b021c81` is not an ancestor: only its
+findings and isolated daily-test source were carried; its branch is unchanged.
+Read-only merge-tree against current main1043b96 yields conflict-free tree
+`dca8e98deebee8f797affa788444c30d80ec881d`. This prospective tree preserves the newer WS-20
+program update; it is not a commit, CI result or performed merge. The combined
+feature delta is the 46 paths below. The separate 13-file repair comparison
+is a3b4107..eba2130, SHA-256
+`70bfb82f566f11230111a00f1245b85ceacc1aba9a4713bae3ddbb204c26692e`.
+
+**Ownership limits.** This is adoption of exact existing hunks, not permission
+for new shared-file features. WS-03 retains compatibility/importer/selector
+work. Its shared test file changes only the authored harness roster entry and
+matching-pin count (5 to 6); existing compatibility assertions survive. The
+one authored package enabled entry/digest is source registration, not an
+installed-app activation. Provider #244 reconciliation and installation/held
+restoration remain with their owners. Existing daily health collectors and
+MCP menu stay intact. No settings, credential, privacy boundary, endpoint
+registry or model selection changes are part of this registration. The
+foundation blocks harness switching and voice-supplied confirmation rather
+than claiming that all writers/runtime support safe switching. Non-harness
+exact-proposal controls remain limited to their existing supported surfaces.
+
+**Verification and next action.** Claude Max exact Opus5.5 accepted c2cd6d9;
+later package/test/doc changes have an independent exact-head ACCEPT at
+eba2130. Runtime harness bytes are unchanged; 148 focused offline tests pass.
+CI for eba2130 is separate and its actual base/test-merge must be recorded.
+These receipts do not establish new main integration or native runtime
+acceptance. After this supplement lands, refresh main in the registered
+branch, reconcile documentation preserving all owners, verify changed-byte
+coverage and run fresh exact combined checks. Any source conflict returns to
+its owner; do not silently widen this claim. The coordinator may then serially
+integrate verified source under the current program authorization. Installation,
+model updates, live inference and acceptance checkboxes remain separate.
+
+| Exact prospective-main changed path | Provenance |
+|---|---|
+| `ROADMAP.md` | Repair + inherited context |
+| `config/skills.yaml` | Repair + inherited context |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/README.md` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/claude-review-c2cd6d9.md` | Repair + inherited context |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/independent-assessment.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/independent-review.md` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/publication-source.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r4-independent-assessment.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r4-independent-review.md` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r4-publication-source.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r4-reviewed-file-manifest.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r5-dispositions.md` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r5-source-evidence.json` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/remediation-dispositions.md` | Repair + inherited context |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/review-dispositions.md` | Frozen foundation |
+| `docs/acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/reviewed-file-manifest.json` | Frozen foundation |
+| `docs/plans/MORTIMER_MODEL_USE_ENHANCEMENTS_PLAN.md` | Repair + inherited context |
+| `docs/roadmap-log/2026-10-22-ws-05-harness-recommendation-claim.md` | Frozen foundation |
+| `docs/roadmap-log/2026-10-22-ws-05-harness-recommendations.md` | Frozen foundation |
+| `docs/roadmap-log/2026-10-22-ws-05-harness-remediation.md` | Repair + inherited context |
+| `jarvis/admin/server.py` | Frozen foundation |
+| `jarvis/bot/model_route_tool.py` | Frozen foundation |
+| `jarvis/model_preferences.py` | Frozen foundation |
+| `jarvis/status/daily.py` | Frozen foundation |
+| `jarvis/status/harness.py` | Repair + inherited context |
+| `jarvis/status/models.py` | Frozen foundation |
+| `macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift` | Frozen foundation |
+| `macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift` | Frozen foundation |
+| `macos/MortimerHost/Tests/MortimerHostTests/ModelRouteControlsTests.swift` | Frozen foundation |
+| `skills/harness-model-evaluation/SKILL.md` | Repair + inherited context |
+| `skills/harness-model-evaluation/mortimer.yaml` | Repair + inherited context |
+| `skills/harness-model-evaluation/references/daily-brief.md` | Frozen foundation |
+| `skills/harness-model-evaluation/references/evaluation.md` | Frozen foundation |
+| `skills/harness-model-evaluation/references/evidence-baseline.md` | Frozen foundation |
+| `skills/harness-model-evaluation/references/mortimer-integration.md` | Frozen foundation |
+| `skills/harness-model-evaluation/references/review-protocol.md` | Frozen foundation |
+| `tests/fixtures/skills_authoring/harness-model-evaluation/matcher-cases.json` | Repair + inherited context |
+| `tests/unit/test_admin_api.py` | Frozen foundation |
+| `tests/unit/test_agent_skills.py` | Frozen foundation |
+| `tests/unit/test_auth_middleware.py` | Frozen foundation |
+| `tests/unit/test_harness_brief.py` | Repair + inherited context |
+| `tests/unit/test_harness_cache_concurrency.py` | Repair + inherited context |
+| `tests/unit/test_harness_confirmation.py` | Frozen foundation |
+| `tests/unit/test_harness_daily_offline.py` | Repair + inherited context |
+| `tests/unit/test_model_preferences.py` | Frozen foundation |
+| `tests/unit/test_model_route_contracts.py` | Frozen foundation |
+
+
+### 2026-10-22 — Claim #266 current-main and lifecycle reconciliation
+
+Reconcile claim head 272bea5 with current main
+`ab31dfa8ddf58ad0583afcb25dffd18afbee5765`, including provider integration
+#259, WS-03 adapter claim #261, WS-24 claim and phone documentation. Only
+ROADMAP and this plan conflicted. Preserve the full provider source milestone
+and historical provider lineage outside active Where; retain all alpha.11
+receipts and all new reservations/claims. Active Where contains only the live
+repair branch. Foundation registration provenance is a separate field, so
+claim landing cannot make the strict checker treat a completed documentation
+branch as active work. This addresses the coordinator's independent lifecycle
+finding on 272bea5. The original 46-path inventory/prospective tree above
+remain dated evidence against main1043b96, not proof of this newer source
+combination. No runtime/test blob differs from current main in this claim.
+
+Before inherited source integration, obtain WS-03 acknowledgement of exactly
+`tests/unit/test_agent_skills.py` roster addition and matching-pin count 5 to 6.
+The new offline adapter uses separate files and has no harness dependency.
+Claim landing, fresh main reconciliation, exact combined source review and CI
+remain required through the sole coordinator. No source/installation/model
+activation or live test is performed by this documentation reconciliation.
+
+
+Coordinator review dispositions for initial #266 head 272bea5: R1 is fixed by
+placing registration provenance outside active Where, with the strict checker
+passing when this claim is treated as main. R2 is fixed by the dated current
+status prefix above; all earlier status evidence remains explicitly historical.
+The main259 conflicts were reconciled additively without changing provider
+runtime/test blobs. These corrections require fresh exact-head documentation
+review and CI; earlier ACCEPT/REVISE receipts are not relabeled.
+
+### 2026-10-22 America/New_York — PR #264 registered foundation integration
+
+Claim #266 merged as `67438c3a66827616a1f91cf692a98245a262813e` after
+independent corrected-delta review and all five CI checks. The isolated source
+branch reconciles that exact main with reviewed repair head
+`eba21305564b905299d4e59a761f6d4ca90bd2db`. Only ROADMAP and this plan conflicted:
+retain the current registration/provider lineage and all dated foundation,
+repair, alpha.11 and other-owner evidence. Runtime and test files merge without
+conflicts; exact blob preservation and combined behavior are checked separately.
+Frozen #241/#242/#253 remain untouched; the main-first foundation exception is
+now registered rather than inferred from the earlier narrow repair claim.
+
+WS-03 explicitly inspected and acknowledged exactly two edits in
+`tests/unit/test_agent_skills.py`, blob
+`a4d8c6cc44bed71bd405c9006fba238102bb9115`: harness roster addition and matching
+digest-pin count 5 to 6. There is no parser/importer/adapter or compatibility
+assertion change. Preserve actual package/pin correspondence; any further
+shared-test delta returns to coordination. The separately reported
+`test_claude_developer_capability.py` isolation defect remains with the provider
+owner, outside this patch; no blind rerun or production fix is included.
+
+Historical exact eba2130 evidence: independent local ACCEPT, 148 focused offline
+passes, all five CI checks (7,038 unit / 197 integration / 13 offline eval passes).
+Official authenticated Claude Code Max returned exact `claude-opus-5-5` ACCEPT
+on c2cd6d9; later package/test/docs changes received independent local review,
+not a second Claude review. Harness runtime bytes remain identical. Those
+checks do not certify this newer main combination. Final combined review,
+focused checks and exact-head publication CI are separate required receipts.
+The after-merge status means source landed only when the coordinator merges
+#264; it does not assert that the current draft is already on main.

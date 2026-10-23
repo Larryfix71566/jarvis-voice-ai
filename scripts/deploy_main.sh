@@ -270,25 +270,35 @@ class Held:
         rb,a=self.envelope(rb);require(set(names)<=set(LOCAL) and names and len(names)==len(set(names)),'only explicit costs/vault permitted')
         require((rb/'installed-held.json').is_file(),'held installation receipt missing')
         self.installed(rb);self.hold();self.floor(a)
+        stage='local restore preflight'
         try:
             for name in names:
-                self.floor(a);self.prelaunch_source(name);label=LABELS[name];self.run('launchctl','enable',self.domain+'/'+label)
+                stage=name+' launch policy'
+                self.floor(a);self.prelaunch_source(name);label=LABELS[name]
+                stage=name+' enable';self.run('launchctl','enable',self.domain+'/'+label)
+                stage=name+' bootstrap'
                 self.run('launchctl','bootstrap',self.domain,self.home/'Library/LaunchAgents'/(label+'.plist'))
+                stage=name+' process identity'
                 for _ in range(100):
                     job=self.job(label)
                     if job['pid']:break
                     self.sys.sleep()
                 require(job['pid'],'new service PID unavailable')
+                stage=name+' effective policy'
                 env=self.run('ps','eww','-p',str(job['pid']),'-o','command=').stdout
                 require(re.findall(r'(?:^|\s)JARVIS_LLM_ACCESS_MODE=([^\s]+)',env)==[MODE],'effective service policy unavailable')
+                stage=name+' source cwd'
                 cwd=self.run('lsof','-a','-p',str(job['pid']),'-d','cwd','-Fn').stdout
                 paths=[x[1:] for x in cwd.splitlines() if x.startswith('n')]
                 require(len(paths)==1 and pathlib.Path(paths[0]).resolve().is_relative_to(self.c),'service source cwd mismatch')
-                self.sys.request(*LOCAL[name]);self.floor(a)
+                stage=name+' health';self.sys.request(*LOCAL[name])
+                stage=name+' shutdown policy';self.floor(a)
+            stage='remaining service holds'
             self.hold(set(LABELS)-set(names))
+            stage='restoration receipt'
             private_json(rb/'local-restoration.json',{'status':'local-only-restored','services':names,'target':a['target']})
-        except Exception:
-            self.quarantine();raise HeldError('local restoration failed; services quarantined') from None
+        except Exception as exc:
+            self.quarantine();raise HeldError('local restoration failed at '+stage+' ('+type(exc).__name__+'); services quarantined') from None
     def archive_safe(self,path):
         with tarfile.open(path,'r:gz') as tar:
             for item in tar:

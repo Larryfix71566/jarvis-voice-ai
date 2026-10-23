@@ -37,3 +37,15 @@ pre-existing/informational limits are dispositioned in the receipt. Focused
 validation is now 148 passing tests. Later package/test/docs edits are not
 claimed as Claude-reviewed; final focused review/CI remain separately pinned.
 PR #264 remains draft and dependency-held; no merge or installation authority.
+
+
+## Registered foundation integration (2026-10-22 America/New_York)
+
+After #266 landed at `67438c3a66827616a1f91cf692a98245a262813e`, reconcile
+current main into reviewed #264 eba2130. Documentation conflicts retain both
+repair history and new registration/provider/current-owner intent; no runtime
+or test conflicts. WS-03 exact roster/pin-only acknowledgement is recorded in
+the canonical plan. Provider fixture isolation is disjoint and remains owned
+separately. Row/plan state describe source landing after coordinator integration,
+with exact combined review/CI still required before merge. No installation,
+model selection, service operation or live inference is authorized or performed.
