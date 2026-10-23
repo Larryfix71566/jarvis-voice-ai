@@ -95,6 +95,47 @@ def test_generic_read_does_not_add_snapshot(tmp_path, monkeypatch):
     assert logic.repo_read_file('plain.md') == {'ok':True, 'path':'plain.md', 'bytes':5, 'content':'hello'}
 
 
+def test_roadmap_limit_is_separate_from_generic_file_limit(tmp_path, monkeypatch):
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    monkeypatch.setattr(logic, 'REPO_READ_MAX_BYTES', 100)
+    monkeypatch.setattr(logic, 'ROADMAP_READ_MAX_BYTES', 1000)
+    text = card('WS-01', extra='x' * 500)
+    (tmp_path / 'ROADMAP.md').write_text(text)
+    (tmp_path / 'plain.md').write_text(text)
+
+    result = logic.repo_read_file('ROADMAP.md')
+    assert result['ok'] is True
+    assert result['content'] == text
+    ordinary = logic.repo_read_file('plain.md')
+    assert ordinary['ok'] is False
+    assert '100 byte limit' in ordinary['error']
+
+    monkeypatch.setattr(logic, 'ROADMAP_READ_MAX_BYTES', 10)
+    refused = logic.repo_read_file('ROADMAP.md')
+    assert refused['ok'] is False
+    assert '10 byte limit' in refused['error']
+    assert 'content' not in refused and 'roadmap' not in refused
+
+
+def test_roadmap_second_read_enforces_dedicated_limit(tmp_path, monkeypatch):
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    doc = tmp_path / 'ROADMAP.md'
+    doc.write_text(card('WS-01'))
+    monkeypatch.setattr(logic, 'ROADMAP_READ_MAX_BYTES', doc.stat().st_size)
+    original_read_bytes = Path.read_bytes
+
+    def grown_read_bytes(path):
+        if path == doc:
+            return b'x' * (logic.ROADMAP_READ_MAX_BYTES + 1)
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, 'read_bytes', grown_read_bytes)
+    refused = logic.repo_read_file('ROADMAP.md')
+    assert refused['ok'] is False
+    assert 'Roadmap grew beyond the read limit; not truncated' in refused['error']
+    assert 'content' not in refused and 'roadmap' not in refused
+
+
 def test_real_repo_has_complete_card_count_and_bounded_snapshot(monkeypatch):
     import re
     root = Path(__file__).resolve().parents[2]

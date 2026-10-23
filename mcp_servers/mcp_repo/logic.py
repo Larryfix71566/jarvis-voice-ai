@@ -12,8 +12,11 @@ import os
 from pathlib import Path
 
 
-# ⚙ TUNING KNOB — largest file repo_read_file will return (D20).
+# ⚙ TUNING KNOB — largest ordinary file repo_read_file will return (D20).
 REPO_READ_MAX_BYTES = 256_000
+# The canonical roadmap also carries a complete bounded parsed snapshot. Its
+# source cap is separate so roadmap growth never raises other file limits.
+ROADMAP_READ_MAX_BYTES = 384 * 1024
 
 # ⚙ TUNING KNOB — cap on repo_list_files/repo_search result counts (D20).
 REPO_SEARCH_MAX_RESULTS = 50
@@ -137,26 +140,27 @@ def repo_read_file(path: str) -> dict:
     if not resolved.is_file():
         return _err(f"{path} is not a file")
 
+    rel = resolved.relative_to(root.resolve(strict=False)).as_posix()
+    read_max_bytes = ROADMAP_READ_MAX_BYTES if rel == "ROADMAP.md" else REPO_READ_MAX_BYTES
     # Size enforcement AFTER resolve_repo_path, BEFORE reading (D11) — a
     # stat() call, not read-then-measure, so an oversized file is never
     # actually loaded into memory.
     size = resolved.stat().st_size
-    if size > REPO_READ_MAX_BYTES:
+    if size > read_max_bytes:
         return _err(f"{path} is {size} bytes, over the "
-                    f"{REPO_READ_MAX_BYTES} byte limit — read a smaller "
+                    f"{read_max_bytes} byte limit — read a smaller "
                     "file or a specific section; it was NOT truncated")
     try:
         content = resolved.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return _err(f"{path} is not valid UTF-8 text (binary file?)")
-    rel = resolved.relative_to(root.resolve(strict=False)).as_posix()
     result = {"ok": True, "path": rel, "bytes": size, "content": content}
     if rel == "ROADMAP.md":
         try:
             # Hash the actual file bytes, including CRLF, rather than universal
             # newline normalization. Ordinary document reads stay unchanged.
             raw = resolved.read_bytes()
-            if len(raw) > REPO_READ_MAX_BYTES:
+            if len(raw) > ROADMAP_READ_MAX_BYTES:
                 raise RepoPathError("Roadmap grew beyond the read limit; not truncated")
             result["content"] = raw.decode("utf-8")
             result["bytes"] = len(raw)
