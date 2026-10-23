@@ -121,6 +121,9 @@ public struct AdminAPI: Sendable {
     // MARK: Model access
     /// Route metadata contains availability flags only; it never returns secrets.
     public func modelRoutes() async throws -> JSONValue { try await get("api/model-routes") }
+    public func refreshHarnessModelEvidence() async throws -> JSONValue {
+        try await post("api/status/harness-models/refresh", body: [String: String]())
+    }
     public func stageModelRoute(_ preference: ModelRoutePreferenceStage) async throws -> JSONValue {
         try await post("api/model-routes/stage", body: preference)
     }

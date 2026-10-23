@@ -1,0 +1,137 @@
+{
+  "base_commit": "574282e5b036a3e4a9e6f76e82c4dc92f61c309a",
+  "changed_files": [
+    {
+      "path": "config/skills.yaml",
+      "before_sha256": "c6eafc069f06d23a1fa837bcab4428c8d9138e076e417654d2c6490537683a99",
+      "after_sha256": "6ff02f20d910ef82148ecb7ea2a81151f68d8876f3c4c3258dedf53fc2fa5ae4"
+    },
+    {
+      "path": "jarvis/admin/server.py",
+      "before_sha256": "8186f73c6c52046004c9ba2f848360e077074ca4396c1c3196024dea958da5b4",
+      "after_sha256": "9a8474dd6b0826dae4a2629306e3bf45cf4e7da6ebd23fb93a8518180785a8a8"
+    },
+    {
+      "path": "jarvis/bot/model_route_tool.py",
+      "before_sha256": "605fa4dd47e0a982d9eb4e2a90fb001af721f9741c3e838f3bc3a4e10e776e51",
+      "after_sha256": "fe54b11188f64e322f23e95821c7041f1e11fdacb2b59520a40b00921a526c6d"
+    },
+    {
+      "path": "jarvis/model_preferences.py",
+      "before_sha256": "1234752bd2f11a114baed56eab386602fdcaf1951dd9495097e66acf0cc1fff7",
+      "after_sha256": "4575f9cd22d01f1fd54a7ae1e2540c2721abfa5a0a90dc2eea56fff643042b24"
+    },
+    {
+      "path": "jarvis/status/daily.py",
+      "before_sha256": "54095dc11ce05fcc9183eee8179b6a807acc1d0f5c0d3e76f237bef565c69131",
+      "after_sha256": "0a61e561583ab48defb6c737d12c5fd29361ae3802a33b84829adcb3693cd2bc"
+    },
+    {
+      "path": "jarvis/status/harness.py",
+      "before_sha256": null,
+      "after_sha256": "2bbfd9017f1749bce9d89cf1d03a29e550df53ce2e6b4cde6c32ca22d86606c0"
+    },
+    {
+      "path": "macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift",
+      "before_sha256": "4a78b3d4d15de4176ba719f6b972abbf535ce8fde2f5391c6d5bd29d4b763be5",
+      "after_sha256": "9bd4b1fb671c579662b67a2a03b29bf0ecaeb1f9cdc9ca3990701d071e3153c3"
+    },
+    {
+      "path": "macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift",
+      "before_sha256": "74c1486e391dfcd8673b41ad0e0e07156a6e5797de6586998aa19dbaa1680bba",
+      "after_sha256": "12b9ca2cc19e2d9642b63f35ecf5df23b3f8eaaf53aaa84deff1126c55e7dd0e"
+    },
+    {
+      "path": "macos/MortimerHost/Tests/MortimerHostTests/ModelRouteControlsTests.swift",
+      "before_sha256": "ab66272597b60fed5988baae20a881b1eaa377b9d1a5c14e99a0b176ce0f3715",
+      "after_sha256": "deb21dc00bc833798a4a25e7274a1e7419ce7947d7a2ca440bf99e6b55e04f7a"
+    },
+    {
+      "path": "mcp_servers/mcp_status/logic.py",
+      "before_sha256": "5a4a99847c849d1fecf7d8f19807b1c631cb4d02cf3be01f0f4996f9941c3f3e",
+      "after_sha256": "af953bdab37d205913efd62bfb8b8b565c7fa3e68d6490308a9cf64d4db11414"
+    },
+    {
+      "path": "mcp_servers/mcp_status/server.py",
+      "before_sha256": "e11f3d55bb17726cec9826c773383061ebf8c5babcf91dc6fdb92336a91d1f42",
+      "after_sha256": "ab0ff1e65430a5d1574856036a8d0a6acaada0647347e8b765100fa9ffcf9da8"
+    },
+    {
+      "path": "mcp_servers/mcp_status/skill.yaml",
+      "before_sha256": "48946d54279be755227020e68cc3066e0119bf0242e35e1a1a4bbc7b76ee4f59",
+      "after_sha256": "29a76404f3e323c0484dc7219ffc104b8e47fc8c488ee609bf1f62e8bd2dab37"
+    },
+    {
+      "path": "skills/harness-model-evaluation/SKILL.md",
+      "before_sha256": null,
+      "after_sha256": "04dff360bdd76052e625c2ca0904260c2cdcb468d5620232b405e876e424c8b4"
+    },
+    {
+      "path": "skills/harness-model-evaluation/mortimer.yaml",
+      "before_sha256": null,
+      "after_sha256": "76342092b7e2e5fe7c64ec6af33c34993b0ee8c92952da05a76e830580a943de"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/daily-brief.md",
+      "before_sha256": null,
+      "after_sha256": "cba3be9bdbd31c58e6614b9f2ad1c0850fc61d64d5e97aa38bff74ab6179da16"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/evaluation.md",
+      "before_sha256": null,
+      "after_sha256": "7bce5a74c59d0243d2e5b11c1cd93ecbf97b76196b8761818b47842782315a7a"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/evidence-baseline.md",
+      "before_sha256": null,
+      "after_sha256": "337f8bb28e1127c2024a33e8953105a529679637f482a01b302c1c1cd56b1e5b"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/mortimer-integration.md",
+      "before_sha256": null,
+      "after_sha256": "cf7fc3255273aed6e4cc629a37cf47a4467446a74d75bfe9c4e3dc428826ae85"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/review-protocol.md",
+      "before_sha256": null,
+      "after_sha256": "9c5fdc23f4e41f108ed438e3aecb6950d10481c06528afa21ab5b276d9ebeec8"
+    },
+    {
+      "path": "tests/fixtures/skills_authoring/harness-model-evaluation/matcher-cases.json",
+      "before_sha256": null,
+      "after_sha256": "299590a591c5a37558d44d525b72389de0f09f59c730452d9d055d3173016839"
+    },
+    {
+      "path": "tests/unit/test_admin_api.py",
+      "before_sha256": "55a8a75c267c8748caaa9ab60cc66a427f068c2448c1c1d6618a1988c9751d56",
+      "after_sha256": "2241fd6dfdb4665449fb27ce17137be0444e8aae67805e478bffd1cd42e349f2"
+    },
+    {
+      "path": "tests/unit/test_harness_brief.py",
+      "before_sha256": null,
+      "after_sha256": "833dca66d3462131692c69e2924230496d4026ceda9ac16e5d1d416fa1e9fab5"
+    },
+    {
+      "path": "tests/unit/test_harness_confirmation.py",
+      "before_sha256": null,
+      "after_sha256": "05e3362e105b02d7b249eba6831fbfa0b2a22574738dd16972ea1939b2386f90"
+    },
+    {
+      "path": "tests/unit/test_mcp_status_logic.py",
+      "before_sha256": "5da1e5c041646998aef08fa6a398fcdaf54e87f664ab559cad37015cd97e2bbc",
+      "after_sha256": "d9db5823224ad700cf69a6c3fbe4fa2331254d5cd6db7b061b5c4a271b9cae37"
+    },
+    {
+      "path": "tests/unit/test_model_preferences.py",
+      "before_sha256": "6effe7dde139b87113e1d3cff7d9171fe3ab3e0d5c9ba39b0b35d585a42a8ff2",
+      "after_sha256": "2bc33d049aaa15b318160f6f6db42eb441b99f751425a18cb47ef63fabacade9"
+    }
+  ],
+  "patch_sha256": "32ccb1f8971ff3e8f11030ec502432cb80dae48bbcf8f45e8f3789b31517c2e4",
+  "installed": false,
+  "published": false,
+  "benchmarks": 0,
+  "independent_code_review": false,
+  "plan_library_file_id": "libfile_502deeb949688191a3c41f02eafadb4c",
+  "plan_library_version": 2
+}

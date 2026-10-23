@@ -1,8 +1,8 @@
 # Model Use Enhancements
 
-**Status (current, 2026-10-22):** Recommendation-only source candidate [#264](https://github.com/Larryfix71566/jarvis-voice-ai/pull/264) at `eba21305564b905299d4e59a761f6d4ca90bd2db` contains the bounded repair: 148 focused offline tests pass, independent exact-head review accepts it, and all five CI jobs pass. Validation run39872658534 checked test-merge `541acd746868caae4d04be1545837468a9ff6e78` into main1043b96: 7,038 unit passes/11 skips/two subtests; 197 integration passes/four skips; 13 offline evals; fixture latency and frontend pass. Claude Max exact Opus5.5 accepted unchanged runtime at c2cd6d9; later package/test/docs changes were independently reviewed, not claimed as Claude-rereviewed. Supplemental foundation claim #266 registers the exact inherited foundation once landed, preserving active repair ownership. It is reconciled with main `ab31dfa8ddf58ad0583afcb25dffd18afbee5765`, including landed provider #259 (`575e41f`). WS-03 acknowledgement, claim landing and fresh current-main combined verification precede source integration through the sole coordinator. Harness switching stays blocked; no installed-build, runtime activation, model change, live inference or acceptance closure follows.
+**Status (after PR #264 integration):** Recommendation-only harness foundation and bounded repair land as source through the sole coordinator; installation, active runtime identity, model switching and live acceptance remain unverified. Main claim #266 is verified at `67438c3a66827616a1f91cf692a98245a262813e`; this candidate reconciles that main and preserves provider #259/#267 plus the newer claims. Original eba2130 reviews/CI are historical evidence; exact combined review and CI must complete before source merge. WS-03 acknowledged only the exact harness roster/pin-count edits in `tests/unit/test_agent_skills.py` (blob `a4d8c6cc44bed71bd405c9006fba238102bb9115`); further shared-test changes require coordination. No model or runtime configuration is changed.
 
-**Separate fixture lane (registration, 2026-10-23 UTC):** The provider owner is assigned only the fresh-worker fixture isolation repair in `tests/unit/test_claude_developer_capability.py` on future branch `codex/ws05-worker-fixture-isolation-20261023`, after this matching claim lands on main. The harness status, source inventory and existing claim above are unchanged. No test code is changed by this registration.
+**Status (historical candidate checkpoint, 2026-10-22):** Recommendation-only source candidate [#264](https://github.com/Larryfix71566/jarvis-voice-ai/pull/264) at `eba21305564b905299d4e59a761f6d4ca90bd2db` contains the bounded repair: 148 focused offline tests pass, independent exact-head review accepts it, and all five CI jobs pass. Validation run39872658534 checked test-merge `541acd746868caae4d04be1545837468a9ff6e78` into main1043b96: 7,038 unit passes/11 skips/two subtests; 197 integration passes/four skips; 13 offline evals; fixture latency and frontend pass. Claude Max exact Opus5.5 accepted unchanged runtime at c2cd6d9; later package/test/docs changes were independently reviewed, not claimed as Claude-rereviewed. Supplemental foundation claim #266 registers the exact inherited foundation once landed, preserving active repair ownership. It is reconciled with main `ab31dfa8ddf58ad0583afcb25dffd18afbee5765`, including landed provider #259 (`575e41f`). WS-03 acknowledgement, claim landing and fresh current-main combined verification precede source integration through the sole coordinator. Harness switching stays blocked; no installed-build, runtime activation, model change, live inference or acceptance closure follows.
 
 **Historical status (before current integration registration):** Bounded harness remediation is claimed on main via #257, with active branch `codex/ws05-harness-remediation-20261022` and its exact scope/CX-28 unchanged. #242/#253 remain frozen, unmerged dependencies at claim registration. Separately, reviewed Codex alpha.11 source from frozen #244 lands only after the current-main integration candidate is merged; sanitation/docs reconciliation review and fresh CI remain required. No runtime activation, installed-build or live acceptance follows. Prior recorded status follows: Revised combined implementation is staged for paired #232/#233 integration; after merge its implementation is landed while release/live acceptance remains open. Frozen `e74e4b8` passes all twelve original independent checks; [revised evidence](../acceptance/command-console/receipts/ws05-ws17-selective-integration-2026-10-21.md). Required exact-source cross-system review is not completed; publication CI remains separate. Historical status follows: SUBSCRIPTION RETIREMENT STAGED 2026-10-21 — draft #232 contains opt-in runtime guards and a buffered native voice/tool adapter; activation and incremental-streaming acceptance remain blocked. Claim #230 is merged and all five claim CI checks passed. No deployment or runtime activation. Historical LANDED FOUNDATION AND BOUNDED CAPABILITY FIXTURE REPAIRS — #177, #200 and #201, merged as `83d90e8` on 2026-10-10 (source `08c0635`, final head `de4381c`; all five CI checks passed). Larry approved revised `08c0635` for offline WS-17 verification only on 10-10; its comparison against frozen `59d57ea` is running, without a pass claim. The earlier approved a5b6f88→ce6cde8 twelve-check pass and subsequent dry-child CI failure remain separate history. Live model acceptance and rollout remain gated.
 **Recorded:** 2026-09-20.
@@ -1123,6 +1123,38 @@ is source evidence only; WS-17 retains review/integration/installation and
 all runtime/private-route gates. The old interrupted run is not a pass.
 
 
+## 2026-10-22 — recommendation-only foundation publication claim
+
+Larry authorized publishing the independently reviewed isolated R3 patch as a draft and checking CI, not merging or installing it. Branch `codex/ws05-harness-recommendations-20261022`; claim branch `docs/claim-ws05-harness-20261022`. CX-28 preserves other owners. The native skill, passive status notice, explicit fixed-public-document refresh and safe admission refusal reuse current infrastructure. Exact source artifact SHA256 `32ccb1f8971ff3e8f11030ec502432cb80dae48bbcf8f45e8f3789b31517c2e4`, originally against `574282e5b036a3e4a9e6f76e82c4dc92f61c309a`, will be checked for byte identity after integration with current main.
+
+Plan Library `libfile_502deeb949688191a3c41f02eafadb4c` version2; full isolated handoff `libfile_cd1e8c0339508191b0dd013bba2b0cc9` version1. Three exact Opus Max document reviews completed; final textual amendments self-checked, not fourth-reviewed. Independent code review found no blockers only within the narrowed foundation, human review required. Current evidence238 backend/16 native tests plus five skill matcher cases is source-specific, not live acceptance. Cross-system source review required before merge remains separate.
+
+Universal approval across config writers, durable model identity, runtime ACK and rollback are unimplemented. Harness switching must remain unavailable; selected metadata never proves actual active voice identity. Benchmark, model selection, provider permissions, installation and any later merge remain separate decisions. Existing current-release installation must not wait for this feature. No new plan/row or duplicate skill importer is introduced.
+
+
+### R3 immutable publication evidence — 2026-10-22
+
+[Source/review receipt](../acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/README.md) records the exact reviewed25-file identity, independent review/dispositions,238 backend/16 native tests and limitations. New main636880e changes no reviewed source. The claim and reviewed implementation are separate drafts; publication is authorized, merging is not. All original provider/acceptance history and checkboxes remain unchanged.
+
+
+### 2026-10-22 — R4 draft CI correction
+
+Draft #242's initial R3 CI caught frozen Developer menu and skill/auth inventory integration failures. The independently reviewed R4 correction restores exact existing MCP schemas and uses passive `status_models.harness_brief` from `jarvis/status/models.py`. No new MCP tool or permission grant remains; native explicit refresh stays authenticated. Existing capability labels and exact six-skill/88-route assertions are preserved. R4 source SHA256 `d0a42d8adb59e5501d6c108e06ada0b9b6f4632b7f06f2ef5b7c5c5abf680339`; 415 focused tests passed with eight skips, five matcher cases passed. Native source/tests unchanged; prior16 results reused. Independent source review accepts draft correction with merge held for amended-head CI and required cross-system review. Claim #241 is green but unmerged; both drafts stay unmerged. No activation, install, benchmark, model switch or claim of complete approval/runtime enforcement.
+
+### 2026-10-22 — claim alignment after cross-system review
+
+The earlier R3 claim description is historical. Current bounded scope reuses the unchanged status_models tool/schema; the proposed extra tool is withdrawn. The additive cached harness_brief read in jarvis/status/models.py also participates in existing daily collection and needs an injectable reader for isolation. Existing health probes, provider policy, registry/matcher semantics and installer remain unchanged. Larry authorized correcting the independent review findings and fresh review/CI on the draft; claim landing, merge and installation remain separate.
+
+
+### 2026-10-22 — R5 cross-system review corrections
+
+[Dispositions](../acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/r5-dispositions.md) cover unresolved-selection repair, validation outside the writer lock with exact metadata/draft rechecks, narrower skill matching, isolated passive readers and provenance.210 backend/18 native tests and seven matcher cases pass. Fresh independent focused review and exact-head CI remain required. Provider policy/tool schemas and release owner paths are unchanged; no merge/install/model change.
+
+### 2026-10-22 — R5 legacy refusal contract alignment
+
+
+CI refusal-contract correction: exact head0f6d62a produced6,911 unit passes and one old refusal-message expectation failure. Unbound legacy drafts now fail before validation/catalog access. Update only the expectation/name in test_model_route_contracts.py, retaining the staging quality-floor and no-saved-preference assertions and prohibiting catalog work.83 focused contract/preference/confirmation tests pass, adding47 distinct cases to the earlier210 (257 distinct backend cases total). Provider owner was notified; provider runtime/policy paths are unchanged. Fresh exact-head CI and focused review remain required.
+
 ### 2026-10-22 — Bounded PR #253 harness remediation claim
 
 Larry directed completion of the confirmed findings while preserving frozen
@@ -1182,6 +1214,43 @@ installation or service operation is authorized by this amendment. The prior
 47-pass receipt is Claude VM evidence, not Mac or CI evidence. No acceptance
 checkbox closes. Separate release/restoration and WS-03 compatibility work
 continue under their existing owners.
+
+
+### 2026-10-22 — Repair dependency reconciliation after claim landing
+
+Main `29440804baf40292d84acbb0798646e67d0c510a` contains the exact reviewed
+#257 claim. The isolated repair candidate carries frozen #242
+`d476905057fc29207338721ce9ec2a452cb2085d` as an unchanged source dependency.
+Only ROADMAP and this plan conflicted during local reconciliation: current
+main's repair branch/scope and all other owners remain authoritative; the
+frozen foundation's historical progress/receipts above are retained, not
+promoted to a foundation landing. Other source integrated mechanically with
+no conflict. #242/#253 branches remain untouched. No broader foundation merge,
+installation, model switch, live inference or additional source transmission
+is authorized. The sole merge coordinator retains merge authority.
+
+
+### 2026-10-22 — Registered harness repair candidate
+
+Bounded cache serialization/generation acknowledgement, finite short-ID
+recognition, package-only matching and isolated daily tests are prepared after
+claim #257 landed. [Finding dispositions](../acceptance/model-use-enhancements/receipts/harness-recommendations-2026-10-22/remediation-dispositions.md)
+define completion ordering, at-least-once notice limits and timeout semantics.
+Separate-process barriers and synthetic negative controls cover the confirmed
+failures; final counts/review are recorded with the exact published candidate.
+No global matcher/importer, provider, native, installer or routing change was
+made in this repair delta. Frozen dependency/source reviews remain historical;
+new source review and exact-head CI are required. No model was selected or
+changed. The sole merge coordinator retains merge authority.
+
+
+Candidate draft #264: Claude Max Opus 5.5 accepted exact runtime repair
+c2cd6d9, with five nonblocking observations retained in the owned receipt.
+Narrow follow-up improves committing-passive test coverage, both reported
+family-name negatives and explicit workspace modes; 148 focused tests pass.
+Runtime repair bytes are unchanged. Later package/test/docs edits require
+focused review and fresh publication-head CI; wider foundation landing,
+model selection and installation remain unapproved.
 
 ### 2026-10-22 — Codex alpha.11 offline compatibility continuation
 
@@ -1376,6 +1445,36 @@ The main259 conflicts were reconciled additively without changing provider
 runtime/test blobs. These corrections require fresh exact-head documentation
 review and CI; earlier ACCEPT/REVISE receipts are not relabeled.
 
+### 2026-10-22 America/New_York — PR #264 registered foundation integration
+
+Claim #266 merged as `67438c3a66827616a1f91cf692a98245a262813e` after
+independent corrected-delta review and all five CI checks. The isolated source
+branch reconciles that exact main with reviewed repair head
+`eba21305564b905299d4e59a761f6d4ca90bd2db`. Only ROADMAP and this plan conflicted:
+retain the current registration/provider lineage and all dated foundation,
+repair, alpha.11 and other-owner evidence. Runtime and test files merge without
+conflicts; exact blob preservation and combined behavior are checked separately.
+Frozen #241/#242/#253 remain untouched; the main-first foundation exception is
+now registered rather than inferred from the earlier narrow repair claim.
+
+WS-03 explicitly inspected and acknowledged exactly two edits in
+`tests/unit/test_agent_skills.py`, blob
+`a4d8c6cc44bed71bd405c9006fba238102bb9115`: harness roster addition and matching
+digest-pin count 5 to 6. There is no parser/importer/adapter or compatibility
+assertion change. Preserve actual package/pin correspondence; any further
+shared-test delta returns to coordination. The separately reported
+`test_claude_developer_capability.py` isolation defect remains with the provider
+owner, outside this patch; no blind rerun or production fix is included.
+
+Historical exact eba2130 evidence: independent local ACCEPT, 148 focused offline
+passes, all five CI checks (7,038 unit / 197 integration / 13 offline eval passes).
+Official authenticated Claude Code Max returned exact `claude-opus-5-5` ACCEPT
+on c2cd6d9; later package/test/docs changes received independent local review,
+not a second Claude review. Harness runtime bytes remain identical. Those
+checks do not certify this newer main combination. Final combined review,
+focused checks and exact-head publication CI are separate required receipts.
+The after-merge status means source landed only when the coordinator merges
+#264; it does not assert that the current draft is already on main.
 
 ### 2026-10-23 UTC — Fresh-worker fixture isolation registration
 

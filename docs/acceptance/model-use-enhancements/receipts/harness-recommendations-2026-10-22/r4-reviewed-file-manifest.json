@@ -1,0 +1,102 @@
+{
+  "base_commit": "636880eabbe9dc756c30df7128d0a90c02d222bd",
+  "patch_sha256": "d0a42d8adb59e5501d6c108e06ada0b9b6f4632b7f06f2ef5b7c5c5abf680339",
+  "changed_files": [
+    {
+      "path": "config/skills.yaml",
+      "after_sha256": "c7383ce37f52e4c29e75f578d342252c5000c5a1c6cdff52d0146d0712a95122"
+    },
+    {
+      "path": "jarvis/admin/server.py",
+      "after_sha256": "9a8474dd6b0826dae4a2629306e3bf45cf4e7da6ebd23fb93a8518180785a8a8"
+    },
+    {
+      "path": "jarvis/bot/model_route_tool.py",
+      "after_sha256": "fe54b11188f64e322f23e95821c7041f1e11fdacb2b59520a40b00921a526c6d"
+    },
+    {
+      "path": "jarvis/model_preferences.py",
+      "after_sha256": "4575f9cd22d01f1fd54a7ae1e2540c2721abfa5a0a90dc2eea56fff643042b24"
+    },
+    {
+      "path": "jarvis/status/daily.py",
+      "after_sha256": "0a61e561583ab48defb6c737d12c5fd29361ae3802a33b84829adcb3693cd2bc"
+    },
+    {
+      "path": "jarvis/status/harness.py",
+      "after_sha256": "2bbfd9017f1749bce9d89cf1d03a29e550df53ce2e6b4cde6c32ca22d86606c0"
+    },
+    {
+      "path": "jarvis/status/models.py",
+      "after_sha256": "aeb8e921d00398b93d43848d241fe3c786d5e925c41f70a851efbe9f5bfcd48e"
+    },
+    {
+      "path": "macos/JarvisKit/Sources/JarvisKit/AdminAPI.swift",
+      "after_sha256": "9bd4b1fb671c579662b67a2a03b29bf0ecaeb1f9cdc9ca3990701d071e3153c3"
+    },
+    {
+      "path": "macos/MortimerHost/Sources/MortimerHost/Drawer/RepoTab.swift",
+      "after_sha256": "12b9ca2cc19e2d9642b63f35ecf5df23b3f8eaaf53aaa84deff1126c55e7dd0e"
+    },
+    {
+      "path": "macos/MortimerHost/Tests/MortimerHostTests/ModelRouteControlsTests.swift",
+      "after_sha256": "deb21dc00bc833798a4a25e7274a1e7419ce7947d7a2ca440bf99e6b55e04f7a"
+    },
+    {
+      "path": "skills/harness-model-evaluation/SKILL.md",
+      "after_sha256": "920cf7c4067eb6e3fbf3d24e2da006f35487899069e31c88b1247d67e0a597b0"
+    },
+    {
+      "path": "skills/harness-model-evaluation/mortimer.yaml",
+      "after_sha256": "817e760cc382e7d2a8946a56c530d96aef8c7d39887ab733f43150d0d68e7480"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/daily-brief.md",
+      "after_sha256": "fc983168b592500cff19ee5a6df9a2940afc572e464dbd7f3372bed99e2ed309"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/evaluation.md",
+      "after_sha256": "7bce5a74c59d0243d2e5b11c1cd93ecbf97b76196b8761818b47842782315a7a"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/evidence-baseline.md",
+      "after_sha256": "337f8bb28e1127c2024a33e8953105a529679637f482a01b302c1c1cd56b1e5b"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/mortimer-integration.md",
+      "after_sha256": "68894bc568d3a63c308a64b1f0b842334235858d46204f6f5c47ad14079add4b"
+    },
+    {
+      "path": "skills/harness-model-evaluation/references/review-protocol.md",
+      "after_sha256": "9c5fdc23f4e41f108ed438e3aecb6950d10481c06528afa21ab5b276d9ebeec8"
+    },
+    {
+      "path": "tests/fixtures/skills_authoring/harness-model-evaluation/matcher-cases.json",
+      "after_sha256": "299590a591c5a37558d44d525b72389de0f09f59c730452d9d055d3173016839"
+    },
+    {
+      "path": "tests/unit/test_admin_api.py",
+      "after_sha256": "2241fd6dfdb4665449fb27ce17137be0444e8aae67805e478bffd1cd42e349f2"
+    },
+    {
+      "path": "tests/unit/test_agent_skills.py",
+      "after_sha256": "e8c36949a02ddd8d69b3a7d6a1d1e9874f04165042d002375e90533e234cfd76"
+    },
+    {
+      "path": "tests/unit/test_auth_middleware.py",
+      "after_sha256": "b09941ff208c00bca8c3ca03a85cf6eb8bf0b64e1c0a6aa45732bb07dba13183"
+    },
+    {
+      "path": "tests/unit/test_harness_brief.py",
+      "after_sha256": "da4a5613b8c3cd208b90c0f577fff8bd078aa45ce3664e8acd5fa16639861566"
+    },
+    {
+      "path": "tests/unit/test_harness_confirmation.py",
+      "after_sha256": "05e3362e105b02d7b249eba6831fbfa0b2a22574738dd16972ea1939b2386f90"
+    },
+    {
+      "path": "tests/unit/test_model_preferences.py",
+      "after_sha256": "2bc33d049aaa15b318160f6f6db42eb441b99f751425a18cb47ef63fabacade9"
+    }
+  ]
+}

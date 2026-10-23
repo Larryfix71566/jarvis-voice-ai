@@ -169,8 +169,9 @@ def test_descriptor_exposes_required_and_model_quality_without_key_lookup():
     assert "below" in descriptor["reason"]
 
 
-def test_stage_and_legacy_confirm_refuse_lower_quality(tmp_path, monkeypatch):
+def test_stage_refuses_lower_quality_and_legacy_confirm_requires_new_preview(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "quality.db"))
+    monkeypatch.setattr("jarvis.saygm.fetch_catalog", lambda **_: pytest.fail("rejected choice fetched catalog"))
     with pytest.raises(ModelPreferenceError, match="minimum 'mid'"):
         stage_preference("developer", "or-gpt-5-mini", "direct_api")
     with get_conn() as conn:
@@ -180,7 +181,8 @@ def test_stage_and_legacy_confirm_refuse_lower_quality(tmp_path, monkeypatch):
                      "VALUES('old-quality','developer','or-gpt-5-mini','direct_api','approved_external',?,?)",
                      (now.isoformat(), (now + timedelta(minutes=5)).isoformat()))
         conn.commit()
-    with pytest.raises(ModelPreferenceError, match="minimum 'mid'"):
+    # Legacy drafts have no bound approval and fail before choice validation.
+    with pytest.raises(ModelPreferenceError, match="legacy draft lacks exact model confirmation"):
         confirm_preference("old-quality")
     assert list_preferences() == []
 

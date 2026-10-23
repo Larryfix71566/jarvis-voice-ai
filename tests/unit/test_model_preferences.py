@@ -40,14 +40,12 @@ def test_preference_migrations_apply_to_supplied_connection(tmp_path):
     conn.close()
 
 
-def test_voice_supervisor_builtin_profile_can_be_confirmed(tmp_path, monkeypatch):
-    monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "voice-prefs.db"))
-    draft = stage_preference(
-        "voice_supervisor", "claude-haiku-4-5", "direct_api",
-        "approved_external",
-    )
-    result = confirm_preference(draft["draft_id"])
-    assert result["confirmed"] is True
+def test_voice_supervisor_requires_runtime_approval_contract(tmp_path, monkeypatch):
+    db = tmp_path / "voice-prefs.db"
+    monkeypatch.setenv("JARVIS_DB_PATH", str(db))
+    with pytest.raises(ModelPreferenceError, match="Harness switching is unavailable"):
+        stage_preference("voice_supervisor", "claude-haiku-4-5", "direct_api", "approved_external")
+    assert not db.exists()
 
 
 def test_tool_workload_cannot_select_text_only_subscription(tmp_path, monkeypatch):
@@ -90,7 +88,8 @@ def test_a_draft_staged_before_the_fix_is_refused_at_confirm(tmp_path, monkeypat
                  (draft_id, now.isoformat(), (now + timedelta(minutes=5)).isoformat()))
     conn.commit()
     conn.close()
-    with pytest.raises(ModelPreferenceError, match="never lower it"):
+    # A legacy token is now refused before validation or any catalog request.
+    with pytest.raises(ModelPreferenceError, match="legacy draft"):
         confirm_preference(draft_id)
     assert list_preferences() == []
 

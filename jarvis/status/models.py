@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from jarvis import keyhealth
 from jarvis.status.providers import coverage_gaps, discover_providers
@@ -20,8 +20,11 @@ SUBSCRIPTION_HEALTH = "n/a (subscription)"
 
 
 def model_access_status(*, registry: dict | None = None, access: dict | None = None,
-                        env: Mapping[str, str] = os.environ) -> dict[str, Any]:
+                        env: Mapping[str, str] = os.environ,
+                        harness_reader: Callable[[], dict[str, Any]] | None = None) -> dict[str, Any]:
     from jarvis.model_routing import ModelRouteError, available_routes, load_access_config
+
+    live_inputs = registry is None and access is None and env is os.environ
 
     if registry is None:
         from jarvis.agents.upgrade_agent import load_model_registry
@@ -32,6 +35,22 @@ def model_access_status(*, registry: dict | None = None, access: dict | None = N
             access = load_access_config()
         except ModelRouteError:
             access = {}
+
+    # Add passive evidence to the existing tool response; preserve its exact
+    # registered schema/menu and do not grant a new Developer operation.
+    if harness_reader is None and not live_inputs:
+        # A supplied registry/access/env is a test or alternate snapshot. Do not
+        # combine it with ambient cache/preferences from another configuration.
+        harness_reader = lambda: {"ok": False, "error": "Harness reader not supplied for this snapshot."}
+    if harness_reader is None:
+        from jarvis.status.harness import read_report
+        from jarvis.status.daily import STATUS_DIR
+        harness_reader = lambda: read_report(STATUS_DIR)
+    try:
+        harness_brief = harness_reader()
+    except Exception:
+        # Optional cached evidence must not suppress established health status.
+        harness_brief = {"ok": False, "error": "Harness evidence unavailable."}
 
     profiles_raw = registry.get("profiles") or {}
     profiles: list[dict[str, Any]] = []
@@ -62,6 +81,7 @@ def model_access_status(*, registry: dict | None = None, access: dict | None = N
         "ok": True,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "source": "registry",
+        "harness_brief": harness_brief,
         "default": registry.get("default"),
         "profiles": profiles,
         "workloads": workloads,

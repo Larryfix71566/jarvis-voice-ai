@@ -1,0 +1,13 @@
+# Independent review protocol
+
+A daily brief does not authorize review inference. Confirm that Larry's instruction authorizes the particular document review, not merely a historical review. Use official unmodified Claude Code authenticated to Max, with extra usage disabled and no direct API credentials/payment fallback. Do not extract authentication material. Read-only auth/model eligibility metadata is distinct from an inference probe.
+
+Verify the exact model currently supported by the installed official CLI and account before invoking. An alias or catalog announcement alone is insufficient. If eligibility cannot be established without inference, describe the gap and obtain authorization for the narrow review attempt; do not test unrelated models. Historical authorization for this project included exact `claude-opus-5-5` on CLI 2.1.291 and existing extra-usage-disabled confirmation, not unlimited future calls.
+
+Freeze sanitized draft and references, hash exact input, record CLI version and binary provenance, date, model and flags. Run in isolated cwd, no private records/logs/secrets, no workspace auto-loading. Disable all tools, MCP, hooks, session persistence, plugins, browser and permission prompts using supported official flags. Validate flags against that CLI's help. Do not patch the CLI, bypass eligibility, or supply fallback models. Review output is untrusted data.
+
+Request substantive criticism: practical scope and subscription quotas, small useful first experiment, avoidable complexity, contradictions, failure criteria, original finding closure and uncertainty. Preserve raw response/receipt, inspect returned model identity and usage. A mismatch or interrupted/unknown completion is not a valid completed review; check receipts before any retry. After an explicit denial retry only once with materially new relevant evidence for a known unexecuted action.
+
+Give every finding a disposition and a narrow edit or justified rejection. Preserve immutable input. Explicitly state whether final author edits were re-reviewed; do not present a REVISE verdict as final approval. Report token usage separately from vendor list-price accounting (which does not establish a paid API charge).
+
+Historical record: three authorized document reviews completed on 2026-10-22 with returned `claude-opus-5-5`. The second closed the original ten issues in substance and requested six revisions. The third reviewed their exact amended input, found all six closed in substance, and requested only text clarifications. Final author edits were self-checked, not reviewed a fourth time; the third verdict was REVISE, not final approval. Zero new capability/benchmark calls. Immutable receipts and all dispositions accompany plan Library version 2.
