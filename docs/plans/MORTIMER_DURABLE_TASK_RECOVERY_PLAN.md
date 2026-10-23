@@ -1,13 +1,13 @@
 # Durable task ownership and restart recovery — WS-24
 
-**Status:** Offline transition-contract claim, 2026-10-22, effective only after
-this registration lands on main. Codex owns future branch
-`codex/ws24-recovery-foundation-20261022` and only the exact paths in section8.
-Preparation #255 is merged; no recovery runtime, storage, activation or acceptance
-is delivered by this claim. Earlier dated preparation and limitations below are
-retained as history. Latest user direction includes all current and future roadmap
-work; this increment advances isolated offline code while preserving product
-acceptance, owner coordination and later storage/runtime/release gates.
+**Status:** Landed via this PR (after-merge source-only state), 2026-10-22.
+The isolated offline transition evaluator and synthetic tests follow merged claim
+#263 on `codex/ws24-recovery-foundation-20261022`; independent corrected-source
+review and publication CI are still required before integration. No recovery
+runtime, storage, activation or product acceptance is delivered. Earlier dated
+preparation and claim limitations below remain historical evidence. Further
+storage/runtime implementation requires a fresh scoped main-first claim and
+preserves product acceptance, owner coordination and release gates.
 
 ## 1. Evidence and existing components
 
@@ -326,3 +326,81 @@ WS-24 acceptance checkboxes remain unimplemented/unaccepted by this increment.
 WS-17 retains exclusive release/VM/full-suite coordination; WS-03/05 keep their
 creator, provider and source-policy boundaries. Later integration needs fresh
 scoped claims and the existing privacy/access/release decisions.
+
+
+### 2026-10-22 — Offline foundation implemented locally
+
+Claim #263 merged at `cd8d809e003238738899d903ae24d95667206055` before
+source work on `codex/ws24-recovery-foundation-20261022`. The isolated new
+`jarvis/task_recovery.py` implements the section 8 proposal contract; its only
+imports are standard-library annotations, dataclasses, enums and regular
+expressions. No production code imports it. The WS-22 task status vocabulary
+is retained; this slice implements start, interruption, definitive outcome
+reconciliation, cancellation/timeout, stop confirmation, stable notice binding,
+unknown delivery and acknowledgment. It does not implement every future
+workflow, a task store, a scheduler, or an adapter to a domain service.
+
+Engineering choices within the registered scope:
+
+- Frozen dataclasses and tuples carry bounded synthetic identities/digests;
+  input validation rejects unknown controls, malformed types and inconsistent
+  histories. IDs are ASCII tokens up to 128 characters, digests are lowercase
+  SHA-256-shaped values, and each retained attempt/receipt history is capped at
+  64 entries. A full history refuses further attempts rather than discarding
+  evidence. These are resource bounds, not default retry or spend allowances.
+- Callers supply nonnegative integer time in one consistent unit, explicit
+  remaining attempt/unit budgets, reservations, deadlines and lease expiries.
+  Zero-unit work is permitted only as an explicit reservation and still consumes
+  one attempt. Reservations are conservative metadata; no actual billing or
+  refund policy is implemented. Authority must have been checked at the exact
+  supplied evaluation time and bind task/request digest/owner/scope.
+- The latest exact event alone provides bounded no-op replay. Changed payloads
+  conflict; older callbacks fail version/attempt/fence preconditions. A replay
+  proposal is explicitly marked and grants no new dispatch. The future caller
+  must enforce atomic CAS and honor that no-op marker. Terminal attempts stay
+  immutable; later definitive evidence lives in a separate receipt tuple.
+- Only a matching host-verified completed or definitively-not-executed receipt
+  resolves uncertainty. A missing receipt cannot permit replacement work.
+  Completed results forbid recomputation. Cancellation of running/orphaned
+  work waits for host-confirmed termination, including cleanup, recorded separately from action outcomes; late results
+  never reopen a cancelled task.
+- Host-supplied authority, authoritative receipts, stop confirmation and actual
+  acknowledgment are trusted inputs that future adapters must verify. They are
+  not signed credentials or newly granted permissions. A posting/transport/legacy
+  delivery flag must never be mapped to acknowledged-notice evidence.
+
+Executed locally: `PYTHONPATH=. python3 tests/unit/test_task_recovery.py -v`
+passes 31 synthetic stdlib unittest cases. These cover the section 8 proposed
+checks, including stale competing proposals (not an actual race), persisted-shape
+round-trip of a synthetic fixture (not database durability), bounded history,
+late result/cancellation behavior, missing/wrong receipts, exact notice/result
+identity and malformed inputs. Module execution from preloaded source and
+evaluation are exercised with ambient file, environment, network, process and
+clock access denied; Python's initial source loading is outside that guard.
+
+Independent review and publication CI remain pending with the coordinator.
+No full suite, VM campaign, external model/API call, production state access,
+push, merge, installation or activation occurred in this worker's slice.
+All four WS-24 acceptance checkboxes remain open. Existing status versus installed
+source distinctions and other owners' scope are unchanged.
+
+
+### 2026-10-22 — Publication lifecycle correction
+
+Independent review identified that an active `review` roadmap status would become
+stale when the source branch merged. Under roadmap rule 0.10, the WS-24 row now
+records **landed via this PR (after-merge source-only state)**. This describes
+the proposed merge result; it is not evidence that publication or merge already
+happened. Exact-source independent review and publication CI remain pre-integration
+gates. This correction closes no acceptance checkbox and grants no persistence,
+runtime, storage, deployment or further source scope. A future increment needs
+its own main-first claim. Historical local test evidence above is unchanged.
+
+Independent review also found that a restored cancelled snapshot could omit its
+stop-confirmation marker and still accept a replay or late receipt. The validator
+now requires a cancelled task with an attempt to retain matching stop evidence,
+and every terminal `stopped` attempt to retain its corresponding marker. One
+new focused test exercises corrupted snapshots from both running and orphaned
+paths, rejects replay/reconciliation after marker loss, and preserves valid late
+results with retained evidence. The focused suite now passes 32 synthetic tests;
+this source correction requires independent rereview before publication.
