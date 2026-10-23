@@ -101,3 +101,7 @@ patch and outcome remain pending. No quota or policy refusal was reported by
 attempt 1. No source has been applied or new test result claimed; 2/12 remains
 unchanged. Current main is integrated while preserving the supplied dependency
 packet; its hashes will be rechecked before applying a returned patch.
+
+## Historical attachment discovery pointer
+
+Main #271 `d4fde41220bb66073631496333371f9c53d89d97` restored the five immutable #246 Skills planning attachments. Rechecked all five SHA-256 identities before adding the canonical-plan discovery pointer. Proposed cases remain proposed; current #251/#258/#261 facts and 2/12 acceptance remain authoritative. The active author packet's seven dependency hashes are unchanged after this main integration; no source patch has returned or been applied at this documentation slice.

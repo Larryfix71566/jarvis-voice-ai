@@ -3290,3 +3290,7 @@ patch and outcome remain pending. No quota or policy refusal was reported by
 attempt 1. No source has been applied or new test result claimed; 2/12 remains
 unchanged. Current main is integrated while preserving the supplied dependency
 packet; its hashes will be rechecked before applying a returned patch.
+
+## 2026-10-23 — historical planning provenance restored
+
+The [sanitized original planning attachments](../acceptance/skills-workspace/receipts/compatibility-planning-2026-10-22/publication-summary.md) are byte-exact from #246 `028b44e11acff9dff3e00380e1624c8657ce545c`, adopted through #271 on main `d4fde41220bb66073631496333371f9c53d89d97`; all five attachment hashes were rechecked. The joint plan records their digests. They include 25 proposed acceptance cases, not claimed passes. The [full 164-line historical appendix](https://github.com/Larryfix71566/jarvis-voice-ai/blob/028b44e11acff9dff3e00380e1624c8657ce545c/docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md) remains available at its immutable source. Landed #251 P0, #258 lifecycle and #261 adapter contract supersede older P0-pending language. This pointer changes no implementation, claim, activation or accepted-gate count (2/12).
