@@ -995,7 +995,7 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 <details id="ws-23">
 <summary>WS-23 — Acceptance Verifier within Systems · Proposed</summary>
 
-**Workstream:** Extend Systems with a verification role, starting from a repeatable checklist and existing diagnostics. Reuse Council review and independent VM checks; keep live-Mac and physical evidence separate. It observes and evaluates criteria; it is not a repair agent or release authority.
+**Workstream:** Extend Systems with a verification role, starting from a repeatable checklist and existing diagnostics. Reuse Council review and independent VM checks; keep live-Mac and physical evidence separate. It observes and evaluates criteria; it is not a repair agent or release authority. The expanded October 22 all-current-and-future-roadmap dispatch permits the isolated offline contract below after its main claim; a new automated profile and runtime rollout still require current acceptance and their existing gates.
 
 ### Requirements and dependencies
 
@@ -1010,16 +1010,16 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 - [ ] Mark missing physical hardware blocked or untested; do not infer a pass from VM/CI success.
 - [ ] Demonstrate that verification cannot repair code, change criteria or authorize a release.
 
-- **Owner:** `codex` for documentation preparation; existing acceptance owners retained; future runtime implementation requires a fresh main claim
-- **Status:** landed documentation preparation via this PR after merge; no new runtime implementation, activation or acceptance. Prior foundation/intake history remains recorded below
-- **Implemented by:** Not implemented by this intake; reuse of existing components must be established in the implementation plan
-- **Remaining work / acceptance:** Canonical preparation plan and proposed synthetic vectors are supplied; design review, existing acceptance prerequisite, effective implementation owner/branch/scope on main and every unchecked future acceptance criterion remain open. No runtime code or automated profile authorized by this registration
+- **Owner:** `codex`; retained dispatcher owns the isolated offline evidence contract; existing acceptance and other source owners remain unchanged
+- **Status:** claimed via this PR after merge: pure evidence-applicability contract only; no runner, automated profile, production wiring or acceptance is delivered by this registration
+- **Implemented by:** Documentation preparation from #255; this claim registers a future unused pure module and synthetic tests, not completed verification behavior
+- **Remaining work / acceptance:** Implement and independently review the bounded contract after main registration. All four future acceptance criteria remain open; supplied-metadata comparison cannot establish real receipt authenticity, installed identity, physical observation or human acceptance
 - **Model version:** not selected; choose eligible models by workload/privacy during planning
-- **Where:** `docs/roadmap-preparation-claims-20261022` based on main `c63ecce97108787c55ef55fad73d32236694cc65`; documentation registration only, no runtime branch claimed
+- **Where:** `codex/ws23-verifier-foundation-20261022` (future implementation branch; source work begins only after this registration is on main)
 - **Plan:** [Canonical plan](docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md); existing historical requirements and acceptance gates retained
-- **Scope:** Documentation only: this roadmap block, `docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md` and the shared WS-04/23/24 preparation log. No runtime, tests, migration, config, private data, credentials, installer or other-owner documentation edits. Future code needs separately registered exact scope on main
-- **Next step:** codex: complete bounded design/applicability review from the canonical plan; larry: retain current acceptance prerequisite and separately register implementation ownership/branch/scope before code or any automated profile
-- **Updated:** 10-22 (completed source analysis and proposed fixture specification; documentation registration only; no acceptance checkbox changes)
+- **Scope:** Only new `jarvis/acceptance_evidence.py`, new `tests/unit/test_acceptance_evidence.py` with inline synthetic fixtures, this WS-23 block, existing `docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md` and `docs/roadmap-log/2026-10-22-ws-23-evidence-foundation.md`. No verifier/VM execution, production importer, Systems/prompt/tool, storage, WS-24 module, runbook/criteria, provider, config, scripts, native, shared-test or other-owner edits
+- **Next step:** codex: after main registration, implement the deterministic contract and focused offline tests; retain applicable observed failures even when prerequisites are unknown, while unmet prerequisites block positive results. Obtain exact-source independent review and publication CI before serial integration. Larry and existing owners retain acceptance and release decisions
+- **Updated:** 10-22 (offline evidence foundation claim under the expanded all-current-and-future-roadmap dispatch; no source code, activation or checkbox changes)
 
 
 ### Prior ownership/intake checkpoint (preserved history)
