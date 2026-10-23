@@ -1,0 +1,20 @@
+---
+date: 2026-10-22
+system: codex
+rows: [WS-31]
+prs: []
+---
+
+# WS-31 NR1 — no-reference contract claim preparation
+
+The completion program dispatch requested the smallest new-app slice that needs no external REA acquisition, reference rights or input. NR1 is a pure stdlib `AppIntent`/`BehaviorSpec` draft validator, not a builder, importer or authorization service. [Canonical plan §11](../plans/MORTIMER_REA_INTEGRATION_PLAN.md#11-ws-31-nr1--no-reference-contract-readiness-2026-10-22) defines exact fields, bounds, digest semantics, errors, ten proposed offline cases, source scope and later user outcome requirements.
+
+Source inspection: main `29440804baf40292d84acbb0798646e67d0c510a`. Existing App Builder supports plan text/path, but the host can truncate plan text; a future exact-spec execution contract must reject incomplete delivery. Existing build-start approval covers draft-PR submission, and AppWorkspace still requires an application repository/sandbox. No-reference does not erase those dependencies. NR1 never calls them and always reports `build_authorized=false`.
+
+Claim preparation branch `docs/ws31-no-reference-claim-20261022` is additive atop frozen REA #245 `b23b824ff15e450fae60535b38a95559eeda9396`, preserving phone #240 `87f163a7619596104e27af0bf50a3b6b88d28809`. Only WS-31's roadmap block, its canonical plan and this log change. Current main does not yet contain those documentation dependencies. Sole serial coordinator must integrate/reconcile #240 and #245, then land the exact NR1 claim; do not overwrite main's newer workstream fields with the older roadmap snapshot. The preparation claim status describes its after-main effect and is not effective locally.
+
+Proposed implementation branch: `codex/ws31-no-reference-contract-20261022`, created only from main after the claim. Exact source/test scope: new `jarvis/app_build_contract.py`, `tests/unit/test_app_build_contract.py`, `tests/fixtures/app_build_contract/new_idea_v1.json`, plus own plan/log/receipt. No existing source, shared tests, config/policy, API/tool/UI, runtime store, dependency, model, credentials or sandbox edit. Actual app outcome, build/publication scope and runtime authority remain later decisions; a synthetic fixture is not Larry's app brief.
+
+Documentation checks cover whitespace, strict roadmap consistency, preservation of all non-WS31 blocks/research/phone documents, exact main-plus-frozen-documentation patch applicability, and pinned source-path/line validity. No source tests have run. A separate Codex static contract reviewer found three Medium issues on unapproved `f6b6f6e`; bounded input preflight, content-free deterministic errors and separate transport/canonical size caps are corrected here, pending exact-head rereview. No Claude/runtime model contribution was invoked; no corresponding execution receipt is claimed. Publication owner's prior #245 CI/readback evidence remains scoped to frozen #245. No push, PR, merge, installation, external reference execution, new repository or deployment in this handoff.
+
+Ref-provenance correction (2026-10-22): the earlier strict failure was produced against main `29440804baf40292d84acbb0798646e67d0c510a` with stale local provider tracking ref `574282e5b036a3e4a9e6f76e82c4dc92f61c309a`. It is not an established defect in main or WS-05, and requires no WS-05 edit or checker weakening. A full `git fetch origin` now resolves main to `1043b9661852deb50af7fe9a82df68e491907df2` and provider branch `codex/ws05-subscription-retirement-20261020` to `014f915bd8f8ac9a5e187779601fe1718d7e21b5`. The provider head is not an ancestor of this main. Baseline and composed validation must record these exact refs; the superseded stale-ref receipt remains historical evidence only. Source links above deliberately retain their inspected `2944080` revision; the six cited source/test files are unchanged through `1043b966`. Frozen #245 and #240 retain their original heads. This correction does not review or approve preparation head `f6b6f6e`.
