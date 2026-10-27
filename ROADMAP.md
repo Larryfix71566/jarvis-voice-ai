@@ -408,6 +408,56 @@ Claude’s work or enable any runtime feature.
 
 ---
 
+
+### Who is working on what — verified 2026-10-27 UTC
+
+Larry requested this assignment view and explicit Kimi coordination. It is a
+snapshot of the existing rows and observed PR/local evidence, **not a new claim,
+reassignment or permission to execute**. Accountable owners and scope locks remain
+in the linked workstream blocks. A claimed branch proves an assignment, not that
+an agent is currently running. “Unconfirmed” means no current execution receipt
+was verified; an old handoff or test pass is not promoted into present activity.
+System names identify contributors, not an inferred model or separate GitHub
+person: these PRs use the shared `Larryfix71566` account, so attribution also uses
+main's registered system/owner and each PR's recorded system/session.
+
+All entries were checked on **2026-10-27 UTC** against fetched main `ae035de`,
+current PR heads/comments and the read-only local inventory described above.
+The evidence column names older source dates where relevant. Reviewers below are
+separate from authors; “pending/unassigned” is not an approval.
+
+| Work item | Accountable owner retained | Current worker / bounded assignment | Reviewer / acceptance authority | Verified activity and evidence |
+|---|---|---|---|---|
+| [WS-19](#ws-19) roadmap reconciliation | Codex | Codex: this documentation draft, including this ownership view | Independent Codex review passed `dc0c369`; this added view needs a new exact-head verdict. Larry's merge approval remains conditional | Active documentation evidenced by [#277](https://github.com/Larryfix71566/jarvis-voice-ai/pull/277); source/operational work excluded |
+| [WS-05](#ws-05) model access / fixture isolation | Codex implementation and acceptance ownership | Kimi: bounded status/plan/log reconciliation in #276. Codex: registered fixture-isolation implementation lane; execution unconfirmed | #276 independent review not established here; fixture repair requires its own independent review; Larry retains model/release decisions | Kimi's [01:15:59 UTC update](https://github.com/Larryfix71566/jarvis-voice-ai/pull/276#issuecomment-6431286992) confirms current documentation work. #272 registers the separate fixture branch; no repair source found in inspected lane |
+| [WS-32](#ws-32) reader growth repair | Kimi | Kimi authored #275 at `5c5cb2e`; new source work since October 23 is unconfirmed | Independent exact-source review pending; Larry's separate code-merge approval is not supplied by this documentation task | [#275](https://github.com/Larryfix71566/jarvis-voice-ai/pull/275) open, not merged; #274 main claim retained |
+| [WS-03](#ws-03) Skills adapter | Codex | Codex owns review/apply/publication; Claude was dispatched bounded returned-patch authorship. Current author execution unconfirmed | Codex integration owner plus independent exact-source reviewer; no adapter-source verdict established | #261 claim; local `369057b` records October 23 timeout/recovery and no applied adapter source. Historical P0 #251/#258 and accepted gates retained |
+| [WS-23](#ws-23) evidence contract | Codex retained dispatcher | Codex authored local unused-module candidate; current execution unconfirmed | Independent exact-source review pending, reviewer not verified active | #267 claim; unmerged local `1b07fd8`, October 23 author record of 25 unittest methods |
+| [WS-30](#ws-30) phone S0 | Codex for synthetic specification; WS-04/17/21 retain runtime scopes | Codex authored local model/fixture; current editing activity unconfirmed | Designated non-author oracle review per plan §14 remains pending; no approval verified | #268 claim; local `ffecab1` plus uncommitted model/fixture edits inspected read-only. Earlier `954c8ee` test evidence does not cover newer bytes |
+| [WS-31](#ws-31) REA NR1 | Codex for bounded no-reference contract | Registered Codex lane; implementation activity unconfirmed, no source found in inspected lane | Independent source reviewer unassigned; Larry chooses later actual app outcome | [#269](https://github.com/Larryfix71566/jarvis-voice-ai/pull/269) merged registration, not source implementation |
+| [WS-17](#ws-17) console / release | Codex; historical Claude authorship retained | No current implementation or operational run verified; source/diagnostics landed | Exact combined-source review/validation remain separate; Larry retains release and live acceptance | #262 diagnostics and #224 historical verification merged; installed development `c63ecce` / services held remains dated owner evidence, not a fresh probe |
+| [WS-13](#ws-13) mail/calendar/brief | Claude | No current Claude implementation run verified; Codex in #277 only restores and qualifies roadmap evidence | Existing source review and Larry's formal M1-1/live gates remain open as specified in the row | #212 merged; Claude's #254 correction restored. October 13 acceptance and later deployment ancestry do not prove a new M1-1 repeat |
+| [WS-20](#ws-20) coordination / acceptance handoff | Codex; Claude retains B4 authorship/ownership | Codex in #277 restores proven policy closeout; no new checker implementation | Independent documentation review for this draft; existing acceptance owners and Larry retain final Phase A/B | #250/#271/#273 source/evidence landed; final owner-evidence milestone open |
+| [WS-24](#ws-24) recovery foundation | Codex retained dispatcher | Offline contract landed; no current persistence/runtime worker assigned or verified | #270 records historical independent source approval; combined validation and later runtime review remain open | #270 at `38b0fcd`, 32 historical synthetic tests; failed historical CI preserved |
+| [WS-21](#ws-21) display transfer | Claude implementation | No current implementation run verified | Codex reviews changes; Larry owns physical acceptance | #171 landed; external-display acceptance remains open |
+| [WS-06](#ws-06), [WS-07](#ws-07) recovery / voice workflows | Claude | Landed work; current follow-up worker activity unconfirmed | Existing plan reviewers; Larry's outstanding Mac checks | Main rows/linked plans retain implementation history and open acceptance; no new execution receipt |
+| [WS-01](#ws-01), [WS-02](#ws-02), [WS-04](#ws-04) reliability / isolation / access | Codex; WS-04 currently documentation preparation only | Current implementation activity unconfirmed; WS-04 runtime needs a fresh claim | Existing cross-review/acceptance owners and Larry's activation decisions | Main rows; #255 preparation does not authorize runtime provisioning or activation |
+| [WS-09](#ws-09), [WS-10](#ws-10), [WS-11](#ws-11) acceptance / rollout | Larry for acceptance; original builders retained in rows | No new live acceptance session verified | Larry plus each existing evidence recorder/feature owner | Existing checklists remain open and dependency-gated; no new acceptance inferred |
+| [WS-22](#ws-22), [WS-25](#ws-25), [WS-26](#ws-26), [WS-27](#ws-27), [WS-29](#ws-29) future work | Codex documentation/intake only; implementation owners unassigned | Parked/proposed implementation; no current implementation worker | Future reviewer unassigned; Larry's prerequisite acceptance and fresh dispatch required | Existing plans/rows preserve proposal boundaries; documentation is not implementation authority |
+| [WS-08](#ws-08), [WS-12](#ws-12), [WS-14](#ws-14), [WS-15](#ws-15), [WS-16](#ws-16), [WS-18](#ws-18) closed bounded work | Codex: WS-08/16; Claude: WS-12/14/15/18; original attribution retained | No new assignment or current activity verified | Historical accepted evidence remains authoritative within its recorded bounds | Accepted rows retained; this view does not reopen them |
+
+**Coordination hold:** [Codex's proposal to Kimi](https://github.com/Larryfix71566/jarvis-voice-ai/pull/276#issuecomment-6431224216)
+asks for explicit WS-05 documentation ownership, retention of the active Codex
+fixture lock and serial ordering. Kimi's later validation update proposes #275
+before #276; the [dependency response](https://github.com/Larryfix71566/jarvis-voice-ai/pull/276#issuecomment-6431299149)
+records that #275 currently fails WS-05 drift while #276 fails the reader tests.
+No final acknowledgement of the fixture-lock treatment or complete serial order
+was present at verification. #277 will defer its duplicate WS-05 field edits only
+after that coordination is settled; no overlapping merge is authorized by this
+view. Keep the active fixture claim, other owners and review/green-check gates
+intact. A future coordinator must update this dated snapshot when evidence changes.
+
+
 ## 2. Workstreams
 
 - Scope locks only while status is `claimed`, `in-progress` or `review`.
