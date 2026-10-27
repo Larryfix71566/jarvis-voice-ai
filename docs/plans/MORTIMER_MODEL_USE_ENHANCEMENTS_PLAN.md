@@ -1,6 +1,6 @@
 # Model Use Enhancements
 
-**Status (after PR #264 integration):** Recommendation-only harness foundation and bounded repair land as source through the sole coordinator; installation, active runtime identity, model switching and live acceptance remain unverified. Main claim #266 is verified at `67438c3a66827616a1f91cf692a98245a262813e`; this candidate reconciles that main and preserves provider #259/#267 plus the newer claims. Original eba2130 reviews/CI are historical evidence; exact combined review and CI must complete before source merge. WS-03 acknowledged only the exact harness roster/pin-count edits in `tests/unit/test_agent_skills.py` (blob `a4d8c6cc44bed71bd405c9006fba238102bb9115`); further shared-test changes require coordination. No model or runtime configuration is changed.
+**Status (reconciled 2026-10-26):** PR #264 merged on 2026-10-23 as `204a74151293447898eab9243d0565d186a12bc6`; its recommendation-only harness foundation and bounded repair are landed source. Installation, active runtime identity, model switching and live acceptance remain unverified. Main claim #266 is verified at `67438c3a66827616a1f91cf692a98245a262813e`; provider #259/#267 and the newer claims remain preserved. Original eba2130 reviews/CI are historical evidence bound to their recorded refs. WS-03 acknowledged only the exact harness roster/pin-count edits in `tests/unit/test_agent_skills.py` (blob `a4d8c6cc44bed71bd405c9006fba238102bb9115`); further shared-test changes require coordination. This documentation reconciliation changes no model or runtime configuration and closes no acceptance gate.
 
 **Status (historical candidate checkpoint, 2026-10-22):** Recommendation-only source candidate [#264](https://github.com/Larryfix71566/jarvis-voice-ai/pull/264) at `eba21305564b905299d4e59a761f6d4ca90bd2db` contains the bounded repair: 148 focused offline tests pass, independent exact-head review accepts it, and all five CI jobs pass. Validation run39872658534 checked test-merge `541acd746868caae4d04be1545837468a9ff6e78` into main1043b96: 7,038 unit passes/11 skips/two subtests; 197 integration passes/four skips; 13 offline evals; fixture latency and frontend pass. Claude Max exact Opus5.5 accepted unchanged runtime at c2cd6d9; later package/test/docs changes were independently reviewed, not claimed as Claude-rereviewed. Supplemental foundation claim #266 registers the exact inherited foundation once landed, preserving active repair ownership. It is reconciled with main `ab31dfa8ddf58ad0583afcb25dffd18afbee5765`, including landed provider #259 (`575e41f`). WS-03 acknowledgement, claim landing and fresh current-main combined verification precede source integration through the sole coordinator. Harness switching stays blocked; no installed-build, runtime activation, model change, live inference or acceptance closure follows.
 
@@ -1484,3 +1484,17 @@ The after-merge status means source landed only when the coordinator merges
 - Planned repair after registration: separate request-directory/environment construction from the fixture that applies parent authority for in-process tests. Fresh-child cases use explicit subprocess `env` without exposing the child DB path to the parent; deterministically force the real parent notifier poll against its isolated parent database. Keep all positive/refusal, UID/ownership, exact-environment and child no-artifact assertions. No artifact deletion, skip, timeout increase, polling suppression or production change.
 - Review/validation: prove the forced-poll regression fails on the uncorrected fixture, then run the bounded affected cases/module offline. Independent exact-source review and required publication CI remain prerequisites for serial integration. No new dependencies, live CLI/model calls, full local suite or VM job. Claim checks use candidate-as-main; existing active harness branch/scope/CX-28, full source inventory and every acceptance checkbox are preserved.
 - Registration is not implementation, installation, route activation, live acceptance or authorization for another capability test. Frozen #269/#270 remain held for causal repair; an unchanged-head rerun is not a resolution.
+
+### 2026-10-26 — Kimi merged-source status reconciliation
+
+Larry authorized Kimi to correct the WS-05 lifecycle documentation without
+changing implementation or acceptance ownership. GitHub verifies #264 merged at
+2026-10-23T19:48:31Z as `204a74151293447898eab9243d0565d186a12bc6`.
+The roadmap's active source location now names that landed merge rather than
+presenting its merged implementation branch as an active candidate. The separate
+Codex fixture-isolation branch and all unresolved review, runtime, installation
+and acceptance gates remain unchanged.
+
+Validation for this documentation-only change is recorded in its WS-05 roadmap
+log and PR. No source, test behavior, configuration, deployment or live evidence
+is added.
