@@ -1,0 +1,5792 @@
+{
+  "version": 1,
+  "status": "candidate expectations revised after independent REVISE; renewed exact-hash oracle review pending",
+  "normative_plan": "docs/plans/MORTIMER_PHONE_ACCESS_PLAN.md",
+  "claim_main": "543b040de7483246468f254dc6011c755a0cfca2",
+  "normative_revision": "5.3, sections 3\u20135, 13\u201314; registration reviewed separately from this fixture",
+  "precedence": "Malformed shape/type first; consume: invalidated, unknown, replay, expiry, binding, authority, peer. Output: authority/connection before classification/scope. Denials may close stale peers but never emit or command. Internal fixture events model trusted authority mutations, not phone commands.",
+  "limits": [
+    "pure synthetic specification only",
+    "no cryptographic ticket or HTTP/WebRTC proof",
+    "no database concurrency or protected-store evidence",
+    "full-host rollback restoring anchor is outside guarantee",
+    "symbolic output is not media/provider egress acceptance",
+    "one-use consume races are serial permutations only"
+  ],
+  "constants": {
+    "ticket_ttl_s": 30,
+    "auth_freshness_s": 5,
+    "reconnect_reservation_s": 15,
+    "network_gap_s": 6
+  },
+  "cases": [
+    {
+      "id": "consume-order-p4",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p5"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-replay"
+          }
+        }
+      ],
+      "final": {
+        "closed": [],
+        "emissions": [],
+        "commands": [],
+        "bindings": {
+          "p1": {
+            "session": "a1",
+            "grant": "A",
+            "owner": "owner-a",
+            "generation": 0,
+            "epoch": 1,
+            "process": 1
+          },
+          "p2": {
+            "session": "a2",
+            "grant": "A",
+            "owner": "owner-a",
+            "generation": 0,
+            "epoch": 1,
+            "process": 1
+          },
+          "p3": {
+            "session": "b1",
+            "grant": "B",
+            "owner": "owner-b",
+            "generation": 0,
+            "epoch": 1,
+            "process": 1
+          },
+          "p4": {
+            "session": "a1",
+            "grant": "A",
+            "owner": "owner-a",
+            "generation": 0,
+            "epoch": 1,
+            "process": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "consume-order-p5",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p5"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-replay"
+          }
+        }
+      ],
+      "final": {
+        "closed": [],
+        "emissions": [],
+        "commands": [],
+        "bindings": {
+          "p1": {
+            "session": "a1",
+            "grant": "A",
+            "owner": "owner-a",
+            "generation": 0,
+            "epoch": 1,
+            "process": 1
+          },
+          "p2": {
+            "session": "a2",
+            "grant": "A",
+            "owner": "owner-a",
+            "generation": 0,
+            "epoch": 1,
+            "process": 1
+          },
+          "p3": {
+            "session": "b1",
+            "grant": "B",
+            "owner": "owner-b",
+            "generation": 0,
+            "epoch": 1,
+            "process": 1
+          },
+          "p5": {
+            "session": "a1",
+            "grant": "A",
+            "owner": "owner-a",
+            "generation": 0,
+            "epoch": 1,
+            "process": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "ticket-owner",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "spoof",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "binding-mismatch"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "closed": [],
+        "emissions": []
+      }
+    },
+    {
+      "id": "ticket-grant",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "B",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "binding-mismatch"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "closed": [],
+        "emissions": []
+      }
+    },
+    {
+      "id": "ticket-session",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a2",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "binding-mismatch"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "closed": [],
+        "emissions": []
+      }
+    },
+    {
+      "id": "ticket-digest",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "wrong",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "binding-mismatch"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "closed": [],
+        "emissions": []
+      }
+    },
+    {
+      "id": "ttl--1",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": -1
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "emissions": []
+      }
+    },
+    {
+      "id": "ttl-0",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-expired"
+          }
+        }
+      ],
+      "final": {
+        "emissions": []
+      }
+    },
+    {
+      "id": "ttl-1",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": 1
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-expired"
+          }
+        }
+      ],
+      "final": {
+        "emissions": []
+      }
+    },
+    {
+      "id": "update-binding",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest",
+            "kind": "update",
+            "peer": "p1"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p2",
+            "kind": "update"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "binding-mismatch"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p1",
+            "kind": "update"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p1",
+            "kind": "update"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-replay"
+          }
+        }
+      ],
+      "final": {
+        "closed": []
+      }
+    },
+    {
+      "id": "revoke-before-consume",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "A",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-stale"
+          }
+        }
+      ],
+      "final": {
+        "epoch": 2,
+        "emissions": []
+      }
+    },
+    {
+      "id": "session-revoke-before-consume",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_session",
+            "session": "a1",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-stale"
+          }
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "emissions": []
+      }
+    },
+    {
+      "id": "consume-before-revoke",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a73 Control and media admission",
+        "\u00a74 steps 6\u20137",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "A"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p4",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "peer-closed"
+          }
+        }
+      ],
+      "final": {
+        "closed": [
+          "p1",
+          "p2",
+          "p3",
+          "p4"
+        ],
+        "emissions": []
+      }
+    },
+    {
+      "id": "spoof-command",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a73 typed identity and command admission",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "command",
+            "peer": "p1",
+            "action": "fixture-action",
+            "protocol": 1,
+            "owner": "owner-b"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "binding-mismatch"
+          }
+        },
+        {
+          "event": {
+            "type": "command",
+            "peer": "p1",
+            "action": "fixture-action",
+            "protocol": 1
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "commands": [
+          {
+            "peer": "p1",
+            "owner": "owner-a"
+          }
+        ]
+      }
+    },
+    {
+      "id": "malformed-command",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a73 typed identity and command admission",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "command",
+            "peer": "p1",
+            "action": "fixture-action",
+            "protocol": 2
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "protocol"
+          }
+        },
+        {
+          "event": {
+            "type": "command",
+            "peer": "p1",
+            "action": "unknown",
+            "protocol": 1
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "protocol"
+          }
+        },
+        {
+          "event": {
+            "type": "command",
+            "peer": "p1",
+            "action": "fixture-action",
+            "protocol": 1,
+            "extra": "untrusted"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          }
+        },
+        {
+          "event": {
+            "type": "unknown"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          }
+        },
+        {
+          "event": {
+            "type": "command",
+            "peer": "p1",
+            "action": "fixture-action",
+            "protocol": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "protocol"
+          }
+        }
+      ],
+      "final": {
+        "commands": [],
+        "emissions": []
+      }
+    },
+    {
+      "id": "missing-action-scope",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a73 typed identity and command admission",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "begin",
+            "grant": "A",
+            "scope": [
+              "voice",
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "commit"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "finalize"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a3",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a3",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "command",
+            "peer": "p4",
+            "action": "fixture-action",
+            "protocol": 1
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "scope"
+          }
+        }
+      ],
+      "final": {
+        "commands": [],
+        "epoch": 2
+      }
+    },
+    {
+      "id": "stale-peer",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a73 typed identity and command admission",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "revoke_session",
+            "session": "a1",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "command",
+            "peer": "p1",
+            "action": "fixture-action",
+            "protocol": 1
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-stale"
+          }
+        }
+      ],
+      "final": {
+        "closed": [
+          "p1"
+        ],
+        "commands": []
+      }
+    },
+    {
+      "id": "session-vs-global",
+      "group": "S0-03",
+      "clauses": [
+        "\u00a74 trusted recovery boundary; session-only sign-out",
+        "\u00a713 S0-03"
+      ],
+      "acceptance": [
+        "A03",
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "revoke_session",
+            "session": "a1",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "auth_freshness_s",
+              "offset": -1
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p2",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p3",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "auth_freshness_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "peer-closed"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "A",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p3",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-stale"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-stale"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "B",
+            "session": "b2"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "epoch": 2,
+        "closed": [
+          "p1",
+          "p3"
+        ],
+        "emissions": [
+          {
+            "peer": "p2",
+            "sink": "event",
+            "at": {
+              "constant": "auth_freshness_s",
+              "offset": -1
+            }
+          },
+          {
+            "peer": "p3",
+            "sink": "event",
+            "at": {
+              "constant": "auth_freshness_s",
+              "offset": -1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "global-lost-notification-deadline",
+      "group": "S0-03",
+      "clauses": [
+        "\u00a74 trusted recovery boundary; session-only sign-out",
+        "\u00a713 S0-03"
+      ],
+      "acceptance": [
+        "A03",
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "A",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "auth_freshness_s",
+              "offset": -1
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "auth_freshness_s",
+              "offset": 1
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "closed": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "closures": [
+          {
+            "peer": "p1",
+            "at": {
+              "constant": "auth_freshness_s",
+              "offset": 0
+            },
+            "reason": "authority-stale"
+          },
+          {
+            "peer": "p2",
+            "at": {
+              "constant": "auth_freshness_s",
+              "offset": 0
+            },
+            "reason": "authority-stale"
+          },
+          {
+            "peer": "p3",
+            "at": {
+              "constant": "auth_freshness_s",
+              "offset": 0
+            },
+            "reason": "authority-stale"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pending-before-emit",
+      "group": "S0-03",
+      "clauses": [
+        "\u00a74 trusted recovery boundary; session-only sign-out",
+        "\u00a713 S0-03"
+      ],
+      "acceptance": [
+        "A03",
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "begin",
+            "grant": "A",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "B",
+            "session": "b2"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          }
+        },
+        {
+          "event": {
+            "type": "commit"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p3",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          }
+        },
+        {
+          "event": {
+            "type": "finalize"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "B",
+            "session": "b2"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "anchor_state": "stable",
+        "epoch": 2,
+        "emissions": [],
+        "closed": [
+          "p1",
+          "p3"
+        ]
+      }
+    },
+    {
+      "id": "emit-before-pending",
+      "group": "S0-03",
+      "clauses": [
+        "\u00a74 trusted recovery boundary; session-only sign-out",
+        "\u00a713 S0-03"
+      ],
+      "acceptance": [
+        "A03",
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "begin",
+            "grant": "A",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [
+          {
+            "peer": "p1",
+            "sink": "event",
+            "at": 0
+          }
+        ],
+        "anchor_state": "pending",
+        "closed": [
+          "p1"
+        ]
+      }
+    },
+    {
+      "id": "network-no-grace",
+      "group": "S0-04",
+      "clauses": [
+        "\u00a74 connectivity state; no authorization grace",
+        "\u00a713 S0-04"
+      ],
+      "acceptance": [
+        "A04"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "disconnect",
+            "peer": "p1"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "availability",
+            "available": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "network_gap_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "peer-closed"
+          }
+        },
+        {
+          "event": {
+            "type": "availability",
+            "available": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a3",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a3",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p4",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "closed": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "emissions": [
+          {
+            "peer": "p4",
+            "sink": "event",
+            "at": {
+              "constant": "network_gap_s",
+              "offset": 0
+            }
+          }
+        ],
+        "closures": [
+          {
+            "peer": "p1",
+            "at": {
+              "constant": "auth_freshness_s",
+              "offset": 0
+            },
+            "reason": "authority-unavailable"
+          },
+          {
+            "peer": "p2",
+            "at": {
+              "constant": "auth_freshness_s",
+              "offset": 0
+            },
+            "reason": "authority-unavailable"
+          },
+          {
+            "peer": "p3",
+            "at": {
+              "constant": "auth_freshness_s",
+              "offset": 0
+            },
+            "reason": "authority-unavailable"
+          }
+        ]
+      }
+    },
+    {
+      "id": "disconnect-no-replay",
+      "group": "S0-04",
+      "clauses": [
+        "\u00a74 connectivity state; no authorization grace",
+        "\u00a713 S0-04"
+      ],
+      "acceptance": [
+        "A04"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "disconnect",
+            "peer": "p1"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "disconnected"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "network_gap_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a3",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a3",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p4",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [
+          {
+            "peer": "p1",
+            "sink": "event",
+            "at": 0
+          },
+          {
+            "peer": "p4",
+            "sink": "event",
+            "at": {
+              "constant": "network_gap_s",
+              "offset": 0
+            }
+          }
+        ],
+        "closed": []
+      }
+    },
+    {
+      "id": "restart-before-consume",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary and restore",
+        "\u00a714 scope-reduction amendment",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "session": "a1",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restart"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-invalidated"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t2",
+            "session": "a3",
+            "digest": "offer-digest"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t2",
+            "session": "a3",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "offer-digest",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "process": 2,
+        "closed": [
+          "p1",
+          "p2",
+          "p3"
+        ]
+      }
+    },
+    {
+      "id": "revoke-old-snapshot",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary and restore",
+        "\u00a714 scope-reduction amendment",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "snapshot",
+            "name": "old"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "A",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restore",
+            "name": "old"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-mismatch"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-mismatch"
+          }
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 2,
+        "closed": [
+          "p1"
+        ],
+        "emissions": []
+      }
+    },
+    {
+      "id": "scope-reduction-old-broader-snapshot",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary and restore",
+        "\u00a714 scope-reduction amendment",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "snapshot",
+            "name": "broad"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "begin",
+            "grant": "A",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "commit"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "finalize"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restore",
+            "name": "broad"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-mismatch"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-mismatch"
+          }
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 2,
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "crash-pending",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary and restore",
+        "\u00a714 scope-reduction amendment",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "begin",
+            "grant": "A",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restart"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "B",
+            "session": "b2"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          }
+        }
+      ],
+      "final": {
+        "process": 2,
+        "closed": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "anchor_state": "pending"
+      }
+    },
+    {
+      "id": "crash-committed",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary and restore",
+        "\u00a714 scope-reduction amendment",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "begin",
+            "grant": "A",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "commit"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restart"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "B",
+            "session": "b2"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          }
+        }
+      ],
+      "final": {
+        "process": 2,
+        "closed": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "anchor_state": "pending"
+      }
+    },
+    {
+      "id": "crash-finalized",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary and restore",
+        "\u00a714 scope-reduction amendment",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "begin",
+            "grant": "A",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "commit"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "finalize"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restart"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "B",
+            "session": "b2"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "process": 2,
+        "closed": [
+          "p1",
+          "p2",
+          "p3"
+        ],
+        "anchor_state": "stable"
+      }
+    },
+    {
+      "id": "missing-anchor",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary and restore",
+        "\u00a714 scope-reduction amendment",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "anchor",
+            "state": "missing"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-missing"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-missing"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "closed": [
+          "p1"
+        ]
+      }
+    },
+    {
+      "id": "no-silent-finalization",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary and restore",
+        "\u00a714 scope-reduction amendment",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "begin",
+            "grant": "A",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "finalize"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "no-commit"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          }
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 2,
+        "anchor_state": "pending",
+        "emissions": []
+      }
+    },
+    {
+      "id": "classification-event",
+      "group": "S0-06",
+      "clauses": [
+        "\u00a75 destination-aware content admission",
+        "\u00a713 S0-06"
+      ],
+      "acceptance": [
+        "A18",
+        "A09",
+        "A19"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": null,
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "protected",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "conflicting",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "unknown",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [
+          {
+            "peer": "p1",
+            "sink": "event",
+            "at": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "classification-text",
+      "group": "S0-06",
+      "clauses": [
+        "\u00a75 destination-aware content admission",
+        "\u00a713 S0-06"
+      ],
+      "acceptance": [
+        "A18",
+        "A09",
+        "A19"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "text",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "text",
+            "classification": null,
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "text",
+            "classification": "protected",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "text",
+            "classification": "conflicting",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "text",
+            "classification": "unknown",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "text",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "text",
+            "classification": "ordinary",
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "text",
+            "classification": "ordinary",
+            "provenance": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [
+          {
+            "peer": "p1",
+            "sink": "text",
+            "at": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "classification-audio-symbol",
+      "group": "S0-06",
+      "clauses": [
+        "\u00a75 destination-aware content admission",
+        "\u00a713 S0-06"
+      ],
+      "acceptance": [
+        "A18",
+        "A09",
+        "A19"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "audio-symbol",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "audio-symbol",
+            "classification": null,
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "audio-symbol",
+            "classification": "protected",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "audio-symbol",
+            "classification": "conflicting",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "audio-symbol",
+            "classification": "unknown",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "audio-symbol",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "audio-symbol",
+            "classification": "ordinary",
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "audio-symbol",
+            "classification": "ordinary",
+            "provenance": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "classification"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [
+          {
+            "peer": "p1",
+            "sink": "audio-symbol",
+            "at": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "display-not-provider",
+      "group": "S0-06",
+      "clauses": [
+        "\u00a75 destination-aware content admission",
+        "\u00a713 S0-06"
+      ],
+      "acceptance": [
+        "A18",
+        "A09",
+        "A19"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "provider-input",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "provider-input-denied"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [
+          {
+            "peer": "p1",
+            "sink": "event",
+            "at": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "stale-then-revoke-other-grant",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "review_finding": "R1",
+      "steps": [
+        {
+          "event": {
+            "type": "snapshot",
+            "name": "old"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "A",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restore",
+            "name": "old"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "B",
+            "notify": false
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-mismatch"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-mismatch"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 2,
+        "emissions": []
+      }
+    },
+    {
+      "id": "stale-then-reduce-other-grant",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "review_finding": "R1",
+      "steps": [
+        {
+          "event": {
+            "type": "snapshot",
+            "name": "old"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "A",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restore",
+            "name": "old"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "begin",
+            "grant": "B",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-mismatch"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "commit"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "no-transition"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "finalize"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "no-commit"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-mismatch"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 2,
+        "anchor_state": "stable",
+        "emissions": []
+      }
+    },
+    {
+      "id": "rollback-before-commit",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "review_finding": "R1",
+      "steps": [
+        {
+          "event": {
+            "type": "snapshot",
+            "name": "old"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "A"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "begin",
+            "grant": "B",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restore",
+            "name": "old"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "commit"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-mismatch"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 3,
+        "anchor_state": "pending",
+        "emissions": []
+      }
+    },
+    {
+      "id": "rollback-before-finalize",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "review_finding": "R1",
+      "steps": [
+        {
+          "event": {
+            "type": "snapshot",
+            "name": "old"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "A"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "begin",
+            "grant": "B",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "commit"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restore",
+            "name": "old"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "finalize"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-mismatch"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 3,
+        "anchor_state": "pending",
+        "emissions": []
+      }
+    },
+    {
+      "id": "mutation-refuses-missing",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "review_finding": "R1",
+      "steps": [
+        {
+          "event": {
+            "type": "anchor",
+            "state": "missing"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "A"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-missing"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "revoke_session",
+            "session": "a1"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-missing"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "begin",
+            "grant": "B",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-missing"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 1,
+        "anchor_state": "missing",
+        "emissions": []
+      }
+    },
+    {
+      "id": "mutation-refuses-pending",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "review_finding": "R1",
+      "steps": [
+        {
+          "event": {
+            "type": "anchor",
+            "state": "pending"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_grant",
+            "grant": "A"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "revoke_session",
+            "session": "a1"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "begin",
+            "grant": "B",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-pending"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 1,
+        "anchor_state": "pending",
+        "emissions": []
+      }
+    },
+    {
+      "id": "transition-missing-before-commit",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "review_finding": "R1",
+      "steps": [
+        {
+          "event": {
+            "type": "begin",
+            "grant": "B",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "anchor",
+            "state": "missing"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "commit"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-missing"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "transition-missing-before-finalize",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "review_finding": "R1",
+      "steps": [
+        {
+          "event": {
+            "type": "begin",
+            "grant": "B",
+            "scope": [
+              "read"
+            ]
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "commit"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "anchor",
+            "state": "missing"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "finalize"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-missing"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-event-type-0",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": []
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-event-type-1",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": {}
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-event-type-2",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": null
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-event-type-3",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-event-type-4",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": 7
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-event-type-5",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": ""
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-issue-session",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": null,
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": " ",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": [],
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": {},
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": true,
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": 5,
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-issue-ticket",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": null,
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": " ",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": [],
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": {},
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": true,
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": 5,
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-issue-digest",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": null
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": ""
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": " "
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": []
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": {}
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": 5
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-consume-ticket",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": null,
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": " ",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": [],
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": {},
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": true,
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": 5,
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-consume-session",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": null,
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": " ",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": [],
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": {},
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": true,
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": 5,
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-consume-owner",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": null,
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": " ",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": [],
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": {},
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": true,
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": 5,
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-consume-grant",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": null,
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": " ",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": [],
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": {},
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": true,
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": 5,
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-consume-digest",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": null,
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": " ",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": [],
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": {},
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": true,
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": 5,
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "malformed-consume-peer",
+      "group": "S0-02",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-02"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R2",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": null
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": ""
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": " "
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": []
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": {}
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": 5
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "nonfinite-clock-nan",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R3",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": {
+                "$nonfinite": "nan"
+              }
+            }
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-expired"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "nonfinite-clock-positive-infinity",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R3",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": {
+                "$nonfinite": "positive-infinity"
+              }
+            }
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-expired"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "nonfinite-clock-negative-infinity",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R3",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": {
+                "$nonfinite": "negative-infinity"
+              }
+            }
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-expired"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "wrong-type-clock-boolean",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R3",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": true
+            }
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-expired"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "wrong-type-clock-null",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R3",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": null
+            }
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-expired"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "wrong-type-clock-string",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R3",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": "0"
+            }
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-expired"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "wrong-type-clock-list",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R3",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": []
+            }
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-expired"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "wrong-type-clock-dict",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R3",
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "session": "a1",
+            "ticket": "t1",
+            "digest": "d"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": {}
+            }
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        },
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "ticket_ttl_s",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t1",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "d",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "ticket-expired"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    },
+    {
+      "id": "unknown-clock-constant",
+      "group": "S0-01",
+      "clauses": [
+        "\u00a713 typed events and monotonic finite fake time",
+        "\u00a713 S0-01"
+      ],
+      "acceptance": [
+        "A01"
+      ],
+      "review_finding": "R3",
+      "steps": [
+        {
+          "event": {
+            "type": "advance",
+            "time": {
+              "constant": "unreserved",
+              "offset": 0
+            }
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "malformed"
+          },
+          "unchanged": true
+        }
+      ],
+      "final": {
+        "emissions": [],
+        "commands": []
+      }
+    }
+  ],
+  "sensitivity": [
+    {
+      "case": "consume-order-p4",
+      "mutation": "allow_replay",
+      "group": "S0-01"
+    },
+    {
+      "case": "spoof-command",
+      "mutation": "trust_client",
+      "group": "S0-02"
+    },
+    {
+      "case": "session-vs-global",
+      "mutation": "ignore_global",
+      "group": "S0-03"
+    },
+    {
+      "case": "network-no-grace",
+      "mutation": "network_grace",
+      "group": "S0-04"
+    },
+    {
+      "case": "scope-reduction-old-broader-snapshot",
+      "mutation": "ignore_anchor",
+      "group": "S0-05"
+    },
+    {
+      "case": "classification-event",
+      "mutation": "unknown_ordinary",
+      "group": "S0-06"
+    }
+  ],
+  "isolation_probes": [
+    {
+      "type": "probe_network"
+    },
+    {
+      "type": "probe_process"
+    },
+    {
+      "type": "probe_runtime"
+    }
+  ],
+  "input_domain_probes": {
+    "clauses": [
+      "\u00a713 named finite monotonic fake-clock constants; \u00a73 ticket expiry"
+    ],
+    "review_finding": "R3",
+    "invalid_constant_values": [
+      null,
+      true,
+      false,
+      "30",
+      [],
+      {},
+      0,
+      -1,
+      {
+        "$nonfinite": "nan"
+      },
+      {
+        "$nonfinite": "positive-infinity"
+      },
+      {
+        "$nonfinite": "negative-infinity"
+      }
+    ],
+    "overflow_probe": {
+      "constant": "ticket_ttl_s",
+      "value": 1e+308,
+      "offset": 1e+308
+    },
+    "nonstandard_json_tokens": [
+      "NaN",
+      "Infinity",
+      "-Infinity"
+    ]
+  },
+  "counterexample_encoding": "$nonfinite is a harness-only marker decoded into a Python IEEE value before calling the model; it is never accepted as a model command or a raw nonstandard JSON token. Each unchanged assertion compares the complete model state before/after denial."
+}

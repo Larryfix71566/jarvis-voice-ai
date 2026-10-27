@@ -1,5 +1,8 @@
 # Mortimer Skills workspace and skill creation implementation plan
 
+**Current integration receipt — 2026-10-27:** This document's authored candidate/history is included in a new aggregate **draft, not ready to merge**, at Larry's request. See the [exact source manifest](../roadmap-log/2026-10-27-unmerged-integration.md). Historical test/after-merge statements below retain their source/date; no new product acceptance or runtime activation is claimed. Independent aggregate review remains pending.
+
+
 Status: **foundation deployed; latest identified native app `bde22bb` (2026-10-03). The Versions dormant-auth wording passed its narrow visual/API subcheck on 2026-10-06; SW-A overall, activation and remaining live acceptance stay open. SW-B/C remain the only fully accepted gates (2/12).** Prepared 2026-09-25; factual status reconciled 2026-10-06.
 
 This is the implementation contract for the agreed Skills library, inspectable
@@ -3254,3 +3257,43 @@ Before implementation, verify actual-main claim, exact branch/owner/file locks a
 P0 nonblocking 0600 writer permissions, cleanup-message and edge-case evidence follow-ups remain separate; the adapter uses immutable Candidate records/validator, not write_skill, and must not silently fold those repairs into its claim.
 
 Historical handoff #246 remains frozen; #248 is the landed P0 ownership registration. #251 supplied the source change; #258 corrected only its post-merge lifecycle wording. Neither is rewritten by this claim.
+
+## 2026-10-22 — actual registered Claude adapter author dispatch
+
+Claim #261 (`5cfc4c9`) is on main as `aa03cd433a71caf6f3b862726a43864ee6686c93`; merge tree
+`68ff1c81fdf581ceb59c930cd0a11ec4010ac3dd` and main-first ownership were verified.
+The isolated implementation branch is `codex/ws03-offline-package-adapter-20261022`.
+Official Claude Code 2.1.291 authenticated through `claude.ai` Max began the
+tools-disabled returned-patch assignment at `2026-10-22T23:51:10.920535+00:00`. Requested model
+`claude-opus-5-5`; actual returned model and completion outcome are pending.
+No source has been applied and no new test result is claimed.
+
+Packet: 103,689 bytes; SHA-256 `f7410423c6f654dd79b6dc990de2d6a0fe861d83c7529c9e1f7bade5d57fedfa`. It contains only the
+registered claim/report contract and necessary excerpts from its seven read-only
+dependencies. No checkout access, credentials/private logs, API fallback,
+service/model change or live inference in Mortimer. Local execution receipt and
+owned process/session are retained by Codex; no local host paths are published.
+Codex reviews/applies/tests/publishes only the registered new files; the coordinator
+retains all merges. Acceptance remains 2/12. This dispatch is implementation
+authorship, not a completed patch, independent source approval or acceptance.
+
+## 2026-10-23 — author timeout and unchanged-packet recovery
+
+The first registered author invocation ended at `2026-10-23T00:06:11.337284+00:00` after
+its 900-second timeout (return 143), with empty stdout/stderr and no parseable
+patch. Its owned process group was confirmed absent before recovery. This is
+not implementation or review success.
+
+Attempt 2 actually started at `2026-10-23T00:07:46.762946+00:00` through the same official
+Code 2.1.291/Max subscription, tools-disabled/no-checkout/no-API-fallback route,
+with a 1,800-second timeout and local streaming capture. The packet is unchanged:
+103,689 bytes; SHA-256 `f7410423c6f654dd79b6dc990de2d6a0fe861d83c7529c9e1f7bade5d57fedfa`; original source base `aa03cd4`.
+Startup announces `claude-opus-5-5` and an empty tool list. Final model identity,
+patch and outcome remain pending. No quota or policy refusal was reported by
+attempt 1. No source has been applied or new test result claimed; 2/12 remains
+unchanged. Current main is integrated while preserving the supplied dependency
+packet; its hashes will be rechecked before applying a returned patch.
+
+## 2026-10-23 — historical planning provenance restored
+
+The [sanitized original planning attachments](../acceptance/skills-workspace/receipts/compatibility-planning-2026-10-22/publication-summary.md) are byte-exact from #246 `028b44e11acff9dff3e00380e1624c8657ce545c`, adopted through #271 on main `d4fde41220bb66073631496333371f9c53d89d97`; all five attachment hashes were rechecked. The joint plan records their digests. They include 25 proposed acceptance cases, not claimed passes. The [full 164-line historical appendix](https://github.com/Larryfix71566/jarvis-voice-ai/blob/028b44e11acff9dff3e00380e1624c8657ce545c/docs/plans/MORTIMER_SKILLS_WORKSPACE_IMPLEMENTATION_PLAN.md) remains available at its immutable source. Landed #251 P0, #258 lifecycle and #261 adapter contract supersede older P0-pending language. This pointer changes no implementation, claim, activation or accepted-gate count (2/12).
