@@ -367,15 +367,15 @@ Claude’s work or enable any runtime feature.
 **Workstream:** Larry approved Kimi claim registration on 2026-10-23 after exact main `c2e3c74a2f08dbe925303d19e6822383d53ddd73` reproduced two roadmap-reader failures: the canonical 259,344-byte roadmap exceeds the generic 256,000-byte file limit. Restore complete bounded roadmap reads without trimming source or weakening other guards.
 
 - **Owner:** `kimi`
-- **Status:** claimed via this PR (registration only; implementation not started). Register Kimi and the future repair branch; no reader or test code is changed by the claim. Registration branch: `docs/ws32-roadmap-reader-claim-20261023`.
-- **Implemented by:** not started; Kimi prepared this registration only
-- **Remaining work / acceptance:** After this claim lands on main, reproduce the failure on the implementation base, add a roadmap-specific bounded read limit and focused regressions, then run the roadmap/agent/repo suites and full offline validation. Acceptance requires complete current-repository projection, explicit refusal beyond the new bound, unchanged generic file limits and no silent workstream loss. Independent review and exact-head CI precede Larry's merge; no deployment or live acceptance is included.
+- **Status:** landed via this PR (source repair only; not deployed or live-accepted): the canonical roadmap has a separate 384 KiB bounded source limit while every other path retains the 256,000-byte cap. Complete current-repository reading/projection and second-read refusal are covered. Candidate validation: 90 focused tests; 7,085 unit passes/11 skips/29 subtests; 197 integration passes/four skips; 13 offline eval passes; latency and frontend build pass. Independent exact-source review and exact-head CI remain separate.
+- **Implemented by:** Kimi, bounded WS-32 reader repair and synthetic regressions
+- **Remaining work / acceptance:** Independent exact-source review and required CI must bind the final candidate; Larry reviews and merges. No production deployment, live acceptance, roadmap-content trimming or other-owner correction is included. The inherited WS-05 stale-status checker finding remains with its owner and is recorded, not hidden.
 - **Model version:** not recorded; do not infer from system name
-- **Where:** `fix/ws32-roadmap-reader-limit-20261023` (future implementation branch; create only after this claim lands)
+- **Where:** `fix/ws32-roadmap-reader-limit-20261023`
 - **Plan:** `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` §7.2; add only WS-32 dated progress during implementation
 - **Scope:** `mcp_servers/mcp_repo/logic.py` roadmap read-limit handling only; directly related `tests/unit/test_mcp_repo_logic.py`, `tests/unit/test_roadmap_reader.py` and `tests/unit/test_roadmap_event.py`; this WS-32 block, WS-32 dated entries in the existing plan and WS-32 `docs/roadmap-log/` entries. Preserve the 256,000-byte limit for every other path, stat-before-read and second-read race checks, path/secret guards, complete-card semantics, 512 KiB snapshot and 600 KiB display-event ceilings, sensitive-turn behavior and all other APIs. No roadmap content trimming, `jarvis/agents/base.py` change, UI/provider/configuration/credential/access change, live test, deployment or acceptance-checkbox closure.
-- **Next step:** larry: review and merge this docs-only claim. kimi: only after it lands, create the named implementation branch from current main, implement the bounded repair and verify it.
-- **Updated:** 10-23 (Larry-approved registration; exact-main failure reproduced; no implementation)
+- **Next step:** kimi: obtain independent exact-source review and exact-head CI; address any findings without expanding scope. larry: review and merge the verified source repair; deployment and live acceptance remain separate decisions.
+- **Updated:** 10-23 (bounded source repair and offline validation complete; independent review and exact-head CI pending)
 
 </details>
 
@@ -669,7 +669,9 @@ Sources: [model-use plan §§11, 14–15](docs/plans/MORTIMER_MODEL_USE_ENHANCEM
 - **Implemented by:** Foundation contributions are not fully itemized; WS-02 isolation and MAR-A baseline work are Codex
 - **Remaining work / acceptance:** Codex: complete the remaining acceptance once prerequisites are supplied; Claude: record cross-system review of the merged implementation; Larry: exact source authorization, operator-issued identity, native-test assignment, account and deployment decisions.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `codex/ws05-harness-remediation-20261022` (candidate #264); preserve frozen #242/#253 inputs. Separate test-only fixture lane: `codex/ws05-worker-fixture-isolation-20261023` (future implementation branch).
+- **Where:** `codex/ws05-worker-fixture-isolation-20261023` (registered future test-only fixture implementation branch; creation and implementation not evidenced in inspected lanes).
+- **Historical harness source:** `codex/ws05-harness-remediation-20261022` landed via #264 as `204a741`; preserve frozen #242/#253 inputs. This merged branch is not the active fixture lane.
+- **Coordination update — 2026-10-27 UTC:** Larry dispatched Codex to repair #275's WS-05 drift check with this metadata-only correction. Codex ownership, claimed fixture scope and every acceptance gate remain unchanged; Kimi retains #275 reader authorship and #276 plan/log reconciliation. Larry reviews and merges #275; no implementation, model switch, installation or acceptance is performed by this correction.
 - **Fixture registration provenance:** `docs/ws05-worker-fixture-claim-20261023`; documentation-only registration, not an active implementation branch. Base `67438c3a66827616a1f91cf692a98245a262813e` includes corrected #266.
 - **Foundation registration provenance:** `docs/claim-ws05-harness-integration-20261022` via #266; this documentation branch is not an active implementation branch. Frozen #241 is not the current registration.
 - **Historical provider source lineage:** `codex/ws05-subscription-retirement-20261020`, isolated checkout from `fd56e98`; claim [PR #230](https://github.com/Larryfix71566/jarvis-voice-ai/pull/230) merged as `005e2a4`; implementation [draft PR #232](https://github.com/Larryfix71566/jarvis-voice-ai/pull/232).
