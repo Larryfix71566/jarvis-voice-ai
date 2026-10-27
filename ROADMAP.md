@@ -669,7 +669,7 @@ Sources: [model-use plan §§11, 14–15](docs/plans/MORTIMER_MODEL_USE_ENHANCEM
 - **Implemented by:** Foundation contributions are not fully itemized; WS-02 isolation and MAR-A baseline work are Codex
 - **Remaining work / acceptance:** Codex: complete the remaining acceptance once prerequisites are supplied; Claude: record cross-system review of the merged implementation; Larry: exact source authorization, operator-issued identity, native-test assignment, account and deployment decisions.
 - **Model version:** not recorded; do not infer from system name.
-- **Where:** `codex/ws05-worker-fixture-isolation-20261023` (registered separate test-only fixture implementation lane; current execution unconfirmed).
+- **Where:** `codex/ws05-worker-fixture-isolation-20261023` (registered future test-only fixture branch; no implementation branch found in checked local/remote refs on 2026-10-27; current execution unconfirmed).
 - **Historical harness source:** `codex/ws05-harness-remediation-20261022` landed via #264 as `204a741`; preserve frozen #242/#253 inputs. This merged branch is not the active fixture lane.
 - **Coordination update — 2026-10-27 UTC:** Larry dispatched Codex to repair #275's WS-05 drift check with this metadata-only correction. Codex ownership, claimed fixture scope and every acceptance gate remain unchanged; Kimi retains #275 reader authorship and #276 plan/log reconciliation. Larry reviews and merges #275; no implementation, model switch, installation or acceptance is performed by this correction.
 - **Fixture registration provenance:** `docs/ws05-worker-fixture-claim-20261023`; documentation-only registration, not an active implementation branch. Base `67438c3a66827616a1f91cf692a98245a262813e` includes corrected #266.
