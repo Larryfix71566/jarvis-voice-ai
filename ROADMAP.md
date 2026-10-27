@@ -8,6 +8,19 @@ This file is the single record of **who is doing what** in this repository, for 
 
 ---
 
+## New aggregate draft — 2026-10-27 UTC
+
+Larry requested a new PR for all remaining unmerged work after #275/#276/#277
+landed. Codex assembles the identified current candidates on
+`integration/unmerged-mortimer-20261027`, based on main `5581d4f` (2026-10-27
+02:08:07 UTC). The [complete source manifest](docs/roadmap-log/2026-10-27-unmerged-integration.md)
+separates included WS-03 documentation, unused WS-23 source and synthetic WS-30
+source/dirty repairs from missing implementations, already adopted history and
+explicitly deferred unknown/obsolete refs. All original authors/owners/scopes and
+acceptance checks are retained. This draft is not approval to merge or acceptance
+of unfinished source; independent aggregate and WS-30 oracle review remain open.
+No implementation of the missing adapter, fixture repair or NR1 is fabricated.
+
 ## Current source reconciliation — 2026-10-27 UTC
 
 The conflict-resolution refresh fetched `origin/main` at
@@ -751,6 +764,9 @@ Source: [joint-working plan §§3, 6–7](docs/plans/ROADMAP_JOINT_WORKING_PLAN.
 - **Updated:** 10-27 UTC (restore proven policy checkbox and prior continuity history lost in #264; all product criteria preserved)
 
 
+
+- **Aggregate draft — 2026-10-27 UTC:** Codex coordinates the requested aggregate draft on `integration/unmerged-mortimer-20261027`; source owners remain unchanged, no merge or operational authority. [Full included/deferred manifest](docs/roadmap-log/2026-10-27-unmerged-integration.md).
+
 </details>
 
 <details id="ws-21">
@@ -972,6 +988,9 @@ Source: [Skills plan §12, SW-A…SW-L](docs/plans/MORTIMER_SKILLS_WORKSPACE_IMP
 
 **Claim boundary:** Larry's current full-program direction authorizes this bounded next slice and relevant repository context through the existing Claude Max subscription. This documentation registers the precise delegated patch-author lane without reassigning overall Codex or human acceptance ownership. Source waits for this claim on main; Claude receives no Codex checkout access, tools, persistent grants, direct paid API route or fallback. The coordinator remains sole merge owner. No installation, activation, service/model change or live-provider/VM run is authorized.
 
+
+- **Aggregate draft — 2026-10-27 UTC:** Dispatch/history-only snapshot from `369057b`; no adapter source in this aggregate. [Full included/deferred manifest](docs/roadmap-log/2026-10-27-unmerged-integration.md).
+
 </details>
 
 <details id="ws-06">
@@ -1189,6 +1208,9 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 - **Previous Scope:** Documentation only in this intake. Future code paths, existing-state reuse, schema/migration reservations, feature gate and rollback must be reviewed before claim; no new service, tool grants or migration number reserved here
 - **Previous Next step:** larry: finish current acceptance and dispatch implementation ownership when ready; assigned planner: map existing components and prepare the bounded design, tests and rollback before code
 - **Previous Updated:** 10-17 (consolidated enhancement intake; unimplemented and unaccepted)
+
+
+- **Aggregate draft — 2026-10-27 UTC:** Unused contract/tests from `1b07fd8` assembled for independent exact-source review; no runner or product acceptance. [Full included/deferred manifest](docs/roadmap-log/2026-10-27-unmerged-integration.md).
 
 </details>
 
@@ -1909,6 +1931,9 @@ WS-24 durable task recovery. No existing owner, scope or acceptance state change
 - **Scope:** Only `tests/unit/test_phone_admission_contract.py`, `tests/fixtures/phone_admission_contract/v1.json`, existing `docs/plans/MORTIMER_PHONE_ACCESS_PLAN.md`, this WS-30 block and `docs/roadmap-log/2026-10-22-ws-30-s0-contract.md`. Registration changes documentation only; tests/fixture begin only after matching main claim. No jarvis/web/macos/scripts/config, shared conftest, dependencies, CI/allowlist, provisioning/auth/bind, services, credentials, ports/VPN, live/model tests or installation. No shared identifiers reserved. Conditional future handoff: only a matching WS-04 1.1/1.4 main claim transfers the fixture directory/harness and versioned oracle obligations; WS-30 then relinquishes editing authority.
 - **Next step:** codex: after matching main receipt, create the named branch and bounded S0 specification, obtain designated non-author oracle review; sole coordinator integrates serially. claude: WS-21 notice is delivered through this registration PR/main ROADMAP under C5, with no display/runtime scope or activation transfer and no claimed direct acknowledgement. WS-04 acknowledgement and WS-17 notice are recorded in §14/log; existing owners retain acceptance. larry: resolve later product decisions only when their dependent phase requires them.
 - **Updated:** 10-22 UTC (S0 main-first documentation registration after verified #265 merge; no source or fixture created; actual oracle review pending)
+
+
+- **Aggregate draft — 2026-10-27 UTC:** Synthetic S0 from `2cca0f1` plus two hashed dirty author repair files at local `ffecab1`; prior oracle REVISE and renewed review gate remain explicit. [Full included/deferred manifest](docs/roadmap-log/2026-10-27-unmerged-integration.md).
 
 </details>
 

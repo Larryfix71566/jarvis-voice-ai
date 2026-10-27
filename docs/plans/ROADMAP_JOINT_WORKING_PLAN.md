@@ -926,3 +926,17 @@ above follows that criterion without depending on #247’s unmerged runbook edit
 No workflow, checker, tests, installed runtime, services or model settings change
 in this closeout. No new live acceptance, release exception or unrelated merge
 is inferred.
+
+
+## 2026-10-27 — requested aggregate draft of remaining unmerged work
+
+Larry requested a new PR for all remaining unmerged work. Codex assembles the
+current claimed WS-03 documentation, WS-23 unused evidence contract, and WS-30
+synthetic candidate/hashed dirty repairs on `integration/unmerged-mortimer-20261027`,
+from main `5581d4f`. The [complete source and exclusion manifest](../roadmap-log/2026-10-27-unmerged-integration.md)
+records exact inputs, original ownership, immutable hashes, historical-ref
+dispositions, missing WS-03/05/31 implementation and unfinished review gates.
+This is a draft integration dispatch, not a new source-author assignment or
+merge/deployment permission. Original worktrees/claims and acceptance checks
+remain unchanged. Independent review and CI must assess the frozen aggregate;
+WS-30 additionally needs renewed clause-derived oracle review. No model changes.
