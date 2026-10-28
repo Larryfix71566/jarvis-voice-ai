@@ -11,7 +11,8 @@
     "no database concurrency or protected-store evidence",
     "full-host rollback restoring anchor is outside guarantee",
     "symbolic output is not media/provider egress acceptance",
-    "one-use consume races are serial permutations only"
+    "one-use consume races are serial permutations only",
+    "synthetic session revocation fences express an invariant only, not a production storage design"
   ],
   "constants": {
     "ticket_ttl_s": 30,
@@ -5708,6 +5709,375 @@
         "emissions": [],
         "commands": []
       }
+    },
+    {
+      "id": "session-revoke-old-snapshot-command",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary; session-only sign-out",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t-session-old",
+            "session": "a1",
+            "digest": "session-offer"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "snapshot",
+            "name": "before-session-signout"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_session",
+            "session": "a1",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restore",
+            "name": "before-session-signout"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restore",
+            "name": "before-session-signout"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t-session-old",
+            "session": "a1",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "session-offer",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-stale"
+          }
+        },
+        {
+          "event": {
+            "type": "command",
+            "peer": "p1",
+            "action": "fixture-action",
+            "protocol": 1
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-stale"
+          }
+        },
+        {
+          "event": {
+            "type": "command",
+            "peer": "p2",
+            "action": "fixture-action",
+            "protocol": 1
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "command",
+            "peer": "p3",
+            "action": "fixture-action",
+            "protocol": 1
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "login",
+            "grant": "A",
+            "session": "a3"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "issue",
+            "ticket": "t-session-new",
+            "session": "a3",
+            "digest": "fresh-session-offer"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "consume",
+            "ticket": "t-session-new",
+            "session": "a3",
+            "owner": "owner-a",
+            "grant": "A",
+            "digest": "fresh-session-offer",
+            "peer": "p4"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "command",
+            "peer": "p4",
+            "action": "fixture-action",
+            "protocol": 1
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 1,
+        "session_fences": {
+          "a1": 1
+        },
+        "closed": [
+          "p1"
+        ],
+        "commands": [
+          {
+            "peer": "p2",
+            "owner": "owner-a"
+          },
+          {
+            "peer": "p3",
+            "owner": "owner-b"
+          },
+          {
+            "peer": "p4",
+            "owner": "owner-a"
+          }
+        ],
+        "emissions": []
+      }
+    },
+    {
+      "id": "session-revoke-old-snapshot-emit",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary; session-only sign-out",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "snapshot",
+            "name": "before-session-signout"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_session",
+            "session": "a1",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restore",
+            "name": "before-session-signout"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p1",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-stale"
+          }
+        },
+        {
+          "event": {
+            "type": "emit",
+            "peer": "p2",
+            "sink": "event",
+            "classification": "ordinary",
+            "provenance": true,
+            "source_allowed": true
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 1,
+        "session_fences": {
+          "a1": 1
+        },
+        "closed": [
+          "p1"
+        ],
+        "emissions": [
+          {
+            "peer": "p2",
+            "sink": "event",
+            "at": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "session-fence-advances-after-stale-restore",
+      "group": "S0-05",
+      "clauses": [
+        "\u00a74 trusted recovery boundary; session-only sign-out",
+        "\u00a713 S0-05"
+      ],
+      "acceptance": [
+        "A17"
+      ],
+      "steps": [
+        {
+          "event": {
+            "type": "snapshot",
+            "name": "before-session-signout"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_session",
+            "session": "a1",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restore",
+            "name": "before-session-signout"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "revoke_session",
+            "session": "a1",
+            "notify": false
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "restore",
+            "name": "before-session-signout"
+          },
+          "expected": {
+            "admitted": true,
+            "reason": "ok"
+          }
+        },
+        {
+          "event": {
+            "type": "command",
+            "peer": "p1",
+            "action": "fixture-action",
+            "protocol": 1
+          },
+          "expected": {
+            "admitted": false,
+            "reason": "authority-stale"
+          }
+        }
+      ],
+      "final": {
+        "epoch": 1,
+        "anchor_epoch": 1,
+        "session_fences": {
+          "a1": 2
+        },
+        "closed": [
+          "p1"
+        ],
+        "commands": []
+      }
     }
   ],
   "sensitivity": [
@@ -5740,6 +6110,10 @@
       "case": "classification-event",
       "mutation": "unknown_ordinary",
       "group": "S0-06"
+    },
+    {
+      "case": "session-revoke-old-snapshot-command",
+      "mutation": "ignore_session_fence"
     }
   ],
   "isolation_probes": [
