@@ -1,13 +1,16 @@
 # Durable task ownership and restart recovery — WS-24
 
-**Status:** Landed via this PR (after-merge source-only state), 2026-10-22.
-The isolated offline transition evaluator and synthetic tests follow merged claim
-#263 on `codex/ws24-recovery-foundation-20261022`; independent corrected-source
-review and publication CI are still required before integration. No recovery
-runtime, storage, activation or product acceptance is delivered. Earlier dated
-preparation and claim limitations below remain historical evidence. Further
-storage/runtime implementation requires a fresh scoped main-first claim and
-preserves product acceptance, owner coordination and release gates.
+**Status:** Landed source-only through #270; documentation-only combined-main
+verification landed via this PR, 2026-10-26. The isolated offline transition
+evaluator and synthetic tests follow merged claim #263 on
+`codex/ws24-recovery-foundation-20261022`. Kimi verified exact combined main
+`5581d4f913d21cbc69a707905a9898780b4a1e3c` locally on macOS under Larry's
+bounded dispatch; exact-head PR CI remains a separate publication receipt. No
+recovery runtime, storage, activation or product acceptance is delivered.
+Earlier dated preparation, historical publication failure and claim limitations
+below remain evidence. Further storage/runtime implementation requires a fresh
+scoped main-first claim and preserves product acceptance, owner coordination
+and release gates.
 
 ## 1. Evidence and existing components
 
@@ -404,3 +407,37 @@ new focused test exercises corrupted snapshots from both running and orphaned
 paths, rejects replay/reconciliation after marker loss, and preserves valid late
 results with retained evidence. The focused suite now passes 32 synthetic tests;
 this source correction requires independent rereview before publication.
+
+
+### 2026-10-26 — Kimi combined-main verification
+
+Larry authorized Kimi to verify the merged WS-24 source read-only and record the
+evidence without changing implementation or acceptance. Exact current main was
+`5581d4f913d21cbc69a707905a9898780b4a1e3c`; the source worktree had no tracked
+modifications after the run.
+
+Local macOS results using the repository's existing Python 3.12 environment:
+
+- WS-24 focused contract: 32 passes and 27 subtests.
+- Complete unit suite: 7,085 passes, 11 skips and 29 subtests.
+- Integration suite: 197 passes and four skips.
+- Offline sub-agent evaluations: 13 passes.
+- Detached-checkout policy tests: nine passes.
+- Backend import smoke, roadmap checker (zero errors/zero warnings), latency
+  budgets and locked-dependency frontend production build passed.
+
+The historical #270 validation failure was one non-WS-24 worker-boundary case
+that found `probe.db`; all four parameter cases pass locally at this main
+revision. There are no changes to that test or its verification script between
+WS-24 source `38b0fcd` and `5581d4f`, so this Mac result is not promoted into
+proof that the historical Ubuntu failure is resolved. Exact-head PR validation
+is a separate publication receipt.
+
+Frontend installation reported three dependency vulnerabilities (two high, one
+critical); no dependency audit or change was attempted. Existing deprecation
+and Vite configuration warnings remained non-blocking.
+
+This documentation-only increment adds no storage, runtime importer, activation
+or acceptance evidence. All four WS-24 acceptance checkboxes remain open.
+Future persistence/runtime work requires a fresh scoped claim; Codex retains
+implementation ownership and Larry retains merge and acceptance authority.
