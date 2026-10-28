@@ -1,0 +1,73 @@
+{
+  "date": "2026-10-28",
+  "system": "kimi",
+  "workstream": "WS-31",
+  "branch": "kimi/ws31-no-reference-contract-20261028",
+  "base": "233995cb9fb0f9a5e1f2fd35611b4cfa1b5e0af8",
+  "implementation_commit": "d2e7a61d46edcc66bbf1eb5746fb3282a14c7efd",
+  "implementation_files": {
+    "jarvis/app_build_contract.py": {
+      "git_blob": "7f2c926000b2ac5f6a315b8913d150a6fe876600",
+      "sha256": "5036a8bf7a7c517d0a964cbd38267946cd02bd110ee915996ea196f48322b358"
+    },
+    "tests/unit/test_app_build_contract.py": {
+      "git_blob": "52aaa8c6780092dbd210207633fc9578d3e4f469",
+      "sha256": "dddca6194379fd1dc062a310a67fdd72e2e0432e44a923921cd13c0da95257dc"
+    },
+    "tests/fixtures/app_build_contract/new_idea_v1.json": {
+      "git_blob": "3ff48199350544733f51430a5cc8dc74747ca3ea",
+      "sha256": "e1585556a00effccbd148d449fbdbda5f375c82237cb9d694800f5c973bdb3ff"
+    }
+  },
+  "fixture": {
+    "synthetic": true,
+    "user_app_request": false,
+    "independent_digest_oracle": {
+      "algorithm": "SHA-256 of UTF-8 canonical JSON with sorted keys, compact separators, ensure_ascii=false and no floats",
+      "intent_sha256": "87d0db81b7c35eb52b1080e2613e7bfb21ddaff3b8e70fdbaf26c17ffa496add",
+      "spec_sha256": "eb48b383ba68b7ec9c947c74b6a3d4ee5fb5d2c2908666f9ba88496c260b9cd5"
+    }
+  },
+  "validation": {
+    "focused_pytest": {
+      "command": "python -m pytest tests/unit/test_app_build_contract.py -q",
+      "passed": 81,
+      "failed": 0
+    },
+    "independent_scratch": {
+      "passed": 6,
+      "failed": 0,
+      "key_order_permutations": 120,
+      "generated_hostile_json_inputs": 500,
+      "committed_to_repository": false
+    },
+    "full_unit_pytest": {
+      "command": "python -m pytest tests/unit -q",
+      "passed": 7197,
+      "skipped": 11,
+      "failed": 0,
+      "subtests_passed": 215,
+      "warnings": 19
+    },
+    "roadmap_before_documentation": "0 errors, 0 warnings",
+    "implementation_diff_check": "passed",
+    "unittest_discovery": "not applicable to pytest-style function tests; zero discovered; not counted as evidence"
+  },
+  "zero_side_effect_evidence": {
+    "file_attempts": 0,
+    "environment_attempts": 0,
+    "network_attempts": 0,
+    "subprocess_attempts": 0,
+    "sqlite_attempts": 0,
+    "model_calls": 0,
+    "repository_or_admin_calls": 0,
+    "registry_calls": 0,
+    "stdlib_imports_only": ["hashlib", "json", "re"]
+  },
+  "build_authorized": false,
+  "real_app_created": false,
+  "runtime_wired": false,
+  "acceptance_closed": false,
+  "independent_codex_source_review": "pending",
+  "repository_ci": "pending draft publication"
+}
