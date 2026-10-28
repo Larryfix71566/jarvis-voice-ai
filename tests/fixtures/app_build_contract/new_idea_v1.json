@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "intent": {
+    "intent_id": "synthetic-list-filter-export-v1",
+    "mode": "new_idea",
+    "title": "Synthetic list, filter, and export draft",
+    "audience": "Synthetic users evaluating a local-only list workflow",
+    "outcome": "Display synthetic items, filter them by category, and export the filtered rows as CSV.",
+    "platform": "web_app",
+    "constraints": [
+      "Use synthetic local data only.",
+      "Require no login, network service, or external integration."
+    ]
+  },
+  "spec": {
+    "spec_id": "synthetic-list-filter-export-spec-v1",
+    "intent_sha256": "87d0db81b7c35eb52b1080e2613e7bfb21ddaff3b8e70fdbaf26c17ffa496add",
+    "requirements": [
+      {
+        "id": "R01",
+        "kind": "new_design",
+        "priority": "must",
+        "statement": "Display a list of synthetic items with names and categories.",
+        "acceptance_case_ids": [
+          "A01"
+        ]
+      },
+      {
+        "id": "R02",
+        "kind": "new_design",
+        "priority": "must",
+        "statement": "Filter the displayed items by a selected category.",
+        "acceptance_case_ids": [
+          "A02"
+        ]
+      },
+      {
+        "id": "R03",
+        "kind": "new_design",
+        "priority": "must",
+        "statement": "Export the currently filtered items as CSV.",
+        "acceptance_case_ids": [
+          "A03"
+        ]
+      }
+    ],
+    "acceptance_cases": [
+      {
+        "id": "A01",
+        "requirement_ids": [
+          "R01"
+        ],
+        "given": "Three synthetic items in two categories",
+        "when": "The list view opens",
+        "then": "All three item names and categories are visible"
+      },
+      {
+        "id": "A02",
+        "requirement_ids": [
+          "R02"
+        ],
+        "given": "The synthetic list is visible",
+        "when": "One category is selected",
+        "then": "Only items in that category remain visible"
+      },
+      {
+        "id": "A03",
+        "requirement_ids": [
+          "R03"
+        ],
+        "given": "A category filter is active",
+        "when": "The CSV export action is requested",
+        "then": "The exported CSV contains only the filtered synthetic items"
+      }
+    ],
+    "open_questions": []
+  }
+}

@@ -1939,10 +1939,10 @@ WS-24 durable task recovery. No existing owner, scope or acceptance state change
 </details>
 
 
-## 13. REA-assisted app building — planned, not started
+## 13. REA-assisted app building — NR1 contract landed; operational work open
 
 <details id="ws-31">
-<summary>WS-31 — New apps and authorized feature recreation through Mortimer · Kimi NR1 assigned, acknowledgment pending</summary>
+<summary>WS-31 — New apps and authorized feature recreation through Mortimer · Kimi NR1 implemented, independent review open</summary>
 
 Larry requested preserving the REA research and implementation plan, clarified
 that REA should help Mortimer build new apps or recreate authorized app features,
@@ -1951,15 +1951,15 @@ follows landed WS-30 phone documentation revision 5.2 without changing existing 
 
 Registration provenance: documentation candidate `docs/ws31-main-integration-20261022` is based on `ab31dfa8ddf58ad0583afcb25dffd18afbee5765`; frozen REA #245 `b23b824` and corrected NR1 `eb413a25` are content inputs, not merged ancestry. Phone #265 has landed; frozen #240 remains historical. Sole serial coordinator owns integration. These registration/historical refs are not active implementation locations.
 
-- **Owner:** `kimi` for NR1 pure no-reference contract implementation after this handoff lands and is acknowledged; `codex` owns independent source/contract review, using a reviewer who did not author the implementation; broader implementation/acceptance owners unchanged
-- **Status:** claimed: bounded Kimi NR1 implementation assignment after this handoff lands; acknowledgment pending, execution unconfirmed. No NR1 source was found in inspected main or registered Codex lane; all operational app-building/REA gates remain open
-- **Implemented by:** Not implemented in the inspected lanes. Codex authored the existing NR1 contract/claim; original research and static-review authorship retained. This assignment does not claim Kimi has written code
-- **Remaining work / acceptance:** After matching Kimi owner/branch/scope is on main and acknowledged, implement unchanged plan section 11 NR1-01–10 as a pure stdlib contract. Obtain independent exact-source review and offline test/CI evidence. No-reference synthetic validation needs no actual app brief or external REA target. Real build, Skill, route, recovery, publication and release gates remain separate; no acceptance closes
-- **Model version:** separate Codex static contract review APPROVE at exact `eb413a25d80df202af8e6d0f04e737ef0463b992`; earlier `f6b6f6e` remains unapproved. Current-main reconciliation review recorded separately; no Claude/runtime model execution or independent source review
-- **Where:** `kimi/ws31-no-reference-contract-20261028` (assigned future implementation branch; create from then-current main only after this matching handoff lands and is acknowledged)
+- **Owner:** `kimi` for the bounded NR1 pure no-reference contract implementation; `codex` owns independent source/contract review, using a reviewer who did not author the implementation; broader implementation/acceptance owners unchanged
+- **Status:** landed: Kimi's pure NR1 contract, focused tests and synthetic fixture land via this PR at immutable implementation commit `d2e7a61d46edcc66bbf1eb5746fb3282a14c7efd`; independent Codex exact-source review and all operational app-building/REA gates remain open
+- **Implemented by:** Kimi authored the three implementation files at `d2e7a61`; Codex authored the existing NR1 contract/claim and retains nonauthor review responsibility; original research and static-review authorship retained
+- **Remaining work / acceptance:** Codex independently reviews the immutable implementation and hostile/limit cases. Real app selection, build, Skill, route, recovery, publication and release gates remain separate; no acceptance closes
+- **Model version:** separate Codex static contract review APPROVE at exact `eb413a25d80df202af8e6d0f04e737ef0463b992`; earlier `f6b6f6e` remains unapproved. Kimi implementation used no runtime model execution; independent Codex source review is pending
+- **Where:** `kimi/ws31-no-reference-contract-20261028`; implementation `d2e7a61d46edcc66bbf1eb5746fb3282a14c7efd`; landed via this PR
 - **Plan:** [REA app-building integration plan](docs/plans/MORTIMER_REA_INTEGRATION_PLAN.md), with [complete preserved research](docs/interface-research/REA_INTEGRATION_RESEARCH_2026-10-22.md) and [original DOCX](docs/interface-research/REA_INTEGRATION_RESEARCH_2026-10-22.docx)
 - **Scope:** NR1 only after main registration: new stdlib-only `jarvis/app_build_contract.py`, new `tests/unit/test_app_build_contract.py`, synthetic `tests/fixtures/app_build_contract/new_idea_v1.json`; this WS-31 block, canonical REA plan, dated WS-31 log and content-free NR1 receipt under `docs/acceptance/rea-app-building/`. No existing admin/agent/App Builder/Skill/provider/sandbox file, shared test, dependency/config/registry/policy, API/UI/tool wiring, persistence/migration, model call, reference acquisition/execution, new app repository, publication, credentials, service or deployment change. No runtime identifier reserved
-- **Next step:** kimi: acknowledge exact scope and absence of a concurrent writer on the handoff PR; after matching main claim, implement NR1 and return a draft with source/base hashes, NR1-01–10 matrix, fixed independent digest oracle and zero-side-effect receipt. codex: independently review the immutable implementation and hostile/limit cases; do not coauthor then self-approve. larry: review the reassignment draft and choose the actual app outcome before a later real build. Serial coordinator handles integration; no merge is delegated here
-- **Updated:** 10-28 (Larry-requested bounded reassignment; main `765f6bca` and registered Codex lane inspected; acknowledgment pending; no implementation, activation or checkbox change)
+- **Next step:** codex: independently review immutable implementation `d2e7a61`, the NR1-01–10 matrix and hostile/limit cases; do not coauthor then self-approve. larry: review and merge this PR if satisfied, then choose the actual app outcome before any later real build. Serial coordinator handles integration; no merge is delegated here
+- **Updated:** 10-28 (Kimi NR1 implementation based on main `233995cb9fb0f9a5e1f2fd35611b4cfa1b5e0af8`; 81 focused tests and 7,197 full unit tests passed; no activation, runtime wiring or acceptance change)
 
 </details>
