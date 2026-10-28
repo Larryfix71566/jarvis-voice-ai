@@ -5,6 +5,10 @@
   "branch": "kimi/ws31-no-reference-contract-20261028",
   "base": "233995cb9fb0f9a5e1f2fd35611b4cfa1b5e0af8",
   "implementation_commit": "d2e7a61d46edcc66bbf1eb5746fb3282a14c7efd",
+  "pull_request": 283,
+  "merged_at": "2026-10-28T02:15:07Z",
+  "merge_commit": "81b6b4d9e05d5166da4c5809ff6efbc18516d0df",
+  "post_merge_main": "075afb18c84a14bca517425f38934eafc92af50d",
   "implementation_files": {
     "jarvis/app_build_contract.py": {
       "git_blob": "7f2c926000b2ac5f6a315b8913d150a6fe876600",
@@ -49,6 +53,14 @@
       "subtests_passed": 215,
       "warnings": 19
     },
+    "post_merge": {
+      "main": "075afb18c84a14bca517425f38934eafc92af50d",
+      "merge_commit_is_ancestor": true,
+      "implementation_blobs_unchanged": true,
+      "focused_pytest_passed": 81,
+      "focused_pytest_failed": 0,
+      "roadmap_check": "0 errors, 0 warnings"
+    },
     "roadmap_before_documentation": "0 errors, 0 warnings",
     "implementation_diff_check": "passed",
     "unittest_discovery": "not applicable to pytest-style function tests; zero discovered; not counted as evidence"
@@ -68,6 +80,9 @@
   "real_app_created": false,
   "runtime_wired": false,
   "acceptance_closed": false,
-  "independent_codex_source_review": "pending",
-  "repository_ci": "pending draft publication"
+  "independent_codex_source_review": "pending; GitHub returned no recorded reviews on #283 at inspection, and Larry's merge is not independent source approval",
+  "repository_ci": {
+    "status": "passed",
+    "checks": ["allowlist", "policy-tests", "validate", "controller-tests", "knowledge-base"]
+  }
 }
