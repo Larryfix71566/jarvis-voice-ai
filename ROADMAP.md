@@ -430,11 +430,12 @@ Claude’s work or enable any runtime feature.
 ---
 
 
-### Who is working on what — verified 2026-10-27 UTC
+### Who is working on what — historical snapshot with 2026-10-28 handoffs
 
 Larry requested this assignment view and explicit Kimi coordination. It is a
-snapshot of the existing rows and observed PR/local evidence, **not a new claim,
-reassignment or permission to execute**. Accountable owners and scope locks remain
+snapshot of the existing rows and observed PR/local evidence. The two explicit
+2026-10-28 handoffs below supersede their older assignments only after this
+documentation claim lands; all other entries remain the historical snapshot. Accountable owners and scope locks remain
 in the linked workstream blocks. A claimed branch proves an assignment, not that
 an agent is currently running. “Unconfirmed” means no current execution receipt
 was verified; an old handoff or test pass is not promoted into present activity.
@@ -442,7 +443,7 @@ System names identify contributors, not an inferred model or separate GitHub
 person: these PRs use the shared `Larryfix71566` account, so attribution also uses
 main's registered system/owner and each PR's recorded system/session.
 
-All entries were checked on **2026-10-27 UTC**, with this refresh against main `6f7c58e` at 01:56:54 UTC,
+Except WS-23 and WS-31, entries were checked on **2026-10-27 UTC**, with this refresh against main `6f7c58e` at 01:56:54 UTC,
 current PR heads/comments and the read-only local inventory described above.
 The evidence column names older source dates where relevant. Reviewers below are
 separate from authors; “pending/unassigned” is not an approval.
@@ -453,9 +454,9 @@ separate from authors; “pending/unassigned” is not an approval.
 | [WS-05](#ws-05) model access / fixture isolation | Codex implementation and acceptance ownership | Kimi: bounded status/plan/log reconciliation #276 landed at `6f7c58e`; no further work without new dispatch. Codex: metadata fix landed in #275; registered future fixture implementation remains unconfirmed | #276 independent review not established here; fixture repair requires its own independent review; Larry retains model/release decisions | [#276](https://github.com/Larryfix71566/jarvis-voice-ai/pull/276) head `0991ba5` merged 01:56:14 UTC; this is a dated source-state snapshot. #272 registers the separate fixture branch; no repair source found in inspected lane |
 | [WS-32](#ws-32) reader growth repair | Kimi | Kimi authored the #275 reader repair; Codex authored only its WS-05 metadata follow-up. Both landed via `51a3f56`; no new implementation activity verified | Independent metadata-delta review passed `212ffde`; an independent verdict on the original reader source is not established here. Larry retains live acceptance authority | [#275](https://github.com/Larryfix71566/jarvis-voice-ai/pull/275) merged 2026-10-27 01:47:56 UTC with all five checks green; main's WS-32 source record retained |
 | [WS-03](#ws-03) Skills adapter | Codex | Codex owns review/apply/publication; Claude was dispatched bounded returned-patch authorship. Current author execution unconfirmed | Codex integration owner plus independent exact-source reviewer; no adapter-source verdict established | #261 claim; local `369057b` records October 23 timeout/recovery and no applied adapter source. Historical P0 #251/#258 and accepted gates retained |
-| [WS-23](#ws-23) evidence contract | Codex retained dispatcher | Codex authored local unused-module candidate; current execution unconfirmed | Independent exact-source review pending, reviewer not verified active | #267 claim; unmerged local `1b07fd8`, October 23 author record of 25 unittest methods |
+| [WS-23](#ws-23) evidence contract | Codex implementation accountability; Kimi independent review | Source landed via #278. Kimi assigned review only; acknowledgment pending, execution unconfirmed | Kimi reviews Codex-authored source; Codex answers findings; Larry retains acceptance | Verified 2026-10-28 at main `765f6bca`; source equals `1b07fd8`. Future branch `kimi/ws23-evidence-contract-review-20261028`; [handoff receipt](docs/roadmap-log/2026-10-28-kimi-bounded-handoffs.md) |
 | [WS-30](#ws-30) phone S0 | Codex for synthetic specification; WS-04/17/21 retain runtime scopes | Codex authored local model/fixture; current editing activity unconfirmed | Designated non-author oracle review per plan §14 remains pending; no approval verified | #268 claim; local `ffecab1` plus uncommitted model/fixture edits inspected read-only. Earlier `954c8ee` test evidence does not cover newer bytes |
-| [WS-31](#ws-31) REA NR1 | Codex for bounded no-reference contract | Registered Codex lane; implementation activity unconfirmed, no source found in inspected lane | Independent source reviewer unassigned; Larry chooses later actual app outcome | [#269](https://github.com/Larryfix71566/jarvis-voice-ai/pull/269) merged registration, not source implementation |
+| [WS-31](#ws-31) REA NR1 | Kimi bounded implementation after main claim and acknowledgment | Assigned pure offline NR1 contract; no source or active execution verified | Codex independent source reviewer, separate from Kimi author; Larry chooses later actual app outcome | Verified 2026-10-28 at main `765f6bca`; future branch `kimi/ws31-no-reference-contract-20261028`; [scope and gates](docs/roadmap-log/2026-10-28-kimi-bounded-handoffs.md) |
 | [WS-28](#ws-28) cleanup/fingerprint prerequisite | Codex bounded repair ownership | Repair source landed; current implementation activity unconfirmed | Independent cross-system review required before real cleanup; Claude's #254 findings remain unresolved here | #222 repair source and #254 review history; no prune/reclaim operation or fresh acceptance verified |
 | [WS-17](#ws-17) console / release | Codex; historical Claude authorship retained | No current implementation or operational run verified; source/diagnostics landed | Exact combined-source review/validation remain separate; Larry retains release and live acceptance | #262 diagnostics and #224 historical verification merged; installed development `c63ecce` / services held remains dated owner evidence, not a fresh probe |
 | [WS-13](#ws-13) mail/calendar/brief | Claude | No current Claude implementation run verified; Codex in #277 only restores and qualifies roadmap evidence | Existing source review and Larry's formal M1-1/live gates remain open as specified in the row | #212 merged; Claude's #254 correction restored. October 13 acceptance and later deployment ancestry do not prove a new M1-1 repeat |
@@ -1171,7 +1172,7 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 ### Proposed enhancements — parked behind current acceptance
 
 <details id="ws-23">
-<summary>WS-23 — Acceptance Verifier within Systems · Proposed</summary>
+<summary>WS-23 — Acceptance Verifier within Systems · Kimi review assigned, acknowledgment pending</summary>
 
 **Workstream:** Extend Systems with a verification role, starting from a repeatable checklist and existing diagnostics. Reuse Council review and independent VM checks; keep live-Mac and physical evidence separate. It observes and evaluates criteria; it is not a repair agent or release authority. The expanded October 22 all-current-and-future-roadmap dispatch permits the isolated offline contract below after its main claim; a new automated profile and runtime rollout still require current acceptance and their existing gates.
 
@@ -1188,16 +1189,16 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 - [ ] Mark missing physical hardware blocked or untested; do not infer a pass from VM/CI success.
 - [ ] Demonstrate that verification cannot repair code, change criteria or authorize a release.
 
-- **Owner:** `codex`; retained dispatcher owns the isolated offline evidence contract; existing acceptance and other source owners remain unchanged
-- **Status:** claimed via this PR after merge: pure evidence-applicability contract only; no runner, automated profile, production wiring or acceptance is delivered by this registration
-- **Implemented by:** Documentation preparation from #255; this claim registers a future unused pure module and synthetic tests, not completed verification behavior
-- **Remaining work / acceptance:** Implement and independently review the bounded contract after main registration. All four future acceptance criteria remain open; supplied-metadata comparison cannot establish real receipt authenticity, installed identity, physical observation or human acceptance
+- **Owner:** `codex` retains implementation accountability and original authorship; `kimi` owns the bounded independent exact-source review after this handoff lands; existing acceptance owners unchanged
+- **Status:** claimed: Kimi independent contract review assignment after this handoff lands; acknowledgment pending, execution unconfirmed. Codex contract source landed through #278 (`61870ff`); no runner, runtime wiring or product acceptance
+- **Implemented by:** Codex authored the unused pure contract and synthetic tests at `1b07fd882ba0246768138d110fe8003a91a36730`, adopted in #278; byte-identical at inspected main `765f6bca`. Kimi is assigned review, not authorship or source repair
+- **Remaining work / acceptance:** Kimi must independently evaluate exact contract/source/test behavior, including failure precedence, unknown prerequisites, stale or wrong-build evidence and side-effect boundaries. Deliver an evidence-linked APPROVE or REVISE verdict with limitations. All four acceptance criteria remain open; this pure supplied-metadata contract proves neither authenticity nor installed/physical/human acceptance
 - **Model version:** not selected; choose eligible models by workload/privacy during planning
-- **Where:** `codex/ws23-verifier-foundation-20261022` (future implementation branch; source work begins only after this registration is on main)
+- **Where:** `kimi/ws23-evidence-contract-review-20261028` (assigned future documentation/review branch; acknowledgment and creation not evidenced). Merged source is on main via #278
 - **Plan:** [Canonical plan](docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md); existing historical requirements and acceptance gates retained
-- **Scope:** Only new `jarvis/acceptance_evidence.py`, new `tests/unit/test_acceptance_evidence.py` with inline synthetic fixtures, this WS-23 block, existing `docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md` and `docs/roadmap-log/2026-10-22-ws-23-evidence-foundation.md`. No verifier/VM execution, production importer, Systems/prompt/tool, storage, WS-24 module, runbook/criteria, provider, config, scripts, native, shared-test or other-owner edits
-- **Next step:** codex: after main registration, implement the deterministic contract and focused offline tests; retain applicable observed failures even when prerequisites are unknown, while unmet prerequisites block positive results. Obtain exact-source independent review and publication CI before serial integration. Larry and existing owners retain acceptance and release decisions
-- **Updated:** 10-22 (offline evidence foundation claim under the expanded all-current-and-future-roadmap dispatch; no source code, activation or checkbox changes)
+- **Scope:** Review-only: read `jarvis/acceptance_evidence.py` and `tests/unit/test_acceptance_evidence.py` at a recorded immutable main revision; run existing offline tests and bounded synthetic scratch checks. Write only this WS-23 block, `docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md` and WS-23 entries under `docs/roadmap-log/`. No source/test/fixture edits, runner/VM, production importer, Systems/prompt/tool, storage, WS-24, criteria, provider/config/scripts/native/shared-test or other-owner edits. Codex retains source accountability; any repair requires a separately coordinated scope amendment
+- **Next step:** kimi: acknowledge the review scope on the handoff PR, fetch main after the matching claim lands, record exact review base and return independent verdict/test receipt. codex: answer source questions without editing the review verdict; coordinate any separately claimed remediation. larry: review this reassignment draft and retain acceptance/release authority; no merge of this draft is delegated
+- **Updated:** 10-28 (Larry-requested redistribution; selected source verified on main `765f6bca`; Kimi acknowledgment pending, no review result claimed)
 
 
 ### Prior ownership/intake checkpoint (preserved history)
@@ -1210,7 +1211,7 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 - **Previous Updated:** 10-17 (consolidated enhancement intake; unimplemented and unaccepted)
 
 
-- **Aggregate draft — 2026-10-27 UTC:** Unused contract/tests from `1b07fd8` assembled for independent exact-source review; no runner or product acceptance. [Full included/deferred manifest](docs/roadmap-log/2026-10-27-unmerged-integration.md).
+- **Historical aggregate draft — 2026-10-27 UTC (subsequently merged via #278):** Unused contract/tests from `1b07fd8` assembled for independent exact-source review; no runner or product acceptance. [Full included/deferred manifest](docs/roadmap-log/2026-10-27-unmerged-integration.md).
 
 </details>
 
@@ -1941,7 +1942,7 @@ WS-24 durable task recovery. No existing owner, scope or acceptance state change
 ## 13. REA-assisted app building — planned, not started
 
 <details id="ws-31">
-<summary>WS-31 — New apps and authorized feature recreation through Mortimer · NR1 contract claimed after merge</summary>
+<summary>WS-31 — New apps and authorized feature recreation through Mortimer · Kimi NR1 assigned, acknowledgment pending</summary>
 
 Larry requested preserving the REA research and implementation plan, clarified
 that REA should help Mortimer build new apps or recreate authorized app features,
@@ -1950,15 +1951,15 @@ follows landed WS-30 phone documentation revision 5.2 without changing existing 
 
 Registration provenance: documentation candidate `docs/ws31-main-integration-20261022` is based on `ab31dfa8ddf58ad0583afcb25dffd18afbee5765`; frozen REA #245 `b23b824` and corrected NR1 `eb413a25` are content inputs, not merged ancestry. Phone #265 has landed; frozen #240 remains historical. Sole serial coordinator owns integration. These registration/historical refs are not active implementation locations.
 
-- **Owner:** `codex` for NR1 pure no-reference contract only after this claim lands; independent source reviewer unassigned; broader implementation/acceptance owners unchanged
-- **Status:** claimed: NR1 data-only contract scope becomes effective only when this documentation claim is on main; source implementation not started; all operational app-building/REA gates remain open
-- **Implemented by:** not implemented; Codex prepared source-referenced NR1 contract and claim; original research/plan authorship retained
-- **Remaining work / acceptance:** After this documentation claim lands on main, verify its exact owner/branch/scope; implement NR1-01–10 against the pure contract and obtain independent source/contract review. No-reference synthetic validation requires no external REA target or actual app outcome. Real build/Skill/route/recovery/publication/release gates remain separate; no existing acceptance closes.
+- **Owner:** `kimi` for NR1 pure no-reference contract implementation after this handoff lands and is acknowledged; `codex` owns independent source/contract review, using a reviewer who did not author the implementation; broader implementation/acceptance owners unchanged
+- **Status:** claimed: bounded Kimi NR1 implementation assignment after this handoff lands; acknowledgment pending, execution unconfirmed. No NR1 source was found in inspected main or registered Codex lane; all operational app-building/REA gates remain open
+- **Implemented by:** Not implemented in the inspected lanes. Codex authored the existing NR1 contract/claim; original research and static-review authorship retained. This assignment does not claim Kimi has written code
+- **Remaining work / acceptance:** After matching Kimi owner/branch/scope is on main and acknowledged, implement unchanged plan section 11 NR1-01–10 as a pure stdlib contract. Obtain independent exact-source review and offline test/CI evidence. No-reference synthetic validation needs no actual app brief or external REA target. Real build, Skill, route, recovery, publication and release gates remain separate; no acceptance closes
 - **Model version:** separate Codex static contract review APPROVE at exact `eb413a25d80df202af8e6d0f04e737ef0463b992`; earlier `f6b6f6e` remains unapproved. Current-main reconciliation review recorded separately; no Claude/runtime model execution or independent source review
-- **Where:** `codex/ws31-no-reference-contract-20261022` — future implementation branch, created only from main after this matching claim lands
+- **Where:** `kimi/ws31-no-reference-contract-20261028` (assigned future implementation branch; create from then-current main only after this matching handoff lands and is acknowledged)
 - **Plan:** [REA app-building integration plan](docs/plans/MORTIMER_REA_INTEGRATION_PLAN.md), with [complete preserved research](docs/interface-research/REA_INTEGRATION_RESEARCH_2026-10-22.md) and [original DOCX](docs/interface-research/REA_INTEGRATION_RESEARCH_2026-10-22.docx)
 - **Scope:** NR1 only after main registration: new stdlib-only `jarvis/app_build_contract.py`, new `tests/unit/test_app_build_contract.py`, synthetic `tests/fixtures/app_build_contract/new_idea_v1.json`; this WS-31 block, canonical REA plan, dated WS-31 log and content-free NR1 receipt under `docs/acceptance/rea-app-building/`. No existing admin/agent/App Builder/Skill/provider/sandbox file, shared test, dependency/config/registry/policy, API/UI/tool wiring, persistence/migration, model call, reference acquisition/execution, new app repository, publication, credentials, service or deployment change. No runtime identifier reserved
-- **Next step:** serial coordinator: review and integrate this additive current-main candidate; codex: verify matching owner/branch/scope before source work, implement only NR1 and report exact review/test evidence. larry: choose actual app outcome before a later build slice. Source needs beyond this scope return for claim amendment; no concurrent merge
-- **Updated:** 10-22 (all-workstreams completion dispatch; smallest no-reference data-only claim prepared; no source work or activation)
+- **Next step:** kimi: acknowledge exact scope and absence of a concurrent writer on the handoff PR; after matching main claim, implement NR1 and return a draft with source/base hashes, NR1-01–10 matrix, fixed independent digest oracle and zero-side-effect receipt. codex: independently review the immutable implementation and hostile/limit cases; do not coauthor then self-approve. larry: review the reassignment draft and choose the actual app outcome before a later real build. Serial coordinator handles integration; no merge is delegated here
+- **Updated:** 10-28 (Larry-requested bounded reassignment; main `765f6bca` and registered Codex lane inspected; acknowledgment pending; no implementation, activation or checkbox change)
 
 </details>

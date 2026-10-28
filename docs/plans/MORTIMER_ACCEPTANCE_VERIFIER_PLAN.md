@@ -1,16 +1,6 @@
 # Acceptance Verifier within Systems — WS-23
 
-**Current integration receipt — 2026-10-27:** This document's authored candidate/history is included in a new aggregate **draft, not ready to merge**, at Larry's request. See the [exact source manifest](../roadmap-log/2026-10-27-unmerged-integration.md). Historical test/after-merge statements below retain their source/date; no new product acceptance or runtime activation is claimed. Independent aggregate review remains pending.
-
-
-**Status:** LANDED VIA THIS PR, source-only after-merge state: unused pure
-evidence contract on `codex/ws23-verifier-foundation-20261022`, implemented after
-claim #267 merged as `4c02709`. The candidate passes 25 focused offline unit
-tests; exact-source independent review and publication CI are separate integration
-gates. No runner, automated profile, production wiring or product acceptance is
-delivered. Current acceptance/access gates and fresh claims still precede real
-receipt adapters or runtime rollout. Earlier preparation and section 6's claim
-are preserved as dated history; section 7 records this implementation's limits.
+**Current status — 2026-10-28:** Codex's unused contract and tests landed via #278 (`61870ff`); they are byte-identical to author source `1b07fd882ba0246768138d110fe8003a91a36730` at inspected main `765f6bca7fd081716c758ea28b94a3feb56c38df`. Kimi is assigned independent exact-source review through this documentation handoff, effective only after it lands; acknowledgment is pending and execution unconfirmed. Codex retains implementation accountability. No runner, automated profile, runtime wiring or product acceptance is delivered. Historical candidate/claim receipts below retain their original dates; section 8 records the current review package.
 
 ## 1. Evidence and boundaries
 
@@ -339,3 +329,11 @@ Real evidence authenticity, real log integrity, installed build observation,
 admitted receipt adapters and all four WS-23 acceptance checkboxes remain open.
 No automated verification profile, WS-24 lifecycle coupling, physical test,
 installation, source-policy/model change or release authority is introduced.
+
+## 8. Kimi independent review handoff — 2026-10-28
+
+Larry requested redistributing work to Kimi. The [handoff receipt](../roadmap-log/2026-10-28-kimi-bounded-handoffs.md) binds the scope and pending acknowledgment. Create `kimi/ws23-evidence-contract-review-20261028` from fresh main only after the matching main claim lands and Kimi confirms it. Read the exact source/test pair above against this plan; source is already merged, but merge and CI do not substitute for independent contract review.
+
+Deliver a documentation-only review with exact base/source hashes, requirements-to-code/test mapping, adversarial counterexamples or their absence, commands/results and an APPROVE or REVISE verdict with limits. Evaluate applicable failure precedence with unknown prerequisites, missing/stale/wrong-build evidence, malformed inputs, deterministic output and absence of IO/authority. Run the existing focused test and bounded offline synthetic checks. Reviewers derive expected outcomes from the contract, not just the implementation. Do not edit source, tests, fixtures or acceptance criteria to make the review pass. Codex handles any separately registered remediation; Kimi then re-reviews the changed immutable source. All four product acceptance checks remain open.
+
+Review writes are this plan, WS-23's roadmap block and dated WS-23 roadmap-log entries only. No model call, VM, live diagnostics, production importer, credentials, service or release action is included. Kimi's acknowledgment and actual review result are still pending; no source review has been inferred from Kimi's prior WS-24 work.
