@@ -1,6 +1,6 @@
 # Mortimer Remote Access Plan — per-client bearer tokens on every endpoint, Tailscale tunnel, fail-closed binds
 
-**Status:** Documentation preparation registration, 2026-10-22, on `docs/roadmap-preparation-claims-20261022`; no provisioning implementation claim. Dormant R1 deployed at `539f8f6` on 2026-09-28; R2 guard merged as `a39136a` and deployed in `7c4637e` on 10-02, as recorded in the dated reconciliation below. Token onboarding method, implementation, credential preparation and activation remain open. Remote activation remains undecided; enabled-mode acceptance is open. Original plan drafted 2026-08-26. Implements roadmap track **T2** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.2). Gate: **G2**.
+**Status:** Documentation preparation registration, 2026-10-22, on `docs/roadmap-preparation-claims-20261022`; no provisioning implementation claim. Dormant R1 deployed at `539f8f6` on 2026-09-28; R2 guard merged as `a39136a` and deployed in `7c4637e` on 10-02, as recorded in the dated reconciliation below. As of 2026-10-29, the bounded offline phone-admission policy and S0 adapter are authored on `codex/ws04-phone-admission-core-20261029`; source review, PR checks and merge remain pending. This does not implement onboarding or complete Stage 1.1. Token onboarding method, credential preparation and activation remain open. Remote activation remains undecided; enabled-mode acceptance is open. Original plan drafted 2026-08-26. Implements roadmap track **T2** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.2). Gate: **G2**.
 
 **Author / origin.** Larry, quoted in the roadmap's origin block: *"ios app for remote connection to the AI Assistant via VPN tunnel for security"* and *"I want this data available to the AI and myself but secured from any intruder."* Roadmap R4 states the principle this plan implements: *"Token auth on every endpoint, even inside the tunnel. Why: a VPN authenticates devices, not callers; any app on a joined phone could otherwise call `/api/selfedit/run`."*
 
@@ -2944,6 +2944,27 @@ not satisfied by these synthetic vectors. No live acceptance checkbox changes.
 
 PR #285 merged to main at `97ffb3bb19ce29a9c4e6768a481389ac147cd691`. The S0 model and fixture hashes remain `d00ce2d1254c04f386b455b061b45a5b1984b295a6201746d8bb6ea462e38781` and `1cf1f8a377438a5fe04d0517535eee86166c48af6decb030da249b9ae5083950`; the independent oracle accepted those exact bytes, and all three PR-triggered workflows completed successfully. This proves only the synthetic contract; no production recovery store, route, phone, or live access is verified.
 
-Larry authorized the next bounded offline WS-04 slice for GPT-6 Luna. The proposed branch is `codex/ws04-phone-admission-core-20261029`, created from then-current main after the matching docs-only claim lands. Exact source/test scope: new `jarvis/bot/phone_admission.py`; new `tests/unit/test_phone_admission.py`; `tests/unit/test_phone_admission_contract.py` wired to the module; and `tests/fixtures/phone_admission_contract/v1.json` transferred read-only with the claim. No fixture version change is included. The existing [phone plan §16](MORTIMER_PHONE_ACCESS_PLAN.md#16-approved-native-iphone-direction-and-staged-claims--revision-54-amendment-candidate-2026-10-28) remains the design authority.
+Larry authorized the next bounded offline WS-04 slice for GPT-6 Luna. The registered branch `codex/ws04-phone-admission-core-20261029` was created from main `d5c9e61faa8cc91da5f7d7e67b8b2056c587de5a` after the matching docs-only claim merged. Exact source/test scope: new `jarvis/bot/phone_admission.py`; new `tests/unit/test_phone_admission.py`; `tests/unit/test_phone_admission_contract.py` wired to the module; and `tests/fixtures/phone_admission_contract/v1.json` transferred read-only with the claim. No fixture version change is included. The existing [phone plan §16](MORTIMER_PHONE_ACCESS_PLAN.md#16-approved-native-iphone-direction-and-staged-claims--revision-54-amendment-candidate-2026-10-28) remains the design authority.
 
-The slice exercises the deterministic admission policy and all current S0 vectors without adding listeners, persistent schema, credentials or live grants. It does not complete the full 1.1 host-anchor/store/route integration; plan §6 items 0.2 and 1.1 reservations, route/sink wiring and their acceptance evidence remain open. Registration and implementation are separate: source edits begin only after the exact owner/branch/scope row is present on main. This docs-only claim PR changes no runtime state or acceptance checkbox.
+The slice exercises the deterministic admission policy and all current S0 vectors without adding listeners, persistent schema, credentials or live grants. It does not complete the full 1.1 host-anchor/store/route integration; plan §6 items 0.2 and 1.1 reservations, route/sink wiring and their acceptance evidence remain open. At registration time, source edits were gated on the exact owner/branch/scope row landing on main; PR #287 registered the scope and changed no runtime state or acceptance checkbox.
+
+
+### 2026-10-29 — Offline phone-admission core implementation
+
+On branch `codex/ws04-phone-admission-core-20261029` at base
+`d5c9e61faa8cc91da5f7d7e67b8b2056c587de5a`, added the deterministic in-memory
+policy core in `jarvis/bot/phone_admission.py`. It requires the existing
+`ClientIdentity` boundary for issue, consume, command, output and login
+admission, checks that the authenticated user matches the session owner, and
+refuses those operations when the explicitly supplied feature flag is off.
+Fixture-derived state and intentionally faulty sensitivity variants stay in
+tests; the v1 fixture is unchanged.
+
+Local offline validation: the focused unittest run passed 9 tests, including all
+70 S0 vectors, all 7 sensitivity cases and all 3 isolation probes; syntax
+compilation passed. The full pytest gate is still pending because no pytest
+module or executable is available in this environment, and no dependency was
+installed. The module is not wired to a route, persistent store/host anchor,
+phone, tunnel, credential or runtime service. Independent exact-source review,
+PR CI and merge are still required; Stage 1.1 and all live acceptance remain
+open.
