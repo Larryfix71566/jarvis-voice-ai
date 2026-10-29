@@ -19,6 +19,7 @@ public enum PhoneSessionAction: Sendable {
 
 public struct PhoneSessionStateMachine: Sendable {
     public private(set) var state: PhoneSessionState = .idle
+    private var usedRequestIDs = Set<String>()
 
     public init() {}
 
@@ -27,13 +28,13 @@ public struct PhoneSessionStateMachine: Sendable {
     public mutating func apply(_ action: PhoneSessionAction) {
         switch action {
         case .beginRequest(let requestID):
-            guard state != .ended else { return }
+            guard state != .ended, usedRequestIDs.insert(requestID).inserted else { return }
             state = .requesting(requestID: requestID)
         case .transportInterrupted:
             guard isRequesting || isReady else { return }
             state = .reconnecting
         case .reconnectRequested(let requestID):
-            guard state == .reconnecting else { return }
+            guard state == .reconnecting, usedRequestIDs.insert(requestID).inserted else { return }
             state = .requesting(requestID: requestID)
         case .response(let requestID, let status):
             guard state == .requesting(requestID: requestID) else { return }

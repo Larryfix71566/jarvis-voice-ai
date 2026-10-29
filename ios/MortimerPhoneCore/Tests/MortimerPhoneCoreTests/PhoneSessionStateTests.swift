@@ -38,6 +38,28 @@ final class PhoneSessionStateTests: XCTestCase {
         XCTAssertEqual(machine.state, .ready(requestID: "next"))
     }
 
+    func testReusedRequestIDCannotAcceptPriorAttemptSuccess() {
+        var machine = PhoneSessionStateMachine()
+        machine.apply(.beginRequest(requestID: "same"))
+        machine.apply(.transportInterrupted)
+        machine.apply(.reconnectRequested(requestID: "same"))
+        XCTAssertEqual(machine.state, .reconnecting, "reconnect must use a fresh request ID")
+        machine.apply(.response(requestID: "same", status: .ok))
+        XCTAssertEqual(machine.state, .reconnecting, "old attempt success cannot authorize the reconnect")
+    }
+
+    func testFreshRequestIDsAllowReconnectWhileStaleAndOutOfOrderResponsesAreIgnored() {
+        var machine = PhoneSessionStateMachine()
+        machine.apply(.beginRequest(requestID: "first"))
+        machine.apply(.transportInterrupted)
+        machine.apply(.reconnectRequested(requestID: "second"))
+        XCTAssertEqual(machine.state, .requesting(requestID: "second"))
+        machine.apply(.response(requestID: "first", status: .ok))
+        XCTAssertEqual(machine.state, .requesting(requestID: "second"))
+        machine.apply(.response(requestID: "second", status: .ok))
+        XCTAssertEqual(machine.state, .ready(requestID: "second"))
+    }
+
     func testEndIsTerminalAndNonReadyResponsesStayFailClosed() {
         var machine = PhoneSessionStateMachine()
         machine.apply(.end)
