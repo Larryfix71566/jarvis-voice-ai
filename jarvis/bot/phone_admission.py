@@ -156,7 +156,10 @@ class PhoneAdmissionCore:
             return "authority-unavailable"
         session = self.sessions.get(binding["session"])
         grant = self.grants.get(binding["grant"])
-        if (not session or not grant or not session["enabled"] or not grant["enabled"]
+        if (not session or not grant
+                or session["grant"] != binding["grant"]
+                or grant["owner"] != binding["owner"]
+                or not session["enabled"] or not grant["enabled"]
                 or binding["process"] != self.process
                 or binding["generation"] != session["generation"]
                 or binding["generation"] < self.session_fences.get(binding["session"], 0)):

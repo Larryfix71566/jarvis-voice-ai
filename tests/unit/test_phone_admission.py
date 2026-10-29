@@ -119,6 +119,86 @@ class PhoneAdmissionBoundaryTests(unittest.TestCase):
             PhoneAdmissionCore(constants(), feature_enabled=True, initial_grants=grants,
                                initial_sessions=sessions, initial_peers=peers)
 
+    def test_peer_authority_requires_current_session_grant_and_owner_binding(self):
+        core = self.make_core()
+        binding = copy.deepcopy(core.peers["p1"]["binding"])
+
+        core.sessions["a1"]["grant"] = "B"
+        self.assertEqual(core.authority(binding), "authority-stale")
+        core.sessions["a1"]["grant"] = "A"
+
+        core.grants["A"]["owner"] = "owner-b"
+        self.assertEqual(core.authority(binding), "authority-stale")
+
+    def test_restored_session_id_reuse_cannot_transfer_old_peer_or_ticket_authority(self):
+        grants, _, _ = fixture_state()
+        core = PhoneAdmissionCore(constants(), feature_enabled=True, initial_grants=grants,
+                                  initial_sessions={}, initial_peers={})
+        alice = identity("owner-a")
+        bob = identity("owner-b")
+
+        self.assertEqual(core.step({"type": "snapshot", "name": "empty"}),
+                         {"admitted": True, "reason": "ok"})
+        self.assertEqual(core.step({"type": "login", "grant": "A", "session": "reused"},
+                                   identity=alice), {"admitted": True, "reason": "ok"})
+
+        for ticket, peer in (("old-command", "old-command-peer"),
+                             ("old-output", "old-output-peer"),
+                             ("old-unused", None)):
+            issue = {"type": "issue", "ticket": ticket, "session": "reused",
+                     "digest": ticket}
+            self.assertEqual(core.step(issue, identity=alice), {"admitted": True, "reason": "ok"})
+            if peer is not None:
+                consume = {"type": "consume", "ticket": ticket, "session": "reused",
+                           "owner": "owner-a", "grant": "A", "digest": ticket,
+                           "peer": peer}
+                self.assertEqual(core.step(consume, identity=alice),
+                                 {"admitted": True, "reason": "ok"})
+
+        self.assertEqual(core.step({"type": "restore", "name": "empty"}),
+                         {"admitted": True, "reason": "ok"})
+        self.assertEqual(core.step({"type": "login", "grant": "B", "session": "reused"},
+                                   identity=bob), {"admitted": True, "reason": "ok"})
+
+        command = {"type": "command", "peer": "old-command-peer",
+                   "action": "fixture-action", "protocol": 1}
+        output = {"type": "emit", "peer": "old-output-peer", "sink": "text",
+                  "classification": "ordinary", "provenance": True,
+                  "source_allowed": True}
+        stale_ticket = {"type": "consume", "ticket": "old-unused", "session": "reused",
+                        "owner": "owner-a", "grant": "A", "digest": "old-unused",
+                        "peer": "stale-ticket-peer"}
+        for event in (command, output, stale_ticket):
+            with self.subTest(event=event):
+                self.assertEqual(core.step(event, identity=alice),
+                                 {"admitted": False, "reason": "authority-stale"})
+        self.assertEqual(core.commands, [])
+        self.assertEqual(core.emissions, [])
+        self.assertFalse(core.tickets["old-unused"]["used"])
+
+        # A new Bob session and a separate, unrelated Bob session remain usable.
+        self.assertEqual(core.step({"type": "login", "grant": "B", "session": "unrelated"},
+                                   identity=bob), {"admitted": True, "reason": "ok"})
+        for session, ticket, peer in (("reused", "fresh-bob", "fresh-bob-peer"),
+                                      ("unrelated", "other-bob", "other-bob-peer")):
+            issue = {"type": "issue", "ticket": ticket, "session": session,
+                     "digest": ticket}
+            self.assertEqual(core.step(issue, identity=bob), {"admitted": True, "reason": "ok"})
+            consume = {"type": "consume", "ticket": ticket, "session": session,
+                       "owner": "owner-b", "grant": "B", "digest": ticket,
+                       "peer": peer}
+            self.assertEqual(core.step(consume, identity=bob),
+                             {"admitted": True, "reason": "ok"})
+            fresh_command = {"type": "command", "peer": peer,
+                             "action": "fixture-action", "protocol": 1}
+            fresh_output = {"type": "emit", "peer": peer, "sink": "text",
+                            "classification": "ordinary", "provenance": True,
+                            "source_allowed": True}
+            self.assertEqual(core.step(fresh_command, identity=bob),
+                             {"admitted": True, "reason": "ok"})
+            self.assertEqual(core.step(fresh_output, identity=bob),
+                             {"admitted": True, "reason": "ok"})
+
 
 if __name__ == "__main__":
     unittest.main()

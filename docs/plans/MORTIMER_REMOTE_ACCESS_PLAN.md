@@ -2962,9 +2962,15 @@ tests; the v1 fixture is unchanged.
 
 Local offline validation: the focused unittest run passed 9 tests, including all
 70 S0 vectors, all 7 sensitivity cases and all 3 isolation probes; syntax
-compilation passed. The full pytest gate is still pending because no pytest
-module or executable is available in this environment, and no dependency was
-installed. The module is not wired to a route, persistent store/host anchor,
-phone, tunnel, credential or runtime service. Independent exact-source review,
-PR CI and merge are still required; Stage 1.1 and all live acceptance remain
-open.
+compilation passed. Independent review found that a restored session ID could
+be reused under another grant while an old peer or ticket retained authority.
+The candidate now requires each saved binding to match the session's current
+grant and its current owner, with regression coverage for stale command/output
+peers and tickets plus successful fresh and unrelated sessions. After that
+correction, the focused unittest run passed 11 tests, including all 70 S0
+vectors, all 7 sensitivity cases, all 3 isolation probes and the new boundary
+tests. The full pytest gate is still pending because no pytest module or
+executable is available in this environment, and no dependency was installed.
+The module is not wired to a route, persistent store/host anchor, phone, tunnel,
+credential or runtime service. Exact-source re-review, updated PR CI and merge
+are still required; Stage 1.1 and all live acceptance remain open.
