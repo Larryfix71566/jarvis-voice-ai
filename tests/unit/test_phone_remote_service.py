@@ -89,6 +89,46 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual((result["status"], result["reason"]), ("unavailable", "feature_off"))
         self.assertEqual(self.media.peers, {})
 
+    def test_readiness_is_content_free_and_voice_offers_store_terminal_receipt(self):
+        unavailable = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=lambda: self.now[0], voice_ready=lambda: False)
+        status = unavailable.handle(self.request("session.status", {}, "voice-status"), self.context)
+        self.assertEqual((status["status"], status["reason"], status["payload"]),
+                         ("unavailable", "voice_not_ready", {}))
+        self.assertEqual(unavailable.handle(self.request("session.status", {}, "voice-status"), self.context), status)
+        sdp = "readiness-offer"
+        ticket = "readiness-ticket"
+        self.store.issue_ticket(identity=self.identity, ticket_id=ticket, session_id="session",
+            owner_id="alice", purpose="offer", payload_digest=hashlib.sha256(sdp.encode()).hexdigest(),
+            now=2, expires_at=20)
+        context = TrustedRequestContext(self.identity, "alice", "session", "dev", self.incarnation, ticket)
+        raw = self.request("voice.offer", {"sdp": sdp}, "readiness-effect")
+        first = unavailable.handle(raw, context)
+        self.assertEqual(first, unavailable.handle(raw, context))
+        self.assertEqual((first["status"], first["reason"], first["payload"]),
+                         ("unavailable", "voice_not_ready", {}))
+        self.assertEqual(self.media.peers, {})
+
+    def test_readiness_is_content_free_and_voice_offers_store_terminal_receipt(self):
+        unavailable = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=lambda: self.now[0], voice_ready=lambda: False)
+        status = unavailable.handle(self.request("session.status", {}, "voice-status"), self.context)
+        self.assertEqual((status["status"], status["reason"], status["payload"]),
+                         ("unavailable", "voice_not_ready", {}))
+        self.assertEqual(unavailable.handle(self.request("session.status", {}, "voice-status"), self.context), status)
+        sdp = "readiness-offer"
+        ticket = "readiness-ticket"
+        self.store.issue_ticket(identity=self.identity, ticket_id=ticket, session_id="session",
+            owner_id="alice", purpose="offer", payload_digest=hashlib.sha256(sdp.encode()).hexdigest(),
+            now=2, expires_at=20)
+        context = TrustedRequestContext(self.identity, "alice", "session", "dev", self.incarnation, ticket)
+        raw = self.request("voice.offer", {"sdp": sdp}, "readiness-effect")
+        first = unavailable.handle(raw, context)
+        self.assertEqual(first, unavailable.handle(raw, context))
+        self.assertEqual((first["status"], first["reason"], first["payload"]),
+                         ("unavailable", "voice_not_ready", {}))
+        self.assertEqual(self.media.peers, {})
+
     def test_offer_consumes_server_ticket_once_and_exact_retry_replays_receipt(self):
         sdp = "synthetic offer canary"
         ticket = "server-only-ticket"
@@ -305,6 +345,46 @@ class ServiceTests(unittest.TestCase):
         wrong_device = TrustedRequestContext(self.identity, "alice", "session", "other-device", self.incarnation)
         result = self.service.handle(self.request("session.status", {}, "wrong-device"), wrong_device)
         self.assertEqual((result["status"], result["reason"]), ("denied", "not_authorized"))
+
+    def test_same_owner_different_device_and_grant_cannot_control_existing_peer(self):
+        self.store.add_device(identity=self.identity, device_id="dev-b", owner_id="alice",
+                              public_key=b"public-b", key_algorithm="test")
+        self.store.add_grant(identity=self.identity, grant_id="grant-b", device_id="dev-b",
+                             owner_id="alice", scopes=["read", "voice"])
+        self.incarnation = self.store.login(identity=self.identity, session_id="session", grant_id="grant",
+            owner_id="alice", now=2, expires_at=100)
+        self.context = TrustedRequestContext(self.identity, "alice", "session", "dev", self.incarnation)
+        offer, _, _ = self._offer(ticket="owner-a-ticket")
+        peer = offer["payload"]["peer_id"]
+        inc_b = self.store.login(identity=self.identity, session_id="session-b", grant_id="grant-b",
+            owner_id="alice", now=2, expires_at=100)
+        context_b = TrustedRequestContext(self.identity, "alice", "session-b", "dev-b", inc_b)
+        result = self.service.handle(self.request("voice.end", {"peer_id": peer}, "cross-grant-end"), context_b)
+        self.assertEqual((result["status"], result["reason"]), ("denied", "not_authorized"))
+        self.assertIn(peer, self.service._peers)
+
+    def test_session_signout_immediately_denies_peer_commands_and_output_but_not_other_session(self):
+        sink = FakeBoundedSink()
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=lambda: self.now[0], output_sink=sink, output_policy=FakeOutputPolicy())
+        offer, _, _ = self._offer(service=service, ticket="scoped-signout-ticket")
+        peer = offer["payload"]["peer_id"]
+        self.assertTrue(service.emit_output(peer, {"classification": "approved_shared",
+            "destination_granted": True, "content": "queued"}))
+        self.store.login(identity=self.identity, session_id="session-b", grant_id="grant",
+            owner_id="alice", now=2, expires_at=100)
+        global_before = self.store.status()["host_generation"]
+        self.store.revoke_session(identity=self.identity, session_id="session", owner_id="alice")
+        self.assertEqual(self.store.status()["host_generation"], global_before)
+        self.assertFalse(service.emit_output(peer, {"classification": "approved_shared",
+            "destination_granted": True, "content": "after revoke"}))
+        denied = service.handle(self.request("voice.end", {"peer_id": peer}, "signed-out-command"), self.context)
+        self.assertEqual((denied["status"], denied["reason"]), ("denied", "not_authorized"))
+        self.assertEqual(service.notify_revocation(), 1)
+        self.assertEqual(len(sink), 0)
+        row = self.db.execute("SELECT login_incarnation FROM phone_remote_sessions WHERE session_id='session-b'").fetchone()
+        fresh = TrustedRequestContext(self.identity, "alice", "session-b", "dev", row[0])
+        self.assertEqual(service.handle(self.request("session.status", {}, "session-b-status"), fresh)["status"], "ok")
 
     def test_revoke_during_output_preparation_prevents_commit(self):
         started, release = threading.Event(), threading.Event()

@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 
 from jarvis.bot.phone_admission_store import PhoneAdmissionStore, SessionBinding, StoreDenied, StoreUnavailable
-from jarvis.bot.phone_remote_protocol import OPERATIONS, ProtocolError, parse_request, response
+from jarvis.bot.phone_remote_protocol import ProtocolError, parse_request, response
 
 
 @dataclass(frozen=True)
@@ -81,7 +81,7 @@ class PhoneRemoteService:
     def __init__(self, store: PhoneAdmissionStore, verifier, media, *, enabled=True,
                  owner_available=lambda _owner: True, clock=time.monotonic,
                  ledger_per_binding=256, ledger_total=4096, output_sink=None,
-                 output_policy=None):
+                 output_policy=None, voice_ready=lambda: True):
         self.store, self.verifier, self.media = store, verifier, media
         self.enabled, self.owner_available, self.clock = enabled, owner_available, clock
         self.ledger_per_binding, self.ledger_total = ledger_per_binding, ledger_total
@@ -89,11 +89,11 @@ class PhoneRemoteService:
             raise TypeError("only the bounded synthetic sink is supported")
         self.output_sink = output_sink if output_sink is not None else FakeBoundedSink()
         self.output_policy = output_policy
+        self.voice_ready = voice_ready
         self._lock = threading.RLock()
         self._ledger = {}
         self._peers = {}
         self._owner_lease = {}
-        self._peer_last_check = {}
 
     @staticmethod
     def _binding_key(binding):
@@ -169,6 +169,11 @@ class PhoneRemoteService:
                 return response(rid, "denied", "not_authorized")
             if not self.store.binding_current(binding, now=self.clock()):
                 return response(rid, "denied", "not_authorized")
+            try:
+                if self.voice_ready() is not True:
+                    return response(rid, "unavailable", "voice_not_ready")
+            except Exception:
+                return response(rid, "unavailable", "voice_not_ready")
             return response(rid, "ok", "none", {"readiness": "ready"})
         if op == "voice.end":
             peer_id = payload["peer_id"]
@@ -191,7 +196,6 @@ class PhoneRemoteService:
                 with self._lock:
                     item = self._peers.pop(peer_id, None)
                     self._owner_lease.pop(binding.owner_id, None)
-                    self._peer_last_check.pop(peer_id, None)
                     if item:
                         self.output_sink.cancel_peer(peer_id)
             if item:
@@ -228,6 +232,11 @@ class PhoneRemoteService:
             if op == "voice.offer" and lease and lease in self._peers:
                 return response(rid, "unavailable", "owner_busy")
         try:
+            if self.voice_ready() is not True:
+                return response(rid, "unavailable", "voice_not_ready")
+        except Exception:
+            return response(rid, "unavailable", "voice_not_ready")
+        try:
             # This is deliberately outside the authority guard.
             peer_id, answer = self.media.prepare(payload["sdp"],
                 payload.get("peer_id") if op == "voice.update" else None)
@@ -240,7 +249,6 @@ class PhoneRemoteService:
                 with self._lock:
                     self._peers[peer_id] = {"binding": binding, "context": context}
                     self._owner_lease[binding.owner_id] = peer_id
-                    self._peer_last_check[peer_id] = self.clock()
         except StoreDenied:
             if op == "voice.offer":
                 self.media.close(peer_id)
@@ -314,7 +322,6 @@ class PhoneRemoteService:
                 if not current:
                     with self._lock:
                         removed = self._peers.pop(peer_id, None)
-                        self._peer_last_check.pop(peer_id, None)
                         if removed:
                             self._owner_lease.pop(removed["binding"].owner_id, None)
                             self.output_sink.cancel_peer(peer_id)

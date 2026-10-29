@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 import threading
 import unittest
+from dataclasses import replace
 from contextlib import contextmanager
 
 from jarvis.bot.phone_admission_store import (
@@ -673,6 +674,23 @@ class StoreTests(unittest.TestCase):
         self.db = restored
         with self.assertRaises(StoreUnavailable):
             PhoneAdmissionStore(self.db, self.anchor)
+
+    def test_immutable_binding_rejects_every_changed_authority_dimension(self):
+        self.seed()
+        incarnation = self.login()
+        binding = self.store.current_binding(identity=identity(), owner_id="alice", session_id="s-a",
+            device_id="d-a", login_incarnation=incarnation, now=2)
+        changes = {
+            "owner_id": "bob", "device_id": "other-device", "grant_id": "other-grant",
+            "session_id": "other-session", "login_incarnation": "host-test:3:999",
+            "host_id": "other-host", "host_generation": binding.host_generation + 1,
+            "grant_generation": binding.grant_generation + 1,
+            "session_generation": binding.session_generation + 1,
+            "process_epoch": "other-process", "scopes": frozenset({"read"}),
+        }
+        for field, value in changes.items():
+            with self.subTest(field=field):
+                self.assertFalse(self.store.binding_current(replace(binding, **{field: value}), now=2))
 
     def test_session_signout_stays_scoped_across_repeated_raw_stale_restores(self):
         self.seed()
