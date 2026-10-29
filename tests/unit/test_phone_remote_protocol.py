@@ -54,6 +54,20 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(error["payload"], {})
         self.assertEqual(json.loads(encode_response(error)), error)
 
+    def test_response_encoder_rejects_invalid_ids_reasons_and_operation_dtos(self):
+        with self.assertRaises(ValueError):
+            encode_response({"request_id": 42, "status": "invented", "reason": "secret text",
+                             "payload": {"secret": "canary"}})
+        with self.assertRaises(ValueError):
+            encode_response(response("r", "ok", "none", {"readiness": "ready"}))
+        good = response("r", "ok", "none", {"readiness": "ready"})
+        self.assertEqual(json.loads(encode_response(good, operation="session.status")), good)
+        with self.assertRaises(ValueError):
+            encode_response(response("r", "ok", "none", {"readiness": "ready", "extra": True}),
+                            operation="session.status")
+        with self.assertRaises(ValueError):
+            encode_response(response("r", "denied", "not_authorized", {"leak": "private"}),
+                            operation="session.status")
 
 if __name__ == "__main__":
     unittest.main()

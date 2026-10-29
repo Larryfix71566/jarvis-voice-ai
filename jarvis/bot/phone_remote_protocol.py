@@ -100,15 +100,82 @@ def parse_request(raw):
 
 
 def response(request_id, status, reason, payload=None):
-    if status not in _STATUSES or reason not in _REASONS:
+    if type(status) is not str or type(reason) is not str or status not in _STATUSES or reason not in _REASONS:
         raise ValueError("invalid internal response")
     if payload is None:
         payload = {}
-    return {"request_id": request_id if type(request_id) is str and request_id else uuid.uuid4().hex,
-            "status": status, "reason": reason, "payload": payload}
+    if type(request_id) is not str or not request_id:
+        request_id = uuid.uuid4().hex
+    try:
+        if len(request_id.encode("utf-8", "strict")) > 128:
+            request_id = uuid.uuid4().hex
+    except UnicodeError:
+        request_id = uuid.uuid4().hex
+    result = {"request_id": request_id, "status": status, "reason": reason, "payload": payload}
+    validate_response(result)
+    return result
 
 
-def encode_response(value):
+def validate_success_payload(operation, payload):
+    """Validate the exact success DTO for one closed operation."""
+    if type(payload) is not dict:
+        return False
+    if operation == "session.status":
+        return set(payload) == {"readiness"} and payload["readiness"] == "ready"
+    if operation in {"voice.offer", "voice.update"}:
+        if set(payload) != {"peer_id", "sdp"}:
+            return False
+        return all(_valid_text(payload[key]) for key in ("peer_id", "sdp"))
+    if operation == "voice.end":
+        return (set(payload) == {"peer_id", "ended"} and _valid_text(payload["peer_id"])
+                and payload["ended"] is True)
+    return False
+
+
+def _valid_text(value):
+    if type(value) is not str or not value:
+        return False
+    try:
+        value.encode("utf-8", "strict")
+    except UnicodeError:
+        return False
+    return True
+
+
+def validate_response(value, *, operation=None, require_operation=False):
+    """Reject unknown response fields, status/reason pairs and unsafe DTOs."""
     if type(value) is not dict or set(value) != {"request_id", "status", "reason", "payload"}:
-        raise ValueError("invalid response")
+        raise ValueError("invalid response envelope")
+    rid = value["request_id"]
+    if type(rid) is not str or not rid:
+        raise ValueError("invalid response request ID")
+    try:
+        if len(rid.encode("utf-8", "strict")) > 128:
+            raise ValueError("invalid response request ID")
+    except UnicodeError:
+        raise ValueError("invalid response request ID") from None
+    status, reason, payload = value["status"], value["reason"], value["payload"]
+    if (type(status) is not str or type(reason) is not str or status not in _STATUSES
+            or reason not in _REASONS or type(payload) is not dict):
+        raise ValueError("invalid response values")
+    if status == "ok":
+        if reason != "none":
+            raise ValueError("invalid success reason")
+        if require_operation and operation is None:
+            raise ValueError("success response needs its operation schema")
+        if operation is not None and not validate_success_payload(operation, payload):
+            raise ValueError("invalid operation success payload")
+    else:
+        allowed = {
+            "denied": {"malformed_request", "not_authorized", "request_conflict", "request_capacity"},
+            "unavailable": {"feature_off", "authority_unavailable", "voice_not_ready", "owner_busy", "operation_unavailable"},
+            "incompatible": {"unsupported_protocol"},
+        }
+        if reason not in allowed[status] or payload != {}:
+            raise ValueError("invalid error response")
+    return True
+
+
+def encode_response(value, *, operation=None):
+    validate_response(value, operation=operation, require_operation=value.get("status") == "ok" if type(value) is dict else True)
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False, allow_nan=False)

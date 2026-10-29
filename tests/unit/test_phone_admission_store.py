@@ -623,6 +623,18 @@ class StoreTests(unittest.TestCase):
             self.store.revoke_grant(identity=identity(), grant_id="g-a", owner_id="alice")
         self.assertEqual(self.store.status(), after)
 
+    def test_scope_noop_still_checks_stable_anchor(self):
+        self.seed()
+        before = self.store.status()
+        self.anchor.available = False
+        with self.assertRaises(StoreUnavailable):
+            self.store.update_grant_scopes(identity=identity(), grant_id="g-a", owner_id="alice",
+                                           scopes=["read", "voice"])
+        self.anchor.available = True
+        self.assertEqual(self.store.status(), before)
+        self.assertEqual(self.db.execute("SELECT scopes_json FROM phone_remote_grants WHERE grant_id='g-a'").fetchone()[0],
+                         '["read","voice"]')
+
     def test_credential_replacement_uses_global_fence_and_validates_before_reservation(self):
         self.seed()
         inc = self.login()

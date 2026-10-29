@@ -9,7 +9,8 @@ import uuid
 from dataclasses import dataclass
 
 from jarvis.bot.phone_admission_store import PhoneAdmissionStore, SessionBinding, StoreDenied, StoreUnavailable
-from jarvis.bot.phone_remote_protocol import ProtocolError, parse_request, response
+from jarvis.bot.phone_remote_protocol import (ProtocolError, parse_request, response,
+    validate_response, validate_success_payload)
 
 
 @dataclass(frozen=True)
@@ -68,9 +69,19 @@ class FakeBoundedSink:
         with self._lock:
             self._queue = [item for item in self._queue if item["peer_id"] != peer_id]
 
-    def dequeue(self):
+    def clear(self):
         with self._lock:
-            return self._queue.pop(0) if self._queue else None
+            self._queue.clear()
+
+    def peek(self):
+        with self._lock:
+            return self._queue[0] if self._queue else None
+
+    def dequeue(self, expected=None):
+        with self._lock:
+            if not self._queue or (expected is not None and self._queue[0] is not expected):
+                return None
+            return self._queue.pop(0)
 
     def __len__(self):
         with self._lock:
@@ -104,6 +115,12 @@ class PhoneRemoteService:
 
     def _valid_context(self, context):
         return type(context) is TrustedRequestContext and self.verifier.verify(context)
+
+    def _owner_ready(self, owner_id):
+        try:
+            return self.owner_available(owner_id) is True
+        except Exception:
+            return False
 
     def _finish(self, key, receipt):
         with self._lock:
@@ -154,11 +171,11 @@ class PhoneRemoteService:
 
     def _serve(self, request, context, binding):
         op, rid, payload = request["operation"], request["request_id"], request["payload"]
-        try:
-            owner_ready = self.owner_available(context.owner_id) is True
-        except Exception:
-            owner_ready = False
-        if not owner_ready:
+        if not self.enabled:
+            self.tick()
+            return response(rid, "unavailable", "feature_off")
+        if not self._owner_ready(context.owner_id):
+            self.tick()
             return response(rid, "unavailable", "owner_busy")
         if op in {"results.snapshot", "results.resume", "call.state", "call.answer", "call.decline"}:
             return response(rid, "unavailable", "operation_unavailable")
@@ -174,6 +191,10 @@ class PhoneRemoteService:
                     return response(rid, "unavailable", "voice_not_ready")
             except Exception:
                 return response(rid, "unavailable", "voice_not_ready")
+            if not self.enabled:
+                return response(rid, "unavailable", "feature_off")
+            if not self._owner_ready(context.owner_id):
+                return response(rid, "unavailable", "owner_busy")
             return response(rid, "ok", "none", {"readiness": "ready"})
         if op == "voice.end":
             peer_id = payload["peer_id"]
@@ -207,12 +228,15 @@ class PhoneRemoteService:
             return response(rid, "denied", "not_authorized")
         if not context.ticket_id:
             return response(rid, "denied", "not_authorized")
+        prior_peer = None
+        prior_version = None
         if op == "voice.update":
             with self._lock:
-                existing = self._peers.get(payload["peer_id"])
-                if (existing is None or existing["binding"] != binding
+                prior_peer = self._peers.get(payload["peer_id"])
+                if (prior_peer is None or prior_peer["binding"] != binding
                         or self._owner_lease.get(binding.owner_id) != payload["peer_id"]):
                     return response(rid, "denied", "not_authorized")
+                prior_version = prior_peer["version"]
         try:
             consumed = self.store.consume_ticket(identity=context.identity,
                 ticket_id=context.ticket_id, session_id=context.session_id,
@@ -227,10 +251,6 @@ class PhoneRemoteService:
             return response(rid, "unavailable", "authority_unavailable")
         if not self.store.binding_current(binding, now=self.clock()):
             return response(rid, "denied", "not_authorized")
-        with self._lock:
-            lease = self._owner_lease.get(binding.owner_id)
-            if op == "voice.offer" and lease and lease in self._peers:
-                return response(rid, "unavailable", "owner_busy")
         try:
             if self.voice_ready() is not True:
                 return response(rid, "unavailable", "voice_not_ready")
@@ -242,22 +262,59 @@ class PhoneRemoteService:
                 payload.get("peer_id") if op == "voice.update" else None)
         except Exception:
             return response(rid, "unavailable", "voice_not_ready")
+        response_payload = {"peer_id": peer_id, "sdp": answer}
+        if (not validate_success_payload(op, response_payload)
+                or (op == "voice.update" and peer_id != payload["peer_id"])):
+            if op == "voice.offer" and type(peer_id) is str and peer_id:
+                self.media.close(peer_id)
+            return response(rid, "unavailable", "voice_not_ready")
+        owner_ready_at_commit = self._owner_ready(context.owner_id)
+        commit_error = None
+        published = False
         try:
             with self.store.serialized_authority():
-                if not self.store.binding_current_serialized(binding, now=self.clock()):
-                    raise StoreDenied("authority changed")
-                with self._lock:
-                    self._peers[peer_id] = {"binding": binding, "context": context}
-                    self._owner_lease[binding.owner_id] = peer_id
+                if not self.enabled:
+                    commit_error = response(rid, "unavailable", "feature_off")
+                elif not owner_ready_at_commit:
+                    commit_error = response(rid, "unavailable", "owner_busy")
+                elif not self.store.binding_current_serialized(binding, now=self.clock()):
+                    commit_error = response(rid, "denied", "not_authorized")
+                else:
+                    with self._lock:
+                        if op == "voice.offer":
+                            lease = self._owner_lease.get(binding.owner_id)
+                            if lease is not None and lease in self._peers:
+                                commit_error = response(rid, "unavailable", "owner_busy")
+                            elif peer_id in self._peers:
+                                commit_error = response(rid, "unavailable", "voice_not_ready")
+                            else:
+                                if lease is not None:
+                                    self._owner_lease.pop(binding.owner_id, None)
+                                self._peers[peer_id] = {"binding": binding, "context": context, "version": 1}
+                                self._owner_lease[binding.owner_id] = peer_id
+                                published = True
+                        else:
+                            current_peer = self._peers.get(peer_id)
+                            if (current_peer is not prior_peer or current_peer is None
+                                    or current_peer["version"] != prior_version
+                                    or current_peer["binding"] != binding
+                                    or self._owner_lease.get(binding.owner_id) != peer_id):
+                                commit_error = response(rid, "denied", "not_authorized")
+                            else:
+                                self._peers[peer_id] = {"binding": binding, "context": context,
+                                                        "version": prior_version + 1}
+                                published = True
         except StoreDenied:
-            if op == "voice.offer":
-                self.media.close(peer_id)
-            return response(rid, "denied", "not_authorized")
+            commit_error = response(rid, "denied", "not_authorized")
         except StoreUnavailable:
-            if op == "voice.offer":
+            commit_error = response(rid, "unavailable", "authority_unavailable")
+        if not published:
+            if op == "voice.offer" and type(peer_id) is str and peer_id:
                 self.media.close(peer_id)
-            return response(rid, "unavailable", "authority_unavailable")
-        receipt = response(rid, "ok", "none", {"peer_id": peer_id, "sdp": answer})
+            if not self.enabled or not owner_ready_at_commit:
+                self.tick()
+            return commit_error or response(rid, "denied", "not_authorized")
+        receipt = response(rid, "ok", "none", response_payload)
         return receipt
 
     def emit_output(self, peer_id, server_output):
@@ -267,6 +324,9 @@ class PhoneRemoteService:
         this facade never accepts it from phone JSON. The injected policy must
         deny unknown/legacy/protected content and require a destination grant.
         """
+        if not self.enabled:
+            self.tick()
+            return False
         if self.output_policy is None:
             return False
         with self._lock:
@@ -274,6 +334,10 @@ class PhoneRemoteService:
             if peer is None or self._owner_lease.get(peer["binding"].owner_id) != peer_id:
                 return False
             binding = peer["binding"]
+            owner_id = peer["context"].owner_id
+        if not self._owner_ready(owner_id):
+            self.tick()
+            return False
         try:
             if "read" not in binding.scopes or not self.store.binding_current(binding, now=self.clock()):
                 return False
@@ -285,40 +349,76 @@ class PhoneRemoteService:
             return False
         if type(prepared) is not bytes:
             return False
+        owner_ready_at_commit = self._owner_ready(owner_id)
+        committed = False
         with self.store.serialized_authority():
-            if not self.store.binding_current_serialized(binding, now=self.clock()):
-                return False
-            with self._lock:
-                current = self._peers.get(peer_id)
-                if current is None or current["binding"] != binding or self._owner_lease.get(binding.owner_id) != peer_id:
-                    return False
-                return self.output_sink.enqueue_nonblocking({
-                    "peer_id": peer_id, "binding": binding, "payload": prepared})
+            if (self.enabled and owner_ready_at_commit
+                    and self.store.binding_current_serialized(binding, now=self.clock())):
+                with self._lock:
+                    current = self._peers.get(peer_id)
+                    if current is not None and current["binding"] == binding and self._owner_lease.get(binding.owner_id) == peer_id:
+                        committed = self.output_sink.enqueue_nonblocking({
+                            "peer_id": peer_id, "binding": binding, "payload": prepared})
+        if not self.enabled or not owner_ready_at_commit:
+            self.tick()
+        return committed
 
     def drain_output(self):
         """Dequeue one synthetic item only while its current binding is valid."""
+        if not self.enabled:
+            self.tick()
+            return None
+        queued = self.output_sink.peek()
+        if queued is None:
+            return None
+        if not self._owner_ready(queued["binding"].owner_id):
+            self.tick()
+            return None
+        owner_ready_at_commit = self._owner_ready(queued["binding"].owner_id)
+        invalidated = False
         with self.store.serialized_authority():
-            item = self.output_sink.dequeue()
-            if item is None:
-                return None
-            if not self.store.binding_current_serialized(item["binding"], now=self.clock()):
-                return None
-            return item["payload"]
+            if not owner_ready_at_commit:
+                invalidated = True
+            else:
+                item = self.output_sink.dequeue(expected=queued)
+                if item is None:
+                    return None
+            if invalidated or (not self.enabled
+                    or not self.store.binding_current_serialized(item["binding"], now=self.clock())):
+                if not self.enabled:
+                    self.output_sink.clear()
+                payload = None
+            else:
+                with self._lock:
+                    peer = self._peers.get(item["peer_id"])
+                    valid_peer = (peer is not None and peer["binding"] == item["binding"]
+                                  and self._owner_lease.get(item["binding"].owner_id) == item["peer_id"])
+                payload = item["payload"] if valid_peer else None
+        if invalidated:
+            self.tick()
+        return payload
 
     def tick(self):
         """Explicit synthetic poll; caller must invoke at least once per five seconds."""
         now = self.clock()
         with self._lock:
             peers = list(self._peers.items())
+        if not self.enabled and not peers:
+            self.output_sink.clear()
+            return 0
         closed = 0
         for peer_id, item in peers:
             binding = item["binding"]
+            owner_ready = self.enabled and self._owner_ready(item["context"].owner_id)
             removed = None
             with self.store.serialized_authority():
-                try:
-                    current = self.store.binding_current_serialized(binding, now=now)
-                except StoreUnavailable:
+                if not self.enabled or not owner_ready:
                     current = False
+                else:
+                    try:
+                        current = self.store.binding_current_serialized(binding, now=now)
+                    except StoreUnavailable:
+                        current = False
                 if not current:
                     with self._lock:
                         removed = self._peers.pop(peer_id, None)
@@ -329,6 +429,8 @@ class PhoneRemoteService:
             if item:
                 self.media.close(peer_id)
                 closed += 1
+        if not self.enabled:
+            self.output_sink.clear()
         return closed
 
     def notify_revocation(self):
@@ -341,6 +443,7 @@ class PhoneRemoteService:
         except ProtocolError as error:
             return response(error.request_id, error.status, error.reason)
         if not self.enabled:
+            self.tick()
             return response(request["request_id"], "unavailable", "feature_off")
         if not self._valid_context(context):
             return response(request["request_id"], "denied", "not_authorized")
@@ -366,5 +469,9 @@ class PhoneRemoteService:
             result = response(request["request_id"], "unavailable", "authority_unavailable")
         except Exception:
             # Never leak exception messages or adapter/authority internals.
+            result = response(request["request_id"], "unavailable", "authority_unavailable")
+        try:
+            validate_response(result, operation=request["operation"], require_operation=True)
+        except (TypeError, ValueError):
             result = response(request["request_id"], "unavailable", "authority_unavailable")
         return self._finish(key, result)

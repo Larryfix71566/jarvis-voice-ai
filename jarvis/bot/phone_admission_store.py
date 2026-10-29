@@ -684,6 +684,7 @@ class PhoneAdmissionStore:
             raise StoreDenied("invalid scopes")
         encoded = json.dumps(scopes, separators=(",", ":"), sort_keys=True)
         with self._authority_guard():
+            self._check_pair()
             grant = self.db.execute("SELECT owner_id,revoked_at,scopes_json FROM phone_remote_grants WHERE grant_id=?",
                                     (grant_id,)).fetchone()
             if grant is None or grant["owner_id"] != owner_id or grant["revoked_at"] is not None:
@@ -788,15 +789,26 @@ class PhoneAdmissionStore:
                 frozenset(scopes))
 
     def binding_terminal(self, binding: SessionBinding, *, now: float) -> bool:
-        """True only when this incarnation cannot become current again."""
+        """Prove terminality from protected epochs and process admission state.
+
+        SQLite row absence or replacement is deliberately not evidence: either
+        can be produced by restoring a stale database snapshot.
+        """
         if type(binding) is not SessionBinding or type(now) not in (int, float) or not math.isfinite(now):
             return False
         with self._authority_guard():
-            self._check_pair()
-            row = self.db.execute("SELECT login_incarnation,revoked_at,expires_at FROM phone_remote_sessions WHERE session_id=?",
-                                  (binding.session_id,)).fetchone()
-            return bool(row is None or row["login_incarnation"] != binding.login_incarnation
-                        or row["revoked_at"] is not None or row["expires_at"] <= now)
+            anchor = self._check_pair()
+            parsed = self._parse_incarnation(binding.login_incarnation)
+            if parsed is None or parsed[0] != binding.host_id or parsed[1] != binding.host_generation:
+                return False
+            if anchor.host_id != binding.host_id or anchor.host_generation > binding.host_generation:
+                return True
+            if anchor.host_generation < binding.host_generation or anchor.login_counter < parsed[2]:
+                return False
+            # A removed process admission cannot be restored with SQLite. The
+            # protected monotonic login counter prevents that incarnation from
+            # being issued again after session-only sign-out.
+            return self._admission_key(binding.session_id, binding.login_incarnation) not in _PROCESS_ADMISSIONS
 
     def status(self) -> dict[str, int]:
         """Non-sensitive synthetic status; no record inventory is exposed."""
