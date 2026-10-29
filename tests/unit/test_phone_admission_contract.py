@@ -95,6 +95,9 @@ class AdmissionModel:
                            "scope": ["voice", "read", "action"]}
                        for g, owner in (("A", "owner-a"), ("B", "owner-b"))}
         self.sessions = {}
+        # Synthetic per-session revocation floor, deliberately outside snapshots.
+        # This represents the contract invariant only, not a production storage layout.
+        self.session_fences = {}
         self.peers = {}
         for sid, gid, pid in (("a1", "A", "p1"), ("a2", "A", "p2"), ("b1", "B", "p3")):
             self.sessions[sid] = {"grant": gid, "generation": 0, "epoch": 1,
@@ -147,7 +150,9 @@ class AdmissionModel:
         grant = self.grants.get(binding["grant"])
         if (not session or not grant or not session["enabled"] or not grant["enabled"]
                 or binding["process"] != self.process
-                or binding["generation"] != session["generation"]):
+                or binding["generation"] != session["generation"]
+                or (self.mutation != "ignore_session_fence"
+                    and binding["generation"] < self.session_fences.get(binding["session"], 0))):
             return "authority-stale"
         if self.mutation != "ignore_global" and (binding["epoch"] != self.epoch
                                                   or session["epoch"] != self.epoch):
@@ -335,8 +340,11 @@ class AdmissionModel:
             if error:
                 return self.deny(error)
             sid = e["session"]
+            next_generation = max(self.sessions[sid]["generation"],
+                                  self.session_fences.get(sid, 0)) + 1
             self.sessions[sid]["enabled"] = False
-            self.sessions[sid]["generation"] += 1
+            self.sessions[sid]["generation"] = next_generation
+            self.session_fences[sid] = next_generation
             if e.get("notify", True):
                 for pid, peer in self.peers.items():
                     if peer["binding"]["session"] == sid:
@@ -402,7 +410,7 @@ class AdmissionModel:
                 return self.deny("authority-stale")
             if sid in self.sessions:
                 return self.deny("session-exists")
-            self.sessions[sid] = {"grant": gid, "generation": 0, "epoch": self.epoch,
+            self.sessions[sid] = {"grant": gid, "generation": self.session_fences.get(sid, 0), "epoch": self.epoch,
                                   "process": self.process, "enabled": True}
             return self.result()
         if kind == "restart":
@@ -418,6 +426,7 @@ class AdmissionModel:
             return self.result()
         if kind == "restore":
             # Adversarial stale DB appearance, NOT the authorized restore procedure.
+            # The per-session revocation floor is outside the rollbackable snapshot.
             self.epoch, self.grants, self.sessions = copy.deepcopy(self.snapshots[e["name"]])
             return self.result()
         if kind == "anchor":
@@ -444,6 +453,7 @@ class AdmissionModel:
     def view(self):
         return {"epoch": self.epoch, "anchor_epoch": self.anchor_epoch,
                 "anchor_state": self.anchor_state, "process": self.process,
+                "session_fences": copy.deepcopy(self.session_fences),
                 "closed": sorted(pid for pid, p in self.peers.items() if p["closed"]),
                 "emissions": copy.deepcopy(self.emissions), "commands": copy.deepcopy(self.commands),
                 "closures": copy.deepcopy(self.closures),
