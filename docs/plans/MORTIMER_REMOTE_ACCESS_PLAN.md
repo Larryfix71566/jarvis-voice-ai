@@ -2939,3 +2939,11 @@ the actual classifier, eligible dedicated memory route, effective stage and
 WS-05 privacy prerequisites. Shadow cannot mutate live memory/prompts; the first
 20 actual decisions and existing 100-candidate/five-model-call daily limits are
 not satisfied by these synthetic vectors. No live acceptance checkbox changes.
+
+### 2026-10-29 — WS-04 offline phone admission claim registration
+
+PR #285 merged to main at `97ffb3bb19ce29a9c4e6768a481389ac147cd691`. The S0 model and fixture hashes remain `d00ce2d1254c04f386b455b061b45a5b1984b295a6201746d8bb6ea462e38781` and `1cf1f8a377438a5fe04d0517535eee86166c48af6decb030da249b9ae5083950`; the independent oracle accepted those exact bytes, and all three PR-triggered workflows completed successfully. This proves only the synthetic contract; no production recovery store, route, phone, or live access is verified.
+
+Larry authorized the next bounded offline WS-04 slice for GPT-6 Luna. The proposed branch is `codex/ws04-phone-admission-core-20261029`, created from then-current main after the matching docs-only claim lands. Exact source/test scope: new `jarvis/bot/phone_admission.py`; new `tests/unit/test_phone_admission.py`; `tests/unit/test_phone_admission_contract.py` wired to the module; and `tests/fixtures/phone_admission_contract/v1.json` transferred read-only with the claim. No fixture version change is included. The existing [phone plan §16](MORTIMER_PHONE_ACCESS_PLAN.md#16-approved-native-iphone-direction-and-staged-claims--revision-54-amendment-candidate-2026-10-28) remains the design authority.
+
+The slice exercises the deterministic admission policy and all current S0 vectors without adding listeners, persistent schema, credentials or live grants. It does not complete the full 1.1 host-anchor/store/route integration; plan §6 items 0.2 and 1.1 reservations, route/sink wiring and their acceptance evidence remain open. Registration and implementation are separate: source edits begin only after the exact owner/branch/scope row is present on main. This docs-only claim PR changes no runtime state or acceptance checkbox.

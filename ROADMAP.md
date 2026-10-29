@@ -883,8 +883,11 @@ Sources: [verified-gap plan §§12–14](docs/plans/MORTIMER_VERIFIED_GAP_CLOSUR
 
 ### Acceptance checklist — remaining
 
-R1 foundation and the remote-bind guard are merged. Local preparation, local activation and remote binding are separate gates.
+R1 foundation and the remote-bind guard are merged. Local preparation, local activation and remote binding remain separate gates.
 
+The WS-30 synthetic session-revocation repair merged in PR #285 as `97ffb3bb19ce29a9c4e6768a481389ac147cd691`; the S0 source and three PR-triggered workflows are complete. This is synthetic contract evidence only, not a production admission fix or accepted phone access.
+
+- [ ] **Codex · offline phone admission core:** After the new claim below lands, implement the deterministic Mac-side admission core and run the S0 v1 contract through it. Preserve all 70 vectors, 7 sensitivity mutations and 3 isolation probes; prove stale ticket/command/output denial after restore, scoped session revocation, unaffected sessions, fresh login, replay/expiry/mismatch refusal and feature-off refusal. This synthetic slice does not wire a request route or establish durable host-anchor behavior.
 - [ ] **Larry · prerequisite decision:** Choose supervised setup, one-time CLI or Mac pairing for local token onboarding. The R2 recommendation is not a substitute for the unresolved roadmap decision.
 - [ ] **Codex · implementation prerequisite:** Build and validate the chosen vault/Keychain onboarding path. Under the proposed supervised path: mint once, pass secrets through stdin, verify vault/Keychain readback, refuse existing storage and clean only this attempt's partial state. No token appears in argv/logs/temp files/receipts; preparation changes no auth or remote flag.
 - [ ] **Codex · disposable acceptance:** Verify first-run success, repeat refusal without another active identity, interrupted retry and failures after DB/vault/Keychain writes. Check the exact Keychain service/account, both-flag combinations and unauthenticated 401 behavior using disposable credentials.
@@ -897,16 +900,16 @@ Source: [remote-access plan Addenda R1/R2 and §8](docs/plans/MORTIMER_REMOTE_AC
 
 **Workstream:** Remote access T2: bearer tokens, fail-closed bind, Tailscale
 
-- **Owner:** `codex` for documentation preparation; existing acceptance owners retained; future runtime implementation requires a fresh main claim
-- **Status:** landed documentation preparation via this PR after merge; no new runtime implementation, activation or acceptance. Prior foundation/intake history remains recorded below
-- **Implemented by:** Codex (remote foundation and R1)
-- **Remaining work / acceptance:** Codex prepares local-only onboarding after Larry selects the method and a fresh provisioning slice is claimed. Larry separately decides credential preparation, local activation and any remote bind; live acceptance remains open
-- **Model version:** not recorded; do not infer from system name.
-- **Where:** `docs/roadmap-preparation-claims-20261022` based on main `c63ecce97108787c55ef55fad73d32236694cc65`; documentation registration only, no runtime branch claimed
-- **Plan:** [Canonical plan](docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md); existing historical requirements and acceptance gates retained
-- **Scope:** Documentation only: this roadmap block, `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md` and the shared WS-04/23/24 preparation log. No runtime, tests, migration, config, private data, credentials, installer or other-owner documentation edits. Future code needs separately registered exact scope on main
-- **Next step:** larry: choose onboarding method; codex: after that decision register exact implementation branch/scope on main. Credential preparation, activation and remote binding remain separate decisions
-- **Updated:** 10-22 (completed source analysis and proposed fixture specification; documentation registration only; no acceptance checkbox changes)
+- **Owner:** `codex` for this bounded WS-04 admission slice; GPT-6 Luna is the assigned implementation model. Larry retains activation and live acceptance decisions.
+- **Status:** claimed by this registration after it merges to main; offline source implementation not started. No route, persistent grant store, tunnel, credential, installation, deployment or live acceptance is established.
+- **Implemented by:** GPT-6 Luna is assigned to implement the offline core after claim merge; this docs-only registration contains no source change.
+- **Remaining work / acceptance:** After the claim lands, implement the typed admission policy and S0 conformance adapter; preserve the fixture unchanged and obtain independent exact-source review plus required CI. This sub-slice does not close Stage 1.1: persistence/host-anchor, route and peer-sink wiring need the plan's 0.2 reservations and later exact scope. Local token onboarding, credentials, local activation, remote binding, phone calls and release acceptance remain separately gated.
+- **Model version:** GPT-6 Luna implementation assignment, per Larry's direction; exact runtime build not recorded.
+- **Where:** proposed source branch `codex/ws04-phone-admission-core-20261029`, created from then-current main only after this claim lands. Claim registration is on `docs/ws04-phone-admission-claim-20261029`.
+- **Plan:** [Canonical WS-04 plan](docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md); approved phone-admission stage in [phone plan §16](docs/plans/MORTIMER_PHONE_ACCESS_PLAN.md#16-approved-native-iphone-direction-and-staged-claims--revision-54-amendment-candidate-2026-10-28).
+- **Scope:** `jarvis/bot/phone_admission.py` (new deterministic admission core); `tests/unit/test_phone_admission.py` (new); `tests/unit/test_phone_admission_contract.py` (adapt the harness to exercise the core); `tests/fixtures/phone_admission_contract/v1.json` (read-only scope transfers when this matching claim lands; any version change requires renewed independent oracle review); this WS-04 block in `ROADMAP.md`; and dated progress in `docs/plans/MORTIMER_REMOTE_ACCESS_PLAN.md`. No route/peer/sink wiring, persistent store/schema/host anchor, config key, credential, pairing/enrollment, tunnel/network change, service operation, iOS/APNs/CallKit, provider/media, live data, installation or deployment. No shared identifiers are reserved by this sub-slice; full Stage 1.1 still requires approved 0.2 reservations and its own complete integration evidence.
+- **Next step:** larry: review and merge this docs-only claim PR to register the exact scope on main; codex: after it lands, create an isolated worktree from current main and implement only the listed offline slice, then obtain non-author review and required CI. The existing onboarding choice, credential preparation, activation, remote binding and live acceptance remain separate decisions.
+- **Updated:** 10-29 (WS-30 S0 PR #285 merged; WS-04 offline admission claim proposed for main-first registration; no phone runtime or live acceptance).
 
 
 ### Prior ownership/intake checkpoint (preserved history)
