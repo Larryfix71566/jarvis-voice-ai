@@ -98,6 +98,21 @@ class AnchorState:
     login_counter: int
 
 
+@dataclass(frozen=True)
+class SessionBinding:
+    owner_id: str
+    device_id: str
+    grant_id: str
+    session_id: str
+    login_incarnation: str
+    host_id: str
+    host_generation: int
+    grant_generation: int
+    session_generation: int
+    process_epoch: str
+    scopes: frozenset[str]
+
+
 class ProtectedAnchor(Protocol):
     """Injected anchor; `exclusive` must serialize all writers/readers sharing authority."""
     def read(self) -> AnchorState: ...
@@ -207,6 +222,39 @@ class PhoneAdmissionStore:
             raise
         except Exception as exc:
             raise StoreUnavailable("anchor write/readback failed") from exc
+
+    def _global_security_transition(self, mutate, label: str) -> int:
+        """Fence every remote session around one authority mutation.
+
+        Caller holds ``_authority_guard`` and has completed all non-mutating
+        authorization/target validation.  The pending anchor is durable before
+        SQLite changes; any interruption thereafter leaves admission fail-closed.
+        """
+        old = self._check_pair()
+        transition = f"{label}:{uuid.uuid4().hex}"
+        generation = old.host_generation + 1
+        pending = AnchorState(old.anchor_version, old.host_id, generation,
+                              transition, "pending", old.login_counter)
+        self._hit(f"{label}_before_anchor_pending")
+        self._write_anchor(pending)
+        self._hit(f"{label}_anchor_pending")
+        with self.db:
+            self.db.execute("UPDATE phone_remote_meta SET host_generation=?,transition_id=?,transition_state='pending' WHERE singleton_id=1",
+                            (generation, transition))
+            mutate()
+            self.db.execute("UPDATE phone_remote_sessions SET revoked_at=COALESCE(revoked_at,0),session_generation=session_generation+1 WHERE revoked_at IS NULL")
+            self._hit(f"{label}_before_db_commit")
+        self._hit(f"{label}_db_committed")
+        stable = AnchorState(old.anchor_version, old.host_id, generation,
+                             None, "stable", old.login_counter)
+        self._hit(f"{label}_before_anchor_finalize")
+        self._write_anchor(stable)
+        self._hit(f"{label}_anchor_finalized")
+        with self.db:
+            self.db.execute("UPDATE phone_remote_meta SET transition_id=NULL,transition_state='stable' WHERE singleton_id=1")
+        self._tickets.clear()
+        self._drop_admissions()
+        return generation
 
     def _create_schema(self) -> None:
         with self._authority_guard(), self.db:
@@ -363,10 +411,12 @@ class PhoneAdmissionStore:
             raise StoreDenied("invalid public key")
         with self._authority_guard():
             self._check_pair()
+            if self.db.execute("SELECT 1 FROM phone_remote_devices WHERE device_id=?", (device_id,)).fetchone():
+                raise StoreDenied("device conflict")
             try:
-                with self.db:
-                    self.db.execute("INSERT INTO phone_remote_devices VALUES(?,?,?,?,NULL)",
-                                    (device_id, owner_id, public_key, key_algorithm))
+                self._global_security_transition(lambda: self.db.execute(
+                    "INSERT INTO phone_remote_devices VALUES(?,?,?,?,NULL)",
+                    (device_id, owner_id, public_key, key_algorithm)), "device_enroll")
             except sqlite3.IntegrityError as exc:
                 raise StoreDenied("device conflict") from exc
 
@@ -387,10 +437,12 @@ class PhoneAdmissionStore:
                                      (device_id,)).fetchone()
             if device is None or device["owner_id"] != owner_id or device["revoked_at"] is not None:
                 raise StoreDenied("device owner mismatch")
+            if self.db.execute("SELECT 1 FROM phone_remote_grants WHERE grant_id=?", (grant_id,)).fetchone():
+                raise StoreDenied("grant conflict")
             try:
-                with self.db:
-                    self.db.execute("INSERT INTO phone_remote_grants VALUES(?,?,?,?,1,NULL)",
-                                    (grant_id, device_id, owner_id, encoded))
+                self._global_security_transition(lambda: self.db.execute(
+                    "INSERT INTO phone_remote_grants VALUES(?,?,?,?,1,NULL)",
+                    (grant_id, device_id, owner_id, encoded)), "grant_enroll")
             except sqlite3.IntegrityError as exc:
                 raise StoreDenied("grant conflict") from exc
 
@@ -509,7 +561,7 @@ class PhoneAdmissionStore:
 
     def consume_ticket(self, *, identity: ClientIdentity, ticket_id: str, session_id: str, owner_id: str,
                        purpose: str, payload_digest: str, now: float,
-                       peer_id: str | None = None) -> None:
+                       peer_id: str | None = None) -> SessionBinding:
         """Atomically consume once only while current session identity matches."""
         ticket_id = self._text(ticket_id, "ticket_id")
         session_id = self._text(session_id, "session_id")
@@ -566,6 +618,10 @@ class PhoneAdmissionStore:
                     if self._admission_key(session_id, row["current_incarnation"]) not in _PROCESS_ADMISSIONS:
                         raise StoreDenied("fresh process admission required")
                     ticket["consumed"] = True
+                    return SessionBinding(owner_id, row["device_id"], row["grant_id"], session_id,
+                        row["current_incarnation"], anchor.host_id, anchor.host_generation,
+                        row["grant_generation"], row["session_generation"], self.process_epoch,
+                        frozenset(scopes))
             except sqlite3.IntegrityError as exc:
                 raise StoreDenied("ticket invalid") from exc
 
@@ -588,45 +644,48 @@ class PhoneAdmissionStore:
         owner_id = self._verified_owner(identity, self._text(owner_id, "owner_id"))
         with self._authority_guard():
             self._check_pair()
-            with self.db:
-                grant = self.db.execute("SELECT owner_id,revoked_at FROM phone_remote_grants WHERE grant_id=?",
-                                        (grant_id,)).fetchone()
-                if grant is None or grant["owner_id"] != owner_id or grant["revoked_at"] is not None:
-                    raise StoreDenied("grant unavailable")
-                sessions = [row[0] for row in self.db.execute(
-                    "SELECT session_id FROM phone_remote_sessions WHERE grant_id=?", (grant_id,))]
-                self.db.execute("UPDATE phone_remote_grants SET revoked_at=0,grant_generation=grant_generation+1 WHERE grant_id=?",
-                                (grant_id,))
-                self.db.execute("UPDATE phone_remote_sessions SET revoked_at=0,session_generation=session_generation+1 WHERE grant_id=? AND revoked_at IS NULL",
-                                (grant_id,))
-                for sid in sessions:
-                    self._drop_admissions(sid)
-                self._tickets = {key: value for key, value in self._tickets.items()
-                                 if value["session_id"] not in sessions}
+            grant = self.db.execute("SELECT owner_id,revoked_at FROM phone_remote_grants WHERE grant_id=?",
+                                    (grant_id,)).fetchone()
+            if grant is None or grant["owner_id"] != owner_id or grant["revoked_at"] is not None:
+                raise StoreDenied("grant unavailable")
+            self._global_security_transition(lambda: self.db.execute(
+                "UPDATE phone_remote_grants SET revoked_at=0,grant_generation=grant_generation+1 WHERE grant_id=?",
+                (grant_id,)), "grant_revoke")
+
+    def update_grant_scopes(self, *, identity: ClientIdentity, grant_id: str,
+                            owner_id: str, scopes: list[str]) -> None:
+        """Replace scopes under a global fence; broadening also changes authority."""
+        grant_id = self._text(grant_id, "grant_id")
+        owner_id = self._verified_owner(identity, self._text(owner_id, "owner_id"))
+        if (type(scopes) is not list or not scopes or
+                any(type(s) is not str or s not in ALLOWED_SCOPES for s in scopes)
+                or len(set(scopes)) != len(scopes)):
+            raise StoreDenied("invalid scopes")
+        encoded = json.dumps(scopes, separators=(",", ":"), sort_keys=True)
+        with self._authority_guard():
+            grant = self.db.execute("SELECT owner_id,revoked_at,scopes_json FROM phone_remote_grants WHERE grant_id=?",
+                                    (grant_id,)).fetchone()
+            if grant is None or grant["owner_id"] != owner_id or grant["revoked_at"] is not None:
+                raise StoreDenied("grant unavailable")
+            if self._valid_scopes(grant["scopes_json"]) == json.loads(encoded):
+                return
+            self._global_security_transition(lambda: self.db.execute(
+                "UPDATE phone_remote_grants SET scopes_json=?,grant_generation=grant_generation+1 WHERE grant_id=?",
+                (encoded, grant_id)), "grant_scope")
 
     def revoke_device(self, *, identity: ClientIdentity, device_id: str, owner_id: str) -> None:
         device_id = self._text(device_id, "device_id")
         owner_id = self._verified_owner(identity, self._text(owner_id, "owner_id"))
         with self._authority_guard():
             self._check_pair()
-            with self.db:
-                device = self.db.execute("SELECT owner_id,revoked_at FROM phone_remote_devices WHERE device_id=?",
-                                         (device_id,)).fetchone()
-                if device is None or device["owner_id"] != owner_id or device["revoked_at"] is not None:
-                    raise StoreDenied("device unavailable")
-                sessions = [row[0] for row in self.db.execute(
-                    "SELECT session_id FROM phone_remote_sessions WHERE grant_id IN "
-                    "(SELECT grant_id FROM phone_remote_grants WHERE device_id=?)", (device_id,))]
+            device = self.db.execute("SELECT owner_id,revoked_at FROM phone_remote_devices WHERE device_id=?",
+                                     (device_id,)).fetchone()
+            if device is None or device["owner_id"] != owner_id or device["revoked_at"] is not None:
+                raise StoreDenied("device unavailable")
+            def revoke():
                 self.db.execute("UPDATE phone_remote_devices SET revoked_at=0 WHERE device_id=?", (device_id,))
-                self.db.execute("UPDATE phone_remote_grants SET revoked_at=0,grant_generation=grant_generation+1 WHERE device_id=? AND revoked_at IS NULL",
-                                (device_id,))
-                self.db.execute("UPDATE phone_remote_sessions SET revoked_at=0,session_generation=session_generation+1 WHERE grant_id IN "
-                                "(SELECT grant_id FROM phone_remote_grants WHERE device_id=?) AND revoked_at IS NULL",
-                                (device_id,))
-                for sid in sessions:
-                    self._drop_admissions(sid)
-                self._tickets = {key: value for key, value in self._tickets.items()
-                                 if value["session_id"] not in sessions}
+                self.db.execute("UPDATE phone_remote_grants SET revoked_at=0,grant_generation=grant_generation+1 WHERE device_id=? AND revoked_at IS NULL", (device_id,))
+            self._global_security_transition(revoke, "device_revoke")
 
     def advance_host_generation(self) -> int:
         """Supported pre-restore fence; unhooked or simultaneous rollback is not detected here.
@@ -637,40 +696,75 @@ class PhoneAdmissionStore:
         detection or restore completion.
         """
         with self._authority_guard():
-            old = self._check_pair()
-            transition = uuid.uuid4().hex
-            new_generation = old.host_generation + 1
-            pending = AnchorState(old.anchor_version, old.host_id, new_generation,
-                                  transition, "pending", old.login_counter)
-            self._hit("generation_before_anchor_pending")
-            self._write_anchor(pending)
-            self._hit("generation_anchor_pending")
-            try:
-                with self.db:
-                    self.db.execute("UPDATE phone_remote_meta SET host_generation=?,transition_id=?,transition_state='pending' WHERE singleton_id=1",
-                                    (new_generation, transition))
-                    # This transition intentionally fences every old login; normal
-                    # session sign-out remains narrower in revoke_session().
-                    self.db.execute("UPDATE phone_remote_sessions SET revoked_at=0,session_generation=session_generation+1 WHERE revoked_at IS NULL")
-                    self._hit("generation_before_db_commit")
-                self._hit("generation_db_committed")
-                stable = AnchorState(old.anchor_version, old.host_id, new_generation,
-                                     None, "stable", old.login_counter)
-                self._hit("generation_before_anchor_finalize")
-                self._write_anchor(stable)
-                self._hit("generation_anchor_finalized")
-                with self.db:
-                    self.db.execute("UPDATE phone_remote_meta SET transition_id=NULL,transition_state='stable' WHERE singleton_id=1")
-                self._drop_admissions()
-                self._drop_admissions()
-            except Exception:
-                raise
-            return new_generation
+            return self._global_security_transition(lambda: None, "generation")
 
     def _check_transition(self, anchor: AnchorState) -> None:
         current = self.anchor.read()
         if current != anchor:
             raise StoreUnavailable("anchor transition changed")
+
+    @contextmanager
+    def serialized_authority(self):
+        """Narrow commit window shared with every authority mutation."""
+        with self._authority_guard():
+            yield
+
+    def binding_current(self, binding: SessionBinding, *, now: float) -> bool:
+        """Check the complete immutable session binding against current authority."""
+        if type(binding) is not SessionBinding or type(now) not in (int, float) or not math.isfinite(now):
+            return False
+        with self._authority_guard():
+            return self._binding_current_locked(binding, now=now)
+
+    def binding_current_serialized(self, binding: SessionBinding, *, now: float) -> bool:
+        """Variant for callers already inside serialized_authority()."""
+        return self._binding_current_locked(binding, now=now)
+
+    def _binding_current_locked(self, binding, *, now):
+            anchor = self._check_pair()
+            row = self.db.execute("""SELECT s.*,g.grant_generation,g.scopes_json,g.revoked_at AS gr,
+                g.owner_id AS go,d.device_id,d.owner_id AS do,d.revoked_at AS dr
+                FROM phone_remote_sessions s JOIN phone_remote_grants g USING(grant_id)
+                JOIN phone_remote_devices d USING(device_id) WHERE s.session_id=?""",
+                (binding.session_id,)).fetchone()
+            return bool(row and anchor.host_id == binding.host_id
+                and anchor.host_generation == binding.host_generation
+                and row["host_id"] == binding.host_id and row["host_generation"] == binding.host_generation
+                and row["owner_id"] == binding.owner_id == row["go"] == row["do"]
+                and row["device_id"] == binding.device_id and row["grant_id"] == binding.grant_id
+                and row["login_incarnation"] == binding.login_incarnation
+                and row["grant_generation"] == binding.grant_generation
+                and row["session_generation"] == binding.session_generation
+                and row["revoked_at"] is None and row["gr"] is None and row["dr"] is None
+                and row["expires_at"] > now and self.process_epoch == binding.process_epoch
+                and frozenset(self._valid_scopes(row["scopes_json"]) or ()) == binding.scopes
+                and self._admission_key(binding.session_id, binding.login_incarnation) in _PROCESS_ADMISSIONS)
+
+    def current_binding(self, *, identity: ClientIdentity, owner_id: str, session_id: str,
+                        device_id: str, login_incarnation: str, now: float) -> SessionBinding:
+        owner_id = self._verified_owner(identity, self._text(owner_id, "owner_id"))
+        session_id, device_id = self._text(session_id, "session_id"), self._text(device_id, "device_id")
+        if type(now) not in (int, float) or not math.isfinite(now):
+            raise StoreDenied("invalid time")
+        with self._authority_guard():
+            anchor = self._check_pair()
+            row = self.db.execute("""SELECT s.*,g.grant_generation,g.scopes_json,g.revoked_at AS gr,
+                g.owner_id AS go,d.device_id,d.owner_id AS do,d.revoked_at AS dr
+                FROM phone_remote_sessions s JOIN phone_remote_grants g USING(grant_id)
+                JOIN phone_remote_devices d USING(device_id) WHERE s.session_id=?""",
+                (session_id,)).fetchone()
+            scopes = self._valid_scopes(row["scopes_json"]) if row else None
+            if (not row or not scopes or row["owner_id"] != owner_id or row["go"] != owner_id
+                    or row["do"] != owner_id or row["device_id"] != device_id
+                    or row["login_incarnation"] != login_incarnation or row["revoked_at"] is not None
+                    or row["gr"] is not None or row["dr"] is not None or row["expires_at"] <= now
+                    or row["host_id"] != anchor.host_id or row["host_generation"] != anchor.host_generation
+                    or self._admission_key(session_id, login_incarnation) not in _PROCESS_ADMISSIONS):
+                raise StoreDenied("session unavailable")
+            return SessionBinding(owner_id, device_id, row["grant_id"], session_id,
+                login_incarnation, anchor.host_id, anchor.host_generation,
+                row["grant_generation"], row["session_generation"], self.process_epoch,
+                frozenset(scopes))
 
     def status(self) -> dict[str, int]:
         """Non-sensitive synthetic status; no record inventory is exposed."""

@@ -212,7 +212,8 @@ class StoreTests(unittest.TestCase):
         self.seed()
         incarnation = self.login()
         self.ticket(incarnation)
-        self.assertEqual(self.store.advance_host_generation(), 2)
+        before = self.store.status()["host_generation"]
+        self.assertEqual(self.store.advance_host_generation(), before + 1)
         with self.assertRaises(StoreDenied):
             self.store.consume_ticket(identity=identity(), ticket_id="t-a", session_id="s-a", owner_id="alice",
                                       purpose="offer", payload_digest="sha256:offer", now=3)
@@ -268,8 +269,8 @@ class StoreTests(unittest.TestCase):
         self.anchor.available = True
         self.anchor.fail_next_write = True
         with self.assertRaises(StoreUnavailable): self.store.advance_host_generation()
-        self.assertEqual(self.anchor.state.host_generation, 1)
-        self.assertEqual(self.store.status()["host_generation"], 1)
+        generation = self.store.status()["host_generation"]
+        self.assertEqual(self.anchor.state.host_generation, generation)
         state = self.anchor.state
         with self.anchor.exclusive():
             self.anchor.write(type(state)(1, state.host_id, 2, None, "stable", state.login_counter))
@@ -380,13 +381,14 @@ class StoreTests(unittest.TestCase):
         self.seed()
         first = self.login()
         self.store.revoke_session(identity=identity(), session_id="s-a", owner_id="alice")
+        generation = self.store.status()["host_generation"]
         state = self.anchor.state
         with self.anchor.exclusive():
             self.anchor.write(type(state)(1, state.host_id, state.host_generation,
                                           None, "stable", 0))
         with self.assertRaises(StoreUnavailable): self.store.status()
         with self.assertRaises(StoreUnavailable): self.login(session="s-a")
-        self.assertEqual(first, "host-test:1:1")
+        self.assertEqual(first, f"host-test:{generation}:1")
         self.assertEqual(self.anchor.state.login_counter, 0)
 
     def test_same_generation_different_host_with_active_sessions_is_denied(self):
@@ -507,8 +509,8 @@ class StoreTests(unittest.TestCase):
         first_thread.join(2); second_thread.join(2)
         self.assertFalse(first_thread.is_alive()); self.assertFalse(second_thread.is_alive())
         self.assertEqual(reentry, ["denied"])
-        self.assertCountEqual([value for value in outcomes if type(value) is int], [2, 3])
-        self.assertEqual(second.status()["host_generation"], 3)
+        self.assertCountEqual([value for value in outcomes if type(value) is int], [4, 5])
+        self.assertEqual(second.status()["host_generation"], 5)
         self.assertEqual(second.status()["login_counter"], 2)
         second._drop_admissions()
         second_db.close()
@@ -555,23 +557,82 @@ class StoreTests(unittest.TestCase):
 
     def test_grant_and_device_revocation_fence_sessions_and_tickets(self):
         self.seed()
+        self.store.add_device(identity=identity(), device_id="d-b", owner_id="alice",
+                              public_key=b"public-b", key_algorithm="test-ed25519")
+        self.store.add_grant(identity=identity(), grant_id="g-b", device_id="d-b",
+                             owner_id="alice", scopes=["read", "voice"])
         self.login()
+        self.login(session="s-b", grant="g-b")
         self.ticket("unused")
+        before = self.store.status()["host_generation"]
         self.store.revoke_grant(identity=identity(), grant_id="g-a", owner_id="alice")
+        self.assertEqual(self.store.status()["host_generation"], before + 1)
+        self.assertIsNotNone(self.store.db.execute(
+            "SELECT revoked_at FROM phone_remote_sessions WHERE session_id='s-b'").fetchone()[0])
         with self.assertRaises(StoreDenied):
             self.store.consume_ticket(identity=identity(), ticket_id="t-a", session_id="s-a",
                                       owner_id="alice", purpose="offer",
                                       payload_digest="sha256:offer", now=3)
         with self.assertRaises(StoreDenied): self.login(session="s-b")
 
-        self.store.add_grant(identity=identity(), grant_id="g-b", device_id="d-a",
-                             owner_id="alice", scopes=["read", "voice"])
         self.login(session="s-b", grant="g-b")
         self.store.revoke_device(identity=identity(), device_id="d-a", owner_id="alice")
         with self.assertRaises(StoreDenied):
             self.store.issue_ticket(identity=identity(), ticket_id="d-revoked", session_id="s-b",
                                     owner_id="alice", purpose="offer", payload_digest="x",
                                     now=3, expires_at=10)
+
+    def test_session_signout_stays_scoped_and_scope_change_is_global(self):
+        self.seed()
+        self.store.add_device(identity=identity(), device_id="d-b", owner_id="alice",
+                              public_key=b"public-b", key_algorithm="test-ed25519")
+        self.store.add_grant(identity=identity(), grant_id="g-b", device_id="d-b",
+                             owner_id="alice", scopes=["read", "voice"])
+        self.login()
+        self.login(session="s-b", grant="g-b")
+        self.store.revoke_session(identity=identity(), session_id="s-a", owner_id="alice")
+        self.assertIsNone(self.store.db.execute(
+            "SELECT revoked_at FROM phone_remote_sessions WHERE session_id='s-b'").fetchone()[0])
+        before = self.store.status()["host_generation"]
+        self.store.update_grant_scopes(identity=identity(), grant_id="g-a", owner_id="alice", scopes=["read"])
+        self.assertEqual(self.store.status()["host_generation"], before + 1)
+        self.assertIsNotNone(self.store.db.execute(
+            "SELECT revoked_at FROM phone_remote_sessions WHERE session_id='s-b'").fetchone()[0])
+        incarnation = self.login(session="s-a", grant="g-a")
+        binding = self.store.current_binding(identity=identity(), owner_id="alice", session_id="s-a",
+            device_id="d-a", login_incarnation=incarnation, now=2)
+        self.assertEqual(binding.scopes, frozenset({"read"}))
+        # The unaffected enrollment may authenticate afresh after the global fence.
+        self.login(session="s-b", grant="g-b")
+
+    def test_failed_or_repeated_revoke_does_not_advance_authority(self):
+        self.seed()
+        before = self.store.status()
+        with self.assertRaises(StoreDenied):
+            self.store.revoke_grant(identity=identity(), grant_id="missing", owner_id="alice")
+        self.assertEqual(self.store.status(), before)
+        self.store.revoke_grant(identity=identity(), grant_id="g-a", owner_id="alice")
+        after = self.store.status()
+        with self.assertRaises(StoreDenied):
+            self.store.revoke_grant(identity=identity(), grant_id="g-a", owner_id="alice")
+        self.assertEqual(self.store.status(), after)
+
+    def test_snapshot_revoke_raw_restore_fails_without_restore_preparation(self):
+        self.seed()
+        self.login()
+        snapshot = os.path.join(self.tmp.name, "pre-revoke.sqlite")
+        backup = sqlite3.connect(snapshot)
+        self.db.backup(backup)
+        backup.close()
+        self.store.revoke_grant(identity=identity(), grant_id="g-a", owner_id="alice")
+        self.db.close()
+        restored = sqlite3.connect(self.path, isolation_level=None, check_same_thread=False)
+        backup = sqlite3.connect(snapshot)
+        backup.backup(restored)
+        backup.close()
+        self.db = restored
+        with self.assertRaises(StoreUnavailable):
+            PhoneAdmissionStore(self.db, self.anchor)
 
     def test_session_revocation_is_scoped_to_one_session(self):
         self.seed()
