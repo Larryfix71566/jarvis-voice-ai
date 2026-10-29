@@ -2972,5 +2972,11 @@ vectors, all 7 sensitivity cases, all 3 isolation probes and the new boundary
 tests. The full pytest gate is still pending because no pytest module or
 executable is available in this environment, and no dependency was installed.
 The module is not wired to a route, persistent store/host anchor, phone, tunnel,
-credential or runtime service. Exact-source re-review, updated PR CI and merge
-are still required; Stage 1.1 and all live acceptance remain open.
+credential or runtime service. Independent exact-source review ACCEPTED commit
+`6a4b22cbd38014b01fb2de6a35245416c20560b6` against main
+`5310d1a9305035f43143fcffad6161619281f475`; required PR CI and merge remain
+open. Review also established a limit: without revocation, restoring and reusing
+the identical session/grant/owner tuple can retain an unexpired unused ticket
+in this synthetic model. The later durable host/route integration must define
+and test a non-rollbackable login-incarnation fence before any general
+restore-safety claim. Stage 1.1 and all live acceptance remain open.
