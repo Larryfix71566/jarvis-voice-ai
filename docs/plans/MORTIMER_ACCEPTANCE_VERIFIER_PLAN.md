@@ -1,6 +1,6 @@
 # Acceptance Verifier within Systems — WS-23
 
-**Current status — 2026-10-27:** Codex's unused contract and tests landed via #278 (`61870ff`). Kimi's documentation-only independent review landed via this PR with APPROVE for the exact source/test blobs at review base `233995cb9fb0f9a5e1f2fd35611b4cfa1b5e0af8`, byte-identical to author `1b07fd882ba0246768138d110fe8003a91a36730`. Evidence is 25 focused tests/63 subtests plus 14 independent adversarial checks; no blocker, should-fix or nit finding. Exact-head PR CI is a separate publication receipt. Codex retains implementation accountability. No runner, automated profile, runtime wiring or product acceptance is delivered. Historical candidate/claim receipts below retain their original dates; sections 8–9 record the review package and verdict.
+**Current status — 2026-10-28:** Codex's unused contract and tests landed via #278 (`61870ff`). Kimi's documentation-only independent review landed via #281 at merge commit `dcdcad733d20b8cf17af2b548fd509799e003452` with APPROVE for the exact source/test blobs at review base `233995cb9fb0f9a5e1f2fd35611b4cfa1b5e0af8`, byte-identical to author `1b07fd882ba0246768138d110fe8003a91a36730`. Evidence is 25 focused tests/63 subtests plus 14 independent adversarial checks; no blocker, should-fix or nit finding. Post-merge verification on main `97ffb3bb19ce29a9c4e6768a481389ac147cd691` found unchanged source/test blobs; 32 focused/manifest tests with 63 subtests and 25 stdlib unittest methods passed. All five #281 checks passed. Codex retains implementation accountability. No runner, automated profile, runtime wiring or product acceptance is delivered. Historical candidate/claim receipts below retain their original dates; sections 8–9 record the review package and verdict.
 
 ## 1. Evidence and boundaries
 
@@ -359,8 +359,15 @@ One scratch fixture initially reused an ID for conflicting content and correctly
 triggered the conflict guard; the fixture was corrected and rerun. No source,
 test or fixture edit occurred.
 
+Review PR #281 merged at 2026-10-29 01:00:45 UTC with merge commit
+`dcdcad733d20b8cf17af2b548fd509799e003452`. Post-merge verification on main
+`97ffb3bb19ce29a9c4e6768a481389ac147cd691` confirmed the merge commit is an
+ancestor and both reviewed blobs remain unchanged. The focused contract plus
+plan-manifest pytest run passed 32 tests with 63 subtests; stdlib unittest
+passed 25 methods; the strict roadmap checker reported zero errors and warnings.
+All five recorded #281 repository checks passed.
+
 This verdict does not authenticate real receipts, verify actual log bytes,
 establish installed/physical/human evidence, activate a profile or close any
-acceptance checkbox. Exact-head PR CI is a separate publication receipt. Codex
-retains source accountability; changed source needs fresh immutable rereview.
-All four WS-23 acceptance criteria remain open.
+acceptance checkbox. Codex retains source accountability; changed source needs
+fresh immutable rereview. All four WS-23 acceptance criteria remain open.
