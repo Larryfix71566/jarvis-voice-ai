@@ -6,6 +6,7 @@ import json
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 from jarvis.bot.phone_admission_store import PhoneAdmissionStore, SessionBinding, StoreDenied, StoreUnavailable
@@ -33,20 +34,105 @@ class FakeContextVerifier:
 
 
 class FakeMediaAdapter:
+    """Nonblocking synthetic media backend with attempt-owned abort handles."""
     def __init__(self):
         self.peers = {}
+        self._capability = object()
+        self._prepared = {}
 
     def prepare(self, sdp, peer_id=None):
         peer = peer_id or uuid.uuid4().hex
         if peer_id is not None and peer_id not in self.peers:
             raise RuntimeError("peer unavailable")
         answer = "v=0\r\no=fake 1 1 IN IP4 127.0.0.1\r\ns=fake\r\nt=0 0\r\n"
-        # Keep media content out of the fake adapter's persistent state.
-        self.peers[peer] = True
-        return peer, answer
+        return self._make_prepared(peer, answer, updating=peer_id is not None)
+
+    def _make_prepared(self, peer_id, answer, *, updating=False):
+        handle = PreparedMedia(self._capability, object(), peer_id, answer, updating)
+        self._prepared[handle.token] = handle
+        return handle
+
+    def _replace_prepared(self, prepared, *, peer_id=None, answer=None):
+        """Fake-adapter test seam for malformed or aliased adapter replies."""
+        if self._prepared.get(prepared.token) is not prepared:
+            raise ValueError("preparation is not owned")
+        replacement = PreparedMedia(self._capability, prepared.token,
+            prepared.peer_id if peer_id is None else peer_id,
+            prepared.answer if answer is None else answer, prepared.updating)
+        self._prepared[prepared.token] = replacement
+        return replacement
+
+    def commit(self, prepared):
+        """Bounded, nonblocking resource activation called at service commit."""
+        if (type(prepared) is not PreparedMedia or prepared._capability is not self._capability
+                or self._prepared.get(prepared.token) is not prepared):
+            return False
+        if prepared.updating:
+            valid = prepared.peer_id in self.peers
+        else:
+            valid = prepared.peer_id not in self.peers
+            if valid:
+                self.peers[prepared.peer_id] = True
+        if valid:
+            self._prepared.pop(prepared.token, None)
+        return valid
+
+    def abort(self, prepared):
+        """Discard only this adapter's still-pending attempt; never close by ID."""
+        if (type(prepared) is PreparedMedia and prepared._capability is self._capability
+                and self._prepared.get(prepared.token) is prepared):
+            self._prepared.pop(prepared.token, None)
+            return True
+        return False
 
     def close(self, peer_id):
         self.peers.pop(peer_id, None)
+
+
+@dataclass(frozen=True)
+class PreparedMedia:
+    _capability: object
+    token: object
+    peer_id: object
+    answer: object
+    updating: bool
+
+
+class FakeOwnerAvailabilityGate:
+    """Test-only gate. All transitions use set_available; commit_guard linearizes them."""
+    def __init__(self, available=True):
+        if type(available) is not bool:
+            raise TypeError("availability must be bool")
+        self._available = bool(available)
+        self._lock = threading.RLock()
+        self._version = 0
+        self._pause_thread = None
+        self._pause_arrived = None
+        self._pause_release = None
+
+    def set_available(self, available):
+        if type(available) is not bool:
+            raise TypeError("availability must be bool")
+        with self._lock:
+            self._available = available
+            self._version += 1
+
+    def snapshot(self, _owner_id):
+        with self._lock:
+            return self._available, self._version
+
+    def pause_before_commit(self, thread_name, arrived, release):
+        """Deterministic race-test seam; pause before locking or reading the gate."""
+        self._pause_thread, self._pause_arrived, self._pause_release = thread_name, arrived, release
+
+    @contextmanager
+    def commit_guard(self, _owner_id):
+        if threading.current_thread().name == self._pause_thread:
+            self._pause_arrived.set()
+            if not self._pause_release.wait(2):
+                raise RuntimeError("availability gate barrier timed out")
+        with self._lock:
+            yield self._available, self._version
 
 
 class FakeBoundedSink:
@@ -90,11 +176,17 @@ class FakeBoundedSink:
 
 class PhoneRemoteService:
     def __init__(self, store: PhoneAdmissionStore, verifier, media, *, enabled=True,
-                 owner_available=lambda _owner: True, clock=time.monotonic,
+                 owner_available=None, clock=time.monotonic,
                  ledger_per_binding=256, ledger_total=4096, output_sink=None,
                  output_policy=None, voice_ready=lambda: True):
         self.store, self.verifier, self.media = store, verifier, media
-        self.enabled, self.owner_available, self.clock = enabled, owner_available, clock
+        self.enabled = enabled
+        self.owner_available = owner_available if owner_available is not None else FakeOwnerAvailabilityGate()
+        if type(self.owner_available) is not FakeOwnerAvailabilityGate:
+            raise TypeError("owner availability must use FakeOwnerAvailabilityGate")
+        if not callable(getattr(media, "commit", None)) or not callable(getattr(media, "abort", None)):
+            raise TypeError("media adapter must implement attempt-owned commit and abort")
+        self.clock = clock
         self.ledger_per_binding, self.ledger_total = ledger_per_binding, ledger_total
         if output_sink is not None and type(output_sink) is not FakeBoundedSink:
             raise TypeError("only the bounded synthetic sink is supported")
@@ -118,7 +210,7 @@ class PhoneRemoteService:
 
     def _owner_ready(self, owner_id):
         try:
-            return self.owner_available(owner_id) is True
+            return self.owner_available.snapshot(owner_id)[0] is True
         except Exception:
             return False
 
@@ -152,6 +244,40 @@ class PhoneRemoteService:
         if not current:
             return key, None, response(request["request_id"], "denied", "not_authorized")
         return key, None, old["receipt"]
+
+    def _revalidate_cached_receipt(self, request, context, binding, receipt):
+        """Cached bytes never bypass live authority, feature, or readiness gates."""
+        if not self.enabled:
+            self.tick()
+            return response(request["request_id"], "unavailable", "feature_off")
+        if not self._owner_ready(context.owner_id):
+            self.tick()
+            return response(request["request_id"], "unavailable", "owner_busy")
+        try:
+            if not self.store.binding_current(binding, now=self.clock()):
+                return response(request["request_id"], "denied", "not_authorized")
+        except StoreUnavailable:
+            return response(request["request_id"], "unavailable", "authority_unavailable")
+        operation = request["operation"]
+        if operation in {"session.status", "voice.offer", "voice.update"}:
+            required_scope = "read" if operation == "session.status" else "voice"
+            if required_scope not in binding.scopes:
+                return response(request["request_id"], "denied", "not_authorized")
+            try:
+                if self.voice_ready() is not True:
+                    return response(request["request_id"], "unavailable", "voice_not_ready")
+            except Exception:
+                return response(request["request_id"], "unavailable", "voice_not_ready")
+        if receipt["status"] != "ok":
+            return receipt
+        if operation in {"voice.offer", "voice.update"}:
+            peer_id = receipt["payload"].get("peer_id")
+            with self._lock:
+                peer = self._peers.get(peer_id)
+                if (peer is None or peer["binding"] != binding
+                        or self._owner_lease.get(binding.owner_id) != peer_id):
+                    return response(request["request_id"], "denied", "not_authorized")
+        return receipt
 
     def _prune_terminal_ledger(self):
         with self._lock:
@@ -215,8 +341,13 @@ class PhoneRemoteService:
                 if not self.store.binding_current_serialized(binding, now=self.clock()):
                     return response(rid, "denied", "not_authorized")
                 with self._lock:
-                    item = self._peers.pop(peer_id, None)
-                    self._owner_lease.pop(binding.owner_id, None)
+                    current = self._peers.get(peer_id)
+                    if current is item:
+                        self._peers.pop(peer_id, None)
+                    else:
+                        item = None
+                    if item and self._owner_lease.get(binding.owner_id) == peer_id:
+                        self._owner_lease.pop(binding.owner_id, None)
                     if item:
                         self.output_sink.cancel_peer(peer_id)
             if item:
@@ -258,60 +389,65 @@ class PhoneRemoteService:
             return response(rid, "unavailable", "voice_not_ready")
         try:
             # This is deliberately outside the authority guard.
-            peer_id, answer = self.media.prepare(payload["sdp"],
+            prepared = self.media.prepare(payload["sdp"],
                 payload.get("peer_id") if op == "voice.update" else None)
         except Exception:
             return response(rid, "unavailable", "voice_not_ready")
-        response_payload = {"peer_id": peer_id, "sdp": answer}
+        if type(prepared) is not PreparedMedia:
+            return response(rid, "unavailable", "voice_not_ready")
+        peer_id = prepared.peer_id
+        response_payload = {"peer_id": peer_id, "sdp": prepared.answer}
         if (not validate_success_payload(op, response_payload)
                 or (op == "voice.update" and peer_id != payload["peer_id"])):
-            if op == "voice.offer" and type(peer_id) is str and peer_id:
-                self.media.close(peer_id)
+            self.media.abort(prepared)
             return response(rid, "unavailable", "voice_not_ready")
-        owner_ready_at_commit = self._owner_ready(context.owner_id)
         commit_error = None
         published = False
         try:
-            with self.store.serialized_authority():
-                if not self.enabled:
-                    commit_error = response(rid, "unavailable", "feature_off")
-                elif not owner_ready_at_commit:
-                    commit_error = response(rid, "unavailable", "owner_busy")
-                elif not self.store.binding_current_serialized(binding, now=self.clock()):
-                    commit_error = response(rid, "denied", "not_authorized")
-                else:
-                    with self._lock:
-                        if op == "voice.offer":
-                            lease = self._owner_lease.get(binding.owner_id)
-                            if lease is not None and lease in self._peers:
-                                commit_error = response(rid, "unavailable", "owner_busy")
-                            elif peer_id in self._peers:
-                                commit_error = response(rid, "unavailable", "voice_not_ready")
+            with self.owner_available.commit_guard(context.owner_id) as (owner_ready_at_commit, _gate_version):
+                with self.store.serialized_authority():
+                    if not self.enabled:
+                        commit_error = response(rid, "unavailable", "feature_off")
+                    elif not owner_ready_at_commit:
+                        commit_error = response(rid, "unavailable", "owner_busy")
+                    elif not self.store.binding_current_serialized(binding, now=self.clock()):
+                        commit_error = response(rid, "denied", "not_authorized")
+                    else:
+                        with self._lock:
+                            if op == "voice.offer":
+                                lease = self._owner_lease.get(binding.owner_id)
+                                if lease is not None and lease in self._peers:
+                                    commit_error = response(rid, "unavailable", "owner_busy")
+                                elif peer_id in self._peers:
+                                    commit_error = response(rid, "unavailable", "voice_not_ready")
+                                elif not self.media.commit(prepared):
+                                    commit_error = response(rid, "unavailable", "voice_not_ready")
+                                else:
+                                    self._peers[peer_id] = {"binding": binding, "context": context, "version": 1}
+                                    self._owner_lease[binding.owner_id] = peer_id
+                                    published = True
                             else:
-                                if lease is not None:
-                                    self._owner_lease.pop(binding.owner_id, None)
-                                self._peers[peer_id] = {"binding": binding, "context": context, "version": 1}
-                                self._owner_lease[binding.owner_id] = peer_id
-                                published = True
-                        else:
-                            current_peer = self._peers.get(peer_id)
-                            if (current_peer is not prior_peer or current_peer is None
-                                    or current_peer["version"] != prior_version
-                                    or current_peer["binding"] != binding
-                                    or self._owner_lease.get(binding.owner_id) != peer_id):
-                                commit_error = response(rid, "denied", "not_authorized")
-                            else:
-                                self._peers[peer_id] = {"binding": binding, "context": context,
-                                                        "version": prior_version + 1}
-                                published = True
+                                current_peer = self._peers.get(peer_id)
+                                if (current_peer is not prior_peer or current_peer is None
+                                        or current_peer["version"] != prior_version
+                                        or current_peer["binding"] != binding
+                                        or self._owner_lease.get(binding.owner_id) != peer_id):
+                                    commit_error = response(rid, "denied", "not_authorized")
+                                elif not self.media.commit(prepared):
+                                    commit_error = response(rid, "unavailable", "voice_not_ready")
+                                else:
+                                    self._peers[peer_id] = {"binding": binding, "context": context,
+                                                            "version": prior_version + 1}
+                                    published = True
         except StoreDenied:
             commit_error = response(rid, "denied", "not_authorized")
         except StoreUnavailable:
             commit_error = response(rid, "unavailable", "authority_unavailable")
+        except Exception:
+            commit_error = response(rid, "unavailable", "authority_unavailable")
         if not published:
-            if op == "voice.offer" and type(peer_id) is str and peer_id:
-                self.media.close(peer_id)
-            if not self.enabled or not owner_ready_at_commit:
+            self.media.abort(prepared)
+            if not self.enabled or not self._owner_ready(context.owner_id):
                 self.tick()
             return commit_error or response(rid, "denied", "not_authorized")
         receipt = response(rid, "ok", "none", response_payload)
@@ -349,17 +485,19 @@ class PhoneRemoteService:
             return False
         if type(prepared) is not bytes:
             return False
-        owner_ready_at_commit = self._owner_ready(owner_id)
         committed = False
-        with self.store.serialized_authority():
-            if (self.enabled and owner_ready_at_commit
-                    and self.store.binding_current_serialized(binding, now=self.clock())):
-                with self._lock:
-                    current = self._peers.get(peer_id)
-                    if current is not None and current["binding"] == binding and self._owner_lease.get(binding.owner_id) == peer_id:
-                        committed = self.output_sink.enqueue_nonblocking({
-                            "peer_id": peer_id, "binding": binding, "payload": prepared})
-        if not self.enabled or not owner_ready_at_commit:
+        owner_was_unavailable = False
+        with self.owner_available.commit_guard(owner_id) as (owner_ready_at_commit, _gate_version):
+            owner_was_unavailable = not owner_ready_at_commit
+            with self.store.serialized_authority():
+                if (self.enabled and owner_ready_at_commit
+                        and self.store.binding_current_serialized(binding, now=self.clock())):
+                    with self._lock:
+                        current = self._peers.get(peer_id)
+                        if current is not None and current["binding"] == binding and self._owner_lease.get(binding.owner_id) == peer_id:
+                            committed = self.output_sink.enqueue_nonblocking({
+                                "peer_id": peer_id, "binding": binding, "payload": prepared})
+        if not self.enabled or owner_was_unavailable:
             self.tick()
         return committed
 
@@ -374,33 +512,34 @@ class PhoneRemoteService:
         if not self._owner_ready(queued["binding"].owner_id):
             self.tick()
             return None
-        owner_ready_at_commit = self._owner_ready(queued["binding"].owner_id)
         invalidated = False
-        with self.store.serialized_authority():
-            if not owner_ready_at_commit:
-                invalidated = True
-            else:
-                item = self.output_sink.dequeue(expected=queued)
-                if item is None:
-                    return None
-            if invalidated or (not self.enabled
-                    or not self.store.binding_current_serialized(item["binding"], now=self.clock())):
-                if not self.enabled:
-                    self.output_sink.clear()
-                payload = None
-            else:
-                with self._lock:
-                    peer = self._peers.get(item["peer_id"])
-                    valid_peer = (peer is not None and peer["binding"] == item["binding"]
-                                  and self._owner_lease.get(item["binding"].owner_id) == item["peer_id"])
-                payload = item["payload"] if valid_peer else None
+        owner_id = queued["binding"].owner_id
+        with self.owner_available.commit_guard(owner_id) as (owner_ready_at_commit, _gate_version):
+            with self.store.serialized_authority():
+                if not owner_ready_at_commit:
+                    invalidated = True
+                    item = None
+                else:
+                    item = self.output_sink.dequeue(expected=queued)
+                    if item is None:
+                        return None
+                if invalidated or (not self.enabled
+                        or not self.store.binding_current_serialized(item["binding"], now=self.clock())):
+                    if not self.enabled:
+                        self.output_sink.clear()
+                    payload = None
+                else:
+                    with self._lock:
+                        peer = self._peers.get(item["peer_id"])
+                        valid_peer = (peer is not None and peer["binding"] == item["binding"]
+                                      and self._owner_lease.get(item["binding"].owner_id) == item["peer_id"])
+                    payload = item["payload"] if valid_peer else None
         if invalidated:
             self.tick()
         return payload
 
     def tick(self):
         """Explicit synthetic poll; caller must invoke at least once per five seconds."""
-        now = self.clock()
         with self._lock:
             peers = list(self._peers.items())
         if not self.enabled and not peers:
@@ -409,22 +548,23 @@ class PhoneRemoteService:
         closed = 0
         for peer_id, item in peers:
             binding = item["binding"]
-            owner_ready = self.enabled and self._owner_ready(item["context"].owner_id)
             removed = None
-            with self.store.serialized_authority():
-                if not self.enabled or not owner_ready:
-                    current = False
-                else:
-                    try:
-                        current = self.store.binding_current_serialized(binding, now=now)
-                    except StoreUnavailable:
+            with self.owner_available.commit_guard(item["context"].owner_id) as (owner_ready, _gate_version):
+                with self.store.serialized_authority():
+                    if not self.enabled or not owner_ready:
                         current = False
-                if not current:
-                    with self._lock:
-                        removed = self._peers.pop(peer_id, None)
-                        if removed:
-                            self._owner_lease.pop(removed["binding"].owner_id, None)
-                            self.output_sink.cancel_peer(peer_id)
+                    else:
+                        try:
+                            current = self.store.binding_current_serialized(binding, now=self.clock())
+                        except StoreUnavailable:
+                            current = False
+                    if not current:
+                        with self._lock:
+                            removed = self._peers.pop(peer_id, None)
+                            if removed and self._owner_lease.get(removed["binding"].owner_id) == peer_id:
+                                self._owner_lease.pop(removed["binding"].owner_id, None)
+                            if removed:
+                                self.output_sink.cancel_peer(peer_id)
             item = removed
             if item:
                 self.media.close(peer_id)
@@ -462,6 +602,11 @@ class PhoneRemoteService:
         except StoreUnavailable:
             return response(request["request_id"], "unavailable", "authority_unavailable")
         if early is not None:
+            with self._lock:
+                entry = self._ledger.get(key)
+                cached = entry is not None and entry["state"] == "done" and entry["receipt"] is early
+            if cached:
+                return self._revalidate_cached_receipt(request, context, binding, early)
             return early
         try:
             result = self._serve(request, context, binding)

@@ -3,12 +3,13 @@ import json
 import sqlite3
 import threading
 import unittest
+from contextlib import contextmanager
 
 from jarvis.auth import ClientIdentity
 from jarvis.bot.phone_admission_store import FakeProtectedAnchor, PhoneAdmissionStore
 from jarvis.bot.phone_remote_protocol import PROTOCOL
 from jarvis.bot.phone_remote_service import (FakeContextVerifier, FakeMediaAdapter,
-    FakeBoundedSink, PhoneRemoteService, TrustedRequestContext)
+    FakeBoundedSink, FakeOwnerAvailabilityGate, PhoneRemoteService, TrustedRequestContext)
 
 
 class BlockingMedia(FakeMediaAdapter):
@@ -27,17 +28,13 @@ class BlockingMedia(FakeMediaAdapter):
         return result
 
 
-class FailingMedia:
+class FailingMedia(FakeMediaAdapter):
     def __init__(self):
         self.calls = 0
 
     def prepare(self, _sdp, peer_id=None):
         self.calls += 1
         raise RuntimeError("synthetic media failure with content canary")
-
-    def close(self, _peer_id):
-        pass
-
 
 class CountingMedia(FakeMediaAdapter):
     def __init__(self):
@@ -51,9 +48,21 @@ class CountingMedia(FakeMediaAdapter):
 
 class InvalidResponseMedia(FakeMediaAdapter):
     def prepare(self, _sdp, peer_id=None):
-        peer = peer_id or "invalid-answer-peer"
-        self.peers[peer] = True
-        return peer, {"private": "unexpected nested content"}
+        prepared = super().prepare(_sdp, peer_id)
+        return self._replace_prepared(prepared, answer={"private": "unexpected nested content"})
+
+
+class AliasInvalidMedia(FakeMediaAdapter):
+    def __init__(self):
+        super().__init__()
+        self.alias = None
+
+    def prepare(self, sdp, peer_id=None):
+        prepared = super().prepare(sdp, peer_id)
+        if self.alias is not None:
+            return self._replace_prepared(prepared, peer_id=self.alias,
+                                          answer={"private": "unexpected nested content"})
+        return prepared
 
 
 class BarrierOffersMedia(FakeMediaAdapter):
@@ -224,7 +233,7 @@ class ServiceTests(unittest.TestCase):
             payload_digest=hashlib.sha256(sdp.encode()).hexdigest(), now=2, expires_at=20)
         replay = service.handle(request, TrustedRequestContext(self.identity, "alice", "session-a",
             "dev", inc_a, "second-rollback-ticket"))
-        self.assertEqual(replay, first)
+        self.assertEqual((replay["status"], replay["reason"]), ("denied", "not_authorized"))
         self.assertEqual(media.calls, 1)
         self.assertNotIn(peer, service._peers)
 
@@ -241,6 +250,25 @@ class ServiceTests(unittest.TestCase):
                          ("unavailable", "voice_not_ready", {}))
         self.assertEqual(service._peers, {})
         self.assertEqual(media.peers, {})
+
+    def test_invalid_adapter_alias_abort_cannot_close_existing_peer(self):
+        media = AliasInvalidMedia()
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), media, clock=lambda: self.now[0])
+        first, _, _ = self._offer(service=service, media=media, ticket="alias-existing",
+                                  request_id="alias-existing")
+        peer_id = first["payload"]["peer_id"]
+        media.alias = peer_id
+        sdp = "bad alias"
+        self.store.issue_ticket(identity=self.identity, ticket_id="alias-invalid-ticket",
+            session_id="session", owner_id="alice", purpose="offer",
+            payload_digest=hashlib.sha256(sdp.encode()).hexdigest(), now=2, expires_at=20)
+        context = TrustedRequestContext(self.identity, "alice", "session", "dev", self.incarnation,
+                                        "alias-invalid-ticket")
+        result = service.handle(self.request("voice.offer", {"sdp": sdp}, "alias-invalid-request"), context)
+        self.assertEqual((result["status"], result["reason"]), ("unavailable", "voice_not_ready"))
+        self.assertIn(peer_id, service._peers)
+        self.assertIn(peer_id, media.peers)
+        self.assertEqual(media._prepared, {})
 
     def test_revocation_fences_peer_and_fake_clock_closes_it(self):
         sdp, ticket = "offer", "ticket"
@@ -335,6 +363,7 @@ class ServiceTests(unittest.TestCase):
         peer_id = next(iter(service._peers))
         self.assertEqual(service._owner_lease["alice"], peer_id)
         self.assertEqual(set(media.peers), {peer_id})
+        self.assertEqual(media._prepared, {})
 
     def test_update_prepared_before_voice_end_cannot_resurrect_ended_peer(self):
         media = UpdateBlockingMedia()
@@ -438,9 +467,9 @@ class ServiceTests(unittest.TestCase):
     def test_live_feature_off_and_owner_unavailability_fence_output_and_close_leases(self):
         for mode in ("feature_off", "owner_busy"):
             with self.subTest(mode=mode):
-                available = [True]
+                available = FakeOwnerAvailabilityGate()
                 service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
-                    clock=lambda: self.now[0], owner_available=lambda _owner: available[0],
+                    clock=lambda: self.now[0], owner_available=available,
                     output_sink=FakeBoundedSink(), output_policy=FakeOutputPolicy())
                 offer, _, _ = self._offer(service=service, ticket=f"{mode}-ticket")
                 peer = offer["payload"]["peer_id"]
@@ -452,11 +481,127 @@ class ServiceTests(unittest.TestCase):
                     self.assertFalse(service.emit_output(peer, output))
                     self.assertIsNone(service.drain_output())
                 else:
-                    available[0] = False
+                    available.set_available(False)
                     self.assertIsNone(service.drain_output())
                 self.assertNotIn(peer, service._peers)
                 self.assertNotIn(peer, self.media.peers)
                 self.assertEqual(len(service.output_sink), 0)
+
+    def test_availability_change_before_peer_and_output_commit_wins(self):
+        # The test gate pauses before taking its lock. set_available therefore
+        # linearizes before the commit snapshot; no arbitrary callback runs under lock.
+        for operation in ("offer", "enqueue", "drain"):
+            with self.subTest(operation=operation):
+                gate = FakeOwnerAvailabilityGate()
+                sink = FakeBoundedSink()
+                service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+                    clock=lambda: self.now[0], owner_available=gate,
+                    output_sink=sink, output_policy=FakeOutputPolicy())
+                if operation == "offer":
+                    self.store.issue_ticket(identity=self.identity, ticket_id=f"gate-{operation}",
+                        session_id="session", owner_id="alice", purpose="offer",
+                        payload_digest=hashlib.sha256(b"offer").hexdigest(), now=2, expires_at=20)
+                    context = TrustedRequestContext(self.identity, "alice", "session", "dev",
+                        self.incarnation, f"gate-{operation}")
+                    raw = self.request("voice.offer", {"sdp": "offer"}, f"gate-{operation}")
+                    action = lambda: service.handle(raw, context)
+                else:
+                    offered, _, _ = self._offer(service=service, ticket=f"gate-base-{operation}")
+                    peer = offered["payload"]["peer_id"]
+                    output = {"classification": "approved_shared", "destination_granted": True,
+                              "content": "gate canary"}
+                    if operation == "enqueue":
+                        action = lambda: service.emit_output(peer, output)
+                    else:
+                        self.assertTrue(service.emit_output(peer, output))
+                        action = service.drain_output
+                arrived, release = threading.Event(), threading.Event()
+                gate.pause_before_commit(f"gate-{operation}", arrived, release)
+                result = []
+                thread = threading.Thread(name=f"gate-{operation}", target=lambda: result.append(action()))
+                thread.start()
+                self.assertTrue(arrived.wait(2))
+                gate.set_available(False)
+                release.set()
+                thread.join(3)
+                self.assertFalse(thread.is_alive())
+                if operation == "offer":
+                    self.assertEqual((result[0]["status"], result[0]["reason"]),
+                                     ("unavailable", "owner_busy"))
+                elif operation == "enqueue":
+                    self.assertEqual(result, [False])
+                else:
+                    self.assertEqual(result, [None])
+                self.assertEqual(len(sink), 0)
+                self.assertEqual(service._peers, {})
+                self.assertEqual(self.media.peers, {})
+
+    def test_delayed_duplicate_end_cannot_remove_newer_owner_lease(self):
+        offered, _, _ = self._offer(ticket="end-race-offer")
+        old_peer = offered["payload"]["peer_id"]
+        original = self.store.serialized_authority
+        arrived, release = threading.Event(), threading.Event()
+
+        @contextmanager
+        def paused_authority():
+            if threading.current_thread().name == "delayed-end":
+                arrived.set()
+                if not release.wait(2):
+                    raise RuntimeError("authority barrier timed out")
+            with original():
+                yield
+
+        self.store.serialized_authority = paused_authority
+        delayed = []
+        thread = threading.Thread(name="delayed-end", target=lambda: delayed.append(
+            self.service.handle(self.request("voice.end", {"peer_id": old_peer}, "delayed-end"), self.context)))
+        thread.start()
+        self.assertTrue(arrived.wait(2))
+        self.assertEqual(self.service.handle(self.request("voice.end", {"peer_id": old_peer}, "first-end"),
+                                             self.context)["status"], "ok")
+        newer, _, _ = self._offer(ticket="end-race-new", request_id="end-race-new")
+        new_peer = newer["payload"]["peer_id"]
+        self.assertEqual(self.service._owner_lease.get("alice"), new_peer)
+        release.set()
+        thread.join(3)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(delayed[0]["status"], "ok")
+        self.assertIn(new_peer, self.service._peers)
+        self.assertEqual(self.service._owner_lease.get("alice"), new_peer)
+        third, _, _ = self._offer(ticket="end-race-third", request_id="end-race-third")
+        self.assertEqual((third["status"], third["reason"]), ("unavailable", "owner_busy"))
+
+    def test_exact_retries_revalidate_readiness_and_live_lease(self):
+        voice_ready = [True]
+        gate = FakeOwnerAvailabilityGate()
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=lambda: self.now[0], owner_available=gate, voice_ready=lambda: voice_ready[0])
+        status_raw = self.request("session.status", {}, "cached-status")
+        first_status = service.handle(status_raw, self.context)
+        self.assertEqual(first_status["status"], "ok")
+        gate.set_available(False)
+        owner_refusal = service.handle(status_raw, self.context)
+        self.assertEqual((owner_refusal["status"], owner_refusal["reason"]),
+                         ("unavailable", "owner_busy"))
+        gate.set_available(True)
+        voice_ready[0] = False
+        self.assertEqual((service.handle(status_raw, self.context)["status"],
+                          service.handle(status_raw, self.context)["reason"]),
+                         ("unavailable", "voice_not_ready"))
+        voice_ready[0] = True
+        offer, context, raw = self._offer(service=service, ticket="cached-offer",
+                                          request_id="cached-voice")
+        peer = offer["payload"]["peer_id"]
+        voice_ready[0] = False
+        stale_readiness = service.handle(raw, context)
+        self.assertEqual((stale_readiness["status"], stale_readiness["reason"]),
+                         ("unavailable", "voice_not_ready"))
+        voice_ready[0] = True
+        self.assertEqual(service.handle(self.request("voice.end", {"peer_id": peer}, "cached-end"),
+                                        context)["status"], "ok")
+        stale = service.handle(raw, context)
+        self.assertEqual((stale["status"], stale["reason"]), ("denied", "not_authorized"))
+        self.assertNotIn(peer, service._peers)
 
     def test_owner_lease_is_not_preempted_and_update_requires_live_peer(self):
         first, _, _ = self._offer(service=self.service, ticket="lease-first")
