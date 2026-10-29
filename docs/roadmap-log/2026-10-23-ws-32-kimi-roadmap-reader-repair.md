@@ -2,7 +2,7 @@
 date: 2026-10-23
 system: kimi
 rows: [WS-32]
-prs: []
+prs: [275]
 ---
 
 # WS-32 bounded roadmap source growth repair
@@ -28,7 +28,27 @@ Full offline results: 7,085 unit passes, 11 skips and 29 subtests; 197
 integration passes and four skips; 13 offline eval passes. Fixture latency
 enforcement and frontend build pass. No live tests were run.
 
-`git diff --check` passes. The roadmap checker has no WS-32 finding but reports
-the inherited WS-05 stale `claimed` status after #264 merged. Per C1/C2 that
-other owner's row is unchanged and the finding is recorded here. Independent
-exact-source review and exact-head CI remain required before Larry merges.
+`git diff --check` passes. The roadmap checker had no WS-32 finding but reported
+the inherited WS-05 stale `claimed` status after #264 merged. That other owner's
+row was preserved here and the drift was resolved separately.
+
+## Post-merge reconciliation
+
+[PR #275](https://github.com/Larryfix71566/jarvis-voice-ai/pull/275) merged at
+2026-10-27 01:47:56 UTC with merge commit
+`51a3f567d6f1f0ad1dc085cdc1127260cefffb77`. The merge commit is an ancestor of
+inspected main `18dad604852da7be72fc6ab2d92fc8728d2b5ca6`.
+
+- Immutable implementation: `5c5cb2ee643655716774e05191e3c14c74504b05`.
+- `mcp_servers/mcp_repo/logic.py` and the related reader test blobs are unchanged
+  on inspected main.
+- Post-merge focused repository/reader/event/plan-manifest pytest: **97 passed**.
+- Post-merge strict roadmap checker: **zero errors, zero warnings**.
+- All five recorded #275 checks passed: `allowlist`, `policy-tests`, `validate`,
+  `controller-tests` and `knowledge-base`.
+- Kimi posted a nonauthor exact-source review request on #275. The separately
+  reviewed WS-05 metadata delta is not a verdict on the original reader source.
+
+Independent exact-source review remains pending. Larry's merge is not that
+review. No production deployment, live acceptance, roadmap-content trimming or
+other-owner correction is included.
