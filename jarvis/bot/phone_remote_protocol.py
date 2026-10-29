@@ -42,10 +42,13 @@ def _walk(value, depth=0):
         raise ValueError("too deep")
     if type(value) is float and not math.isfinite(value):
         raise ValueError("non-finite number")
+    if type(value) is str:
+        value.encode("utf-8", "strict")
     if type(value) is dict:
         for k, v in value.items():
             if type(k) is not str:
                 raise ValueError("bad key")
+            k.encode("utf-8", "strict")
             _walk(v, depth + 1)
     elif type(value) is list:
         for v in value:
@@ -60,8 +63,13 @@ def parse_request(raw):
             raw = raw.decode("utf-8", "strict")
         except UnicodeError:
             raise ProtocolError() from None
-    if type(raw) is not str or len(raw.encode("utf-8")) > 1_048_576:
+    if type(raw) is not str:
         raise ProtocolError()
+    try:
+        if len(raw.encode("utf-8", "strict")) > 1_048_576:
+            raise ProtocolError()
+    except UnicodeError:
+        raise ProtocolError() from None
     try:
         obj = json.loads(raw, object_pairs_hook=_pairs, parse_constant=_constant)
         _walk(obj)

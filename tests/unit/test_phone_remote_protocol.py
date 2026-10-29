@@ -29,6 +29,10 @@ class ProtocolTests(unittest.TestCase):
             with self.assertRaises(ProtocolError) as error:
                 parse_request(raw)
             self.assertIsNone(error.exception.request_id)
+        for raw in (envelope().replace('"request_id":"r-1"', '"request_id":"\\ud800"'),
+                    envelope("voice.offer", {"sdp": "\ud800"})):
+            with self.assertRaises(ProtocolError):
+                parse_request(raw)
 
     def test_depth_size_version_and_identifier_bounds(self):
         deep = {"v": None}

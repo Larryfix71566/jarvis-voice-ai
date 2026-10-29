@@ -564,6 +564,7 @@ class StoreTests(unittest.TestCase):
         self.login()
         self.login(session="s-b", grant="g-b")
         self.ticket("unused")
+        self.ticket("unused-b", ticket="ticket-b", session="s-b")
         before = self.store.status()["host_generation"]
         self.store.revoke_grant(identity=identity(), grant_id="g-a", owner_id="alice")
         self.assertEqual(self.store.status()["host_generation"], before + 1)
@@ -574,6 +575,10 @@ class StoreTests(unittest.TestCase):
                                       owner_id="alice", purpose="offer",
                                       payload_digest="sha256:offer", now=3)
         with self.assertRaises(StoreDenied): self.login(session="s-b")
+        with self.assertRaises(StoreDenied):
+            self.store.consume_ticket(identity=identity(), ticket_id="ticket-b", session_id="s-b",
+                owner_id="alice", purpose="offer", payload_digest="sha256:offer", now=3)
+        with self.assertRaises(StoreDenied): self.login(session="s-a", grant="g-a")
 
         self.login(session="s-b", grant="g-b")
         self.store.revoke_device(identity=identity(), device_id="d-a", owner_id="alice")
@@ -617,6 +622,25 @@ class StoreTests(unittest.TestCase):
             self.store.revoke_grant(identity=identity(), grant_id="g-a", owner_id="alice")
         self.assertEqual(self.store.status(), after)
 
+    def test_credential_replacement_uses_global_fence_and_validates_before_reservation(self):
+        self.seed()
+        inc = self.login()
+        before = self.store.status()["host_generation"]
+        with self.assertRaises(StoreDenied):
+            self.store.replace_device_credential(identity=identity("bob"), device_id="d-a",
+                owner_id="alice", public_key=b"new", key_algorithm="test-ed25519")
+        self.assertEqual(self.store.status()["host_generation"], before)
+        self.store.replace_device_credential(identity=identity(), device_id="d-a", owner_id="alice",
+            public_key=b"new", key_algorithm="test-ed25519")
+        self.assertEqual(self.store.status()["host_generation"], before + 1)
+        with self.assertRaises(StoreDenied):
+            self.store.current_binding(identity=identity(), owner_id="alice", session_id="s-a",
+                device_id="d-a", login_incarnation=inc, now=2)
+        stable = self.store.status()
+        self.store.replace_device_credential(identity=identity(), device_id="d-a", owner_id="alice",
+            public_key=b"new", key_algorithm="test-ed25519")
+        self.assertEqual(self.store.status(), stable)
+
     def test_snapshot_revoke_raw_restore_fails_without_restore_preparation(self):
         self.seed()
         self.login()
@@ -633,6 +657,79 @@ class StoreTests(unittest.TestCase):
         self.db = restored
         with self.assertRaises(StoreUnavailable):
             PhoneAdmissionStore(self.db, self.anchor)
+
+    def test_scope_reduction_then_old_broader_snapshot_fails_closed(self):
+        self.seed()
+        snapshot = os.path.join(self.tmp.name, "broader-grant.sqlite")
+        old_db = sqlite3.connect(snapshot)
+        self.db.backup(old_db)
+        old_db.close()
+        self.store.update_grant_scopes(identity=identity(), grant_id="g-a", owner_id="alice", scopes=["read"])
+        self.db.close()
+        restored = sqlite3.connect(self.path, isolation_level=None, check_same_thread=False)
+        old_db = sqlite3.connect(snapshot)
+        old_db.backup(restored)
+        old_db.close()
+        self.db = restored
+        with self.assertRaises(StoreUnavailable):
+            PhoneAdmissionStore(self.db, self.anchor)
+
+    def test_session_signout_stays_scoped_across_repeated_raw_stale_restores(self):
+        self.seed()
+        inc_a = self.login(session="s-a")
+        inc_b = self.login(session="s-b")
+        snapshot = os.path.join(self.tmp.name, "sessions.sqlite")
+        snapdb = sqlite3.connect(snapshot)
+        self.db.backup(snapdb)
+        snapdb.close()
+        self.store.revoke_session(identity=identity(), session_id="s-a", owner_id="alice")
+
+        def restore_snapshot():
+            snap = sqlite3.connect(snapshot)
+            snap.backup(self.db)
+            snap.close()
+
+        restore_snapshot()
+        with self.assertRaises(StoreDenied):
+            self.store.current_binding(identity=identity(), owner_id="alice", session_id="s-a",
+                device_id="d-a", login_incarnation=inc_a, now=2)
+        self.assertEqual(self.store.current_binding(identity=identity(), owner_id="alice", session_id="s-b",
+            device_id="d-a", login_incarnation=inc_b, now=2).session_id, "s-b")
+        self.store.revoke_session(identity=identity(), session_id="s-a", owner_id="alice")
+        restore_snapshot()
+        with self.assertRaises(StoreDenied):
+            self.store.current_binding(identity=identity(), owner_id="alice", session_id="s-a",
+                device_id="d-a", login_incarnation=inc_a, now=2)
+        self.assertEqual(self.store.current_binding(identity=identity(), owner_id="alice", session_id="s-b",
+            device_id="d-a", login_incarnation=inc_b, now=2).session_id, "s-b")
+
+    def test_global_transition_crashes_fail_closed_after_pending_reservation(self):
+        boundaries = ("grant_revoke_before_anchor_pending", "grant_revoke_anchor_pending",
+            "grant_revoke_before_db_commit", "grant_revoke_db_committed",
+            "grant_revoke_before_anchor_finalize", "grant_revoke_anchor_finalized")
+        for boundary in boundaries:
+            with self.subTest(boundary=boundary):
+                db = sqlite3.connect(":memory:", isolation_level=None)
+                anchor = FakeProtectedAnchor()
+                store = PhoneAdmissionStore(db, anchor)
+                identity_value = identity()
+                store.add_device(identity=identity_value, device_id="d", owner_id="alice",
+                                 public_key=b"key", key_algorithm="test")
+                store.add_grant(identity=identity_value, grant_id="g", device_id="d",
+                                 owner_id="alice", scopes=["read", "voice"])
+                generation = anchor.state.host_generation
+                def fail(name):
+                    if name == boundary:
+                        raise RuntimeError("synthetic transition crash")
+                store.failpoint = fail
+                with self.assertRaises(RuntimeError):
+                    store.revoke_grant(identity=identity_value, grant_id="g", owner_id="alice")
+                if boundary == "grant_revoke_before_anchor_pending":
+                    self.assertEqual(store.status()["host_generation"], generation)
+                else:
+                    with self.assertRaises(StoreUnavailable):
+                        store.status()
+                db.close()
 
     def test_session_revocation_is_scoped_to_one_session(self):
         self.seed()

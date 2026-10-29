@@ -446,6 +446,27 @@ class PhoneAdmissionStore:
             except sqlite3.IntegrityError as exc:
                 raise StoreDenied("grant conflict") from exc
 
+    def replace_device_credential(self, *, identity: ClientIdentity, device_id: str,
+                                  owner_id: str, public_key: bytes,
+                                  key_algorithm: str) -> None:
+        """Replace verification material under a global generation transition."""
+        device_id = self._text(device_id, "device_id")
+        owner_id = self._verified_owner(identity, self._text(owner_id, "owner_id"))
+        key_algorithm = self._text(key_algorithm, "key_algorithm")
+        if type(public_key) is not bytes or not public_key:
+            raise StoreDenied("invalid public key")
+        with self._authority_guard():
+            self._check_pair()
+            row = self.db.execute("SELECT owner_id,public_key,key_algorithm,revoked_at FROM phone_remote_devices WHERE device_id=?",
+                                  (device_id,)).fetchone()
+            if row is None or row["owner_id"] != owner_id or row["revoked_at"] is not None:
+                raise StoreDenied("device unavailable")
+            if row["public_key"] == public_key and row["key_algorithm"] == key_algorithm:
+                return
+            self._global_security_transition(lambda: self.db.execute(
+                "UPDATE phone_remote_devices SET public_key=?,key_algorithm=? WHERE device_id=?",
+                (public_key, key_algorithm, device_id)), "credential_replace")
+
     def login(self, *, identity: ClientIdentity, session_id: str, grant_id: str, owner_id: str,
               now: float, expires_at: float) -> str:
         session_id = self._text(session_id, "session_id")
@@ -765,6 +786,17 @@ class PhoneAdmissionStore:
                 login_incarnation, anchor.host_id, anchor.host_generation,
                 row["grant_generation"], row["session_generation"], self.process_epoch,
                 frozenset(scopes))
+
+    def binding_terminal(self, binding: SessionBinding, *, now: float) -> bool:
+        """True only when this incarnation cannot become current again."""
+        if type(binding) is not SessionBinding or type(now) not in (int, float) or not math.isfinite(now):
+            return False
+        with self._authority_guard():
+            self._check_pair()
+            row = self.db.execute("SELECT login_incarnation,revoked_at,expires_at FROM phone_remote_sessions WHERE session_id=?",
+                                  (binding.session_id,)).fetchone()
+            return bool(row is None or row["login_incarnation"] != binding.login_incarnation
+                        or row["revoked_at"] is not None or row["expires_at"] <= now)
 
     def status(self) -> dict[str, int]:
         """Non-sensitive synthetic status; no record inventory is exposed."""
