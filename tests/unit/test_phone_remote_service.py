@@ -3,13 +3,13 @@ import json
 import sqlite3
 import threading
 import unittest
-from contextlib import contextmanager
 
 from jarvis.auth import ClientIdentity
 from jarvis.bot.phone_admission_store import FakeProtectedAnchor, PhoneAdmissionStore
 from jarvis.bot.phone_remote_protocol import PROTOCOL
 from jarvis.bot.phone_remote_service import (FakeContextVerifier, FakeMediaAdapter,
-    FakeBoundedSink, FakeOwnerAvailabilityGate, PhoneRemoteService, TrustedRequestContext)
+    FakeBoundedSink, FakeOwnerAvailabilityGate, FakeReadinessGate, PhoneRemoteService,
+    TrustedRequestContext)
 
 
 class BlockingMedia(FakeMediaAdapter):
@@ -30,11 +30,25 @@ class BlockingMedia(FakeMediaAdapter):
 
 class FailingMedia(FakeMediaAdapter):
     def __init__(self):
+        super().__init__()
         self.calls = 0
 
     def prepare(self, _sdp, peer_id=None):
         self.calls += 1
         raise RuntimeError("synthetic media failure with content canary")
+
+
+class BlockingCommitMedia(FakeMediaAdapter):
+    def __init__(self):
+        super().__init__()
+        self.commit_called = threading.Event()
+        self.release = threading.Event()
+
+    def commit(self, _prepared):
+        self.commit_called.set()
+        if not self.release.wait(2):
+            raise RuntimeError("unexpected adapter commit call blocked")
+        return True
 
 class CountingMedia(FakeMediaAdapter):
     def __init__(self):
@@ -63,6 +77,17 @@ class AliasInvalidMedia(FakeMediaAdapter):
             return self._replace_prepared(prepared, peer_id=self.alias,
                                           answer={"private": "unexpected nested content"})
         return prepared
+
+
+class AliasMedia(FakeMediaAdapter):
+    def __init__(self):
+        super().__init__()
+        self.alias = None
+
+    def prepare(self, sdp, peer_id=None):
+        prepared = super().prepare(sdp, peer_id)
+        return (self._replace_prepared(prepared, peer_id=self.alias)
+                if self.alias is not None else prepared)
 
 
 class BarrierOffersMedia(FakeMediaAdapter):
@@ -144,8 +169,9 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(self.media.peers, {})
 
     def test_readiness_is_content_free_and_voice_offers_store_terminal_receipt(self):
+        readiness = FakeReadinessGate(False)
         unavailable = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
-            clock=lambda: self.now[0], voice_ready=lambda: False)
+            clock=lambda: self.now[0], voice_ready=readiness)
         status = unavailable.handle(self.request("session.status", {}, "voice-status"), self.context)
         self.assertEqual((status["status"], status["reason"], status["payload"]),
                          ("unavailable", "voice_not_ready", {}))
@@ -539,19 +565,8 @@ class ServiceTests(unittest.TestCase):
     def test_delayed_duplicate_end_cannot_remove_newer_owner_lease(self):
         offered, _, _ = self._offer(ticket="end-race-offer")
         old_peer = offered["payload"]["peer_id"]
-        original = self.store.serialized_authority
         arrived, release = threading.Event(), threading.Event()
-
-        @contextmanager
-        def paused_authority():
-            if threading.current_thread().name == "delayed-end":
-                arrived.set()
-                if not release.wait(2):
-                    raise RuntimeError("authority barrier timed out")
-            with original():
-                yield
-
-        self.store.serialized_authority = paused_authority
+        self.service.owner_available.pause_before_commit("delayed-end", arrived, release)
         delayed = []
         thread = threading.Thread(name="delayed-end", target=lambda: delayed.append(
             self.service.handle(self.request("voice.end", {"peer_id": old_peer}, "delayed-end"), self.context)))
@@ -571,11 +586,117 @@ class ServiceTests(unittest.TestCase):
         third, _, _ = self._offer(ticket="end-race-third", request_id="end-race-third")
         self.assertEqual((third["status"], third["reason"]), ("unavailable", "owner_busy"))
 
+    def test_delayed_end_closes_same_binding_peer_after_update_wins(self):
+        offered, _, _ = self._offer(ticket="end-update-offer", request_id="end-update-offer")
+        peer_id = offered["payload"]["peer_id"]
+        arrived, release = threading.Event(), threading.Event()
+        self.service.owner_available.pause_before_commit("end-update-delayed", arrived, release)
+        ended = []
+        thread = threading.Thread(name="end-update-delayed", target=lambda: ended.append(
+            self.service.handle(self.request("voice.end", {"peer_id": peer_id}, "end-update-delayed"),
+                                self.context)))
+        thread.start()
+        self.assertTrue(arrived.wait(2))
+        update_sdp = "update before end"
+        self.store.issue_ticket(identity=self.identity, ticket_id="end-update-ticket", session_id="session",
+            owner_id="alice", purpose="update", payload_digest=hashlib.sha256(update_sdp.encode()).hexdigest(),
+            now=2, expires_at=20, peer_id=peer_id)
+        update_context = TrustedRequestContext(self.identity, "alice", "session", "dev",
+            self.incarnation, "end-update-ticket")
+        updated = self.service.handle(self.request("voice.update",
+            {"peer_id": peer_id, "sdp": update_sdp}, "update-before-end"), update_context)
+        self.assertEqual(updated["status"], "ok")
+        release.set()
+        thread.join(3)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual((ended[0]["status"], ended[0]["payload"]["ended"]), ("ok", True))
+        self.assertNotIn(peer_id, self.service._peers)
+        self.assertNotIn(peer_id, self.service._owner_lease.values())
+        self.assertNotIn(peer_id, self.media.peers)
+
+    def test_delayed_end_does_not_close_new_same_binding_resource_with_reused_id(self):
+        media = AliasMedia()
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), media, clock=lambda: self.now[0])
+        first, _, _ = self._offer(service=service, media=media, ticket="reuse-first",
+                                  request_id="reuse-first")
+        peer_id = first["payload"]["peer_id"]
+        arrived, release = threading.Event(), threading.Event()
+        service.owner_available.pause_before_commit("reuse-delayed-end", arrived, release)
+        delayed = []
+        thread = threading.Thread(name="reuse-delayed-end", target=lambda: delayed.append(
+            service.handle(self.request("voice.end", {"peer_id": peer_id}, "reuse-delayed-end"),
+                           self.context)))
+        thread.start()
+        self.assertTrue(arrived.wait(2))
+        self.assertEqual(service.handle(self.request("voice.end", {"peer_id": peer_id}, "reuse-first-end"),
+                                        self.context)["status"], "ok")
+        media.alias = peer_id
+        second, _, _ = self._offer(service=service, media=media, ticket="reuse-second",
+                                   request_id="reuse-second")
+        self.assertEqual(second["status"], "ok")
+        self.assertEqual(second["payload"]["peer_id"], peer_id)
+        second_resource = service._peers[peer_id]["resource"]
+        release.set()
+        thread.join(3)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual((delayed[0]["status"], delayed[0]["reason"]), ("denied", "not_authorized"))
+        self.assertIs(service._peers[peer_id]["resource"], second_resource)
+        self.assertEqual(service._owner_lease.get("alice"), peer_id)
+        self.assertIs(media.peers[peer_id], second_resource)
+
+    def test_cached_voice_readiness_change_revoke_linearizes_before_receipt(self):
+        readiness = FakeReadinessGate()
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=lambda: self.now[0], voice_ready=readiness)
+        offer, context, raw = self._offer(service=service, ticket="readiness-revoke-ticket",
+            request_id="readiness-revoke")
+        self.assertEqual(offer["status"], "ok")
+        arrived, release = threading.Event(), threading.Event()
+        readiness.pause_before_commit("cached-readiness", arrived, release)
+        responses = []
+        thread = threading.Thread(name="cached-readiness", target=lambda: responses.append(
+            service.handle(raw, context)))
+        thread.start()
+        self.assertTrue(arrived.wait(2))
+        self.store.revoke_grant(identity=self.identity, grant_id="grant", owner_id="alice")
+        release.set()
+        thread.join(3)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual((responses[0]["status"], responses[0]["reason"]),
+                         ("denied", "not_authorized"))
+        self.assertNotEqual(responses[0], offer)
+
+    def test_injected_adapter_commit_callback_never_runs_under_locks(self):
+        media = BlockingCommitMedia()
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), media, clock=lambda: self.now[0])
+        self.store.issue_ticket(identity=self.identity, ticket_id="no-adapter-commit", session_id="session",
+            owner_id="alice", purpose="offer", payload_digest=hashlib.sha256(b"offer").hexdigest(),
+            now=2, expires_at=20)
+        context = TrustedRequestContext(self.identity, "alice", "session", "dev", self.incarnation,
+                                        "no-adapter-commit")
+        result = []
+        thread = threading.Thread(target=lambda: result.append(service.handle(
+            self.request("voice.offer", {"sdp": "offer"}, "no-adapter-commit"), context)))
+        thread.start()
+        thread.join(2)
+        self.assertFalse(thread.is_alive(), "service must not invoke injectable commit callback")
+        self.assertEqual(result[0]["status"], "ok")
+        self.assertFalse(media.commit_called.is_set())
+        completed = threading.Event()
+        revoke = threading.Thread(target=lambda: (self.store.revoke_grant(identity=self.identity,
+            grant_id="grant", owner_id="alice"), completed.set()))
+        revoke.start()
+        revoke.join(2)
+        self.assertFalse(revoke.is_alive())
+        self.assertTrue(completed.is_set())
+        self.assertEqual(service.tick(), 1)
+        self.assertEqual(service._peers, {})
+
     def test_exact_retries_revalidate_readiness_and_live_lease(self):
-        voice_ready = [True]
+        voice_ready = FakeReadinessGate()
         gate = FakeOwnerAvailabilityGate()
         service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
-            clock=lambda: self.now[0], owner_available=gate, voice_ready=lambda: voice_ready[0])
+            clock=lambda: self.now[0], owner_available=gate, voice_ready=voice_ready)
         status_raw = self.request("session.status", {}, "cached-status")
         first_status = service.handle(status_raw, self.context)
         self.assertEqual(first_status["status"], "ok")
@@ -584,19 +705,19 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual((owner_refusal["status"], owner_refusal["reason"]),
                          ("unavailable", "owner_busy"))
         gate.set_available(True)
-        voice_ready[0] = False
+        voice_ready.set_ready(False)
         self.assertEqual((service.handle(status_raw, self.context)["status"],
                           service.handle(status_raw, self.context)["reason"]),
                          ("unavailable", "voice_not_ready"))
-        voice_ready[0] = True
+        voice_ready.set_ready(True)
         offer, context, raw = self._offer(service=service, ticket="cached-offer",
                                           request_id="cached-voice")
         peer = offer["payload"]["peer_id"]
-        voice_ready[0] = False
+        voice_ready.set_ready(False)
         stale_readiness = service.handle(raw, context)
         self.assertEqual((stale_readiness["status"], stale_readiness["reason"]),
                          ("unavailable", "voice_not_ready"))
-        voice_ready[0] = True
+        voice_ready.set_ready(True)
         self.assertEqual(service.handle(self.request("voice.end", {"peer_id": peer}, "cached-end"),
                                         context)["status"], "ok")
         stale = service.handle(raw, context)
