@@ -1172,7 +1172,7 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 ### Proposed enhancements — parked behind current acceptance
 
 <details id="ws-23">
-<summary>WS-23 — Acceptance Verifier within Systems · Kimi review assigned, acknowledgment pending</summary>
+<summary>WS-23 — Acceptance Verifier within Systems · Kimi independent review APPROVE</summary>
 
 **Workstream:** Extend Systems with a verification role, starting from a repeatable checklist and existing diagnostics. Reuse Council review and independent VM checks; keep live-Mac and physical evidence separate. It observes and evaluates criteria; it is not a repair agent or release authority. The expanded October 22 all-current-and-future-roadmap dispatch permits the isolated offline contract below after its main claim; a new automated profile and runtime rollout still require current acceptance and their existing gates.
 
@@ -1189,16 +1189,16 @@ Sources: [adaptive closure plan C8](docs/plans/MORTIMER_ADAPTIVE_INTERFACE_CLOSU
 - [ ] Mark missing physical hardware blocked or untested; do not infer a pass from VM/CI success.
 - [ ] Demonstrate that verification cannot repair code, change criteria or authorize a release.
 
-- **Owner:** `codex` retains implementation accountability and original authorship; `kimi` owns the bounded independent exact-source review after this handoff lands; existing acceptance owners unchanged
-- **Status:** claimed: Kimi independent contract review assignment after this handoff lands; acknowledgment pending, execution unconfirmed. Codex contract source landed through #278 (`61870ff`); no runner, runtime wiring or product acceptance
-- **Implemented by:** Codex authored the unused pure contract and synthetic tests at `1b07fd882ba0246768138d110fe8003a91a36730`, adopted in #278; byte-identical at inspected main `765f6bca`. Kimi is assigned review, not authorship or source repair
-- **Remaining work / acceptance:** Kimi must independently evaluate exact contract/source/test behavior, including failure precedence, unknown prerequisites, stale or wrong-build evidence and side-effect boundaries. Deliver an evidence-linked APPROVE or REVISE verdict with limitations. All four acceptance criteria remain open; this pure supplied-metadata contract proves neither authenticity nor installed/physical/human acceptance
+- **Owner:** `codex` retains implementation accountability and original authorship; `kimi` owns the bounded independent exact-source review; existing acceptance owners unchanged
+- **Status:** landed via this PR (documentation-only independent review): Kimi APPROVE for exact Codex source/test blobs at review base `233995cb9fb0f9a5e1f2fd35611b4cfa1b5e0af8`, byte-identical to author `1b07fd882ba0246768138d110fe8003a91a36730`. Evidence: 25 focused tests/63 subtests and 14 independent adversarial checks pass; no blocker, should-fix or nit finding. Exact-head PR CI is a separate publication receipt. Codex contract source landed through #278 (`61870ff`); no runner, runtime wiring or product acceptance
+- **Implemented by:** Codex authored the unused pure contract and synthetic tests at `1b07fd882ba0246768138d110fe8003a91a36730`, adopted in #278. Kimi independently reviewed the exact merged source without authorship or source repair
+- **Remaining work / acceptance:** Preserve Kimi's source-only APPROVE and its limitations. All four acceptance criteria remain open; this pure supplied-metadata contract proves neither authenticity nor installed/physical/human acceptance. Future source changes require a new immutable review; runtime/profile rollout remains separately gated
 - **Model version:** not selected; choose eligible models by workload/privacy during planning
-- **Where:** `kimi/ws23-evidence-contract-review-20261028` (assigned future documentation/review branch; acknowledgment and creation not evidenced). Merged source is on main via #278
+- **Where:** review evidence on `kimi/ws23-evidence-contract-review-20261028`; merged source is on main via #278
 - **Plan:** [Canonical plan](docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md); existing historical requirements and acceptance gates retained
 - **Scope:** Review-only: read `jarvis/acceptance_evidence.py` and `tests/unit/test_acceptance_evidence.py` at a recorded immutable main revision; run existing offline tests and bounded synthetic scratch checks. Write only this WS-23 block, `docs/plans/MORTIMER_ACCEPTANCE_VERIFIER_PLAN.md` and WS-23 entries under `docs/roadmap-log/`. No source/test/fixture edits, runner/VM, production importer, Systems/prompt/tool, storage, WS-24, criteria, provider/config/scripts/native/shared-test or other-owner edits. Codex retains source accountability; any repair requires a separately coordinated scope amendment
-- **Next step:** kimi: acknowledge the review scope on the handoff PR, fetch main after the matching claim lands, record exact review base and return independent verdict/test receipt. codex: answer source questions without editing the review verdict; coordinate any separately claimed remediation. larry: review this reassignment draft and retain acceptance/release authority; no merge of this draft is delegated
-- **Updated:** 10-28 (Larry-requested redistribution; selected source verified on main `765f6bca`; Kimi acknowledgment pending, no review result claimed)
+- **Next step:** codex: preserve the independent verdict and source accountability; coordinate any separately claimed remediation and rereview. larry: retain acceptance/release authority; no implementation merge, deployment or acceptance is advanced by this review
+- **Updated:** 10-27 (Kimi independent exact-source APPROVE with focused and adversarial evidence; all acceptance criteria remain open)
 
 
 ### Prior ownership/intake checkpoint (preserved history)
