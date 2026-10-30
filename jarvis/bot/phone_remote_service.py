@@ -796,8 +796,8 @@ class PhoneRemoteService:
                                 # apply the captured binding's result to a new record.
                                 if current_peer is None:
                                     should_remove = False
-                                elif not self.enabled and current_peer.get("service_token") is not self._service_token:
-                                    should_remove = False
+                                elif not self.enabled:
+                                    should_remove = current_peer.get("service_token") is self._service_token
                                 elif not owner_ready:
                                     should_remove = True
                                 else:

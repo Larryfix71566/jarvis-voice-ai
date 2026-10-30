@@ -1012,6 +1012,79 @@ class ServiceTests(unittest.TestCase):
         self.assertIs(other._active_resources[peer_id], new_peer["resource"])
         self.assertTrue(self.store.binding_current(new_peer["binding"], now=2))
 
+    def test_delayed_tick_replacement_respects_facade_feature_and_live_authority(self):
+        for replacement_owner, condition, expected_closed in (
+                ("same", "feature_off", 1),
+                ("other", "feature_off", 0),
+                ("other", "owner_unavailable", 1),
+                ("other", "expired", 1)):
+            with self.subTest(replacement_owner=replacement_owner, condition=condition):
+                db = sqlite3.connect(":memory:", check_same_thread=False)
+                anchor = FakeProtectedAnchor()
+                store = PhoneAdmissionStore(db, anchor)
+                identity = ClientIdentity(name="fake", user_id="alice")
+                store.add_device(identity=identity, device_id="d", owner_id="alice",
+                    public_key=b"public", key_algorithm="test")
+                store.add_grant(identity=identity, grant_id="g", device_id="d", owner_id="alice",
+                    scopes=["read", "voice"])
+                old_incarnation = store.login(identity=identity, session_id="s", grant_id="g",
+                    owner_id="alice", now=1, expires_at=100)
+                clock = FakeClockGate(2)
+                owner_gate = FakeOwnerAvailabilityGate()
+                readiness = FakeReadinessGate()
+                old_media, new_media = AliasMedia(), AliasMedia()
+                old_service = PhoneRemoteService(store, FakeContextVerifier(), old_media,
+                    clock=clock, owner_available=owner_gate, voice_ready=readiness)
+                new_service = old_service if replacement_owner == "same" else PhoneRemoteService(
+                    store, FakeContextVerifier(), new_media, clock=clock,
+                    owner_available=owner_gate, voice_ready=readiness)
+                old_ticket = "tick-replacement-old-ticket"
+                store.issue_ticket(identity=identity, ticket_id=old_ticket, session_id="s", owner_id="alice",
+                    purpose="offer", payload_digest=hashlib.sha256(b"offer").hexdigest(), now=2, expires_at=20)
+                initial = old_service.handle(self.request("voice.offer", {"sdp": "offer"},
+                    "tick-replacement-old"), TrustedRequestContext(identity, "alice", "s", "d",
+                    old_incarnation, old_ticket))
+                self.assertEqual(initial["status"], "ok")
+                peer_id = initial["payload"]["peer_id"]
+                store.revoke_session(identity=identity, session_id="s", owner_id="alice")
+                arrived, release = threading.Event(), threading.Event()
+                owner_gate.pause_before_commit("tick-replacement-race", arrived, release)
+                results = []
+                thread = threading.Thread(name="tick-replacement-race",
+                    target=lambda: results.append(old_service.tick()))
+                thread.start()
+                self.assertTrue(arrived.wait(2))
+                self.assertEqual(new_service.tick(), 1)
+                new_incarnation = store.login(identity=identity, session_id="s", grant_id="g",
+                    owner_id="alice", now=2, expires_at=100)
+                new_ticket = "tick-replacement-new-ticket"
+                store.issue_ticket(identity=identity, ticket_id=new_ticket, session_id="s", owner_id="alice",
+                    purpose="offer", payload_digest=hashlib.sha256(b"offer").hexdigest(), now=2, expires_at=20)
+                new_context = TrustedRequestContext(identity, "alice", "s", "d", new_incarnation, new_ticket)
+                new_service.media.alias = peer_id
+                replacement = new_service.handle(self.request("voice.offer", {"sdp": "offer"},
+                    "tick-replacement-new"), new_context)
+                self.assertEqual(replacement["status"], "ok")
+                peer = new_service._peers[peer_id]
+                if condition == "feature_off":
+                    old_service.enabled = False
+                elif condition == "owner_unavailable":
+                    owner_gate.set_available(False)
+                else:
+                    clock.set_time(100)
+                release.set()
+                thread.join(3)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(results, [expected_closed])
+                if expected_closed:
+                    self.assertNotIn(peer_id, old_service._peers)
+                    self.assertNotIn(peer_id, old_service._active_resources)
+                else:
+                    self.assertIs(new_service._peers[peer_id], peer)
+                    self.assertIs(new_service._active_resources[peer_id], peer["resource"])
+                store._drop_admissions()
+                db.close()
+
     def test_replay_history_is_shared_across_facades_and_never_reexecutes(self):
         media_a, media_b = CountingMedia(), CountingMedia()
         service_a = PhoneRemoteService(self.store, FakeContextVerifier(), media_a, clock=self.clock,
