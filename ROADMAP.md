@@ -1953,6 +1953,8 @@ WS-21 retains display-transfer ownership; WS-24 retains durable recovery.
 - **Next step:** Coordinate the exact workflow diff with Claude for handoff/cross-review before making the one-file edit and running the package job. Keep result payloads with WS-17 and voice readiness with WS-05. Incoming calls and all real device, Apple, tunnel, microphone, install, release and privacy gates remain separate; no merge is authorized by this branch-local claim.
 - **Updated:** 2026-10-29 UTC, R3.7 fake-host source remains independently accepted at `c0a0de9` and locally tested 15/15; the separate R3-S1 store source/test files are integrated at `66121b8` and passed 34/34 with the repository auth type. PR #290's current validate workflow is running; the R3.8 CI claim is adopted on this branch only and remains unimplemented. No iOS/live acceptance is claimed.
 
+- **R3.13 adopted local claim:** The parent adopted the reviewed two-file WS-30 client claim. GPT-6 Luna authored the cancellation-linearization source candidate at `4e2507af17be12a40d6afdf07ad8a54f9cc37716`; existing reviewer `01a18584-92e2-7511-aca8-983bb3f230ef` remains the nonauthor reviewer. `swift test --package-path ios/MortimerPhoneCore` passed 40/40 (10 new client tests, 30 existing); exact-source review is pending. No publication, app, network transport, or live acceptance is claimed. See R3.13 in the remote-access plan.
+
 
 - **Aggregate draft — 2026-10-27 UTC:** Synthetic S0 from `2cca0f1` plus two hashed dirty author repair files at local `ffecab1`; prior oracle REVISE and renewed review gate remain explicit. [Full included/deferred manifest](docs/roadmap-log/2026-10-27-unmerged-integration.md).
 
