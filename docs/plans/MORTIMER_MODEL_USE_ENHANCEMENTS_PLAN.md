@@ -1498,3 +1498,25 @@ and acceptance gates remain unchanged.
 Validation for this documentation-only change is recorded in its WS-05 roadmap
 log and PR. No source, test behavior, configuration, deployment or live evidence
 is added.
+
+### 2026-10-30 UTC — Fresh-worker fixture isolation candidate
+
+- Branch: `codex/ws05-worker-fixture-isolation-20261023`, refreshed from
+  verified GitHub `main` `5310d1a9305035f43143fcffad6161619281f475`.
+  The registered branch and any open PR were absent at the refresh; the exact
+  pre-existing Codex test-only claim remains the authority. No competing PR
+  for the fixture file was found.
+- Candidate changes only `tests/unit/test_claude_developer_capability.py`:
+  request construction now returns the worker environment without installing
+  it or its working directory in the parent; all worker-boundary checks run in
+  fresh child processes with explicit `cwd`/`env`. A deterministic regression
+  ticks the reminder notifier with its fake post callback and checks that the
+  temporary parent DB is used while the worker `probe.db` remains absent.
+  Existing refusal, UID/system-marker, environment, ownership and no-artifact
+  assertions remain in place. No notifier/runtime path changed.
+- Validation: `python3.12 -m py_compile tests/unit/test_claude_developer_capability.py`
+  and `git diff --check` pass. The focused pytest module and regression could
+  not run in this executor: Python 3.12 has no `pytest` or `yaml` module, and
+  no dependency was installed. Independent review of this combined integration and current exact-head CI
+  remain pending. This is a local fixture-only candidate, not a
+  CI repair acceptance or production change.
