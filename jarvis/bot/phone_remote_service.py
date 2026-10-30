@@ -11,17 +11,50 @@ import weakref
 from contextlib import contextmanager
 from dataclasses import dataclass
 
-from jarvis.bot.phone_admission_store import PhoneAdmissionStore, StoreDenied, StoreUnavailable
+from jarvis.bot.phone_admission_store import (FakeProtectedAnchor, PhoneAdmissionStore, StoreDenied, StoreUnavailable)
 from jarvis.bot.phone_remote_protocol import (ProtocolError, parse_request, response,
     validate_response, validate_success_payload)
 
-_LEASE_REGISTRY_LOCK = threading.RLock()
-_LEASES_BY_STORE = weakref.WeakKeyDictionary()
+_AUTHORITY_REGISTRY_LOCK = threading.RLock()
+_RUNTIMES_BY_ANCHOR = weakref.WeakKeyDictionary()
 
 
-def _shared_owner_leases(store):
-    with _LEASE_REGISTRY_LOCK:
-        return _LEASES_BY_STORE.setdefault(store, {})
+class _AuthorityRuntime:
+    """Strong-lived process coordinator for one injected protected authority."""
+    def __init__(self, owner_available, clock, voice_ready, ledger_per_binding, ledger_total):
+        self.lock = threading.RLock()
+        self.owner_available = owner_available
+        self.clock = clock
+        self.voice_ready = voice_ready
+        self.ledger_per_binding = ledger_per_binding
+        self.ledger_total = ledger_total
+        self.ledger = {}
+        self.peers = {}
+        self.owner_lease = {}
+        self.active_resources = {}
+        self.pending_media = {}
+        self.sinks = weakref.WeakSet()
+
+
+def _authority_runtime(anchor, owner_available, clock, voice_ready,
+                       default_owner, default_clock, default_ready,
+                       ledger_per_binding, ledger_total):
+    with _AUTHORITY_REGISTRY_LOCK:
+        runtime = _RUNTIMES_BY_ANCHOR.get(anchor)
+        if runtime is None:
+            runtime = _AuthorityRuntime(default_owner, default_clock, default_ready,
+                                        ledger_per_binding, ledger_total)
+            _RUNTIMES_BY_ANCHOR[anchor] = runtime
+        else:
+            for supplied, current, label in (
+                    (owner_available, runtime.owner_available, "owner availability"),
+                    (clock, runtime.clock, "clock"),
+                    (voice_ready, runtime.voice_ready, "voice readiness")):
+                if supplied is not None and supplied is not current:
+                    raise TypeError(f"shared authority requires the same {label} gate")
+            runtime.ledger_per_binding = min(runtime.ledger_per_binding, ledger_per_binding)
+            runtime.ledger_total = min(runtime.ledger_total, ledger_total)
+        return runtime
 
 
 @dataclass(frozen=True)
@@ -239,30 +272,54 @@ class PhoneRemoteService:
             raise TypeError("media must be a synthetic FakeMediaAdapter preparer")
         if type(getattr(media, "_capability", None)) is not object:
             raise TypeError("media preparation capability is invalid")
-        self.store, self.verifier, self.media = store, verifier, media
-        self.enabled = enabled
-        self.owner_available = owner_available if owner_available is not None else FakeOwnerAvailabilityGate()
-        if type(self.owner_available) is not FakeOwnerAvailabilityGate:
-            raise TypeError("owner availability must use FakeOwnerAvailabilityGate")
-        self._media_capability = media._capability
-        if clock is not None and type(clock) is not FakeClockGate:
-            raise TypeError("clock must use FakeClockGate")
-        self.clock = clock if clock is not None else FakeClockGate()
-        self._lease_registry = _shared_owner_leases(store)
-        self.ledger_per_binding, self.ledger_total = ledger_per_binding, ledger_total
+        if type(store.anchor) is not FakeProtectedAnchor:
+            raise TypeError("service authority must use the exact fake protected anchor")
+        if type(enabled) is not bool:
+            raise TypeError("feature state must be bool")
+        if type(ledger_per_binding) is not int or ledger_per_binding < 1 or type(ledger_total) is not int or ledger_total < 1:
+            raise TypeError("ledger limits must be positive integers")
         if output_sink is not None and type(output_sink) is not FakeBoundedSink:
             raise TypeError("only the bounded synthetic sink is supported")
+        if clock is not None and type(clock) is not FakeClockGate:
+            raise TypeError("clock must use FakeClockGate")
+        if owner_available is not None and type(owner_available) is not FakeOwnerAvailabilityGate:
+            raise TypeError("owner availability must use FakeOwnerAvailabilityGate")
+        if voice_ready is not None and type(voice_ready) is not FakeReadinessGate:
+            raise TypeError("voice readiness must use FakeReadinessGate")
+        self.store, self.verifier, self.media = store, verifier, media
+        self.enabled = enabled
+        requested_clock = clock if clock is not None else FakeClockGate()
+        requested_owner = owner_available if owner_available is not None else FakeOwnerAvailabilityGate()
+        requested_ready = voice_ready if voice_ready is not None else FakeReadinessGate()
+        self._runtime = _authority_runtime(store.anchor, owner_available, clock, voice_ready,
+                                           requested_owner, requested_clock, requested_ready,
+                                           ledger_per_binding, ledger_total)
+        # First service seeds the gates; subsequent wrappers must supply the same
+        # explicit objects or omit them and inherit this authority's gates.
+        if self._runtime.clock is not requested_clock and clock is not None:
+            raise TypeError("shared authority requires the same clock gate")
+        if self._runtime.owner_available is not requested_owner and owner_available is not None:
+            raise TypeError("shared authority requires the same owner availability gate")
+        if self._runtime.voice_ready is not requested_ready and voice_ready is not None:
+            raise TypeError("shared authority requires the same voice readiness gate")
+        self.clock = self._runtime.clock
+        self.owner_available = self._runtime.owner_available
+        self.voice_ready = self._runtime.voice_ready
+        self._service_token = object()
+        self._media_capability = media._capability
+        self.ledger_per_binding, self.ledger_total = (self._runtime.ledger_per_binding,
+                                                      self._runtime.ledger_total)
         self.output_sink = output_sink if output_sink is not None else FakeBoundedSink()
         self.output_policy = output_policy
-        self.voice_ready = voice_ready if voice_ready is not None else FakeReadinessGate()
-        if type(self.voice_ready) is not FakeReadinessGate:
-            raise TypeError("voice readiness must use FakeReadinessGate")
-        self._lock = threading.RLock()
-        self._ledger = {}
-        self._peers = {}
-        self._owner_lease = {}
-        self._active_resources = {}
-        self._pending_media = {}
+        self._lock = self._runtime.lock
+        self._ledger = self._runtime.ledger
+        self._peers = self._runtime.peers
+        self._owner_lease = self._runtime.owner_lease
+        self._lease_registry = self._runtime.owner_lease  # compatibility inspection alias
+        self._active_resources = self._runtime.active_resources
+        self._pending_media = self._runtime.pending_media
+        with self._lock:
+            self._runtime.sinks.add(self.output_sink)
 
     @staticmethod
     def _binding_key(binding):
@@ -307,31 +364,24 @@ class PhoneRemoteService:
             self._pending_media.pop(prepared.token, None)
 
     def _lease_owner_locked(self, owner_id):
-        with _LEASE_REGISTRY_LOCK:
-            entry = self._lease_registry.get(owner_id)
-            if entry is None:
-                return None
-            service = entry[0]()
-            if service is None:
-                self._lease_registry.pop(owner_id, None)
-                return None
-            return entry
+        return self._owner_lease.get(owner_id)
 
     def _lease_is_mine_locked(self, owner_id, peer_id, resource=None):
         entry = self._lease_owner_locked(owner_id)
-        return (entry is not None and entry[0]() is self and entry[1] == peer_id
-                and (resource is None or entry[2] is resource))
+        return (entry is not None and entry[0] == peer_id
+                and (resource is None or entry[1] is resource))
 
     def _record_lease_locked(self, owner_id, peer_id, resource):
-        with _LEASE_REGISTRY_LOCK:
-            self._lease_registry[owner_id] = (weakref.ref(self), peer_id, resource)
+        self._owner_lease[owner_id] = (peer_id, resource)
 
     def _clear_lease_locked(self, owner_id, peer_id, resource):
-        with _LEASE_REGISTRY_LOCK:
-            entry = self._lease_registry.get(owner_id)
-            if (entry is not None and entry[0]() is self and entry[1] == peer_id
-                    and entry[2] is resource):
-                self._lease_registry.pop(owner_id, None)
+        entry = self._owner_lease.get(owner_id)
+        if entry is not None and entry[0] == peer_id and entry[1] is resource:
+            self._owner_lease.pop(owner_id, None)
+
+    def _cancel_peer_outputs_locked(self, peer_id):
+        for sink in tuple(self._runtime.sinks):
+            sink.cancel_peer(peer_id)
 
     def _activate_prepared_locked(self, prepared):
         """Activate an owned fake resource with plain local dict mutations only.
@@ -367,25 +417,25 @@ class PhoneRemoteService:
             old = self._ledger.get(key)
             if old is None:
                 active = sum(1 for candidate in self._ledger if candidate[0] == key[0])
-                if active >= self.ledger_per_binding or len(self._ledger) >= self.ledger_total:
-                    return key, None, response(request["request_id"], "denied", "request_capacity")
+                if active >= self._runtime.ledger_per_binding or len(self._ledger) >= self._runtime.ledger_total:
+                    return key, None, response(request["request_id"], "denied", "request_capacity"), None
                 self._ledger[key] = {"binding": binding, "operation": request["operation"],
                     "version": request["protocol_version"], "digest": digest,
-                    "state": "in_flight", "receipt": None}
-                return key, digest, None
+                    "state": "in_flight", "receipt": None, "resource_incarnation": None}
+                return key, digest, None, None
         if old["operation"] != request["operation"] or old["version"] != request["protocol_version"] or old["digest"] != digest:
-            return key, None, response(request["request_id"], "denied", "request_conflict")
+            return key, None, response(request["request_id"], "denied", "request_conflict"), None
         if old["state"] == "in_flight":
-            return key, None, response(request["request_id"], "denied", "request_conflict")
+            return key, None, response(request["request_id"], "denied", "request_conflict"), None
         try:
             current = self.store.binding_current(binding, now=self._now())
         except StoreUnavailable:
-            return key, None, response(request["request_id"], "unavailable", "authority_unavailable")
+            return key, None, response(request["request_id"], "unavailable", "authority_unavailable"), None
         if not current:
-            return key, None, response(request["request_id"], "denied", "not_authorized")
-        return key, None, old["receipt"]
+            return key, None, response(request["request_id"], "denied", "not_authorized"), None
+        return key, None, old["receipt"], old.get("resource_incarnation")
 
-    def _revalidate_cached_receipt(self, request, context, binding, receipt):
+    def _revalidate_cached_receipt(self, request, context, binding, receipt, resource_incarnation):
         operation = request["operation"]
         needs_ready = operation in {"session.status", "voice.offer", "voice.update"}
         # Readiness preparation is outside authority locks. The final state is
@@ -398,15 +448,15 @@ class PhoneRemoteService:
                         with self.clock.commit_guard() as (commit_now, _):
                             with self.store.serialized_authority():
                                 return self._cached_receipt_commit(request, context, binding, receipt,
-                                    commit_now, owner_ready, voice_ready)
+                                    commit_now, owner_ready, voice_ready, resource_incarnation)
                 with self.clock.commit_guard() as (commit_now, _):
                     with self.store.serialized_authority():
                         return self._cached_receipt_commit(request, context, binding, receipt,
-                            commit_now, owner_ready, True)
+                            commit_now, owner_ready, True, resource_incarnation)
         except StoreUnavailable:
             return response(request["request_id"], "unavailable", "authority_unavailable")
 
-    def _cached_receipt_commit(self, request, context, binding, receipt, now, owner_ready, voice_ready):
+    def _cached_receipt_commit(self, request, context, binding, receipt, now, owner_ready, voice_ready, resource_incarnation):
         operation = request["operation"]
         if not self.enabled:
             return response(request["request_id"], "unavailable", "feature_off")
@@ -425,27 +475,11 @@ class PhoneRemoteService:
             with self._lock:
                 peer = self._peers.get(peer_id)
                 if (peer is None or peer["binding"] != binding
-                        or self._owner_lease.get(binding.owner_id) != peer_id
+                        or peer.get("incarnation") is not resource_incarnation
+                        or self._owner_lease.get(binding.owner_id, (None,))[0] != peer_id
                         or not self._lease_is_mine_locked(binding.owner_id, peer_id, peer["resource"])):
                     return response(request["request_id"], "denied", "not_authorized")
         return receipt
-
-    def _prune_terminal_ledger(self):
-        with self._lock:
-            entries = [(key, value["binding"]) for key, value in self._ledger.items()
-                       if value["state"] == "done"]
-        terminal = []
-        for key, binding in entries:
-            try:
-                now = self._now()
-                if self.store.binding_terminal(binding, now=now):
-                    terminal.append(key)
-            except StoreUnavailable:
-                pass
-        if terminal:
-            with self._lock:
-                for key in terminal:
-                    self._ledger.pop(key, None)
 
     def _serve(self, request, context, binding):
         op, rid, payload = request["operation"], request["request_id"], request["payload"]
@@ -505,18 +539,14 @@ class PhoneRemoteService:
                             if (current is not None and item is not None
                                     and current["resource"] is not item["resource"]):
                                 return response(rid, "denied", "not_authorized")
-                            shared = self._lease_owner_locked(binding.owner_id)
-                            if (current is None and shared is not None and shared[1] == peer_id
-                                    and shared[0]() is not self):
-                                return response(rid, "denied", "not_authorized")
                             if current is not None:
                                 self._peers.pop(peer_id, None)
                                 ended = current
-                                if self._owner_lease.get(binding.owner_id) == peer_id:
+                                if self._owner_lease.get(binding.owner_id, (None,))[0] == peer_id:
                                     self._owner_lease.pop(binding.owner_id, None)
                                 self._clear_lease_locked(binding.owner_id, peer_id, current["resource"])
                                 self._active_resources.pop(peer_id, None)
-                                self.output_sink.cancel_peer(peer_id)
+                                self._cancel_peer_outputs_locked(peer_id)
             return response(rid, "ok", "none", {"peer_id": peer_id, "ended": True})
         if op not in {"voice.offer", "voice.update"}:
             return response(rid, "unavailable", "operation_unavailable")
@@ -531,7 +561,7 @@ class PhoneRemoteService:
             with self._lock:
                 prior_peer = self._peers.get(payload["peer_id"])
                 if (prior_peer is None or prior_peer["binding"] != binding
-                        or self._owner_lease.get(binding.owner_id) != payload["peer_id"]
+                        or self._owner_lease.get(binding.owner_id, (None,))[0] != payload["peer_id"]
                         or not self._lease_is_mine_locked(binding.owner_id, payload["peer_id"],
                                                           prior_peer["resource"])):
                     return response(rid, "denied", "not_authorized")
@@ -597,9 +627,11 @@ class PhoneRemoteService:
                                         elif not self._activate_prepared_locked(prepared):
                                             commit_error = response(rid, "unavailable", "voice_not_ready")
                                         else:
+                                            incarnation = object()
                                             self._peers[peer_id] = {"binding": binding, "context": context,
-                                                "version": 1, "resource": prepared.resource}
-                                            self._owner_lease[binding.owner_id] = peer_id
+                                                "version": 1, "resource": prepared.resource,
+                                                "incarnation": incarnation, "service_token": self._service_token}
+                                            self._ledger[(self._binding_key(binding), rid)]["resource_incarnation"] = incarnation
                                             self._record_lease_locked(binding.owner_id, peer_id, prepared.resource)
                                             published = True
                                     else:
@@ -607,15 +639,18 @@ class PhoneRemoteService:
                                         if (current_peer is not prior_peer or current_peer is None
                                                 or current_peer["version"] != prior_version
                                                 or current_peer["binding"] != binding
-                                                or self._owner_lease.get(binding.owner_id) != peer_id
+                                                or self._owner_lease.get(binding.owner_id, (None,))[0] != peer_id
                                                 or not self._lease_is_mine_locked(binding.owner_id, peer_id,
                                                                                   prior_resource)):
                                             commit_error = response(rid, "denied", "not_authorized")
                                         elif not self._activate_prepared_locked(prepared):
                                             commit_error = response(rid, "unavailable", "voice_not_ready")
                                         else:
+                                            incarnation = object()
                                             self._peers[peer_id] = {"binding": binding, "context": context,
-                                                "version": prior_version + 1, "resource": prepared.resource}
+                                                "version": prior_version + 1, "resource": prepared.resource,
+                                                "incarnation": incarnation, "service_token": self._service_token}
+                                            self._ledger[(self._binding_key(binding), rid)]["resource_incarnation"] = incarnation
                                             published = True
         except StoreDenied:
             commit_error = response(rid, "denied", "not_authorized")
@@ -646,9 +681,10 @@ class PhoneRemoteService:
             return False
         with self._lock:
             peer = self._peers.get(peer_id)
-            if peer is None or self._owner_lease.get(peer["binding"].owner_id) != peer_id:
+            if peer is None or self._owner_lease.get(peer["binding"].owner_id, (None,))[0] != peer_id:
                 return False
             binding = peer["binding"]
+            origin_incarnation = peer["incarnation"]
             owner_id = peer["context"].owner_id
         if not self._owner_ready(owner_id):
             self.tick()
@@ -676,11 +712,13 @@ class PhoneRemoteService:
                         with self._lock:
                             current = self._peers.get(peer_id)
                             if (current is not None and current["binding"] == binding
-                                    and self._owner_lease.get(binding.owner_id) == peer_id
+                                    and current.get("incarnation") is origin_incarnation
+                                    and self._owner_lease.get(binding.owner_id, (None,))[0] == peer_id
                                     and self._lease_is_mine_locked(binding.owner_id, peer_id,
                                                                    current["resource"])):
                                 committed = self.output_sink.enqueue_nonblocking({
-                                    "peer_id": peer_id, "binding": binding, "payload": prepared})
+                                    "peer_id": peer_id, "binding": binding, "payload": prepared,
+                                    "incarnation": origin_incarnation})
         if not self.enabled or owner_was_unavailable:
             self.tick()
         return committed
@@ -717,7 +755,8 @@ class PhoneRemoteService:
                         with self._lock:
                             peer = self._peers.get(item["peer_id"])
                             valid_peer = (peer is not None and peer["binding"] == item["binding"]
-                                and self._owner_lease.get(item["binding"].owner_id) == item["peer_id"]
+                                and peer.get("incarnation") is item["incarnation"]
+                                and self._owner_lease.get(item["binding"].owner_id, (None,))[0] == item["peer_id"]
                                 and self._lease_is_mine_locked(item["binding"].owner_id, item["peer_id"],
                                                                peer["resource"]))
                         payload = item["payload"] if valid_peer else None
@@ -734,6 +773,8 @@ class PhoneRemoteService:
             return 0
         closed = 0
         for peer_id, item in peers:
+            if not self.enabled and item.get("service_token") is not self._service_token:
+                continue
             binding = item["binding"]
             removed = None
             with self.owner_available.commit_guard(item["context"].owner_id) as (owner_ready, _gate_version):
@@ -749,13 +790,13 @@ class PhoneRemoteService:
                         if not current:
                             with self._lock:
                                 removed = self._peers.pop(peer_id, None)
-                                if removed and self._owner_lease.get(removed["binding"].owner_id) == peer_id:
+                                if removed and self._owner_lease.get(removed["binding"].owner_id, (None,))[0] == peer_id:
                                     self._owner_lease.pop(removed["binding"].owner_id, None)
                                 if removed:
                                     self._clear_lease_locked(removed["binding"].owner_id, peer_id,
                                                              removed["resource"])
                                     self._active_resources.pop(peer_id, None)
-                                    self.output_sink.cancel_peer(peer_id)
+                                    self._cancel_peer_outputs_locked(peer_id)
             item = removed
             if item:
                 closed += 1
@@ -787,9 +828,8 @@ class PhoneRemoteService:
             return response(request["request_id"], "unavailable", "authority_unavailable")
         except StoreDenied:
             return response(request["request_id"], "denied", "not_authorized")
-        self._prune_terminal_ledger()
         try:
-            key, _, early = self._reserve_request(binding, request)
+            key, _, early, cached_incarnation = self._reserve_request(binding, request)
         except StoreUnavailable:
             return response(request["request_id"], "unavailable", "authority_unavailable")
         if early is not None:
@@ -797,7 +837,7 @@ class PhoneRemoteService:
                 entry = self._ledger.get(key)
                 cached = entry is not None and entry["state"] == "done" and entry["receipt"] is early
             if cached:
-                return self._revalidate_cached_receipt(request, context, binding, early)
+                return self._revalidate_cached_receipt(request, context, binding, early, cached_incarnation)
             return early
         try:
             result = self._serve(request, context, binding)
