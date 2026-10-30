@@ -787,8 +787,26 @@ class PhoneRemoteService:
                                 current = self.store.binding_current_serialized(binding, now=now)
                             except StoreUnavailable:
                                 current = False
-                        if not current:
-                            with self._lock:
+                        with self._lock:
+                            current_peer = self._peers.get(peer_id)
+                            should_remove = not current
+                            if current_peer is not item:
+                                # Another tick/end/reconnect may have replaced this
+                                # peer ID while this poll waited for its gate. Never
+                                # apply the captured binding's result to a new record.
+                                if current_peer is None:
+                                    should_remove = False
+                                elif not self.enabled and current_peer.get("service_token") is not self._service_token:
+                                    should_remove = False
+                                elif not owner_ready:
+                                    should_remove = True
+                                else:
+                                    try:
+                                        should_remove = not self.store.binding_current_serialized(
+                                            current_peer["binding"], now=now)
+                                    except StoreUnavailable:
+                                        should_remove = True
+                            if should_remove and current_peer is not None:
                                 removed = self._peers.pop(peer_id, None)
                                 if removed and self._owner_lease.get(removed["binding"].owner_id, (None,))[0] == peer_id:
                                     self._owner_lease.pop(removed["binding"].owner_id, None)

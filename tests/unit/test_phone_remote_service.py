@@ -288,11 +288,12 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(bounded.handle(self.request("session.status", {}, request_id="one"), bounded_context)["status"], "ok")
         capacity = bounded.handle(self.request("session.status", {}, request_id="other"), bounded_context)
         self.assertEqual((capacity["status"], capacity["reason"]), ("denied", "request_capacity"))
-        self.store.revoke_session(identity=self.identity, session_id="session", owner_id="alice")
-        renewed = self.store.login(identity=self.identity, session_id="session", grant_id="grant",
+        bounded_store.revoke_session(identity=self.identity, session_id="session", owner_id="alice")
+        renewed = bounded_store.login(identity=self.identity, session_id="session", grant_id="grant",
             owner_id="alice", now=2, expires_at=100)
         renewed_context = TrustedRequestContext(self.identity, "alice", "session", "dev", renewed)
-        self.assertEqual(bounded.handle(self.request("session.status", {}, request_id="renewed"), renewed_context)["status"], "denied")
+        exhausted = bounded.handle(self.request("session.status", {}, request_id="renewed"), renewed_context)
+        self.assertEqual((exhausted["status"], exhausted["reason"]), ("denied", "request_capacity"))
         self.assertGreaterEqual(len(bounded._ledger), 1)  # prior incarnations remain failclosed
         bounded_store._drop_admissions()
         bounded_db.close()
@@ -976,6 +977,40 @@ class ServiceTests(unittest.TestCase):
             db_a.close()
             db_b.close()
             db_c.close()
+
+    def test_delayed_tick_does_not_close_authorized_replacement_peer_id(self):
+        initial, _, _ = self._offer(ticket="tick-stale-initial", request_id="tick-stale-initial")
+        peer_id = initial["payload"]["peer_id"]
+        other_media = AliasMedia()
+        other = PhoneRemoteService(self.store, FakeContextVerifier(), other_media, clock=self.clock,
+            owner_available=self.service.owner_available, voice_ready=self.service.voice_ready)
+        self.store.revoke_session(identity=self.identity, session_id="session", owner_id="alice")
+        arrived, release = threading.Event(), threading.Event()
+        self.service.owner_available.pause_before_commit("delayed-stale-tick", arrived, release)
+        outcome = []
+        thread = threading.Thread(name="delayed-stale-tick", target=lambda: outcome.append(self.service.tick()))
+        thread.start()
+        self.assertTrue(arrived.wait(2))
+        self.assertEqual(other.tick(), 1)
+        new_incarnation = self.store.login(identity=self.identity, session_id="session", grant_id="grant",
+            owner_id="alice", now=2, expires_at=100)
+        ticket_id = "tick-fresh-ticket"
+        self.store.issue_ticket(identity=self.identity, ticket_id=ticket_id, session_id="session",
+            owner_id="alice", purpose="offer", payload_digest=hashlib.sha256(b"offer").hexdigest(),
+            now=2, expires_at=20)
+        context = TrustedRequestContext(self.identity, "alice", "session", "dev", new_incarnation, ticket_id)
+        other_media.alias = peer_id
+        new_offer = other.handle(self.request("voice.offer", {"sdp": "offer"}, "tick-fresh-request"), context)
+        self.assertEqual(new_offer["status"], "ok")
+        new_peer = other._peers[peer_id]
+        self.assertTrue(self.store.binding_current(new_peer["binding"], now=2))
+        release.set()
+        thread.join(3)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(outcome, [0])
+        self.assertIs(other._peers[peer_id], new_peer)
+        self.assertIs(other._active_resources[peer_id], new_peer["resource"])
+        self.assertTrue(self.store.binding_current(new_peer["binding"], now=2))
 
     def test_replay_history_is_shared_across_facades_and_never_reexecutes(self):
         media_a, media_b = CountingMedia(), CountingMedia()
