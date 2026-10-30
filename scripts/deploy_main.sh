@@ -535,9 +535,12 @@ PYB
   cat > "$RB/ROLLBACK.sh" <<RBEOF
 #!/bin/bash
 # Restore production to its state before the $SHORT deploy of $TS.
-# Code + app only by default. The database is NOT restored unless you pass --restore-db,
-# because that discards every conversation and memory written since the deploy.
+# Code/app rollback. The explicit --restore-db argument is unavailable in new scripts.
 set -uo pipefail
+if [ "\$#" -ne 0 ]; then
+  echo "rollback accepts no arguments" >&2
+  exit 2
+fi
 C="$C"; RB="$RB"
 osascript -e 'tell application id "com.mortimer.host" to quit' 2>/dev/null; sleep 3; pkill -x MortimerHost 2>/dev/null
 git -C "\$C" checkout -q -f --detach $PRIOR || { echo "checkout of prior HEAD failed"; exit 1; }
