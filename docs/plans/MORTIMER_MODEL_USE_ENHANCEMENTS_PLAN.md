@@ -1498,3 +1498,74 @@ and acceptance gates remain unchanged.
 Validation for this documentation-only change is recorded in its WS-05 roadmap
 log and PR. No source, test behavior, configuration, deployment or live evidence
 is added.
+
+### 2026-10-30 UTC — Fresh-worker fixture isolation candidate
+
+- Branch: `codex/ws05-worker-fixture-isolation-20261023`, refreshed from
+  verified GitHub `main` `5310d1a9305035f43143fcffad6161619281f475`.
+  The registered branch and any open PR were absent at the refresh; the exact
+  pre-existing Codex test-only claim remains the authority. No competing PR
+  for the fixture file was found.
+- Candidate changes only `tests/unit/test_claude_developer_capability.py`:
+  request construction now returns the worker environment without installing
+  it or its working directory in the parent; all worker-boundary checks run in
+  fresh child processes with explicit `cwd`/`env`. A deterministic regression
+  ticks the reminder notifier with its fake post callback and checks that the
+  temporary parent DB is used while the worker `probe.db` remains absent.
+  Existing refusal, UID/system-marker, environment, ownership and no-artifact
+  assertions remain in place. No notifier/runtime path changed.
+- Validation: `python3.12 -m py_compile tests/unit/test_claude_developer_capability.py`
+  and `git diff --check` pass. The focused pytest module and regression could
+  not run in this executor: Python 3.12 has no `pytest` or `yaml` module, and
+  no dependency was installed. Independent review of this combined integration and current exact-head CI
+  remain pending. This is a local fixture-only candidate, not a
+  CI repair acceptance or production change.
+
+### 2026-10-31 — Provider-cancellation deadline phase test claim (proposed)
+
+CI run `41159320847`, validation job `124413109250`, failed only
+`tests/unit/test_model_execution_deadlines.py::test_provider_swallowing_cancellation_cannot_return_or_publish_late_result[False-True]`.
+The test timed out waiting for its fake provider's `entered` event. This does
+not prove that the provider swallowed cancellation incorrectly: its 20 ms
+request deadline starts before durable budget admission, and the provider is
+invoked only after that preflight. A controlled 30 ms delay in local budget
+admission reproduced the same observable symptom (provider not entered;
+worker terminates with `TimeoutError`), while the unchanged exact test passed
+locally. The CI root cause remains unproven.
+
+The bounded follow-up is test-only on
+`codex/ws05-deadline-confirmed-phase-20261031`, with source scope exactly
+`tests/unit/test_model_execution_deadlines.py`. For the three existing
+`(explicit_cancel, uncancel)` cases, allow admission to finish with a longer
+initial request timeout, wait for the actual fake-provider entry, then use the
+existing `expire_at_confirmed_phase` fixture for the deadline case or explicit
+`worker.cancel()` for cancellation. Preserve both parameter axes and every
+late-result, client-close, event, and no-ledger assertion. The existing
+`test_short_host_deadline_before_admission_never_creates_a_provider_or_reservation`
+continues to cover genuine early timeout during budget admission; do not add
+sleep-based synchronization, relax assertions, or change production deadlines.
+
+No edit to `jarvis/model_execution.py`, production code, CI workflow, harness,
+settings, dependencies, or another test path is claimed. The separate registered
+WS-05 fresh-worker fixture branch remains scoped to
+`tests/unit/test_claude_developer_capability.py`. The test-only claim was recorded
+locally in `bf5fd6a2a857ce1c3a64d6827b43cee9bfd1c322`; source candidate
+`465060b0758fe44018814353ddf2d862c7128025` changes only the exact test path
+above. Validation completed in a disposable Python 3.12.13 venv at
+`/tmp/ws05-deadline-test-venv312`, with the existing repository test venv
+site-packages visible and Anthropic's dependencies aligned to
+`requirements-lock.txt` (`anthropic 0.125.0`, `pydantic 2.13.4`,
+`pydantic-core 2.46.4`, `anyio 4.14.2`; pytest 9.1.1 and pytest-asyncio
+1.4.0). The complete deadline module passed 16 tests. The seven related
+model-execution/budget/ledger modules (`test_model_execution.py`,
+`test_model_execution_deadlines.py`, `test_model_execution_limits.py`,
+`test_model_budget.py`, `test_model_budget_preflight.py`,
+`test_model_budget_transport.py`, and `test_usage_ledger.py`) passed 230
+tests. Commands used `PYTHONDONTWRITEBYTECODE=1` and
+`--confcutdir=tests/unit`; no provider traffic was made. The initial failed
+runs before installing the missing dependency are historical and superseded
+by this complete run. The original CI run remains failed; corrected-head CI
+has not run. The CI cause remains unproven, and no flaky/unrelated
+classification is claimed. Exact-source independent review remains pending;
+no production source, runtime behavior, model setting, or acceptance closure
+changed.
