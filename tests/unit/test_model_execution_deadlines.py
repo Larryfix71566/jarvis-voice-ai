@@ -183,7 +183,9 @@ async def test_expired_lifecycle_observer_cannot_start_provider(
 
 
 @pytest.mark.parametrize("explicit_cancel,uncancel", [(False, False), (False, True), (True, False)])
-async def test_provider_swallowing_cancellation_cannot_return_or_publish_late_result(ledger, explicit_cancel, uncancel):
+async def test_provider_swallowing_cancellation_cannot_return_or_publish_late_result(
+    ledger, explicit_cancel, uncancel, expire_at_confirmed_phase,
+):
     entered = asyncio.Event()
     events = []
 
@@ -198,12 +200,16 @@ async def test_provider_swallowing_cancellation_cannot_return_or_publish_late_re
 
     client = Client(create)
     worker = asyncio.create_task(execute_chat(
-        request(timeout_s=1 if explicit_cancel else .02), route(),
+        request(timeout_s=10), route(),
         client_factory=lambda _: client, event_sink=events.append,
     ))
     await asyncio.wait_for(entered.wait(), 1)
     if explicit_cancel:
         worker.cancel()
+    else:
+        # The deadline is meant to exercise a provider that suppresses
+        # cancellation, not whichever admission/preflight happens to run first.
+        expire_at_confirmed_phase(worker)
     with pytest.raises(asyncio.CancelledError if explicit_cancel else TimeoutError):
         await worker
     assert client.closed == ["deadline-parent"]
