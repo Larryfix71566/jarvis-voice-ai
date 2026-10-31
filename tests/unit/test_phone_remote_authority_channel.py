@@ -23,7 +23,7 @@ from jarvis.bot.phone_admission_store import (
     AnchorState, FakeProtectedAnchor, PhoneAdmissionStore, StoreDenied, StoreUnavailable,
 )
 from jarvis.bot.phone_remote_authority_channel import (
-    ChannelProtocolError, MAX_FRAME_BYTES, NativeProtectedAnchor,
+    ChannelProtocolError, MAX_FRAME_BYTES, NativeProtectedAnchor, NativeProtectedAnchorV2,
     decode_frame_payload, encode_frame_payload, open_store, run_store_operation,
 )
 
@@ -53,20 +53,26 @@ def _child(database: str, scenario: str) -> int:
             return 72
         anchor.wait_for_shutdown()
         return 0
-    if scenario in {"duplicate-frame", "float-sequence", "sequence-replay",
-                    "sequence-skip", "sequence-overflow"}:
-        anchor = NativeProtectedAnchor.from_inherited_environment()
+    malformed_case = scenario.removeprefix("v2-")
+    malformed_cases = {"duplicate-frame", "float-sequence", "sequence-replay",
+                        "sequence-skip", "sequence-overflow"}
+    if malformed_case in malformed_cases:
+        from jarvis.bot.phone_remote_authority_channel import NativeProtectedAnchorV2
+        v2 = scenario.startswith("v2-")
+        anchor = (NativeProtectedAnchorV2 if v2 else NativeProtectedAnchor).from_inherited_environment()
         owner, child = anchor._owner_incarnation, anchor._child_incarnation
         corr = str(uuid.uuid4())
-        if scenario == "duplicate-frame":
-            body = ("{\"protocol\":\"mortimer.phone-authority-channel.v1\",\"version\":1,"
+        protocol = "mortimer.phone-authority-channel.v2" if v2 else "mortimer.phone-authority-channel.v1"
+        version = 2 if v2 else 1
+        if malformed_case == "duplicate-frame":
+            body = ("{\"protocol\":\"" + protocol + "\",\"version\":" + str(version) + ","
                     f"\"kind\":\"child.grant.acquire\",\"owner_incarnation\":\"{owner}\","
                     f"\"child_incarnation\":\"{child}\",\"sequence\":2,\"sequence\":2,"
                     f"\"correlation_id\":\"{corr}\",\"payload\":{{\"operation\":\"store.read\"}}}}")
         else:
             bad_sequence = {"float-sequence": 2.0, "sequence-replay": 1,
-                "sequence-skip": 3, "sequence-overflow": 1 << 64}[scenario]
-            body = json.dumps({"protocol": "mortimer.phone-authority-channel.v1", "version": 1,
+                "sequence-skip": 3, "sequence-overflow": 1 << 64}[malformed_case]
+            body = json.dumps({"protocol": protocol, "version": version,
                 "kind": "child.grant.acquire", "owner_incarnation": owner,
                 "child_incarnation": child, "sequence": bad_sequence, "correlation_id": corr,
                 "payload": {"operation": "store.read"}})
@@ -80,7 +86,8 @@ def _child(database: str, scenario: str) -> int:
         _record_scenario_result(outcome)
         anchor.close()
         return 0
-    if scenario not in {"basic", "denied", "denied-mutation", "repeat-revoke",
+    if scenario not in {"basic", "denied", "denied-mutation", "repeat-revoke", "v2-auth-denial", "v2-service-signout", "v2-lost-authorize-ack", "v2-lost-output-drain", "v2-lost-offer-commit-ack", "v2-lost-update-commit-ack", "v2-output-preflight-lost-ack", "v2-feature-output-gates", "v2-global-revoke-restore", "v2-same-child-restore", "v2-grant-revoke-cleanup", "v2-eof-during-preparation",
+                        "v2-duplicate-frame", "v2-float-sequence", "v2-sequence-replay", "v2-sequence-skip", "v2-sequence-overflow",
                         "release-without-read", "abort-eof", "malformed-final-null",
                         "unicode-host-transition", "scoped-signout-control",
                         "duplicate-readback", "second-grant"}:
@@ -108,8 +115,436 @@ def _child(database: str, scenario: str) -> int:
     inherited = [fd for fd in range(5, 64) if _is_open(fd)]
     if inherited:
         return 65
+    if scenario in {"v2-service-signout", "v2-lost-authorize-ack", "v2-lost-output-drain",
+                     "v2-lost-offer-commit-ack", "v2-lost-update-commit-ack", "v2-feature-output-gates",
+                     "v2-output-preflight-lost-ack", "v2-global-revoke-restore", "v2-same-child-restore",
+                     "v2-grant-revoke-cleanup", "v2-eof-during-preparation"}:
+        from jarvis.bot.phone_remote_service import (
+            _AuthorityChildServiceHost, FakeContextVerifier, FakeMediaAdapter,
+            TrustedRequestContext,
+        )
+        class BarrierMedia(FakeMediaAdapter):
+            def __init__(self):
+                super().__init__(); self.started = threading.Event(); self.release = threading.Event(); self.calls = 0
+            def prepare(self, sdp, peer_id=None, resource=None):
+                self.calls += 1
+                self.started.set()
+                if not self.release.wait(5):
+                    raise RuntimeError("media barrier timed out")
+                return super().prepare(sdp, peer_id, resource)
+        class FileBarrierMedia(FakeMediaAdapter):
+            def prepare(self, sdp, peer_id=None, resource=None):
+                entered = os.environ["PHONE_REMOTE_AUTHORITY_MEDIA_ENTERED_FILE"]
+                release = os.environ["PHONE_REMOTE_AUTHORITY_MEDIA_RELEASE_FILE"]
+                pathlib.Path(entered).write_text("preparing", encoding="ascii")
+                deadline = time.monotonic() + 15
+                while not pathlib.Path(release).exists() and time.monotonic() < deadline:
+                    time.sleep(0.005)
+                if not pathlib.Path(release).exists():
+                    raise RuntimeError("media preparation barrier timed out")
+                return super().prepare(sdp, peer_id, resource)
+        identity = _identity()
+        media = (FileBarrierMedia() if scenario == "v2-eof-during-preparation" else
+                 FakeMediaAdapter() if scenario in {"v2-lost-output-drain", "v2-lost-offer-commit-ack",
+                     "v2-lost-update-commit-ack", "v2-output-preflight-lost-ack", "v2-feature-output-gates",
+                     "v2-global-revoke-restore", "v2-same-child-restore", "v2-grant-revoke-cleanup"} else BarrierMedia())
+        class CanaryOutputPolicy:
+            def prepare(self, _content): return b"private-output-canary"
+        from jarvis.bot.phone_remote_service import FakeClockGate, FakeOwnerAvailabilityGate
+        clock = FakeClockGate(now=2)
+        owner_gate = FakeOwnerAvailabilityGate()
+        host = _AuthorityChildServiceHost(database, verifier=FakeContextVerifier(),
+            media=media, clock=clock, owner_available=owner_gate,
+            output_policy=CanaryOutputPolicy() if scenario in {"v2-lost-output-drain",
+                "v2-output-preflight-lost-ack", "v2-feature-output-gates", "v2-global-revoke-restore", "v2-same-child-restore",
+                "v2-grant-revoke-cleanup"} else None)
+        stage = "login-and-signout"
+        try:
+            inc_a = host.login(identity=identity, session_id="s-a", grant_id="g-channel",
+                              owner_id="alice", now=1, expires_at=100)
+            inc_b = host.login(identity=identity, session_id="s-b", grant_id="g-channel",
+                              owner_id="alice", now=1, expires_at=100)
+            if scenario not in {"v2-same-child-restore", "v2-grant-revoke-cleanup"}:
+                host.signout(identity=identity, session_id="s-a", owner_id="alice")
+            ctx_a = TrustedRequestContext(identity, "alice", "s-a", "d-channel", inc_a)
+            preissue_sdp = "v=0\\r\\no=preissue\\r\\ns=preissue\\r\\nt=0 0\\r\\n"
+            preissue_ticket = scenario == "v2-lost-authorize-ack"
+            if preissue_ticket:
+                preissue_digest = __import__("hashlib").sha256(preissue_sdp.encode()).hexdigest()
+                host.issue_ticket(identity=identity, ticket_id="t-b-preissued", session_id="s-b",
+                    owner_id="alice", purpose="offer", payload_digest=preissue_digest,
+                    now=2, expires_at=20)
+            stale = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                "request_id": "a-stale", "operation": "session.status", "payload": {}})
+            denied = host.handle(stale, ctx_a)
+            if scenario == "v2-lost-authorize-ack":
+                try:
+                    offer = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                        "request_id": "b-preissued", "operation": "voice.offer",
+                        "payload": {"sdp": preissue_sdp}})
+                    host.handle(offer, TrustedRequestContext(identity, "alice", "s-b", "d-channel",
+                        inc_b, "t-b-preissued"))
+                    issue = "unexpected-success"
+                except StoreUnavailable:
+                    issue = "fenced"
+                _record_scenario_result("lost-ack-a=" + denied["status"] + ";b=" + issue
+                    + ";preissued=" + str(preissue_ticket) + ";media=" + str(media.calls))
+                return 0
+            sdp = "v=0\\r\\no=test\\r\\ns=test\\r\\nt=0 0\\r\\n"
+            if scenario in {"v2-lost-offer-commit-ack", "v2-eof-during-preparation"}:
+                digest = __import__("hashlib").sha256(sdp.encode()).hexdigest()
+                host.issue_ticket(identity=identity, ticket_id="t-b-offer", session_id="s-b",
+                    owner_id="alice", purpose="offer", payload_digest=digest, now=2, expires_at=20)
+                context = TrustedRequestContext(identity, "alice", "s-b", "d-channel", inc_b, "t-b-offer")
+                request_wire = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                    "request_id": "b-offer", "operation": "voice.offer", "payload": {"sdp": sdp}})
+                if scenario == "v2-eof-during-preparation":
+                    result = host.handle(request_wire, context)
+                    _record_scenario_result("eof-preparation=" + result["status"] + ";after=" +
+                        ("fenced" if host._closed else "live"))
+                    return 0
+                result = host.handle(request_wire, context)
+                if result.get("status") != "unavailable" or result.get("reason") != "authority_unavailable":
+                    _record_scenario_result("offer-ack-unexpected:" + json.dumps(result, sort_keys=True))
+                    return 95
+                try:
+                    host.handle(stale, ctx_a)
+                    after = "unexpected-live"
+                except StoreUnavailable:
+                    after = "fenced"
+                _record_scenario_result("lost-offer=" + result["status"] + ";after=" + after)
+                return 0
+            if scenario == "v2-lost-update-commit-ack":
+                import hashlib
+                offer_digest = hashlib.sha256(sdp.encode()).hexdigest()
+                host.issue_ticket(identity=identity, ticket_id="t-update-base", session_id="s-b",
+                    owner_id="alice", purpose="offer", payload_digest=offer_digest, now=2, expires_at=20)
+                offer_context = TrustedRequestContext(identity, "alice", "s-b", "d-channel",
+                    inc_b, "t-update-base")
+                offer_wire = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                    "request_id": "b-base-offer", "operation": "voice.offer", "payload": {"sdp": sdp}})
+                accepted = host.handle(offer_wire, offer_context)
+                peer_id = accepted.get("payload", {}).get("peer_id")
+                if accepted.get("status") != "ok" or not peer_id:
+                    _record_scenario_result("base-offer-failed:" + json.dumps(accepted, sort_keys=True))
+                    return 96
+                update_sdp = "v=0\\r\\no=lost-update\\r\\ns=lost-update\\r\\nt=0 0\\r\\n"
+                update_digest = hashlib.sha256(update_sdp.encode()).hexdigest()
+                host.issue_ticket(identity=identity, ticket_id="t-update-lost", session_id="s-b",
+                    owner_id="alice", purpose="update", payload_digest=update_digest,
+                    peer_id=peer_id, now=3, expires_at=20)
+                update_context = TrustedRequestContext(identity, "alice", "s-b", "d-channel",
+                    inc_b, "t-update-lost")
+                update_wire = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                    "request_id": "b-lost-update", "operation": "voice.update",
+                    "payload": {"peer_id": peer_id, "sdp": update_sdp}})
+                result = host.handle(update_wire, update_context)
+                try:
+                    host.handle(stale, ctx_a)
+                    after = "unexpected-live"
+                except StoreUnavailable:
+                    after = "fenced"
+                _record_scenario_result("lost-update=" + result["status"] + ";after=" + after)
+                return 0
+            if scenario == "v2-output-preflight-lost-ack":
+                import hashlib
+                output_sdp = "v=0\\r\\no=output-preflight\\r\\ns=output-preflight\\r\\nt=0 0\\r\\n"
+                digest = hashlib.sha256(output_sdp.encode()).hexdigest()
+                host.issue_ticket(identity=identity, ticket_id="t-output-preflight", session_id="s-b",
+                    owner_id="alice", purpose="offer", payload_digest=digest, now=2, expires_at=20)
+                request_context = TrustedRequestContext(identity, "alice", "s-b", "d-channel",
+                    inc_b, "t-output-preflight")
+                request_wire = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                    "request_id": "output-preflight-offer", "operation": "voice.offer",
+                    "payload": {"sdp": output_sdp}})
+                accepted = host.handle(request_wire, request_context)
+                if accepted.get("status") != "ok":
+                    _record_scenario_result("output-preflight-offer-failed:" + json.dumps(accepted, sort_keys=True))
+                    return 97
+                enqueued = host.emit_output(accepted["payload"]["peer_id"], {"source": "synthetic-test"})
+                fenced_immediately = host._fenced and host._closed
+                try:
+                    after_response = host.handle(stale, ctx_a)
+                    after = ("unavailable:" + str(after_response.get("reason"))
+                        if after_response.get("status") == "unavailable" else "unexpected-live")
+                except StoreUnavailable:
+                    after = "fenced"
+                _record_scenario_result("output-preflight=" + str(enqueued)
+                    + ";fenced=" + str(host._fenced) + ";closed=" + str(host._closed)
+                    + ";immediate=" + str(fenced_immediately) + ";after=" + after)
+                return 0
+            if scenario == "v2-same-child-restore":
+                stage = "same-child-restore-setup"
+                sync = pathlib.Path(os.environ["PHONE_REMOTE_AUTHORITY_TEST_SYNC_DIR"])
+                sync.mkdir(mode=0o700, parents=True, exist_ok=True)
+                sdp_a = "v=0\\r\\no=restore-a\\r\\ns=restore-a\\r\\nt=0 0\\r\\n"
+                digest_a = __import__("hashlib").sha256(sdp_a.encode()).hexdigest()
+                host.issue_ticket(identity=identity, ticket_id="t-restore-a", session_id="s-a",
+                    owner_id="alice", purpose="offer", payload_digest=digest_a, now=2, expires_at=20)
+                stage = "same-child-restore-offer"
+                ctx_a = TrustedRequestContext(identity, "alice", "s-a", "d-channel", inc_a, "t-restore-a")
+                wire_a = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                    "request_id": "restore-a-offer", "operation": "voice.offer", "payload": {"sdp": sdp_a}})
+                accepted_a = host.handle(wire_a, ctx_a)
+                stage = "same-child-restore-queue"
+                peer_a = accepted_a.get("payload", {}).get("peer_id")
+                queued_a = bool(peer_a and host.emit_output(peer_a, {"source": "restore-canary"}))
+                pathlib.Path(sync / "snapshot-ready").write_text("ready", encoding="ascii")
+                def wait_signal(name):
+                    deadline = time.monotonic() + 20
+                    while not (sync / name).exists() and time.monotonic() < deadline:
+                        time.sleep(0.005)
+                    if not (sync / name).exists():
+                        raise RuntimeError("parent restore synchronization timed out")
+                wait_signal("snapshot-captured")
+                stage = "same-child-restore-signout"
+                host.signout(identity=identity, session_id="s-a", owner_id="alice")
+                pathlib.Path(sync / "a-signed-out").write_text("signed-out", encoding="ascii")
+                def check_after_restore(label):
+                    nonlocal stage
+                    stage = label + "-check"
+                    wait_signal(label + "-ready")
+                    stale_retry = host.handle(wire_a, ctx_a)
+                    stale_output = host.emit_output(peer_a, {"source": "restore-canary"}) if peer_a else False
+                    stale_drain = host.drain_output()
+                    return (stale_retry.get("status") == "denied" and not stale_output
+                            and stale_drain is None)
+                first_denied = check_after_restore("restore-one")
+                pathlib.Path(sync / "restore-one-checked").write_text("checked", encoding="ascii")
+                second_denied = check_after_restore("restore-two")
+                pathlib.Path(sync / "restore-two-checked").write_text("checked", encoding="ascii")
+                sdp_b = "v=0\\r\\no=restore-b\\r\\ns=restore-b\\r\\nt=0 0\\r\\n"
+                stage = "same-child-b-ticket"
+                digest_b = __import__("hashlib").sha256(sdp_b.encode()).hexdigest()
+                host.issue_ticket(identity=identity, ticket_id="t-restore-b", session_id="s-b",
+                    owner_id="alice", purpose="offer", payload_digest=digest_b, now=3, expires_at=20)
+                stage = "same-child-b-offer"
+                ctx_b = TrustedRequestContext(identity, "alice", "s-b", "d-channel", inc_b, "t-restore-b")
+                wire_b = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                    "request_id": "restore-b-offer", "operation": "voice.offer", "payload": {"sdp": sdp_b}})
+                accepted_b = host.handle(wire_b, ctx_b)
+                _record_scenario_result("a-queued=" + str(queued_a) + ";a-denied="
+                    + str(first_denied and second_denied) + ";b=" + accepted_b.get("status", "missing"))
+                host.shutdown()
+                return 0
+            if scenario == "v2-grant-revoke-cleanup":
+                sdp_grant = "v=0\\r\\no=grant-revoke\\r\\ns=grant-revoke\\r\\nt=0 0\\r\\n"
+                digest_grant = __import__("hashlib").sha256(sdp_grant.encode()).hexdigest()
+                host.issue_ticket(identity=identity, ticket_id="t-grant-revoke", session_id="s-b",
+                    owner_id="alice", purpose="offer", payload_digest=digest_grant, now=2, expires_at=20)
+                ctx_b = TrustedRequestContext(identity, "alice", "s-b", "d-channel", inc_b, "t-grant-revoke")
+                wire = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                    "request_id": "grant-revoke-offer", "operation": "voice.offer",
+                    "payload": {"sdp": sdp_grant}})
+                offer_result = host.handle(wire, ctx_b)
+                peer = offer_result.get("payload", {}).get("peer_id")
+                queued = bool(peer and host.emit_output(peer, {"source": "grant-revoke-canary"}))
+                host.mutate_authority("revoke_grant", identity=identity, grant_id="g-channel", owner_id="alice")
+                after_status = host.handle(json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                    "request_id": "grant-revoke-status", "operation": "session.status", "payload": {}}),
+                    TrustedRequestContext(identity, "alice", "s-b", "d-channel", inc_b))
+                clean = host.drain_output() is None and not host.emit_output(peer, {"source": "test"})
+                try:
+                    host.login(identity=identity, session_id="s-fresh-grant", grant_id="g-channel",
+                        owner_id="alice", now=3, expires_at=100)
+                    fresh = "unexpected-login"
+                except (StoreDenied, StoreUnavailable):
+                    fresh = "denied"
+                _record_scenario_result("offer=" + offer_result.get("status", "missing")
+                    + ";queued=" + str(queued) + ";old=" + after_status.get("status", "missing")
+                    + ";clean=" + str(clean) + ";fresh=" + fresh)
+                if not host._closed:
+                    host.shutdown()
+                return 0
+            if scenario in {"v2-feature-output-gates", "v2-global-revoke-restore"}:
+                import hashlib
+                def make_offer(session_id, incarnation, ticket_id, request_id, sdp_value):
+                    digest = hashlib.sha256(sdp_value.encode()).hexdigest()
+                    host.issue_ticket(identity=identity, ticket_id=ticket_id, session_id=session_id,
+                        owner_id="alice", purpose="offer", payload_digest=digest, now=2, expires_at=20)
+                    request_context = TrustedRequestContext(identity, "alice", session_id,
+                        "d-channel", incarnation, ticket_id)
+                    wire = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                        "request_id": request_id, "operation": "voice.offer", "payload": {"sdp": sdp_value}})
+                    return host.handle(wire, request_context), request_context, wire
+                def queue_synthetic(peer):
+                    return bool(host.emit_output(peer, {"source": "synthetic-process-test"}))
+                if scenario == "v2-feature-output-gates":
+                    stage = "feature-off"
+                    first, _, first_wire = make_offer("s-b", inc_b, "t-feature", "feature-offer", sdp)
+                    stage = "feature-output-queue"
+                    first_peer = first.get("payload", {}).get("peer_id")
+                    queued_feature = bool(first_peer and queue_synthetic(first_peer))
+                    stage = "feature-disable"
+                    host.set_enabled(False)
+                    stage = "feature-retry"
+                    retry = host.handle(first_wire, TrustedRequestContext(identity, "alice", "s-b",
+                        "d-channel", inc_b, "t-feature"))
+                    stage = "feature-cleanup-check"
+                    retry_denied = retry.get("status") == "unavailable" and retry.get("reason") == "feature_off"
+                    stage = "feature-drain"
+                    drained = host.drain_output() is None
+                    stage = "feature-peer-check"
+                    peer_denied = not host.emit_output(first_peer, {"source": "test"})
+                    feature_clean = retry_denied and drained and peer_denied
+                    host.set_enabled(True)
+                    stage = "availability-off"
+                    inc_c = host.login(identity=identity, session_id="s-c", grant_id="g-channel",
+                        owner_id="alice", now=3, expires_at=100)
+                    second, _, _ = make_offer("s-c", inc_c, "t-availability", "availability-offer",
+                        "v=0\\r\\no=availability\\r\\ns=availability\\r\\nt=0 0\\r\\n")
+                    second_peer = second.get("payload", {}).get("peer_id")
+                    queued_availability = bool(second_peer and queue_synthetic(second_peer))
+                    owner_gate.set_available(False)
+                    availability_clean = (host.drain_output() is None
+                        and not host.emit_output(second_peer, {"source": "test"}))
+                    owner_gate.set_available(True)
+                    stage = "expiry"
+                    inc_d = host.login(identity=identity, session_id="s-d", grant_id="g-channel",
+                        owner_id="alice", now=4, expires_at=100)
+                    third, _, _ = make_offer("s-d", inc_d, "t-expiry", "expiry-offer",
+                        "v=0\\r\\no=expiry\\r\\ns=expiry\\r\\nt=0 0\\r\\n")
+                    third_peer = third.get("payload", {}).get("peer_id")
+                    queued_expiry = bool(third_peer and queue_synthetic(third_peer))
+                    clock.set_time(101)
+                    expiry_clean = (host.drain_output() is None
+                        and not host.emit_output(third_peer, {"source": "test"}))
+                    _record_scenario_result("feature=" + str(queued_feature and feature_clean)
+                        + ";availability=" + str(queued_availability and availability_clean)
+                        + ";expiry=" + str(queued_expiry and expiry_clean))
+                    host.shutdown()
+                    return 0
+                # Queue a peer and protected output, globally advance the
+                # anchor generation, then prove cleanup and fresh login.
+                stage = "global-revoke"
+                first, _, _ = make_offer("s-b", inc_b, "t-global-old", "global-old", sdp)
+                peer = first.get("payload", {}).get("peer_id")
+                queued = bool(peer and queue_synthetic(peer))
+                host.mutate_authority("advance_host_generation")
+                denied_old = host.handle(stale, ctx_a).get("status")
+                output_empty = host.drain_output() is None
+                old_peer_rejected = not host.emit_output(peer, {"source": "test"})
+                fresh_inc = host.login(identity=identity, session_id="s-fresh", grant_id="g-channel",
+                    owner_id="alice", now=3, expires_at=100)
+                fresh, _, _ = make_offer("s-fresh", fresh_inc, "t-global-fresh", "global-fresh",
+                    "v=0\\r\\no=fresh\\r\\ns=fresh\\r\\nt=0 0\\r\\n")
+                _record_scenario_result("old=" + str(denied_old) + ";queued=" + str(queued)
+                    + ";clean=" + str(output_empty and old_peer_rejected)
+                    + ";fresh=" + str(fresh.get("status")))
+                host.shutdown()
+                return 0
+            ticket_id = "t-b-offer"
+            digest = __import__("hashlib").sha256(sdp.encode()).hexdigest()
+            host.issue_ticket(identity=identity, ticket_id=ticket_id, session_id="s-b",
+                      owner_id="alice", purpose="offer", payload_digest=digest, now=2, expires_at=20)
+            ctx_b = TrustedRequestContext(identity, "alice", "s-b", "d-channel", inc_b, ticket_id)
+            offer = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                "request_id": "b-offer", "operation": "voice.offer", "payload": {"sdp": sdp}})
+            from jarvis.bot.phone_remote_asgi import PhoneRemoteASGI
+            import asyncio
+            async def run_request(raw):
+                sent = []
+                events = iter([{"type": "websocket.connect"},
+                               {"type": "websocket.receive", "text": raw, "bytes": None},
+                               {"type": "websocket.disconnect", "code": 1000}])
+                async def receive():
+                    return next(events)
+                async def send(message):
+                    sent.append(message)
+                await app({"type": "websocket", "path": "/ws/phone-remote"}, receive, send)
+                return sent
+            def provider(_scope, request):
+                request_ticket = ("t-b-offer" if request is not None and request["operation"] == "voice.offer"
+                                  else "t-b-update" if request is not None and request["operation"] == "voice.update"
+                                  else None)
+                return TrustedRequestContext(identity, "alice", "s-b", "d-channel", inc_b,
+                                             request_ticket)
+            app = PhoneRemoteASGI(host, provider, enabled=True)
+            if scenario == "v2-lost-output-drain":
+                sent = asyncio.run(run_request(offer))
+                accepted = json.loads(sent[1]["text"])
+                if accepted.get("status") != "ok" or not host.emit_output(accepted["payload"]["peer_id"],
+                        {"source": "synthetic-test"}):
+                    return 94
+                try:
+                    host.drain_output()
+                    drain = "unexpected-bytes"
+                except StoreUnavailable:
+                    drain = "unavailable"
+                try:
+                    host.handle(stale, ctx_a)
+                    after = "unexpected-live"
+                except StoreUnavailable:
+                    after = "fenced"
+                _record_scenario_result("output-drain=" + drain + ";after=" + after)
+                return 0
+            async def overlapping_requests():
+                first_task = asyncio.create_task(run_request(offer))
+                started = await asyncio.to_thread(media.started.wait, 3)
+                if not started:
+                    media.release.set()
+                    raise RuntimeError("media preparation did not reach its barrier")
+                # Cancel only after child-worker media preparation started.
+                # ASGI must drain the dispatched synchronous service call.
+                first_task.cancel()
+                second_offer = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                    "request_id": "b-busy", "operation": "voice.offer", "payload": {"sdp": sdp}})
+                second = await run_request(second_offer)
+                media.release.set()
+                try:
+                    await first_task
+                    cancelled = False
+                except asyncio.CancelledError:
+                    cancelled = True
+                first = await run_request(offer)  # exact retry must retrieve the one committed receipt
+                return first, second, cancelled
+            sent, busy_sent, drained_cancel = asyncio.run(overlapping_requests())
+            if len(sent) < 2 or "text" not in sent[1]:
+                _record_scenario_result("asgi-no-reply:" + json.dumps(sent, sort_keys=True))
+                host.shutdown()
+                return 91
+            if len(busy_sent) < 2 or "text" not in busy_sent[1]:
+                _record_scenario_result("asgi-busy-no-reply:" + json.dumps(busy_sent, sort_keys=True))
+                host.shutdown()
+                return 92
+            accepted = json.loads(sent[1]["text"])
+            busy = json.loads(busy_sent[1]["text"])
+            if (denied.get("status") != "denied" or accepted.get("status") != "ok"
+                    or busy.get("status") != "unavailable" or not drained_cancel):
+                _record_scenario_result(json.dumps({"a": denied, "b": accepted, "busy": busy}, sort_keys=True))
+                return 90
+            peer_id = accepted["payload"]["peer_id"]
+            update_sdp = "v=0\\r\\no=update\\r\\ns=update\\r\\nt=0 0\\r\\n"
+            update_digest = __import__("hashlib").sha256(update_sdp.encode()).hexdigest()
+            host.issue_ticket(identity=identity, ticket_id="t-b-update", session_id="s-b",
+                owner_id="alice", purpose="update", payload_digest=update_digest,
+                peer_id=peer_id, now=3, expires_at=20)
+            update = json.dumps({"kind": "mortimer.phone-remote.v1", "protocol_version": 1,
+                "request_id": "b-update", "operation": "voice.update",
+                "payload": {"peer_id": peer_id, "sdp": update_sdp}})
+            update_sent = asyncio.run(run_request(update))
+            retry_sent = asyncio.run(run_request(update))
+            update_reply = json.loads(update_sent[1]["text"])
+            retry_reply = json.loads(retry_sent[1]["text"])
+            if update_reply != retry_reply or update_reply["status"] != "ok" or media.calls != 2:
+                _record_scenario_result("update-retry-invalid:" + json.dumps({
+                    "update": update_reply, "retry": retry_reply, "media_calls": media.calls}, sort_keys=True))
+                return 93
+            _record_scenario_result("a-denied-b-offer-ok-busy-rejected-cancel-drained-update-replayed:" + peer_id)
+            host.shutdown()
+            return 0
+        except BaseException as exc:
+            _record_scenario_result("child-error@" + stage + ":" + type(exc).__name__ + ":" + str(exc))
+            raise
+        finally:
+            if not host._closed:
+                # Test failures still close the inherited channel so the owner
+                # can reap the child rather than hanging on a live descriptor.
+                host._thread.join(timeout=2)
     db = sqlite3.connect(database, isolation_level=None, timeout=0.25)
-    anchor = NativeProtectedAnchor.from_inherited_environment()
+    from jarvis.bot.phone_remote_authority_channel import NativeProtectedAnchorV2
+    anchor_type = NativeProtectedAnchorV2 if os.environ.get("PHONE_REMOTE_AUTHORITY_PROTOCOL_VERSION") == "2" else NativeProtectedAnchor
+    anchor = anchor_type.from_inherited_environment()
     try:
         store = open_store(PhoneAdmissionStore, db, anchor=anchor, failpoint=failpoint)
         initial_generation = db.execute("SELECT host_generation FROM phone_remote_meta WHERE singleton_id=1").fetchone()[0]
@@ -151,6 +586,17 @@ def _child(database: str, scenario: str) -> int:
         status = run_store_operation("store.read", store.status, anchor=anchor)
         if status != {"schema_version": 1, "host_generation": initial_generation, "login_counter": 0}:
             return 66
+        if scenario == "v2-auth-denial":
+            try:
+                run_store_operation("service.authorize", store.current_binding, anchor=anchor,
+                    identity=_identity(), owner_id="alice", session_id="missing",
+                    device_id="d-channel", login_incarnation="missing-incarnation", now=1)
+            except StoreDenied:
+                _record_scenario_result("authorization-denied-released")
+            else:
+                return 89
+            anchor.wait_for_shutdown()
+            return 0
         if scenario in {"malformed-final-null", "unicode-host-transition"}:
             try:
                 with anchor._operation_context("authority.mutate"):
@@ -317,6 +763,56 @@ class NativeFrameValidationTests(unittest.TestCase):
     def _packet(frame):
         body = json.dumps(frame, separators=(",", ":")).encode("utf-8")
         return struct.pack(">I", len(body)) + body
+
+    @staticmethod
+    def _v2_frame(kind, sequence, owner, child, correlation, payload):
+        return {"protocol": "mortimer.phone-authority-channel.v2", "version": 2,
+                "kind": kind, "owner_incarnation": owner, "child_incarnation": child,
+                "sequence": sequence, "correlation_id": correlation, "payload": payload}
+
+    def test_v2_rejects_malformed_handshake_fields(self):
+        owner, child, corr = (str(uuid.uuid4()) for _ in range(3))
+        base = self._v2_frame("owner.hello", 1, owner, child, corr,
+                              {"max_frame_bytes": MAX_FRAME_BYTES})
+        raw_duplicate = json.dumps(base, separators=(",", ":")).replace(
+            '"version":2', '"version":2,"version":2').encode()
+        packets = [self._packet({**base, "version": 2.0}),
+                   self._packet({**base, "payload": {"max_frame_bytes": float(MAX_FRAME_BYTES)}}),
+                   struct.pack(">I", len(raw_duplicate)) + raw_duplicate]
+        for packet in packets:
+            parent, child_socket = socket.socketpair()
+            parent.sendall(packet); parent.close()
+            with self.subTest(packet=packet[:64]), self.assertRaises(ChannelProtocolError):
+                NativeProtectedAnchorV2(child_socket)
+
+    def test_v2_binding_current_accepts_only_exact_pregrant_false(self):
+        parent, child_socket = socket.socketpair()
+        owner, child, correlation = (str(uuid.uuid4()) for _ in range(3))
+        observed = []
+        def fake_owner():
+            try:
+                parent.sendall(self._packet(self._v2_frame("owner.hello", 1,
+                    owner, child, correlation, {"max_frame_bytes": MAX_FRAME_BYTES})))
+                self._read_frame(parent)  # child.ready
+                parent.settimeout(0.15)
+                try:
+                    observed.append("unexpected-grant" if parent.recv(1) else "no-grant")
+                except TimeoutError:
+                    observed.append("no-grant")
+            finally:
+                parent.close()
+        worker = threading.Thread(target=fake_owner, daemon=True)
+        worker.start()
+        anchor = NativeProtectedAnchorV2(child_socket)
+        db = sqlite3.connect(":memory:", isolation_level=None)
+        store = PhoneAdmissionStore(db, FakeProtectedAnchor())
+        store.anchor = anchor
+        result = run_store_operation("service.authorize", store.binding_current,
+                                     object(), now=2, anchor=anchor)
+        self.assertIs(result, False)
+        anchor.close(); worker.join(timeout=2); db.close()
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(observed, ["no-grant"])
 
     def test_native_client_rejects_duplicate_and_noninteger_handshake_fields(self):
         owner, child, corr = (str(uuid.uuid4()) for _ in range(3))
@@ -599,6 +1095,20 @@ class ProcessBoundaryTests(unittest.TestCase):
         self.assertEqual(rows, {"s-control-a": 0.0, "s-control-b": None})
         self.assertEqual(db.execute("SELECT host_generation FROM phone_remote_meta WHERE singleton_id=1").fetchone()[0],
                          self.initial_generation)
+        db.close()
+
+    def test_v2_readonly_authorization_denial_releases_grant_without_fencing(self):
+        marker = os.path.join(self.tmp.name, "v2-authorization-result")
+        env = dict(self.env, PHONE_REMOTE_AUTHORITY_SCENARIO_RESULT=marker)
+        result = subprocess.run(self.owner_command("v2-auth-denial", 3), env=env,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
+        self.assertEqual(pathlib.Path(marker).read_text(encoding="ascii"),
+                         "authorization-denied-released")
+        db = sqlite3.connect(self.db_path)
+        self.assertEqual(db.execute("SELECT count(*) FROM phone_remote_sessions").fetchone()[0], 0)
+        self.assertEqual(db.execute("SELECT host_generation,transition_state FROM phone_remote_meta WHERE singleton_id=1").fetchone(),
+                         (self.initial_generation, "stable"))
         db.close()
 
     def test_second_grant_is_denied_while_the_first_is_active(self):
@@ -903,8 +1413,9 @@ class ProcessBoundaryTests(unittest.TestCase):
         db.close()
 
     def test_native_owner_rejects_duplicate_and_invalid_sequence_frames(self):
-        for scenario in ("duplicate-frame", "float-sequence", "sequence-replay",
-                         "sequence-skip", "sequence-overflow"):
+        scenarios = tuple(name for base in ("duplicate-frame", "float-sequence", "sequence-replay",
+                         "sequence-skip", "sequence-overflow") for name in (base, "v2-" + base))
+        for scenario in scenarios:
             with self.subTest(scenario=scenario):
                 marker = os.path.join(self.tmp.name, "malformed-frame-result")
                 env = dict(self.env, PHONE_REMOTE_AUTHORITY_SCENARIO_RESULT=marker)

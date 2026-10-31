@@ -4,7 +4,8 @@ import Darwin
 
 public enum PhoneRemoteAuthorityError: Error { case invalidFrame, unavailable }
 
-private let protocolName = "mortimer.phone-authority-channel.v1"
+private let protocolNameV1 = "mortimer.phone-authority-channel.v1"
+private let protocolNameV2 = "mortimer.phone-authority-channel.v2"
 private let maxFrame = 65_536
 private let maxSequence: UInt64 = UInt64.max
 
@@ -95,7 +96,7 @@ private struct DuplicateKeyScanner {
 }
 
 private func frameRead(_ fd: Int32, expectedSequence: UInt64,
-                       owner: String, child: String) throws -> [String: Any] {
+                       owner: String, child: String, protocolName: String, version: UInt64) throws -> [String: Any] {
     let prefix = try readExact(fd, 4)
     let size = prefix.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
     guard size > 0, size <= maxFrame else { throw PhoneRemoteAuthorityError.invalidFrame }
@@ -105,7 +106,7 @@ private func frameRead(_ fd: Int32, expectedSequence: UInt64,
     guard let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
           Set(object.keys) == Set(["protocol", "version", "kind", "owner_incarnation", "child_incarnation", "sequence", "correlation_id", "payload"]),
           object["protocol"] as? String == protocolName,
-          exactInt(object["version"], min: 1) == 1,
+          exactInt(object["version"], min: version) == version,
           let kind = object["kind"] as? String, !kind.isEmpty,
           object["owner_incarnation"] as? String == owner,
           object["child_incarnation"] as? String == child,
@@ -117,8 +118,9 @@ private func frameRead(_ fd: Int32, expectedSequence: UInt64,
 }
 
 private func frameWrite(_ fd: Int32, sequence: UInt64, owner: String, child: String,
-                        kind: String, correlation: String, payload: [String: Any]) throws {
-    let object: [String: Any] = ["protocol": protocolName, "version": 1, "kind": kind,
+                        kind: String, correlation: String, payload: [String: Any],
+                        protocolName: String, version: UInt64) throws {
+    let object: [String: Any] = ["protocol": protocolName, "version": version, "kind": kind,
         "owner_incarnation": owner, "child_incarnation": child, "sequence": sequence,
         "correlation_id": correlation, "payload": payload]
     let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .fragmentsAllowed])
@@ -209,14 +211,17 @@ public final class PhoneRemoteAuthorityOwner {
     private let anchorPath: String
     private var completedGrants = 0
     private var terminalStatus: Int32 = 0
+    private let version: UInt64
+    private var protocolName: String { version == 2 ? protocolNameV2 : protocolNameV1 }
 
     private init(lockFD: Int32, listenerFD: Int32, childPID: pid_t, ownerID: String,
                 childID: String, anchor: Anchor, expectedGrants: Int,
-                holdMilliseconds: UInt32, readyPath: String, anchorPath: String) {
+                holdMilliseconds: UInt32, readyPath: String, anchorPath: String, version: UInt64) {
         self.lockFD = lockFD; self.listenerFD = listenerFD; self.childPID = childPID
         self.ownerID = ownerID; self.childID = childID; self.anchor = anchor; self.initialAnchor = anchor
         self.expectedGrants = expectedGrants; self.holdMilliseconds = holdMilliseconds; self.readyPath = readyPath
         self.anchorPath = anchorPath
+        self.version = version
     }
 
     /// Runs one owner lifecycle. The lock descriptor stays open until child reaping.
@@ -263,7 +268,8 @@ public final class PhoneRemoteAuthorityOwner {
         let owner = PhoneRemoteAuthorityOwner(lockFD: lockFD, listenerFD: sockets[0], childPID: pid,
                                               ownerID: ownerID, childID: childID, anchor: initial,
                                               expectedGrants: expectedGrants, holdMilliseconds: holdMilliseconds,
-                                              readyPath: readyPath, anchorPath: testAnchorPath)
+                                              readyPath: readyPath, anchorPath: testAnchorPath,
+                                              version: scenario.hasPrefix("v2-") ? 2 : 1)
         var status = owner.serve()
         // Always close the owner endpoint before waiting. Terminal abort/error
         // paths must deliver EOF to a child that may be waiting for it. Keep
@@ -326,9 +332,15 @@ public final class PhoneRemoteAuthorityOwner {
             "PYTHONIOENCODING": "utf-8", "PHONE_REMOTE_AUTHORITY_CHANNEL_FD": "3",
             "PHONE_REMOTE_AUTHORITY_LOCK_FD": "4"
         ]
+        if scenario.hasPrefix("v2-") { envMap["PHONE_REMOTE_AUTHORITY_PROTOCOL_VERSION"] = "2" }
         // Only deterministic offline test controls cross the process boundary.
         for key in ["PHONE_REMOTE_AUTHORITY_FAILPOINT", "PHONE_REMOTE_AUTHORITY_CRASH_AT",
                     "PHONE_REMOTE_AUTHORITY_ENTERED_FILE", "PHONE_REMOTE_AUTHORITY_RELEASE_FILE",
+                    "PHONE_REMOTE_AUTHORITY_PAUSE_RELEASE",
+                    "PHONE_REMOTE_AUTHORITY_PAUSE_RELEASE_OCCURRENCE",
+                    "PHONE_REMOTE_AUTHORITY_MEDIA_ENTERED_FILE",
+                    "PHONE_REMOTE_AUTHORITY_MEDIA_RELEASE_FILE",
+                    "PHONE_REMOTE_AUTHORITY_TEST_SYNC_DIR",
                     "PHONE_REMOTE_AUTHORITY_SCENARIO_RESULT",
                     "PHONE_REMOTE_AUTHORITY_TEST_DUPLICATE_READBACK"] {
             if let value = parentEnvironment[key] { envMap[key] = value }
@@ -349,11 +361,13 @@ public final class PhoneRemoteAuthorityOwner {
         guard outSequence < maxSequence else { throw PhoneRemoteAuthorityError.invalidFrame }
         outSequence += 1
         try frameWrite(listenerFD, sequence: outSequence, owner: ownerID, child: childID,
-                       kind: kind, correlation: correlation, payload: payload)
+                       kind: kind, correlation: correlation, payload: payload,
+                       protocolName: protocolName, version: version)
     }
 
     private func receive() throws -> (String, String, [String: Any]) {
-        let frame = try frameRead(listenerFD, expectedSequence: inSequence, owner: ownerID, child: childID)
+        let frame = try frameRead(listenerFD, expectedSequence: inSequence, owner: ownerID, child: childID,
+                                  protocolName: protocolName, version: version)
         guard inSequence < maxSequence else { throw PhoneRemoteAuthorityError.invalidFrame }
         inSequence += 1
         return (frame["kind"] as! String, frame["correlation_id"] as! String, frame["payload"] as! [String: Any])
@@ -392,7 +406,8 @@ public final class PhoneRemoteAuthorityOwner {
         switch kind {
         case "child.grant.acquire":
             guard Set(p.keys) == ["operation"], let op = p["operation"] as? String,
-                  ["store.open", "store.read", "session.login", "session.signout", "authority.mutate", "ticket.issue", "ticket.consume"].contains(op)
+                  (["store.open", "store.read", "session.login", "session.signout", "authority.mutate", "ticket.issue", "ticket.consume"].contains(op)
+                    || (version == 2 && ["service.authorize", "service.commit"].contains(op)))
             else { error("phase_invalid", correlation: corr); return }
             guard grant == nil else { error("owner_busy", correlation: corr); return }
             guard anchor.transition == "stable", anchor == initialAnchor else { error("authority_unavailable", correlation: corr); return }
@@ -403,6 +418,10 @@ public final class PhoneRemoteAuthorityOwner {
             guard Set(p.keys) == ["grant_id"], validGrant(p), phase == "read" || phase == "writeAdvance" || phase == "writeReadback" || phase == "stableReadback",
                   (anchor.transition == "stable" || phase != "read") else { error("phase_invalid", correlation: corr); return }
             guard (try? readTestAnchor()) == anchor else { error("anchor_corrupt", correlation: corr); return }
+            if version == 2 && (operation == "service.authorize" || operation == "service.commit") {
+                guard phase == "read", !verifiedRead else { error("phase_invalid", correlation: corr); return }
+                phase = "serviceRelease"
+            }
             verifiedRead = true
             if phase == "writeReadback" { phase = "writeAdvance" }
             if phase == "stableReadback" { phase = "release" }
@@ -429,13 +448,16 @@ public final class PhoneRemoteAuthorityOwner {
             try send("owner.anchor.verified", ["grant_id": grant!, "state": anchor.wire], correlation: corr)
         case "child.grant.release":
             guard Set(p.keys) == ["grant_id"], validGrant(p), verifiedRead,
-                  (phase == "read" && anchor.transition == "stable"
-                    && ["store.open", "store.read", "session.signout", "ticket.issue", "ticket.consume"].contains(operation!)) || phase == "release" else {
+                  ((phase == "read" && anchor.transition == "stable"
+                    && ["store.open", "store.read", "session.signout", "ticket.issue", "ticket.consume"].contains(operation!))
+                    || phase == "release"
+                    || (version == 2 && phase == "serviceRelease"
+                        && ["service.authorize", "service.commit"].contains(operation!))) else {
                 error("phase_invalid", correlation: corr); return
             }
             let id = grant!; let completedOperation = operation!
             grant = nil; operation = nil; phase = "idle"; verifiedRead = false; initialAnchor = anchor
-            pauseBeforeTestReleaseAck(operation: completedOperation)
+            pauseBeforeTestReleaseAck(operation: completedOperation, occurrence: completedGrants + 1)
             try send("owner.grant.released", ["grant_id": id], correlation: corr)
             completedGrants += 1
             if expectedGrants > 0 && completedGrants == expectedGrants { try shutdownChild(correlation: corr) }
@@ -451,9 +473,11 @@ public final class PhoneRemoteAuthorityOwner {
         }
     }
 
-    private func pauseBeforeTestReleaseAck(operation: String) {
+    private func pauseBeforeTestReleaseAck(operation: String, occurrence: Int) {
         let target = ProcessInfo.processInfo.environment["PHONE_REMOTE_AUTHORITY_PAUSE_RELEASE"]
         guard target == operation,
+              (ProcessInfo.processInfo.environment["PHONE_REMOTE_AUTHORITY_PAUSE_RELEASE_OCCURRENCE"] == nil
+                || Int(ProcessInfo.processInfo.environment["PHONE_REMOTE_AUTHORITY_PAUSE_RELEASE_OCCURRENCE"]!) == occurrence),
               let entered = ProcessInfo.processInfo.environment["PHONE_REMOTE_AUTHORITY_ENTERED_FILE"],
               let release = ProcessInfo.processInfo.environment["PHONE_REMOTE_AUTHORITY_RELEASE_FILE"] else { return }
         try? Data("before-ack".utf8).write(to: URL(fileURLWithPath: entered), options: .atomic)

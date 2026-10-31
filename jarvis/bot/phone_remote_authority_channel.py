@@ -23,12 +23,15 @@ from jarvis.bot.phone_admission_store import (
     AUTHORITY_TABLES,
     AnchorState,
     PhoneAdmissionStore,
+    StoreDenied,
     StoreUnavailable,
 )
 
 
 PROTOCOL = "mortimer.phone-authority-channel.v1"
 VERSION = 1
+PROTOCOL_V2 = "mortimer.phone-authority-channel.v2"
+VERSION_V2 = 2
 MAX_FRAME_BYTES = 65_536
 MAX_SEQUENCE = (1 << 64) - 1
 FRAME_FIELDS = frozenset({
@@ -174,6 +177,11 @@ def _state_from_wire(value: object, *, allow_pending: bool = True) -> AnchorStat
 class NativeProtectedAnchor:
     """Implements the store's injected ProtectedAnchor over inherited FD 3."""
 
+    protocol = PROTOCOL
+    version = VERSION
+    operations = OPERATIONS
+    service_authority = False
+
     def __init__(self, channel: socket.socket) -> None:
         if type(channel) is not socket.socket:
             raise TypeError("a connected socket is required")
@@ -244,7 +252,7 @@ class NativeProtectedAnchor:
             frame = decode_frame_payload(self._read_exact(size))
             if frame.keys() != FRAME_FIELDS:
                 raise ChannelProtocolError("invalid frame envelope")
-            if frame["protocol"] != PROTOCOL or not _exact_int(frame["version"], VERSION, VERSION):
+            if frame["protocol"] != self.protocol or not _exact_int(frame["version"], self.version, self.version):
                 raise ChannelProtocolError("unsupported protocol")
             if (type(frame["kind"]) is not str or not frame["kind"]
                     or not _canonical_uuid(frame["owner_incarnation"])
@@ -279,8 +287,8 @@ class NativeProtectedAnchor:
             self.close()
             raise ChannelProtocolError("invalid correlation id")
         frame = {
-            "protocol": PROTOCOL,
-            "version": VERSION,
+            "protocol": self.protocol,
+            "version": self.version,
             "kind": kind,
             "owner_incarnation": self._owner_incarnation,
             "child_incarnation": self._child_incarnation,
@@ -324,8 +332,8 @@ class NativeProtectedAnchor:
         return response["payload"]
 
     @contextlib.contextmanager
-    def _operation_context(self, operation: str):
-        if operation not in OPERATIONS:
+    def _operation_context(self, operation: str, *, method: str | None = None):
+        if operation not in self.operations:
             raise StoreUnavailable("unsupported store operation")
         if not self._scope_lock.acquire(blocking=False):
             raise StoreUnavailable("concurrent or nested store operation")
@@ -333,21 +341,32 @@ class NativeProtectedAnchor:
             self._scope_lock.release()
             raise StoreUnavailable("nested store operation")
         self._scope_local.operation = operation
+        self._scope_local.method = method
         self._scope_local.thread_id = threading.get_ident()
         self._scope_local.grant_count = 0
+        self._scope_local.allow_zero_grant_false = False
         try:
             yield
-            if self._scope_local.grant_count != 1:
+            valid_zero_grant_false = (
+                self.service_authority
+                and operation == "service.authorize"
+                and method == "binding_current"
+                and self._scope_local.allow_zero_grant_false is True
+                and self._scope_local.grant_count == 0
+            )
+            if self._scope_local.grant_count != 1 and not valid_zero_grant_false:
                 raise StoreUnavailable("store method did not use exactly one authority grant")
         finally:
             self._scope_local.operation = None
+            self._scope_local.method = None
             self._scope_local.thread_id = None
+            self._scope_local.allow_zero_grant_false = False
             self._scope_lock.release()
 
     @contextlib.contextmanager
     def exclusive(self):
         operation = getattr(self._scope_local, "operation", None)
-        if (operation not in OPERATIONS or self._grant_id is not None
+        if (operation not in self.operations or self._grant_id is not None
                 or getattr(self._scope_local, "grant_count", 0) != 0):
             raise StoreUnavailable("explicit store operation context required")
         payload = self._request("child.grant.acquire", {"operation": operation}, "owner.grant.acquired")
@@ -364,6 +383,27 @@ class NativeProtectedAnchor:
         self._anchor_state = None
         try:
             yield
+        except StoreDenied:
+            if (not self.service_authority
+                    or getattr(self._scope_local, "operation", None) != "service.authorize"
+                    or getattr(self._scope_local, "method", None) not in {"current_binding", "binding_current"}
+                    or not self._grant_read_verified or self._closed):
+                if not self._abort_grant():
+                    raise StoreUnavailable("authority operation outcome is unknown")
+                raise
+            grant_id = self._grant_id
+            try:
+                payload = self._request("child.grant.release", {"grant_id": grant_id}, "owner.grant.released")
+                if payload != {"grant_id": grant_id}:
+                    raise ChannelProtocolError("invalid release acknowledgment")
+                self._grant_id = self._grant_operation = None
+                self._grant_owner_thread = None
+                self._grant_read_verified = False
+                self._anchor_state = None
+            except BaseException as exc:
+                self.close()
+                raise StoreUnavailable("authority operation outcome is unknown") from exc
+            raise
         except BaseException as original:
             if not self._abort_grant():
                 raise StoreUnavailable("authority operation outcome is unknown") from original
@@ -490,7 +530,7 @@ class NativeProtectedAnchor:
     def _require_operation_context(self) -> str:
         operation = getattr(self._scope_local, "operation", None)
         thread_id = threading.get_ident()
-        if (operation not in OPERATIONS
+        if (operation not in self.operations
                 or getattr(self._scope_local, "thread_id", None) != thread_id
                 or not self._scope_lock.locked()):
             raise StoreUnavailable("active store operation context required")
@@ -516,6 +556,31 @@ class NativeProtectedAnchor:
         except OSError:
             pass
 
+    @property
+    def is_closed(self) -> bool:
+        """Expose terminal channel state to the owning process coordinator."""
+        return self._closed
+
+
+class NativeProtectedAnchorV2(NativeProtectedAnchor):
+    """Strict v2 authority channel used by the offline service composition."""
+    protocol = PROTOCOL_V2
+    version = VERSION_V2
+    operations = OPERATIONS | frozenset({"service.authorize", "service.commit"})
+    service_authority = True
+
+    @contextlib.contextmanager
+    def service_commit(self):
+        with self._operation_context("service.commit", method="serialized_authority"):
+            yield
+
+    @contextlib.contextmanager
+    def service_authorize(self, method: str):
+        if method not in {"current_binding", "binding_current"}:
+            raise StoreUnavailable("service authorization method is not allowlisted")
+        with self._operation_context("service.authorize", method=method):
+            yield
+
 
 _METHOD_OPERATIONS = {
     "store.read": frozenset({"status"}),
@@ -533,7 +598,7 @@ _METHOD_OPERATIONS = {
 def open_store(factory: Callable[..., PhoneAdmissionStore], *args: Any,
                anchor: NativeProtectedAnchor, **kwargs: Any) -> PhoneAdmissionStore:
     """Construct exactly the existing store inside the `store.open` grant."""
-    if (factory is not PhoneAdmissionStore or type(anchor) is not NativeProtectedAnchor
+    if (factory is not PhoneAdmissionStore or type(anchor) not in {NativeProtectedAnchor, NativeProtectedAnchorV2}
             or len(args) != 1 or type(args[0]) is not sqlite3.Connection
             or set(kwargs) - {"failpoint", "process_epoch"} or args[0].in_transaction):
         raise StoreUnavailable("unsupported store construction")
@@ -558,13 +623,24 @@ def run_store_operation(operation: str, method: Callable[..., Any], *args: Any,
     method_owner = method.__self__
     method_function = method.__func__
     class_function = getattr(PhoneAdmissionStore, method_name, None)
-    if (operation not in _METHOD_OPERATIONS
-            or method_name not in _METHOD_OPERATIONS[operation]
+    v2 = type(anchor) is NativeProtectedAnchorV2
+    method_map = dict(_METHOD_OPERATIONS)
+    if v2:
+        method_map["service.authorize"] = frozenset({"current_binding", "binding_current"})
+        method_map["service.commit"] = frozenset()
+    if (operation not in method_map
+            or method_name not in method_map[operation]
             or type(method_owner) is not PhoneAdmissionStore
             or method_function is not class_function
-            or type(anchor) is not NativeProtectedAnchor
+            or type(anchor) not in {NativeProtectedAnchor, NativeProtectedAnchorV2}
             or method_owner.anchor is not anchor):
         raise StoreUnavailable("store method does not match operation")
-    with anchor._operation_context(operation):
+    with anchor._operation_context(operation, method=method_name if v2 else None):
         result = method(*args, **kwargs)
+        if (v2 and operation == "service.authorize" and method_name == "binding_current"
+                and result is False):
+            # This exact store method can reject malformed immutable bindings
+            # before opening its authority guard. No other zero-grant result is
+            # accepted by the v2 operation context.
+            anchor._scope_local.allow_zero_grant_false = True
     return result
