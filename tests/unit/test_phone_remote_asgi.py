@@ -694,7 +694,7 @@ class PhoneRemoteASGITests(unittest.TestCase):
             ("voice.offer", {"sdp": "offer"}),
             ("voice.update", {"peer_id": "peer-a", "sdp": "offer"}),
             ("voice.end", {"peer_id": "peer-a"}),
-            ("results.snapshot", {}), ("results.resume", {}),
+            ("results.snapshot", {}), ("results.resume", {"cursor": "A" * 43}),
             ("call.state", {}), ("call.answer", {}), ("call.decline", {}),
         ]
         for index, (operation, payload) in enumerate(cases):
@@ -723,6 +723,23 @@ class PhoneRemoteASGITests(unittest.TestCase):
                         "request_id": f"req-{index}", "status": "unavailable",
                         "reason": "operation_unavailable", "payload": {},
                     })
+
+    def test_results_resume_without_cursor_is_rejected_before_service_dispatch(self):
+        service = RecordingService()
+        raw = envelope("results.resume", {}, request_id="missing-cursor")
+
+        sent = self.invoke(PhoneRemoteASGI(
+            service, lambda _scope, _request: self.context, enabled=True), [
+                {"type": "websocket.connect"},
+                {"type": "websocket.receive", "text": raw},
+                {"type": "websocket.disconnect", "code": 1000},
+            ])
+
+        self.assertEqual(service.calls, [])
+        self.assertEqual(self.sent_text(sent), [{
+            "request_id": "missing-cursor", "status": "denied",
+            "reason": "malformed_request", "payload": {},
+        }])
 
     def test_request_ticket_context_cannot_change_authenticated_binding(self):
         service = RecordingService()
@@ -877,3 +894,47 @@ class PhoneRemoteASGITests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PhoneCardASGITests(unittest.TestCase):
+    def test_checked_card_wire_uses_only_trusted_context_and_rejects_identity_smuggling(self):
+        from tests.unit.test_phone_remote_result_commands import CardFixture, wire
+        fixture=CardFixture();self.addCleanup(fixture.close);fixture.sync()
+        calls=[]
+        def provider(scope,request):
+            calls.append(None if request is None else request['operation']);return fixture.context
+        app=PhoneRemoteASGI(fixture.service,provider,enabled=True)
+        messages=[{'type':'websocket.connect'},
+            {'type':'websocket.receive','text':wire('results.pin',fixture.target(),'pin')},
+            {'type':'websocket.receive','text':wire('results.close',{**fixture.target(),'owner_id':'b'},'forged')},
+            {'type':'websocket.disconnect','code':1000}]
+        sent=[]
+        async def receive():return messages.pop(0)
+        async def send(message):sent.append(message)
+        asyncio.run(app({'type':'websocket','path':ASGI_PATH},receive,send))
+        replies=[json.loads(m['text']) for m in sent if m['type']=='websocket.send']
+        self.assertEqual([r['reason'] for r in replies],['none','malformed_request'])
+        self.assertTrue(replies[0]['payload']['cards'][0]['pinned'])
+        self.assertEqual(calls,[None])  # non-voice requests use the admitted connection binding
+
+
+class ProofASGIConstructionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_unprepared_host_truthy_flags_and_spoofed_scope_never_call_provider(self):
+        from jarvis.bot.phone_remote_asgi import create_phone_remote_connection_asgi
+        from jarvis.bot.phone_remote_service import _AuthorityChildServiceHost
+        for host in (None,object(),object.__new__(_AuthorityChildServiceHost)):
+            for enabled in (False,True,1,'true'):
+                sent=[]
+                async def receive():raise AssertionError('unprepared adapter consumed transport')
+                async def send(event):sent.append(event)
+                await create_phone_remote_connection_asgi(host,enabled=enabled)(
+                    {'type':'websocket','path':ASGI_PATH,'state':{'trusted_context':object()}},receive,send)
+                self.assertEqual(sent,[{'type':'websocket.close','code':1008}])
+
+    async def test_proof_factory_http_is_unmounted_and_has_no_context_provider_parameter(self):
+        from jarvis.bot.phone_remote_asgi import create_phone_remote_connection_asgi
+        with self.assertRaises(TypeError):create_phone_remote_connection_asgi(context_provider=lambda:object())
+        sent=[]
+        async def receive():raise AssertionError('HTTP input consumed')
+        async def send(event):sent.append(event)
+        await create_phone_remote_connection_asgi()({'type':'http','path':ASGI_PATH},receive,send)
+        self.assertEqual(sent[0]['status'],404)

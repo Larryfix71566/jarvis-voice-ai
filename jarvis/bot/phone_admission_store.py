@@ -8,6 +8,7 @@ No credentials, private keys, listeners, routes, or provider state live here.
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import sqlite3
 import threading
@@ -20,6 +21,15 @@ from jarvis.auth import ClientIdentity
 
 
 SCHEMA_VERSION = 1
+SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2})
+RESTORE_RECEIPT_SQL = ("CREATE TABLE phone_remote_restore_receipt("
+                       "singleton_id INTEGER PRIMARY KEY CHECK(singleton_id=1),"
+                       "operation_id TEXT NOT NULL,host_id TEXT NOT NULL CHECK(length(host_id)>0),"
+                       "target_generation INTEGER NOT NULL CHECK(target_generation>0),"
+                       "manifest_sha256 TEXT NOT NULL CHECK(length(manifest_sha256)=64),"
+                       "checkpoint_sha256 TEXT NOT NULL CHECK(length(checkpoint_sha256)=64),"
+                       "authority_sha256 TEXT NOT NULL CHECK(length(authority_sha256)=64),"
+                       "receipt_version INTEGER NOT NULL CHECK(receipt_version=1))")
 ALLOWED_SCOPES = frozenset({"read", "voice", "action", "calls"})
 OFFER_TTL_S = 30.0
 AUTHORITY_TABLES = frozenset({"phone_remote_meta", "phone_remote_devices",
@@ -111,6 +121,20 @@ class SessionBinding:
     session_generation: int
     process_epoch: str
     scopes: frozenset[str]
+
+
+@dataclass(frozen=True)
+class LoginChallengeContext:
+    """Current enrolled proof context returned only under a stable read grant."""
+    owner_id: str
+    device_id: str
+    grant_id: str
+    public_key: bytes
+    key_algorithm: str
+    grant_generation: int
+    scopes: frozenset[str]
+    host_id: str
+    host_generation: int
 
 
 class ProtectedAnchor(Protocol):
@@ -273,7 +297,8 @@ class PhoneAdmissionStore:
                 self._validate_anchor(anchor)
                 self.db.execute("INSERT INTO phone_remote_meta VALUES(1,?,?,?,NULL,'stable')",
                                 (SCHEMA_VERSION, anchor.host_id, anchor.host_generation))
-            elif (meta["schema_version"] != SCHEMA_VERSION
+            elif (type(meta["schema_version"]) is not int
+                  or meta["schema_version"] not in SUPPORTED_SCHEMA_VERSIONS
                   or meta["transition_state"] != "stable"
                   or meta["transition_id"] is not None):
                 raise StoreUnavailable("unsupported or pending store schema")
@@ -290,7 +315,8 @@ class PhoneAdmissionStore:
         if (row is None or anchor.transition_state != "stable" or anchor.transition_id is not None
                 or row["transition_state"] != "stable"
                 or row["transition_id"] is not None
-                or row["schema_version"] != SCHEMA_VERSION
+                or type(row["schema_version"]) is not int
+                or row["schema_version"] not in SUPPORTED_SCHEMA_VERSIONS
                 or row["host_id"] != anchor.host_id
                 or row["host_generation"] != anchor.host_generation):
             raise StoreUnavailable("anchor and database are not a stable matching pair")
@@ -316,11 +342,29 @@ class PhoneAdmissionStore:
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
         present = names & AUTHORITY_TABLES
         if not present:
+            if self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                               ("phone_remote_restore_receipt",)).fetchone() is not None:
+                raise StoreUnavailable("restore receipt exists without authority metadata")
             if allow_empty:
                 return
             raise StoreUnavailable("authority schema is incomplete")
         if present != AUTHORITY_TABLES:
             raise StoreUnavailable("partial authority schema; no repair/bootstrap")
+        meta = self.db.execute("SELECT schema_version FROM phone_remote_meta WHERE singleton_id=1").fetchone()
+        if meta is not None and type(meta[0]) is int and meta[0] in SUPPORTED_SCHEMA_VERSIONS:
+            receipt = self.db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+                                      ("phone_remote_restore_receipt",)).fetchone()
+            if meta[0] == 1 and receipt is not None:
+                raise StoreUnavailable("restore receipt table requires schema version 2")
+            if meta[0] == 2 and (receipt is None
+                    or self._normalize_ddl(receipt[0]) != self._normalize_ddl(RESTORE_RECEIPT_SQL)):
+                raise StoreUnavailable("schema-v2 restore receipt is missing or malformed")
+        elif meta is not None:
+            raise StoreUnavailable("authority schema version is unsupported")
+        unexpected_phone_tables = {name for name in names if name.startswith("phone_remote_")} \
+            - AUTHORITY_TABLES - {"phone_remote_restore_receipt"}
+        if unexpected_phone_tables:
+            raise StoreUnavailable("unexpected phone authority table")
         for table, expected in AUTHORITY_COLUMNS.items():
             actual = {row[1] for row in self.db.execute(f"PRAGMA table_info({table})")}
             if actual != expected:
@@ -330,8 +374,9 @@ class PhoneAdmissionStore:
             if row is None or self._normalize_ddl(row[0]) != self._normalize_ddl(SCHEMA_SQL[table]):
                 raise StoreUnavailable("authority table constraints differ from canonical schema")
         altered = self.db.execute("""SELECT 1 FROM sqlite_master
-            WHERE tbl_name IN (?,?,?,?) AND type IN ('trigger','index')
-              AND name NOT LIKE 'sqlite_autoindex_%' LIMIT 1""", tuple(AUTHORITY_TABLES)).fetchone()
+            WHERE tbl_name IN (?,?,?,?,?) AND type IN ('trigger','index')
+              AND name NOT LIKE 'sqlite_autoindex_%' LIMIT 1""",
+            (*AUTHORITY_TABLES, "phone_remote_restore_receipt")).fetchone()
         if altered is not None:
             raise StoreUnavailable("unexpected authority trigger or index")
         if self.db.execute("PRAGMA foreign_key_check").fetchone() is not None:
@@ -467,6 +512,59 @@ class PhoneAdmissionStore:
                 "UPDATE phone_remote_devices SET public_key=?,key_algorithm=? WHERE device_id=?",
                 (public_key, key_algorithm, device_id)), "credential_replace")
 
+    def _login_transition_locked(self, *, session_id: str, grant_id: str, owner_id: str,
+                                 now: float, expires_at: float, anchor: AnchorState) -> str:
+        """Shared protected-counter/SQLite/final-anchor transition; guard is held."""
+        grant = self.db.execute("""SELECT g.*,d.owner_id AS device_owner,d.revoked_at AS device_revoked
+            FROM phone_remote_grants g JOIN phone_remote_devices d USING(device_id)
+            WHERE g.grant_id=?""", (grant_id,)).fetchone()
+        if (grant is None or grant["owner_id"] != owner_id or grant["device_owner"] != owner_id
+                or grant["revoked_at"] is not None or grant["device_revoked"] is not None):
+            raise StoreDenied("grant unavailable")
+        if self._valid_scopes(grant["scopes_json"]) is None:
+            raise StoreDenied("grant scope data is invalid")
+        previous = self.db.execute("SELECT revoked_at FROM phone_remote_sessions WHERE session_id=?",
+                                   (session_id,)).fetchone()
+        if previous is not None and previous["revoked_at"] is None:
+            old = self.db.execute("SELECT login_incarnation FROM phone_remote_sessions WHERE session_id=?",
+                                  (session_id,)).fetchone()[0]
+            if self._admission_key(session_id, old) in _PROCESS_ADMISSIONS:
+                raise StoreDenied("session already admitted in this process")
+        counter = anchor.login_counter + 1
+        incarnation = f"{anchor.host_id}:{anchor.host_generation}:{counter}"
+        pending = AnchorState(anchor.anchor_version, anchor.host_id, anchor.host_generation,
+                              f"login:{uuid.uuid4().hex}", "pending", counter)
+        self._hit("login_before_anchor_reservation")
+        self._write_anchor(pending)
+        self._hit("login_anchor_reserved")
+        try:
+            with self.db:
+                self._check_transition(pending)
+                previous = self.db.execute("SELECT * FROM phone_remote_sessions WHERE session_id=?",
+                                           (session_id,)).fetchone()
+                if previous is None:
+                    self.db.execute("INSERT INTO phone_remote_sessions VALUES(?,?,?,?,?,?,?,?,NULL)",
+                                    (session_id, anchor.host_id, grant_id, owner_id, incarnation,
+                                     anchor.host_generation, 1, expires_at))
+                else:
+                    self.db.execute("""UPDATE phone_remote_sessions SET host_id=?,grant_id=?,owner_id=?,
+                        login_incarnation=?,host_generation=?,session_generation=?,expires_at=?,revoked_at=NULL
+                        WHERE session_id=?""", (anchor.host_id, grant_id, owner_id, incarnation,
+                        anchor.host_generation, previous["session_generation"] + 1, expires_at, session_id))
+                self._hit("login_before_db_commit")
+            self._hit("login_db_committed")
+            stable = AnchorState(anchor.anchor_version, anchor.host_id, anchor.host_generation,
+                                 None, "stable", counter)
+            self._hit("login_before_anchor_finalize")
+            self._write_anchor(stable)
+            self._hit("login_anchor_finalized")
+            self._drop_admissions(session_id)
+            _PROCESS_ADMISSIONS.add(self._admission_key(session_id, incarnation))
+        except Exception:
+            # A pending anchor permanently blocks use until trusted recovery.
+            raise
+        return incarnation
+
     def login(self, *, identity: ClientIdentity, session_id: str, grant_id: str, owner_id: str,
               now: float, expires_at: float) -> str:
         session_id = self._text(session_id, "session_id")
@@ -478,55 +576,72 @@ class PhoneAdmissionStore:
             raise StoreDenied("invalid session lifetime")
         with self._authority_guard():
             anchor = self._check_pair()
-            grant = self.db.execute("""SELECT g.*,d.owner_id AS device_owner,d.revoked_at AS device_revoked
-                FROM phone_remote_grants g JOIN phone_remote_devices d USING(device_id)
-                WHERE g.grant_id=?""", (grant_id,)).fetchone()
-            if (grant is None or grant["owner_id"] != owner_id or grant["device_owner"] != owner_id
-                    or grant["revoked_at"] is not None or grant["device_revoked"] is not None):
-                raise StoreDenied("grant unavailable")
-            if self._valid_scopes(grant["scopes_json"]) is None:
-                raise StoreDenied("grant scope data is invalid")
-            previous = self.db.execute("SELECT revoked_at FROM phone_remote_sessions WHERE session_id=?",
-                                       (session_id,)).fetchone()
-            if previous is not None and previous["revoked_at"] is None:
-                old = self.db.execute("SELECT login_incarnation FROM phone_remote_sessions WHERE session_id=?",
-                                      (session_id,)).fetchone()[0]
-                if self._admission_key(session_id, old) in _PROCESS_ADMISSIONS:
-                    raise StoreDenied("session already admitted in this process")
-            counter = anchor.login_counter + 1
-            incarnation = f"{anchor.host_id}:{anchor.host_generation}:{counter}"
-            pending = AnchorState(anchor.anchor_version, anchor.host_id, anchor.host_generation,
-                                  f"login:{uuid.uuid4().hex}", "pending", counter)
-            self._hit("login_before_anchor_reservation")
-            self._write_anchor(pending)
-            self._hit("login_anchor_reserved")
-            try:
-                with self.db:
-                    self._check_transition(pending)
-                    previous = self.db.execute("SELECT * FROM phone_remote_sessions WHERE session_id=?",
-                                               (session_id,)).fetchone()
-                    if previous is None:
-                        self.db.execute("INSERT INTO phone_remote_sessions VALUES(?,?,?,?,?,?,?,?,NULL)",
-                                        (session_id, anchor.host_id, grant_id, owner_id, incarnation,
-                                         anchor.host_generation, 1, expires_at))
-                    else:
-                        self.db.execute("""UPDATE phone_remote_sessions SET host_id=?,grant_id=?,owner_id=?,
-                            login_incarnation=?,host_generation=?,session_generation=?,expires_at=?,revoked_at=NULL
-                            WHERE session_id=?""", (anchor.host_id, grant_id, owner_id, incarnation,
-                            anchor.host_generation, previous["session_generation"] + 1, expires_at, session_id))
-                    self._hit("login_before_db_commit")
-                self._hit("login_db_committed")
-                stable = AnchorState(anchor.anchor_version, anchor.host_id, anchor.host_generation,
-                                     None, "stable", counter)
-                self._hit("login_before_anchor_finalize")
-                self._write_anchor(stable)
-                self._hit("login_anchor_finalized")
-                self._drop_admissions(session_id)
-                _PROCESS_ADMISSIONS.add(self._admission_key(session_id, incarnation))
-            except Exception:
-                # A pending anchor permanently blocks use until trusted recovery.
-                raise
-            return incarnation
+            return self._login_transition_locked(session_id=session_id, grant_id=grant_id,
+                owner_id=owner_id, now=now, expires_at=expires_at, anchor=anchor)
+
+    def login_challenge_context(self, *, device_id: str, grant_id: str) -> LoginChallengeContext:
+        """Resolve a live proof key only inside the v3 stable challenge read."""
+        device_id = self._text(device_id, "device_id")
+        grant_id = self._text(grant_id, "grant_id")
+        with self._authority_guard():
+            anchor = self._check_pair()
+            row = self.db.execute("""SELECT d.device_id,d.owner_id,d.public_key,d.key_algorithm,d.revoked_at AS dr,
+                    g.grant_id,g.owner_id AS grant_owner,g.scopes_json,g.grant_generation,g.revoked_at AS gr
+                FROM phone_remote_devices d JOIN phone_remote_grants g USING(device_id,owner_id)
+                WHERE d.device_id=? AND g.grant_id=?""", (device_id, grant_id)).fetchone()
+            scopes = self._valid_scopes(row["scopes_json"]) if row else None
+            if (row is None or not scopes or row["dr"] is not None or row["gr"] is not None
+                    or row["owner_id"] != row["grant_owner"]):
+                raise StoreDenied("login challenge unavailable")
+            if type(row["public_key"]) is not bytes or not row["public_key"]:
+                raise StoreUnavailable("enrolled key data is malformed")
+            return LoginChallengeContext(row["owner_id"], row["device_id"], row["grant_id"],
+                row["public_key"], row["key_algorithm"], row["grant_generation"],
+                frozenset(scopes), anchor.host_id, anchor.host_generation)
+
+    def login_proof(self, *, identity: ClientIdentity, session_id: str, device_id: str,
+                    grant_id: str, owner_id: str, expected_host_id: str,
+                    expected_host_generation: int, expected_grant_generation: int,
+                    expected_key_algorithm: str, expected_key_fingerprint: str,
+                    challenge_expires_at_ms: int, monotonic_deadline_ms: int,
+                    now_ms: int, monotonic_now_ms: int, expires_at_ms: int) -> str:
+        """Create one session only after v3 proof context is revalidated pre-mutation."""
+        session_id = self._text(session_id, "session_id")
+        device_id = self._text(device_id, "device_id")
+        grant_id = self._text(grant_id, "grant_id")
+        owner_id = self._text(owner_id, "owner_id")
+        expected_host_id = self._text(expected_host_id, "expected_host_id")
+        expected_key_algorithm = self._text(expected_key_algorithm, "key_algorithm")
+        expected_key_fingerprint = self._text(expected_key_fingerprint, "key_fingerprint")
+        numeric = (expected_host_generation, expected_grant_generation, challenge_expires_at_ms,
+                   monotonic_deadline_ms, now_ms, monotonic_now_ms, expires_at_ms)
+        if any(type(value) is not int or value < 0 for value in numeric) or expires_at_ms <= now_ms:
+            raise StoreDenied("invalid login proof context")
+        with self._authority_guard():
+            anchor = self._check_pair()
+            self._verified_owner(identity, owner_id)
+            row = self.db.execute("""SELECT d.owner_id,d.public_key,d.key_algorithm,d.revoked_at AS dr,
+                    g.owner_id AS grant_owner,g.grant_generation,g.scopes_json,g.revoked_at AS gr
+                FROM phone_remote_devices d JOIN phone_remote_grants g USING(device_id,owner_id)
+                WHERE d.device_id=? AND g.grant_id=?""", (device_id, grant_id)).fetchone()
+            scopes = self._valid_scopes(row["scopes_json"]) if row else None
+            if (row is None or not scopes or row["dr"] is not None or row["gr"] is not None
+                    or row["owner_id"] != owner_id or row["grant_owner"] != owner_id
+                    or row["grant_generation"] != expected_grant_generation
+                    or row["key_algorithm"] != expected_key_algorithm
+                    or type(row["public_key"]) is not bytes
+                    or hashlib.sha256(row["public_key"]).hexdigest() != expected_key_fingerprint
+                    or anchor.host_id != expected_host_id
+                    or anchor.host_generation != expected_host_generation):
+                raise StoreDenied("login proof context unavailable")
+            # This check is deliberately after _check_pair() and before the
+            # first pending-anchor write. V3 can acknowledge this known denial
+            # without fencing unrelated sessions.
+            if now_ms >= challenge_expires_at_ms or monotonic_now_ms >= monotonic_deadline_ms:
+                raise StoreDenied("login challenge expired")
+            return self._login_transition_locked(session_id=session_id, grant_id=grant_id,
+                owner_id=owner_id, now=now_ms / 1000.0, expires_at=expires_at_ms / 1000.0,
+                anchor=anchor)
 
     def issue_ticket(self, *, identity: ClientIdentity, ticket_id: str, session_id: str, owner_id: str,
                      purpose: str, payload_digest: str, now: float, expires_at: float,
@@ -720,6 +835,44 @@ class PhoneAdmissionStore:
         with self._authority_guard():
             return self._global_security_transition(lambda: None, "generation")
 
+    def prepare_restore(self, *, expected_host_id: str, expected_generation: int) -> dict[str, object]:
+        """Permanently fence this disposable authority before a supported restore.
+
+        This is deliberately a prepare-only transition. It does not replace or
+        reconcile SQLite, and it never finalizes the protected anchor. A later
+        process must therefore refuse normal admission until a separately
+        reviewed recovery path exists.
+        """
+        expected_host_id = self._text(expected_host_id, "expected_host_id")
+        if type(expected_generation) is not int or expected_generation < 1:
+            raise StoreDenied("restore target unavailable")
+        with self._authority_guard():
+            old = self._check_pair()
+            if (old.host_id != expected_host_id
+                    or old.host_generation != expected_generation):
+                raise StoreDenied("restore target unavailable")
+            if old.host_generation >= (1 << 64) - 1:
+                raise StoreUnavailable("restore generation is exhausted")
+            # The restore operation identifier is a canonical UUID shared by
+            # the durable transition and the private owner/child protocol.
+            transition = str(uuid.uuid4())
+            generation = old.host_generation + 1
+            pending = AnchorState(old.anchor_version, old.host_id, generation,
+                                  transition, "pending", old.login_counter)
+            self._hit("restore_before_anchor_pending")
+            self._write_anchor(pending)
+            self._hit("restore_anchor_pending")
+            with self.db:
+                self.db.execute("UPDATE phone_remote_meta SET host_generation=?,transition_id=?,transition_state='pending' WHERE singleton_id=1",
+                                (generation, transition))
+                self.db.execute("UPDATE phone_remote_sessions SET revoked_at=COALESCE(revoked_at,0),session_generation=session_generation+1 WHERE revoked_at IS NULL")
+                self._hit("restore_before_db_commit")
+            self._hit("restore_db_pending")
+            self._tickets.clear()
+            self._drop_admissions()
+            return {"host_id": old.host_id, "host_generation": generation,
+                    "transition_id": transition, "transition_state": "pending"}
+
     def _check_transition(self, anchor: AnchorState) -> None:
         current = self.anchor.read()
         if current != anchor:
@@ -814,6 +967,7 @@ class PhoneAdmissionStore:
         """Non-sensitive synthetic status; no record inventory is exposed."""
         with self._authority_guard():
             anchor = self._check_pair()
-            return {"schema_version": SCHEMA_VERSION,
+            row = self.db.execute("SELECT schema_version FROM phone_remote_meta WHERE singleton_id=1").fetchone()
+            return {"schema_version": row["schema_version"],
                     "host_generation": anchor.host_generation,
                     "login_counter": anchor.login_counter}

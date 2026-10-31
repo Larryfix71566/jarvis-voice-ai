@@ -3,27 +3,23 @@ import XCTest
 @testable import MortimerPhoneCore
 
 private actor ControlledByteTransport: PhoneRemoteByteTransport {
-    private struct StartWaiter {
-        let index: Int
-        let continuation: CheckedContinuation<Data, Never>
-    }
     private var requests: [Data] = []
     private var responseWaiter: CheckedContinuation<Data, Error>?
-    private var startWaiters: [StartWaiter] = []
 
     func exchange(_ request: Data) async throws -> Data {
         requests.append(request)
-        let ready = startWaiters.filter { $0.index < requests.count }
-        startWaiters.removeAll { $0.index < requests.count }
-        for waiter in ready { waiter.continuation.resume(returning: requests[waiter.index]) }
         return try await withCheckedThrowingContinuation { continuation in
             responseWaiter = continuation
         }
     }
 
-    func waitForRequest(after index: Int = 0) async -> Data {
-        if requests.count > index { return requests[index] }
-        return await withCheckedContinuation { startWaiters.append(StartWaiter(index: index, continuation: $0)) }
+    func waitForRequest(after index: Int = 0) async throws -> Data {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while requests.count <= index {
+            guard ContinuousClock.now < deadline else { throw DispatchWaitError.timeout }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        return requests[index]
     }
 
     func requestCount() -> Int { requests.count }
@@ -35,7 +31,26 @@ private actor ControlledByteTransport: PhoneRemoteByteTransport {
     }
 }
 
+private enum DispatchWaitError: Error { case timeout }
+
 final class PhoneRemoteOperationsClientTests: XCTestCase {
+    func testAllCardActionsUseOneCheckedExchangeAndCancellationDrain() async throws {
+        let view = cardViewFixture()
+        for action in PhoneResultCardAction.allCases {
+            let transport = ControlledByteTransport()
+            let client = PhoneRemoteOperationsClient(transport: transport)
+            let task = Task { try await client.send(.resultCard(action, view.target(for: view.cards[0].resultID)!)) }
+            let bytes = try await transport.waitForRequest()
+            let request = try PhoneRemoteOperationsJSON.decodeRequest(from: bytes)
+            XCTAssertEqual(request.operation, action.operation)
+            task.cancel()
+            do { _ = try await client.send(.resultsSnapshot); XCTFail("overlapping exchange") } catch { }
+            await transport.respond(try successResponse(for: request))
+            do { _ = try await task.value; XCTFail("cancelled card publication") } catch { }
+            let count = await transport.requestCount(); XCTAssertEqual(count, 1)
+        }
+    }
+
     func testFourOperationsCrossCheckedByteBoundary() async throws {
         for payload in [
             PhoneRemoteOperationRequest.Payload.sessionStatus,
@@ -46,7 +61,7 @@ final class PhoneRemoteOperationsClientTests: XCTestCase {
             let transport = ControlledByteTransport()
             let client = PhoneRemoteOperationsClient(transport: transport)
             let operationTask = Task { try await client.send(payload) }
-            let bytes = await transport.waitForRequest()
+            let bytes = try await transport.waitForRequest()
             let request = try PhoneRemoteOperationsJSON.decodeRequest(from: bytes)
             let response = try successResponse(for: request)
             await transport.respond(response)
@@ -58,11 +73,64 @@ final class PhoneRemoteOperationsClientTests: XCTestCase {
         }
     }
 
+    func testResultsSnapshotAndResumeCrossCheckedByteBoundary() async throws {
+        for payload in [PhoneRemoteOperationRequest.Payload.resultsSnapshot,
+                        .resultsResume(cursor: String(repeating: "A", count: 43))] {
+            let transport = ControlledByteTransport()
+            let client = PhoneRemoteOperationsClient(transport: transport)
+            let operationTask = Task { try await client.send(payload) }
+            let bytes = try await transport.waitForRequest()
+            let request = try PhoneRemoteOperationsJSON.decodeRequest(from: bytes)
+            let response = try successResponse(for: request)
+            await transport.respond(response)
+            let result = try await operationTask.value
+            XCTAssertTrue(result.requestID.utf8.elementsEqual(request.requestID.utf8))
+            XCTAssertEqual(result.operation, request.operation)
+            switch result.payload {
+            case .resultsSnapshot(let snapshot):
+                XCTAssertEqual(snapshot.items.map(\.resultID), ["00000000-0000-0000-0000-000000000101"])
+                XCTAssertEqual(snapshot.cursor.utf8.count, 43)
+            case .resultsResume(let page):
+                XCTAssertEqual(page.events.map(\.sequence), [2])
+                XCTAssertEqual(page.events.first?.item.revision, 2)
+            default:
+                XCTFail("checked results response was not decoded as results")
+            }
+            let state = await client.state
+            XCTAssertEqual(state, .ready(requestID: request.requestID))
+        }
+    }
+
+    func testCancelledResultsResumeDoesNotPublishLatePageOrReplayRequest() async throws {
+        let transport = ControlledByteTransport()
+        let client = PhoneRemoteOperationsClient(transport: transport)
+        let task = Task { try await client.send(.resultsResume(cursor: String(repeating: "B", count: 42) + "A")) }
+        let bytes = try await transport.waitForRequest()
+        task.cancel()
+        try await waitUntil {
+            let state = await client.state
+            let draining = await client.isDraining
+            return state == .reconnecting && draining
+        }
+        let request = try PhoneRemoteOperationsJSON.decodeRequest(from: bytes)
+        await transport.respond(try successResponse(for: request))
+        do {
+            _ = try await task.value
+            XCTFail("cancelled result page must not be published")
+        } catch let error as PhoneRemoteOperationsClientError {
+            XCTAssertEqual(error, .cancelled)
+        }
+        let count = await transport.requestCount()
+        let state = await client.state
+        XCTAssertEqual(count, 1)
+        XCTAssertEqual(state, .reconnecting)
+    }
+
     func testSimultaneousSendRejectsSecondWithoutDispatch() async throws {
         let transport = ControlledByteTransport()
         let client = PhoneRemoteOperationsClient(transport: transport)
         let first = Task { try await client.send(.sessionStatus) }
-        let firstBytes = await transport.waitForRequest()
+        let firstBytes = try await transport.waitForRequest()
         do {
             _ = try await client.send(.voiceOffer(sdp: "must-not-dispatch"))
             XCTFail("second exchange should be rejected")
@@ -101,7 +169,7 @@ final class PhoneRemoteOperationsClientTests: XCTestCase {
         let transport = ControlledByteTransport()
         let client = PhoneRemoteOperationsClient(transport: transport)
         let first = Task { try await client.send(.voiceOffer(sdp: "one-shot-effect")) }
-        let bytes = await transport.waitForRequest()
+        let bytes = try await transport.waitForRequest()
         first.cancel()
         try await waitUntil {
             let state = await client.state
@@ -175,7 +243,7 @@ final class PhoneRemoteOperationsClientTests: XCTestCase {
         let transport = ControlledByteTransport()
         let client = PhoneRemoteOperationsClient(transport: transport)
         let first = Task { try await client.send(.voiceUpdate(peerID: "p", sdp: "effect")) }
-        let firstBytes = await transport.waitForRequest()
+        let firstBytes = try await transport.waitForRequest()
         let interrupt = Task { await client.interrupt() }
         try await waitUntil {
             let state = await client.state
@@ -199,7 +267,7 @@ final class PhoneRemoteOperationsClientTests: XCTestCase {
         }
 
         let reconnect = Task { try await client.reconnect(.sessionStatus) }
-        let newBytes = await transport.waitForRequest(after: 1)
+        let newBytes = try await transport.waitForRequest(after: 1)
         let newRequest = try PhoneRemoteOperationsJSON.decodeRequest(from: newBytes)
         XCTAssertEqual(newRequest.operation, .sessionStatus)
         XCTAssertFalse(newRequest.requestID.utf8.elementsEqual(oldRequest.requestID.utf8))
@@ -212,7 +280,7 @@ final class PhoneRemoteOperationsClientTests: XCTestCase {
 
         await client.interrupt()
         let secondReconnect = Task { try await client.reconnect(.sessionStatus) }
-        let thirdBytes = await transport.waitForRequest(after: 2)
+        let thirdBytes = try await transport.waitForRequest(after: 2)
         let thirdRequest = try PhoneRemoteOperationsJSON.decodeRequest(from: thirdBytes)
         XCTAssertFalse(thirdRequest.requestID.utf8.elementsEqual(newRequest.requestID.utf8))
         XCTAssertEqual(thirdRequest.operation, .sessionStatus)
@@ -228,7 +296,7 @@ final class PhoneRemoteOperationsClientTests: XCTestCase {
         let transport = ControlledByteTransport()
         let client = PhoneRemoteOperationsClient(transport: transport)
         let requestTask = Task { try await client.send(.voiceEnd(peerID: "peer")) }
-        let bytes = await transport.waitForRequest()
+        let bytes = try await transport.waitForRequest()
         let close = Task { await client.close() }
         try await waitUntil {
             let state = await client.state
@@ -262,7 +330,7 @@ final class PhoneRemoteOperationsClientTests: XCTestCase {
         let transport = ControlledByteTransport()
         let client = PhoneRemoteOperationsClient(transport: transport)
         let requestTask = Task { try await client.send(.sessionStatus) }
-        _ = await transport.waitForRequest()
+        _ = try await transport.waitForRequest()
         await transport.respond(Data(#"{"request_id":"wrong","status":"ok","reason":"none","payload":{"readiness":"ready"}}"#.utf8))
         do {
             _ = try await requestTask.value
@@ -280,9 +348,9 @@ final class PhoneRemoteOperationsClientTests: XCTestCase {
         let clientA = PhoneRemoteOperationsClient(transport: transportA)
         let clientB = PhoneRemoteOperationsClient(transport: transportB)
         let taskA = Task { try await clientA.send(.sessionStatus) }
-        let bytesA = await transportA.waitForRequest()
+        let bytesA = try await transportA.waitForRequest()
         let taskB = Task { try await clientB.send(.voiceOffer(sdp: "independent")) }
-        let bytesB = await transportB.waitForRequest()
+        let bytesB = try await transportB.waitForRequest()
         let requestA = try PhoneRemoteOperationsJSON.decodeRequest(from: bytesA)
         let requestB = try PhoneRemoteOperationsJSON.decodeRequest(from: bytesB)
         await transportB.respond(try successResponse(for: requestB))
@@ -302,6 +370,27 @@ final class PhoneRemoteOperationsClientTests: XCTestCase {
         case .voiceOffer: payload = .voiceOffer(peerID: "peer-canary", sdp: "answer-canary")
         case .voiceUpdate: payload = .voiceUpdate(peerID: "peer-canary", sdp: "answer-canary")
         case .voiceEnd: payload = .voiceEnd(peerID: "peer-canary", ended: true)
+        case .resultsSnapshot:
+            let item = PhoneRemoteResultItem(resultID: "00000000-0000-0000-0000-000000000101",
+                revision: 1, sourceID: "00000000-0000-0000-0000-000000000101",
+                sourceRevision: 1, title: "synthetic title", body: "synthetic body",
+                receivedAtMilliseconds: 1_800_000_000_000)
+            payload = .resultsSnapshot(PhoneRemoteResultsSnapshot(
+                generation: "00000000-0000-0000-0000-000000000201",
+                collectionEpoch: "00000000-0000-0000-0000-000000000202",
+                contentWatermark: 1, cursor: String(repeating: "A", count: 43), items: [item]))
+        case .resultsResume:
+            let item = PhoneRemoteResultItem(resultID: "00000000-0000-0000-0000-000000000101",
+                revision: 2, sourceID: "00000000-0000-0000-0000-000000000101",
+                sourceRevision: 2, title: "updated synthetic title", body: "updated synthetic body",
+                receivedAtMilliseconds: 1_800_000_000_001)
+            payload = .resultsResume(PhoneRemoteResultsPage(
+                generation: "00000000-0000-0000-0000-000000000201",
+                collectionEpoch: "00000000-0000-0000-0000-000000000202",
+                contentWatermark: 2, resetRequired: false, hasMore: false,
+                cursor: String(repeating: "C", count: 42) + "A", events: [PhoneRemoteResultEvent(sequence: 2, item: item)]))
+        case .resultsView, .resultCard:
+            payload = .resultCardView(cardViewFixture())
         }
         let response = try PhoneRemoteOperationResponse(
             requestID: request.requestID, operation: request.operation,

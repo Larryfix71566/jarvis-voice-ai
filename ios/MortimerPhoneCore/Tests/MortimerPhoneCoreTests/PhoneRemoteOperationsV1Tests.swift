@@ -3,12 +3,14 @@ import XCTest
 @testable import MortimerPhoneCore
 
 final class PhoneRemoteOperationsV1Tests: XCTestCase {
-    func testFourClosedRequestSchemasRoundTripThroughCheckedBoundary() throws {
+    func testSixClosedRequestSchemasRoundTripThroughCheckedBoundary() throws {
         let cases: [(PhoneRemoteOperationRequest.Payload, PhoneRemoteOperation, Set<String>)] = [
             (.sessionStatus, .sessionStatus, []),
             (.voiceOffer(sdp: "offer-canary"), .voiceOffer, ["sdp"]),
             (.voiceUpdate(peerID: "peer-canary", sdp: "update-canary"), .voiceUpdate, ["peer_id", "sdp"]),
             (.voiceEnd(peerID: "peer-canary"), .voiceEnd, ["peer_id"]),
+            (.resultsSnapshot, .resultsSnapshot, []),
+            (.resultsResume(cursor: String(repeating: "A", count: 43)), .resultsResume, ["cursor"]),
         ]
         for (payload, operation, payloadKeys) in cases {
             let request = try PhoneRemoteOperationRequest(requestID: "rid-1", payload: payload)
@@ -30,7 +32,8 @@ final class PhoneRemoteOperationsV1Tests: XCTestCase {
             envelope(op: "voice.offer", payload: "{}"),
             envelope(op: "voice.update", payload: #"{"sdp":"s"}"#),
             envelope(op: "voice.end", payload: #"{"peer_id":"p","sdp":"s"}"#),
-            envelope(op: "results.snapshot", payload: "{}"),
+            envelope(op: "results.snapshot", payload: #"{"cursor":"unexpected"}"#),
+            envelope(op: "results.resume", payload: #"{"cursor":"bad"}"#),
         ]
         for json in malformed {
             XCTAssertThrowsError(try PhoneRemoteOperationsJSON.decodeRequest(from: Data(json.utf8)))
@@ -132,6 +135,8 @@ final class PhoneRemoteOperationsV1Tests: XCTestCase {
             (.voiceOffer, #"{"peer_id":"p","sdp":"answer"}"#),
             (.voiceUpdate, #"{"peer_id":"p","sdp":"answer"}"#),
             (.voiceEnd, #"{"peer_id":"p","ended":true}"#),
+            (.resultsSnapshot, resultsSnapshotJSON()),
+            (.resultsResume, resultsPageJSON()),
         ]
         for (operation, payload) in valid {
             let data = Data(response(status: "ok", reason: "none", payload: payload).utf8)
@@ -198,7 +203,9 @@ final class PhoneRemoteOperationsV1Tests: XCTestCase {
         XCTAssertThrowsError(try PhoneRemoteOperationResponse(requestID: "r", operation: .callAnswer, status: .unavailable, reason: .operationUnavailable, payload: .empty))
     }
 
-    func testFakeHostExchangesCheckedBytesForAllFourOperations() throws {
+    func testFakeHostExchangesCheckedBytesForAllSixOperations() throws {
+        let sampleSnapshot = snapshot()
+        let samplePage = page()
         let host = FakePhoneRemoteOperationsHost { requestBytes in
             let request = try PhoneRemoteOperationsJSON.decodeRequest(from: requestBytes)
             let response: PhoneRemoteOperationResponse
@@ -211,6 +218,12 @@ final class PhoneRemoteOperationsV1Tests: XCTestCase {
                 response = try PhoneRemoteOperationResponse(requestID: request.requestID, operation: .voiceUpdate, status: .ok, reason: .none, payload: .voiceUpdate(peerID: peerID, sdp: "update-answer"))
             case .voiceEnd(let peerID):
                 response = try PhoneRemoteOperationResponse(requestID: request.requestID, operation: .voiceEnd, status: .ok, reason: .none, payload: .voiceEnd(peerID: peerID, ended: true))
+            case .resultsSnapshot:
+                response = try PhoneRemoteOperationResponse(requestID: request.requestID, operation: .resultsSnapshot, status: .ok, reason: .none, payload: .resultsSnapshot(sampleSnapshot))
+            case .resultsResume:
+                response = try PhoneRemoteOperationResponse(requestID: request.requestID, operation: .resultsResume, status: .ok, reason: .none, payload: .resultsResume(samplePage))
+            case .resultsView, .resultCard:
+                response = try PhoneRemoteOperationResponse(requestID: request.requestID, operation: request.operation, status: .ok, reason: .none, payload: .resultCardView(cardViewFixture()))
             }
             return try PhoneRemoteOperationsJSON.encodeResponse(response, for: request.operation)
         }
@@ -219,6 +232,8 @@ final class PhoneRemoteOperationsV1Tests: XCTestCase {
             (.voiceOffer(sdp: "synthetic-offer"), .voiceOffer, .voiceOffer(peerID: "offer-peer", sdp: "offer-answer")),
             (.voiceUpdate(peerID: "update-peer", sdp: "synthetic-update"), .voiceUpdate, .voiceUpdate(peerID: "update-peer", sdp: "update-answer")),
             (.voiceEnd(peerID: "end-peer"), .voiceEnd, .voiceEnd(peerID: "end-peer", ended: true)),
+            (.resultsSnapshot, .resultsSnapshot, .resultsSnapshot(sampleSnapshot)),
+            (.resultsResume(cursor: String(repeating: "A", count: 43)), .resultsResume, .resultsResume(samplePage)),
         ]
         for (index, item) in cases.enumerated() {
             let request = try PhoneRemoteOperationRequest(requestID: "request-\(index)", payload: item.0)
@@ -273,11 +288,180 @@ final class PhoneRemoteOperationsV1Tests: XCTestCase {
         }
     }
 
+    func testResultsDTOsRejectGapsDuplicatesAndHiddenMetadata() throws {
+        let item = resultItem()
+        let invalidItems = [
+            #"[{"result_id":"00000000-0000-0000-0000-000000000001","revision":1,"source":{"kind":"synthetic.workspace_result.v1","id":"00000000-0000-0000-0000-000000000001","revision":1},"classification":"protected","title":"x","body":"y","received_at_ms":1}]"#,
+            #"[{"result_id":"00000000-0000-0000-0000-000000000001","revision":1,"source":{"kind":"synthetic.workspace_result.v1","id":"00000000-0000-0000-0000-000000000002","revision":1},"classification":"ordinary","title":"x","body":"y","received_at_ms":1}]"#,
+        ]
+        for items in invalidItems {
+            let json = #"{"generation":"00000000-0000-0000-0000-000000000201","collection_epoch":"00000000-0000-0000-0000-000000000301","content_watermark":1,"cursor":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","items":"# + items + "}"
+            XCTAssertThrowsError(try PhoneRemoteOperationsJSON.decodeResponse(
+                from: Data(response(status: "ok", reason: "none", payload: json).utf8), for: .resultsSnapshot))
+        }
+        let gap = #"{"generation":"00000000-0000-0000-0000-000000000201","collection_epoch":"00000000-0000-0000-0000-000000000301","content_watermark":3,"reset_required":false,"has_more":false,"cursor":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","events":[{"sequence":1,"kind":"upsert","item":"# + resultItemJSON(item) + #"},{"sequence":3,"kind":"upsert","item":"# + resultItemJSON(item) + #"}]}"#
+        XCTAssertThrowsError(try PhoneRemoteOperationsJSON.decodeResponse(
+            from: Data(response(status: "ok", reason: "none", payload: gap).utf8), for: .resultsResume))
+        let good = try PhoneRemoteOperationsJSON.decodeResponse(
+            from: Data(response(status: "ok", reason: "none", payload: resultsPageJSON()).utf8), for: .resultsResume)
+        XCTAssertEqual(good.operation, .resultsResume)
+    }
+
+    func testResultsNumbersAndCursorTokensRequireCanonicalWireForms() throws {
+        let floatWatermark = #"{"request_id":"rid","status":"ok","reason":"none","payload":{"generation":"00000000-0000-0000-0000-000000000201","collection_epoch":"00000000-0000-0000-0000-000000000301","content_watermark":10.0,"cursor":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","items":[]}}"#
+        XCTAssertThrowsError(try PhoneRemoteOperationsJSON.decodeResponse(
+            from: Data(floatWatermark.utf8), for: .resultsSnapshot))
+        let noncanonical = String(repeating: "A", count: 42) + "B"
+        XCTAssertThrowsError(try PhoneRemoteOperationRequest(requestID: "r",
+            payload: .resultsResume(cursor: noncanonical)))
+        XCTAssertThrowsError(try PhoneRemoteOperationsJSON.decodeResponse(
+            from: Data(resultsSnapshotJSON().replacingOccurrences(
+                of: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", with: noncanonical).utf8),
+            for: .resultsSnapshot))
+    }
+
+    func testMaximumSequenceCannotOverflowContiguityValidation() throws {
+        let maximum = PhoneRemoteResultEvent(sequence: Int.max, item: resultItem())
+        let afterMaximum = PhoneRemoteResultEvent(sequence: 1, item: resultItem())
+        let invalid = PhoneRemoteResultsPage(generation: "00000000-0000-0000-0000-000000000201",
+            collectionEpoch: "00000000-0000-0000-0000-000000000301", contentWatermark: Int.max,
+            resetRequired: false, hasMore: false, cursor: String(repeating: "B", count: 42) + "A",
+            events: [maximum, afterMaximum])
+        XCTAssertThrowsError(try PhoneRemoteOperationResponse(requestID: "r", operation: .resultsResume,
+            status: .ok, reason: .none, payload: .resultsResume(invalid)))
+    }
+
+    func testLargeVoiceResponseDoesNotUseResultsSpecificByteCap() throws {
+        let response = try PhoneRemoteOperationResponse(requestID: "voice-large", operation: .voiceOffer,
+            status: .ok, reason: .none,
+            payload: .voiceOffer(peerID: "peer", sdp: String(repeating: "x", count: 600_000)))
+        let bytes = try PhoneRemoteOperationsJSON.encodeResponse(response, for: .voiceOffer)
+        XCTAssertGreaterThan(bytes.count, 512 * 1024)
+        XCTAssertLessThan(bytes.count, PhoneRemoteOperationsJSON.maximumInputBytes)
+    }
+
+    private func resultItem() -> PhoneRemoteResultItem {
+        PhoneRemoteResultItem(resultID: "00000000-0000-0000-0000-000000000001", revision: 1,
+            sourceID: "00000000-0000-0000-0000-000000000001", sourceRevision: 1,
+            title: "Synthetic", body: "Preview", receivedAtMilliseconds: 1_800_000_000_000)
+    }
+
+    private func snapshot() -> PhoneRemoteResultsSnapshot {
+        PhoneRemoteResultsSnapshot(generation: "00000000-0000-0000-0000-000000000201",
+            collectionEpoch: "00000000-0000-0000-0000-000000000301", contentWatermark: 1,
+            cursor: String(repeating: "A", count: 43), items: [resultItem()])
+    }
+
+    private func page() -> PhoneRemoteResultsPage {
+        PhoneRemoteResultsPage(generation: "00000000-0000-0000-0000-000000000201",
+            collectionEpoch: "00000000-0000-0000-0000-000000000301", contentWatermark: 1,
+            resetRequired: false, hasMore: false, cursor: String(repeating: "B", count: 42) + "A",
+            events: [PhoneRemoteResultEvent(sequence: 1, item: resultItem())])
+    }
+
+    private func resultItemJSON(_ item: PhoneRemoteResultItem) -> String {
+        #"{"result_id":"\#(item.resultID)","revision":\#(item.revision),"source":{"kind":"synthetic.workspace_result.v1","id":"\#(item.sourceID)","revision":\#(item.sourceRevision)},"classification":"ordinary","title":"\#(item.title)","body":"\#(item.body)","received_at_ms":\#(item.receivedAtMilliseconds)}"#
+    }
+
+    private func resultsSnapshotJSON() -> String {
+        #"{"generation":"00000000-0000-0000-0000-000000000201","collection_epoch":"00000000-0000-0000-0000-000000000301","content_watermark":1,"cursor":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","items":["# + resultItemJSON(resultItem()) + "]}"
+    }
+
+    private func resultsPageJSON() -> String {
+        #"{"generation":"00000000-0000-0000-0000-000000000201","collection_epoch":"00000000-0000-0000-0000-000000000301","content_watermark":1,"reset_required":false,"has_more":false,"cursor":"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA","events":[{"sequence":1,"kind":"upsert","item":"# + resultItemJSON(resultItem()) + "}]}"
+    }
+
     private func envelope(op: String, rid: String = "rid", payload: String) -> String {
         #"{"kind":"mortimer.phone-remote.v1","protocol_version":1,"request_id":"\#(rid)","operation":"\#(op)","payload":\#(payload)}"#
     }
 
     private func response(status: String, reason: String, payload: String, rid: String = "rid") -> String {
         #"{"request_id":"\#(rid)","status":"\#(status)","reason":"\#(reason)","payload":\#(payload)}"#
+    }
+}
+
+
+func cardViewFixture(revision: Int = 0, resultRevision: Int = 1, open: Bool = true,
+                     pinned: Bool = false, selected: Bool = false) -> PhoneResultCardView {
+    let id = "00000000-0000-0000-0000-000000000101"
+    return PhoneResultCardView(generation: "00000000-0000-0000-0000-000000000201",
+        collectionEpoch: "00000000-0000-0000-0000-000000000301",
+        viewID: "00000000-0000-0000-0000-000000000401", viewRevision: revision,
+        selectedResultID: selected ? id : nil,
+        allowedOperations: PhoneResultCardAction.allCases.sorted { $0.rawValue < $1.rawValue },
+        cards: [PhoneResultCardState(resultID: id, resultRevision: resultRevision, open: open, pinned: pinned)])
+}
+
+extension PhoneRemoteOperationsV1Tests {
+    func testCardOperationsRoundTripAndExactTypes() throws {
+        let view = cardViewFixture()
+        let payloads: [PhoneRemoteOperationRequest.Payload] = [.resultsView(generation: view.generation, collectionEpoch: view.collectionEpoch)]
+            + PhoneResultCardAction.allCases.map { .resultCard($0, view.target(for: view.cards[0].resultID)!) }
+        for payload in payloads {
+            let request = try PhoneRemoteOperationRequest(requestID: "card-request", payload: payload)
+            let bytes = try PhoneRemoteOperationsJSON.encodeRequest(request)
+            XCTAssertEqual(try PhoneRemoteOperationsJSON.decodeRequest(from: bytes), request)
+            XCTAssertEqual(try PhoneRemoteOperationsJSON.decodeRequest(from: JSONEncoder().encode(request)), request)
+            let response = try PhoneRemoteOperationResponse(requestID: request.requestID, operation: request.operation,
+                status: .ok, reason: .none, payload: .resultCardView(view))
+            let encoded = try PhoneRemoteOperationsJSON.encodeResponse(response, for: request.operation)
+            XCTAssertEqual(try PhoneRemoteOperationsJSON.decodeResponse(from: encoded, for: request.operation), response)
+            XCTAssertEqual(try PhoneRemoteOperationsJSON.decodeResponse(from: JSONEncoder().encode(response), for: request.operation), response)
+            if request.operation != .resultsView {
+                let text = String(decoding: bytes, as: UTF8.self)
+                for replacement in ["0.0", "true", "\"0\"", "-1"] {
+                    let bad = text.replacingOccurrences(of: "\"view_revision\":0", with: "\"view_revision\":\(replacement)")
+                    XCTAssertThrowsError(try PhoneRemoteOperationsJSON.decodeRequest(from: Data(bad.utf8)))
+                }
+            }
+        }
+    }
+
+    func testCardViewRejectsAmbiguousMetadataAndOversizeBytes() throws {
+        let view = cardViewFixture()
+        let response = try PhoneRemoteOperationResponse(requestID: "view", operation: .resultsView,
+            status: .ok, reason: .none, payload: .resultCardView(view))
+        let data = try PhoneRemoteOperationsJSON.encodeResponse(response, for: .resultsView)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let original = try XCTUnwrap(root["payload"] as? [String: Any])
+        let card = try XCTUnwrap((original["cards"] as? [[String: Any]])?.first)
+        var variants: [[String: Any]] = []
+        for change in [["extra": true], ["view_revision": true], ["view_revision": -1],
+                       ["selected_result_id": "00000000-0000-0000-0000-000000000999"],
+                       ["allowed_operations": ["shell"]], ["allowed_operations": ["results.pin", "results.pin"]],
+                       ["cards": [card, card]], ["cards": Array(repeating: card, count: 26)]] as [[String: Any]] {
+            variants.append(original.merging(change) { _, new in new })
+        }
+        for change in [["open": false, "pinned": true], ["result_revision": true], ["open": 1], ["extra": "bad"]] as [[String: Any]] {
+            variants.append(original.merging(["cards": [card.merging(change) { _, new in new }]]) { _, new in new })
+        }
+        var missing = original; missing.removeValue(forKey: "selected_result_id"); variants.append(missing)
+        for payload in variants {
+            let bad = try JSONSerialization.data(withJSONObject: root.merging(["payload": payload]) { _, new in new })
+            XCTAssertThrowsError(try PhoneRemoteOperationsJSON.decodeResponse(from: bad, for: .resultsView))
+        }
+        let padded = Data(repeating: 0x20, count: 16 * 1024) + data
+        XCTAssertThrowsError(try PhoneRemoteOperationsJSON.decodeResponse(from: padded, for: .resultsView))
+    }
+}
+
+extension PhoneRemoteOperationsV1Tests {
+    func testCardErrorMatrixMatchesPythonAndExcludesVoiceReadiness() throws {
+        for operation in [PhoneRemoteOperation.resultsView, .resultsSelect, .resultsPin, .resultsUnpin, .resultsClose, .resultsReopen] {
+            let cases: [(PhoneRemoteStatus, [PhoneRemoteOperationReason])] = [
+                (.denied, [.malformedRequest, .notAuthorized, .requestConflict, .requestCapacity]),
+                (.unavailable, [.featureOff, .authorityUnavailable, .ownerBusy, .operationUnavailable]),
+                (.incompatible, [.unsupportedProtocol])]
+            for (status, reasons) in cases {
+                for reason in reasons {
+                    let response = try PhoneRemoteOperationResponse(requestID: "matrix", operation: operation,
+                        status: status, reason: reason, payload: .empty)
+                    let bytes = try PhoneRemoteOperationsJSON.encodeResponse(response, for: operation)
+                    XCTAssertEqual(try PhoneRemoteOperationsJSON.decodeResponse(from: bytes, for: operation), response)
+                }
+            }
+            XCTAssertThrowsError(try PhoneRemoteOperationResponse(requestID: "voice", operation: operation,
+                status: .unavailable, reason: .voiceNotReady, payload: .empty))
+        }
     }
 }

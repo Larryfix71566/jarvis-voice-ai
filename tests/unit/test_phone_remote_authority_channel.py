@@ -39,13 +39,27 @@ def _record_scenario_result(value: str) -> None:
             handle.write(value)
 
 
+_CHILD_STAGE = "entry"
+
+
 def _child(database: str, scenario: str) -> int:
     """Fixed test child entrypoint used by the Swift process owner only."""
     from jarvis.bot.phone_remote_authority_channel import (
         NativeProtectedAnchor, open_store, run_store_operation,
     )
-    if scenario == "hold":
-        anchor = NativeProtectedAnchor.from_inherited_environment()
+    if scenario == "v4-card-bridge":
+        from tests.unit.test_phone_remote_authority_service import _authority_child_card_entrypoint
+        return _authority_child_card_entrypoint(database)
+    if scenario.startswith("v4-login-"):
+        if os.environ.get("PHONE_REMOTE_AUTHORITY_PROTOCOL_VERSION") != "4":
+            raise AssertionError("v4 scenario requires the real v4 channel")
+        scenario = "v3-login-" + scenario.removeprefix("v4-login-")
+    if scenario in {"hold", "v3-hold"}:
+        if scenario == "v3-hold":
+            from jarvis.bot.phone_remote_authority_channel import NativeProtectedAnchorV3
+            anchor = NativeProtectedAnchorV3.from_inherited_environment()
+        else:
+            anchor = NativeProtectedAnchor.from_inherited_environment()
         os.fstat(4)
         if any(_is_open(fd) for fd in (0, 1, 2)):
             return 71
@@ -86,7 +100,13 @@ def _child(database: str, scenario: str) -> int:
         _record_scenario_result(outcome)
         anchor.close()
         return 0
-    if scenario not in {"basic", "denied", "denied-mutation", "repeat-revoke", "v2-auth-denial", "v2-service-signout", "v2-lost-authorize-ack", "v2-lost-output-drain", "v2-lost-offer-commit-ack", "v2-lost-update-commit-ack", "v2-output-preflight-lost-ack", "v2-feature-output-gates", "v2-global-revoke-restore", "v2-same-child-restore", "v2-grant-revoke-cleanup", "v2-eof-during-preparation",
+    if scenario not in {"basic", "hold", "v3-hold", "v4-normal", "denied", "denied-mutation", "repeat-revoke", "v2-auth-denial", "v2-service-signout", "v2-lost-authorize-ack", "v2-lost-output-drain", "v2-lost-offer-commit-ack", "v2-lost-update-commit-ack", "v2-output-preflight-lost-ack", "v2-feature-output-gates", "v2-global-revoke-restore", "v2-same-child-restore", "v2-grant-revoke-cleanup", "v2-eof-during-preparation",
+                        "v3-login-replay", "v3-login-unknown-b", "v3-login-capacity", "v3-login-unknown-capacity",
+                        "v3-login-attempt-limit", "v3-login-expiry-then-b", "v3-login-expiry-ack-lost",
+                        "v3-login-revoke-then-b", "v3-login-service-status", "v3-login-busy",
+                        "v3-login-crash", "v3-login-challenge-denial-ack-lost", "v3-login-total-capacity",
+                        "v3-login-retired-tombstone", "v3-login-issue-only", "v3-login-restart-reject",
+                        "v3-login-replay-restore",
                         "v2-duplicate-frame", "v2-float-sequence", "v2-sequence-replay", "v2-sequence-skip", "v2-sequence-overflow",
                         "release-without-read", "abort-eof", "malformed-final-null",
                         "unicode-host-transition", "scoped-signout-control",
@@ -115,6 +135,261 @@ def _child(database: str, scenario: str) -> int:
     inherited = [fd for fd in range(5, 64) if _is_open(fd)]
     if inherited:
         return 65
+    if scenario.startswith("v3-login-"):
+        from dataclasses import asdict
+        from jarvis.bot.phone_remote_login import LoginClockGate, LoginFailure, LoginSession
+        from jarvis.bot.phone_remote_service import (
+            _AuthorityChildServiceHost, FakeContextVerifier, FakeMediaAdapter,
+            TrustedRequestContext,
+        )
+
+        message_dir = pathlib.Path(os.environ["PHONE_REMOTE_AUTHORITY_LOGIN_MESSAGE_DIR"])
+        message_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        barrier_values = tuple(os.environ.get(name, "") for name in (
+            "PHONE_REMOTE_AUTHORITY_LOGIN_VERIFY_ENTERED_FILE",
+            "PHONE_REMOTE_AUTHORITY_LOGIN_VERIFY_RELEASE_FILE",
+            "PHONE_REMOTE_AUTHORITY_LOGIN_VERIFY_TIME_FILE"))
+        barrier = barrier_values if all(barrier_values) else None
+        login_clock = LoginClockGate(wall_ms=1_800_000_000_000, monotonic_ms=1_000,
+                                     verification_barrier=barrier)
+        try:
+            host = _AuthorityChildServiceHost(database, verifier=FakeContextVerifier(),
+                media=FakeMediaAdapter(), login_clock=login_clock, login_service_id="svc.test",
+                store_failpoint=failpoint)
+        except BaseException as exc:
+            _record_scenario_result(json.dumps({"startup_error": type(exc).__name__,
+                                                "message": str(exc)}, sort_keys=True))
+            raise
+
+        def result_value(value):
+            if type(value) is LoginFailure:
+                return {"failure": value.code}
+            if type(value) is LoginSession:
+                return {"session_id": value.session_id, "expires_at_ms": value.expires_at_ms}
+            if type(value).__name__ == "ChallengeResponse":
+                return {"issued": True}
+            return {"unexpected": type(value).__name__}
+
+
+        def wait_for_proof(label):
+            path = message_dir / ("proof-" + label + ".json")
+            deadline = time.monotonic() + 20
+            while not path.exists() and time.monotonic() < deadline:
+                time.sleep(0.005)
+            if not path.exists():
+                raise RuntimeError("synthetic login proof was not supplied")
+            return path.read_bytes()
+
+        def obtain_challenge(label, device_id="d-channel", grant_id="g-channel"):
+            value = host.issue_login_challenge(device_id=device_id, grant_id=grant_id)
+            if type(value) is LoginFailure:
+                return value
+            destination = message_dir / ("challenge-" + label + ".json")
+            temporary = destination.with_suffix(".tmp")
+            temporary.write_text(json.dumps(asdict(value), sort_keys=True), encoding="ascii")
+            temporary.replace(destination)
+            return value
+
+        output = {}
+        try:
+            if scenario == "v3-login-unknown-b":
+                denied = obtain_challenge("a", "unknown-device", "unknown-grant")
+                output["a"] = result_value(denied)
+                challenge = obtain_challenge("b")
+                output["b"] = result_value(host.complete_phone_login(
+                    challenge_id=challenge.challenge_id,
+                    proof_bytes=wait_for_proof("b")))
+            elif scenario == "v3-login-revoke-then-b":
+                challenge_a = obtain_challenge("a")
+                proof_a = wait_for_proof("a")
+                host.mutate_authority("revoke_grant", identity=ClientIdentity(
+                    name="authority-login-test", user_id="alice"),
+                    grant_id="g-channel", owner_id="alice")
+                output["a"] = result_value(host.complete_phone_login(
+                    challenge_id=challenge_a.challenge_id, proof_bytes=proof_a))
+                challenge_b = obtain_challenge("b", "d-login-b", "g-login-b")
+                output["b"] = result_value(host.complete_phone_login(
+                    challenge_id=challenge_b.challenge_id, proof_bytes=wait_for_proof("b")))
+            elif scenario == "v3-login-capacity":
+                issued = [obtain_challenge(str(index)) for index in range(4)]
+                overflow = obtain_challenge("overflow")
+                output = {"issued": sum(type(item).__name__ == "ChallengeResponse" for item in issued),
+                          "overflow": result_value(overflow)}
+            elif scenario == "v3-login-unknown-capacity":
+                unknown = [obtain_challenge("unknown-" + str(index), "missing-device", "missing-grant")
+                           for index in range(6)]
+                issued = obtain_challenge("valid")
+                output = {"unknown_denied": sum(type(item) is LoginFailure
+                                                 and item.code == "not_authorized" for item in unknown),
+                          "issued": type(issued).__name__ == "ChallengeResponse"}
+            elif scenario == "v3-login-attempt-limit":
+                challenge = obtain_challenge("login")
+                bad = [result_value(host.complete_phone_login(
+                    challenge_id=challenge.challenge_id, proof_bytes=b"not-a-proof"))
+                    for _ in range(3)]
+                exhausted = host.complete_phone_login(challenge_id=challenge.challenge_id,
+                                                       proof_bytes=wait_for_proof("login"))
+                output = {"bad": bad, "after_limit": result_value(exhausted)}
+            elif scenario == "v3-login-issue-only":
+                challenge = obtain_challenge("a")
+                output = {"challenge": result_value(challenge)}
+            elif scenario == "v3-login-restart-reject":
+                challenge = json.loads((message_dir / "challenge-a.json").read_text(encoding="ascii"))
+                proof = (message_dir / "proof-a.json").read_bytes()
+                login_result = result_value(host.complete_phone_login(
+                    challenge_id=challenge["challenge_id"], proof_bytes=proof))
+                # The challenge is child-local and rejected before a store
+                # grant; perform one independent read to complete this
+                # disposable owner's bounded grant budget.
+                host.read_status()
+                output = {"login": login_result}
+            elif scenario == "v3-login-replay-restore":
+                challenge = obtain_challenge("a")
+                login = host.complete_phone_login(challenge_id=challenge.challenge_id,
+                    proof_bytes=wait_for_proof("a"))
+                replay = host.complete_phone_login(challenge_id=challenge.challenge_id,
+                    proof_bytes=wait_for_proof("a"))
+                output = {"login": result_value(login), "replay": result_value(replay)}
+            elif scenario == "v3-login-service-status":
+                challenge = obtain_challenge("a")
+                login = host.complete_phone_login(challenge_id=challenge.challenge_id,
+                    proof_bytes=wait_for_proof("a"))
+                with sqlite3.connect(database) as check_db:
+                    row = check_db.execute("SELECT login_incarnation FROM phone_remote_sessions WHERE session_id=?",
+                        (login.session_id,)).fetchone()
+                identity = ClientIdentity(name="phone-auth-proof", user_id="alice")
+                context = TrustedRequestContext(identity, "alice", login.session_id,
+                    "d-channel", row[0])
+                status = host.handle(json.dumps({"kind": "mortimer.phone-remote.v1",
+                    "protocol_version": 1, "request_id": "proof-login-status",
+                    "operation": "session.status", "payload": {}}), context)
+                output = {"login": result_value(login), "status": status}
+            elif scenario == "v3-login-busy":
+                import asyncio
+                from contextlib import suppress
+                challenge = obtain_challenge("a")
+                proof = wait_for_proof("a")
+                login_result = []
+                entered = pathlib.Path(os.environ["PHONE_REMOTE_AUTHORITY_LOGIN_VERIFY_ENTERED_FILE"])
+                release = pathlib.Path(os.environ["PHONE_REMOTE_AUTHORITY_LOGIN_VERIFY_RELEASE_FILE"])
+                underlying_done = threading.Event()
+                def perform_login():
+                    try:
+                        login_result.append(result_value(host.complete_phone_login(
+                            challenge_id=challenge.challenge_id, proof_bytes=proof)))
+                    finally:
+                        underlying_done.set()
+                async def run_concurrent_attempts():
+                    task = asyncio.create_task(asyncio.to_thread(perform_login))
+                    deadline = time.monotonic() + 10
+                    while not entered.exists() and time.monotonic() < deadline:
+                        await asyncio.sleep(0.005)
+                    if not entered.exists():
+                        raise RuntimeError("proof verifier did not reach the busy barrier")
+                    task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await task
+                    busy = result_value(host.complete_phone_login(
+                        challenge_id=challenge.challenge_id, proof_bytes=proof))
+                    duplicate = result_value(host.complete_phone_login(
+                        challenge_id=challenge.challenge_id, proof_bytes=proof))
+                    busy_challenge = result_value(host.issue_login_challenge(
+                        device_id="d-channel", grant_id="g-channel"))
+                    pathlib.Path(os.environ["PHONE_REMOTE_AUTHORITY_LOGIN_VERIFY_TIME_FILE"]).write_text(
+                        json.dumps({"wall_ms": 1_800_000_000_000,
+                                    "monotonic_ms": 1_000}), encoding="ascii")
+                    release.write_text("continue", encoding="ascii")
+                    drained = await asyncio.to_thread(underlying_done.wait, 10)
+                    if not drained:
+                        raise RuntimeError("cancelled login worker did not drain")
+                    replay = result_value(host.complete_phone_login(
+                        challenge_id=challenge.challenge_id, proof_bytes=proof))
+                    return {"cancelled": task.cancelled(), "busy": busy, "duplicate": duplicate,
+                        "busy_challenge": busy_challenge, "login": login_result[0], "replay": replay}
+                output = asyncio.run(run_concurrent_attempts())
+            elif scenario == "v3-login-crash":
+                challenge = obtain_challenge("a")
+                host.complete_phone_login(challenge_id=challenge.challenge_id,
+                    proof_bytes=wait_for_proof("a"))
+                output = {"unexpected": "transition completed despite crash failpoint"}
+            elif scenario == "v3-login-challenge-denial-ack-lost":
+                denied = host.issue_login_challenge(device_id="missing-device", grant_id="missing-grant")
+                output["a"] = result_value(denied)
+                output["b"] = result_value(host.issue_login_challenge(device_id="d-channel", grant_id="g-channel"))
+            elif scenario == "v3-login-total-capacity":
+                issued = 0
+                for device_index in range(16):
+                    for _ in range(4):
+                        item = obtain_challenge("capacity", "d-capacity-" + str(device_index),
+                                                "g-capacity-" + str(device_index))
+                        issued += type(item).__name__ == "ChallengeResponse"
+                overflow = obtain_challenge("overflow", "d-capacity-overflow", "g-capacity-overflow")
+                output = {"issued": issued, "overflow": result_value(overflow)}
+            elif scenario == "v3-login-retired-tombstone":
+                retired = obtain_challenge("retired")
+                if type(retired).__name__ != "ChallengeResponse":
+                    output = {"retired": result_value(retired)}
+                    _record_scenario_result(json.dumps(output, sort_keys=True,
+                        separators=(",", ":")))
+                    return 1
+                bad = [result_value(host.complete_phone_login(
+                    challenge_id=retired.challenge_id, proof_bytes=b"bad")) for _ in range(3)]
+                issued = 0
+                for index in range(15):
+                    for _ in range(4):
+                        item = obtain_challenge("fill", "d-capacity-" + str(index), "g-capacity-" + str(index))
+                        issued += type(item).__name__ == "ChallengeResponse"
+                for _ in range(3):
+                    issued += type(obtain_challenge("fill-main")).__name__ == "ChallengeResponse"
+                overflow = obtain_challenge("overflow", "d-capacity-overflow", "g-capacity-overflow")
+                output = {"bad": bad, "filled": issued, "overflow": result_value(overflow)}
+            else:
+                challenge = obtain_challenge("a")
+                proof = wait_for_proof("a")
+                if scenario == "v3-login-expiry-ack-lost":
+                    output["login"] = result_value(host.complete_phone_login(
+                        challenge_id=challenge.challenge_id, proof_bytes=proof))
+                    try:
+                        host.read_status()
+                        output["after"] = "unexpected-live"
+                    except StoreUnavailable:
+                        output["after"] = "fenced"
+                else:
+                    if scenario == "v3-login-expiry-then-b":
+                        wrong = bytearray(proof)
+                        wrong[-1] = ord("A") if wrong[-1] != ord("A") else ord("B")
+                        output["bad_proof"] = result_value(host.complete_phone_login(
+                            challenge_id=challenge.challenge_id, proof_bytes=bytes(wrong)))
+                    if scenario.startswith("v3-login-expiry"):
+                        # The signature is checked using the pre-expiry clock; the
+                        # test gate then advances both clocks before store preflight.
+                        output["expired"] = result_value(host.complete_phone_login(
+                            challenge_id=challenge.challenge_id, proof_bytes=proof))
+                        if scenario == "v3-login-expiry-then-b":
+                            challenge_b = obtain_challenge("b")
+                            output["b"] = result_value(host.complete_phone_login(
+                                challenge_id=challenge_b.challenge_id,
+                                proof_bytes=wait_for_proof("b")))
+                    else:
+                        output["login"] = result_value(host.complete_phone_login(
+                            challenge_id=challenge.challenge_id, proof_bytes=proof))
+                        if scenario == "v3-login-replay":
+                            output["replay"] = result_value(host.complete_phone_login(
+                                challenge_id=challenge.challenge_id, proof_bytes=proof))
+            _record_scenario_result(json.dumps(output, sort_keys=True, separators=(",", ":")))
+            if not host._closed:
+                host.shutdown()
+            return 0
+        except BaseException as exc:
+            chain = []
+            current = exc
+            while current is not None and len(chain) < 5:
+                chain.append(type(current).__name__ + ":" + str(current))
+                current = current.__cause__
+            _record_scenario_result(json.dumps({"error": chain}, sort_keys=True))
+            raise
+        finally:
+            host._thread.join(timeout=2)
     if scenario in {"v2-service-signout", "v2-lost-authorize-ack", "v2-lost-output-drain",
                      "v2-lost-offer-commit-ack", "v2-lost-update-commit-ack", "v2-feature-output-gates",
                      "v2-output-preflight-lost-ack", "v2-global-revoke-restore", "v2-same-child-restore",
@@ -541,13 +816,49 @@ def _child(database: str, scenario: str) -> int:
                 # Test failures still close the inherited channel so the owner
                 # can reap the child rather than hanging on a live descriptor.
                 host._thread.join(timeout=2)
+    global _CHILD_STAGE
+    _CHILD_STAGE = "sqlite-open"
     db = sqlite3.connect(database, isolation_level=None, timeout=0.25)
-    from jarvis.bot.phone_remote_authority_channel import NativeProtectedAnchorV2
-    anchor_type = NativeProtectedAnchorV2 if os.environ.get("PHONE_REMOTE_AUTHORITY_PROTOCOL_VERSION") == "2" else NativeProtectedAnchor
+    from jarvis.bot.phone_remote_authority_channel import (
+        NativeProtectedAnchorV2, NativeProtectedAnchorV3, NativeProtectedAnchorV4,
+    )
+    protocol_version = os.environ.get("PHONE_REMOTE_AUTHORITY_PROTOCOL_VERSION")
+    anchor_type = {"2": NativeProtectedAnchorV2, "3": NativeProtectedAnchorV3,
+                   "4": NativeProtectedAnchorV4}.get(protocol_version, NativeProtectedAnchor)
     anchor = anchor_type.from_inherited_environment()
     try:
+        _CHILD_STAGE = "store-open"
         store = open_store(PhoneAdmissionStore, db, anchor=anchor, failpoint=failpoint)
         initial_generation = db.execute("SELECT host_generation FROM phone_remote_meta WHERE singleton_id=1").fetchone()[0]
+        if scenario == "v4-normal":
+            _CHILD_STAGE = "v4-store-read"
+            status = run_store_operation("store.read", store.status, anchor=anchor)
+            initial_counter = anchor.protected_anchor["login_counter"]
+            schema_version = anchor.protected_anchor["anchor_version"]
+            if status != {"schema_version": schema_version, "host_generation": initial_generation, "login_counter": initial_counter}:
+                return 68
+            _CHILD_STAGE = "v4-session-login"
+            run_store_operation("session.login", store.login, anchor=anchor,
+                identity=_identity(), session_id="s-v4", grant_id="g-v4",
+                owner_id="alice", now=1, expires_at=100)
+            status = run_store_operation("store.read", store.status, anchor=anchor)
+            if status != {"schema_version": schema_version, "host_generation": initial_generation, "login_counter": initial_counter + 1}:
+                return 69
+            incarnation = store.db.execute("SELECT login_incarnation FROM phone_remote_sessions WHERE session_id='s-v4'").fetchone()[0]
+            challenge = run_store_operation("session.challenge", store.login_challenge_context, anchor=anchor,
+                device_id="d-v4", grant_id="g-v4")
+            if challenge.device_id != "d-v4" or challenge.grant_id != "g-v4":
+                return 70
+            binding = run_store_operation("service.authorize", store.current_binding, anchor=anchor,
+                identity=_identity(), owner_id="alice", session_id="s-v4", device_id="d-v4",
+                login_incarnation=incarnation, now=2)
+            with anchor.service_commit():
+                with store.serialized_authority():
+                    if not store.binding_current_serialized(binding, now=2):
+                        return 71
+            _record_scenario_result("v4-store-open-read-login-challenge-service-ok")
+            anchor.wait_for_shutdown()
+            return 0
         if scenario == "release-without-read":
             try:
                 with anchor._operation_context("store.read"):
@@ -675,19 +986,25 @@ def _child(database: str, scenario: str) -> int:
                 _record_scenario_result("second-grant-denied")
                 return 0
             return 88
+        _CHILD_STAGE = "session-login"
         run_store_operation("session.login", store.login, anchor=anchor,
             identity=_identity(), session_id="s-channel", grant_id="g-channel",
             owner_id="alice", now=1, expires_at=100)
+        _CHILD_STAGE = "ticket-issue"
         run_store_operation("ticket.issue", store.issue_ticket, anchor=anchor,
             identity=_identity(), ticket_id="t-channel", session_id="s-channel",
             owner_id="alice", purpose="offer", payload_digest="sha256:offer",
             now=2, expires_at=20)
+        _CHILD_STAGE = "ticket-consume"
         run_store_operation("ticket.consume", store.consume_ticket, anchor=anchor,
             identity=_identity(), ticket_id="t-channel", session_id="s-channel",
             owner_id="alice", purpose="offer", payload_digest="sha256:offer", now=3)
+        _CHILD_STAGE = "session-signout"
         run_store_operation("session.signout", store.revoke_session, anchor=anchor,
             identity=_identity(), session_id="s-channel", owner_id="alice")
+        _CHILD_STAGE = "authority-mutate"
         run_store_operation("authority.mutate", store.advance_host_generation, anchor=anchor)
+        _CHILD_STAGE = "store-read"
         final = run_store_operation("store.read", store.status, anchor=anchor)
         if final != {"schema_version": 1, "host_generation": initial_generation + 1, "login_counter": 1}:
             return 67
@@ -708,7 +1025,8 @@ def _is_open(fd: int) -> bool:
 if __name__ == "__main__" and len(sys.argv) >= 2 and sys.argv[1] == "--authority-child":
     try:
         child_code = _child(sys.argv[2], sys.argv[3])
-    except BaseException:
+    except BaseException as exc:
+        _record_scenario_result("child-unhandled:" + _CHILD_STAGE + ":" + type(exc).__name__ + ":" + str(exc))
         child_code = 1
     raise SystemExit(child_code)
 
@@ -1513,3 +1831,70 @@ class ProcessBoundaryTests(unittest.TestCase):
         session = db.execute("SELECT login_incarnation,revoked_at FROM phone_remote_sessions WHERE session_id='s-channel'").fetchone()
         db.close()
         self.assertEqual(session, (f"host-test:{self.initial_generation}:1", None))
+
+
+class V4ActivationBoundaryTests(unittest.TestCase):
+    def hello(self):
+        return {"protocol": "mortimer.phone-authority-channel.v4", "version": 4,
+            "kind": "owner.hello", "owner_incarnation": str(uuid.uuid4()),
+            "child_incarnation": str(uuid.uuid4()), "sequence": 1,
+            "correlation_id": str(uuid.uuid4()), "payload": {"mode": "normal", "store_schema_version": 1,
+                "protected_anchor": {"anchor_version": 1, "host_id": "host-test", "host_generation": 1,
+                    "transition_state": "stable", "transition_id": None, "login_counter": 0}}}
+
+    def channel(self, frame):
+        from jarvis.bot.phone_remote_authority_channel import NativeProtectedAnchorV4
+        parent, child = socket.socketpair()
+        self.addCleanup(parent.close); self.addCleanup(child.close)
+        parent.sendall(NativeFrameValidationTests._packet(frame))
+        return parent, NativeProtectedAnchorV4(child)
+
+    def test_transport_ready_does_not_admit_store_or_service_operations(self):
+        parent, anchor = self.channel(self.hello())
+        length = struct.unpack(">I", parent.recv(4))[0]
+        ready = json.loads(parent.recv(length))
+        self.assertEqual(ready["kind"], "child.ready")
+        self.assertFalse(anchor._activated)
+        db = sqlite3.connect(":memory:"); self.addCleanup(db.close)
+        store = PhoneAdmissionStore(db, FakeProtectedAnchor("host-test")); store.anchor = anchor
+        with self.assertRaises(StoreUnavailable):
+            run_store_operation("store.read", store.status, anchor=anchor)
+        self.assertEqual(parent.recv(1), b"")  # closed without any grant frame
+
+    def test_activation_rejects_float_identity_even_when_numerically_equal(self):
+        frame = self.hello()
+        parent, anchor = self.channel(frame)
+        length = struct.unpack(">I", parent.recv(4))[0]; parent.recv(length)
+        db = sqlite3.connect(":memory:"); self.addCleanup(db.close)
+        PhoneAdmissionStore(db, FakeProtectedAnchor("host-test"))
+        # Isolate the activation codec after the independently tested store.open
+        # release gate; this test does not claim a real grant exchange.
+        anchor._store_open_released = True
+        errors = []
+        def owner():
+            try:
+                length = struct.unpack(">I", parent.recv(4))[0]
+                ready = json.loads(parent.recv(length))
+                self.assertEqual(ready["kind"], "child.service.ready")
+                reply = {**frame, "kind": "owner.service.activate", "sequence": 2,
+                    "correlation_id": ready["correlation_id"], "payload": {
+                        "host_id": "host-test", "host_generation": 1.0,
+                        "store_schema_version": 1, "operation_id": None}}
+                parent.sendall(NativeFrameValidationTests._packet(reply))
+            except BaseException as exc: errors.append(exc)
+        worker = threading.Thread(target=owner); worker.start()
+        with self.assertRaises(ChannelProtocolError): anchor.activate(db)
+        worker.join(2)
+        self.assertFalse(worker.is_alive()); self.assertEqual(errors, [])
+        self.assertFalse(anchor._activated)
+
+    def test_v4_wrong_versions_float_schema_and_extra_hello_fields_fail_closed(self):
+        for field, value in (("version", 4.0), ("version", True),
+                             ("protocol", "mortimer.phone-authority-channel.v3")):
+            frame = self.hello(); frame[field] = value
+            with self.subTest(field=field, value=value), self.assertRaises(StoreUnavailable): self.channel(frame)
+        for payload in ({"max_frame_bytes": MAX_FRAME_BYTES},
+                        {**self.hello()["payload"], "store_schema_version": 1.0},
+                        {**self.hello()["payload"], "extra": True}):
+            frame = self.hello(); frame["payload"] = payload
+            with self.subTest(payload=payload), self.assertRaises(StoreUnavailable): self.channel(frame)

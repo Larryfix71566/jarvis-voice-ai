@@ -300,3 +300,302 @@ class PhoneRemoteASGI:
 def create_phone_remote_asgi(service=None, context_provider=None, *, enabled=False):
     """Construct the offline ASGI adapter from server-owned injected values."""
     return PhoneRemoteASGI(service, context_provider, enabled=enabled)
+
+
+class PhoneRemoteConnectionASGI(PhoneRemoteASGI):
+    """Unmounted proof handshake; no scope/context-provider authority is used."""
+    def __init__(self, host=None, *, enabled=False):
+        from jarvis.bot.phone_remote_service import _AuthorityChildServiceHost
+        from jarvis.bot.phone_remote_connection import ConnectionRegistry
+        super().__init__(enabled=enabled)
+        self._host = host if (type(host) is _AuthorityChildServiceHost
+            and type(getattr(host, "_connections", None)) is ConnectionRegistry
+            and host._connections.host is host) else None
+
+    async def __call__(self, scope, receive, send):
+        from dataclasses import asdict
+        from jarvis.bot.phone_remote_connection import (
+            CONNECTION_PROTOCOL, ConnectionFailure, ConnectionLease, ConnectionReply,
+            HandshakeError, parse_handshake, decode_proof, handshake_response, is_handshake_attempt,
+        )
+        if type(scope) is not dict:
+            return
+        if scope.get("type") == "http":
+            await self._http_not_found(send)
+            return
+        if scope.get("type") != "websocket":
+            return
+        host = self._host
+        if scope.get("path") != ASGI_PATH or not self._enabled or host is None:
+            await self._close(send, _CLOSE_POLICY)
+            return
+        lease = None
+        token = object()
+        reader = timer = sending = None
+        pending = asyncio.Queue(maxsize=1)
+        closed = False
+        close_code = _CLOSE_POLICY
+        disconnected = False
+        phase = "challenge"
+        challenge_request_id = None
+
+        def retire(code=_CLOSE_POLICY, *, disconnect=False):
+            nonlocal closed, close_code, disconnected
+            closed, close_code = True, code
+            disconnected = disconnected or disconnect
+            if lease is not None:
+                host.close_connection(lease, token)
+            if sending is not None and not sending.done():
+                sending.cancel()
+            while not pending.empty():
+                pending.get_nowait()
+            pending.put_nowait(None)
+
+        async def send_owned(event, *, terminal=False):
+            nonlocal sending
+            if closed and not terminal:
+                return False
+            retained = lease is not None and host._connections.begin_send(lease, token)
+            if not retained and not terminal:
+                # The owner/lease can retire after reply claim, or between
+                # open and accept. Refusal settles this invocation locally;
+                # it must not wait for another phone frame to discover closure.
+                retire(_CLOSE_INTERNAL)
+                return False
+            task = monitor = None
+            try:
+                if retained and retained.is_set():
+                    retire()
+                    return False
+                task = asyncio.create_task(send(event))
+                sending = task
+                async def watch_owner_retirement():
+                    # A registry close can originate on the owner worker. Poll
+                    # its existing local Event without consuming an executor
+                    # slot or invoking callbacks under registry/service locks.
+                    while not task.done():
+                        if retained.is_set():
+                            retire()
+                            return
+                        await asyncio.sleep(.01)
+                if retained:
+                    monitor = asyncio.create_task(watch_owner_retirement())
+                await asyncio.shield(task)
+                return True
+            except asyncio.CancelledError:
+                cancelled_by_caller = not closed
+                if cancelled_by_caller:
+                    retire(disconnect=True)
+                if task is not None:
+                    task.cancel()
+                    while not task.done():
+                        try:
+                            await asyncio.shield(task)
+                        except asyncio.CancelledError:
+                            continue
+                        except Exception:
+                            break
+                if cancelled_by_caller:
+                    raise
+                return False
+            finally:
+                if monitor is not None:
+                    monitor.cancel()
+                    while not monitor.done():
+                        try:
+                            await asyncio.shield(monitor)
+                        except asyncio.CancelledError:
+                            continue
+                    if not monitor.cancelled():
+                        monitor.exception()
+                if task is not None and task.done() and not task.cancelled():
+                    task.exception()
+                sending = None
+                if retained:
+                    host._connections.end_send(lease, token)
+
+        async def owned(function, *args):
+            task = asyncio.create_task(self._blocking_call(function, *args))
+            try:
+                return await asyncio.shield(task)
+            except asyncio.CancelledError:
+                retire(disconnect=True)
+                while not task.done():
+                    try:
+                        await asyncio.shield(task)
+                    except asyncio.CancelledError:
+                        continue
+                    except Exception:
+                        break
+                # A cancelled open may have allocated a lease before returning.
+                if task.done() and not task.cancelled():
+                    try:
+                        value = task.result()
+                        if type(value) is ConnectionLease:
+                            host.close_connection(value, token)
+                    except Exception:
+                        pass
+                raise
+
+        async def read_frames():
+            try:
+                while True:
+                    event = await receive()
+                    if type(event) is not dict:
+                        retire()
+                        return
+                    if event.get("type") == "websocket.disconnect":
+                        retire(disconnect=True)
+                        return
+                    if closed:
+                        retire(close_code)
+                        return
+                    if event.get("type") != "websocket.receive":
+                        retire()
+                        return
+                    text, data = event.get("text"), event.get("bytes")
+                    raw = text if type(text) is str and data is None else data if type(data) is bytes and text is None else None
+                    try:
+                        size = len(raw.encode("utf-8", "strict")) if type(raw) is str else len(raw) if type(raw) is bytes else 0
+                    except UnicodeError:
+                        size = 0
+                    if size == 0 or size > (1_048_576 if phase == "active" else 8192) or pending.full():
+                        retire()
+                        return
+                    pending.put_nowait(raw)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                retire(_CLOSE_INTERNAL)
+
+        async def fail(rid, reason, *, handshake):
+            if closed:
+                return
+            wire = (handshake_response(rid, reason=reason) if handshake else
+                    encode_response(response(rid, "denied" if reason in {"not_authorized", "invalid_request"} else "unavailable",
+                        "not_authorized" if reason in {"not_authorized", "invalid_request"} else "authority_unavailable")))
+            if not await send_owned({"type": "websocket.send", "text": wire}):
+                return
+            retire(_CLOSE_INTERNAL if reason == "authority_unavailable" else _CLOSE_POLICY)
+
+        try:
+            first = await receive()
+            if type(first) is not dict or first.get("type") != "websocket.connect":
+                return
+            lease = await owned(host.open_connection, token)
+            if type(lease) is not ConnectionLease:
+                lease = None
+                await self._close(send, _CLOSE_POLICY)
+                return
+            epoch, deadline = host._connections.timer(lease, token)
+            loop = asyncio.get_running_loop()
+
+            def timeout():
+                # Cancellation of the TimerHandle alone cannot revoke a callback
+                # that is already queued. Epoch/state arbitration owns that race.
+                if host._connections.expire_handshake(lease, token, epoch):
+                    retire(_CLOSE_INTERNAL)
+
+            import time
+            timer = loop.call_later(max(0, deadline - time.monotonic()), timeout)
+            reader = asyncio.create_task(read_frames())
+            if not await send_owned({"type": "websocket.accept"}):
+                retire(close_code)
+            while not closed:
+                raw = await pending.get()
+                if raw is None or closed:
+                    break
+                if phase != "active":
+                    try:
+                        request = parse_handshake(raw)
+                    except HandshakeError as exc:
+                        await fail(exc.request_id, "invalid_request", handshake=True)
+                        break
+                    rid = request["request_id"]
+                    expected = "auth.challenge" if phase == "challenge" else "auth.prove"
+                    if request["operation"] != expected or rid == challenge_request_id:
+                        await fail(rid, "invalid_request", handshake=True)
+                        break
+                    payload = request["payload"]
+                    if phase == "challenge":
+                        result = await owned(host.connection_challenge, lease, token,
+                                             payload["device_id"], payload["grant_id"])
+                        if closed:
+                            break
+                        if type(result) is ConnectionFailure:
+                            await fail(rid, result.reason, handshake=True)
+                            break
+                        wire = handshake_response(rid, payload=asdict(result))
+                        challenge_request_id = rid
+                        phase = "proof"
+                    else:
+                        result = await owned(host.connection_prove, lease, token,
+                                             payload["challenge_id"], decode_proof(payload["proof"]))
+                        if closed:
+                            break
+                        if result is not True:
+                            await fail(rid, result.reason if type(result) is ConnectionFailure else "authority_unavailable", handshake=True)
+                            break
+                        result = await owned(host.activate_connection, lease, token, rid)
+                        if closed:
+                            break
+                        if type(result) is not ConnectionReply:
+                            await fail(rid, result.reason if type(result) is ConnectionFailure else "authority_unavailable", handshake=True)
+                            break
+                        timer.cancel()
+                        phase = "active"
+                        wire = await owned(host.claim_connection_reply, lease, token, result)
+                        if type(wire) is ConnectionFailure:
+                            await fail(rid, wire.reason, handshake=True)
+                            break
+                else:
+                    # No authentication envelope is a business request/downgrade.
+                    if is_handshake_attempt(raw):
+                        retire()
+                        break
+                    try:
+                        request = parse_request(raw)
+                    except ProtocolError as exc:
+                        wire = encode_response(response(exc.request_id, exc.status, exc.reason))
+                    else:
+                        result = await owned(host.handle_connection, lease, token, raw)
+                        if closed:
+                            break
+                        if type(result) is not ConnectionReply:
+                            await fail(request["request_id"], result.reason if type(result) is ConnectionFailure else "authority_unavailable", handshake=False)
+                            break
+                        wire = await owned(host.claim_connection_reply, lease, token, result)
+                        if type(wire) is ConnectionFailure:
+                            await fail(request["request_id"], wire.reason, handshake=False)
+                            break
+                if not closed and not await send_owned({"type": "websocket.send", "text": wire}):
+                    break
+            if not disconnected:
+                await send_owned({"type": "websocket.close", "code": close_code}, terminal=True)
+        except asyncio.CancelledError:
+            retire(disconnect=True)
+            raise
+        except Exception:
+            retire(_CLOSE_INTERNAL)
+            if not disconnected:
+                await send_owned({"type": "websocket.close", "code": _CLOSE_INTERNAL}, terminal=True)
+        finally:
+            if timer is not None:
+                timer.cancel()
+            if lease is not None:
+                host.close_connection(lease, token)
+            if reader is not None:
+                reader.cancel()
+                while not reader.done():
+                    try:
+                        await asyncio.shield(reader)
+                    except asyncio.CancelledError:
+                        continue
+                    except Exception:
+                        break
+                if not reader.cancelled():
+                    reader.exception()
+
+
+def create_phone_remote_connection_asgi(host=None, *, enabled=False):
+    return PhoneRemoteConnectionASGI(host, enabled=enabled)

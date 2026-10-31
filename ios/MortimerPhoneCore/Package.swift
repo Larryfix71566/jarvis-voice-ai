@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "MortimerPhoneCore",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS(.v13), .iOS(.v17)],
     products: [
         .library(name: "MortimerPhoneCore", targets: ["MortimerPhoneCore"]),
     ],

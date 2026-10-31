@@ -11,7 +11,8 @@ final class PhoneRemoteProtocolTests: XCTestCase {
     func testExactOperationsAndStatuses() {
         XCTAssertEqual(PhoneRemoteOperation.allCases.map(\.rawValue), [
             "session.status", "voice.offer", "voice.update", "voice.end",
-            "results.snapshot", "results.resume", "call.state", "call.answer", "call.decline",
+            "results.snapshot", "results.resume", "results.view", "results.select", "results.pin",
+            "results.unpin", "results.close", "results.reopen", "call.state", "call.answer", "call.decline",
         ])
         XCTAssertEqual(PhoneRemoteStatus.allCases.map(\.rawValue), ["ok", "denied", "unavailable", "incompatible"])
     }

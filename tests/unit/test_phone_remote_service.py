@@ -10,6 +10,8 @@ import weakref
 from jarvis.auth import ClientIdentity
 from jarvis.bot.phone_admission_store import FakeProtectedAnchor, PhoneAdmissionStore
 from jarvis.bot.phone_remote_protocol import PROTOCOL
+from jarvis.bot.phone_remote_results import (PhoneRemoteResults,
+    PhoneResultCollectionGrantV1, SyntheticResultRecord, SyntheticResultsSource)
 from jarvis.bot.phone_remote_service import (FakeContextVerifier, FakeMediaAdapter,
     FakeBoundedSink, FakeClockGate, FakeOwnerAvailabilityGate, FakeReadinessGate, PhoneRemoteService,
     TrustedRequestContext)
@@ -404,6 +406,228 @@ class ServiceTests(unittest.TestCase):
         receipt = self.service.handle(deferred, self.context)
         self.assertEqual((receipt["status"], receipt["reason"]), ("unavailable", "operation_unavailable"))
         self.assertEqual(self.service.handle(deferred, self.context), receipt)
+
+    def test_results_snapshot_resume_and_cached_receipt_revalidate_visibility(self):
+        result_id = "00000000-0000-0000-0000-000000000101"
+        grant = PhoneResultCollectionGrantV1("alice", "dev", "grant",
+            "00000000-0000-0000-0000-000000000201", (result_id,))
+        source = SyntheticResultsSource((SyntheticResultRecord(result_id, 1, "safe title",
+            "safe body", 1_800_000_000_000),))
+        projector = PhoneRemoteResults(grant, source, clock=lambda: 10.0)
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=self.clock, results=projector)
+
+        snapshot_request = self.request("results.snapshot", {}, "service-results-snapshot")
+        snapshot = service.handle(snapshot_request, self.context)
+        self.assertEqual((snapshot["status"], snapshot["reason"]), ("ok", "none"))
+        self.assertEqual(snapshot, service.handle(snapshot_request, self.context))
+        self.assertEqual(snapshot["payload"]["items"][0]["result_id"], result_id)
+        self.assertNotIn("protected canary", repr(snapshot))
+
+        source.replace((SyntheticResultRecord(result_id, 2, "updated title", "updated body",
+            1_800_000_000_001),))
+        cursor = snapshot["payload"]["cursor"]
+        resume_request = self.request("results.resume", {"cursor": cursor}, "service-results-resume")
+        page = service.handle(resume_request, self.context)
+        self.assertEqual((page["status"], page["reason"]), ("ok", "none"))
+        self.assertEqual(page["payload"]["events"][0]["item"]["revision"], 2)
+        self.assertEqual(page, service.handle(resume_request, self.context))
+
+        source.replace((SyntheticResultRecord(result_id, 3, "private title", "private body",
+            1_800_000_000_002, classification="protected"),))
+        stale = service.handle(resume_request, self.context)
+        self.assertEqual((stale["status"], stale["reason"], stale["payload"]),
+                         ("unavailable", "authority_unavailable", {}))
+        reset = service.handle(self.request("results.resume", {"cursor": page["payload"]["cursor"]},
+            "service-results-reset"), self.context)
+        self.assertEqual((reset["status"], reset["reason"]), ("ok", "none"))
+        self.assertTrue(reset["payload"]["reset_required"])
+        self.assertNotIn("private title", repr(reset))
+
+    def test_result_source_change_during_commit_preparation_fails_without_cursor(self):
+        result_id = "00000000-0000-0000-0000-000000000111"
+        grant = PhoneResultCollectionGrantV1("alice", "dev", "grant",
+            "00000000-0000-0000-0000-000000000211", (result_id,))
+        source = SyntheticResultsSource((SyntheticResultRecord(result_id, 1, "before", "before-body",
+            1_800_000_000_000),))
+        projector = PhoneRemoteResults(grant, source, clock=lambda: 10.0)
+        availability = self.service.owner_available
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=self.clock, owner_available=availability, results=projector)
+        arrived, release = threading.Event(), threading.Event()
+        availability.pause_before_commit("result-source-change", arrived, release)
+        replies = []
+        request = self.request("results.snapshot", {}, "source-changed-during-prepare")
+        thread = threading.Thread(name="result-source-change",
+            target=lambda: replies.append(service.handle(request, self.context)))
+        thread.start()
+        self.assertTrue(arrived.wait(2))
+        source.replace((SyntheticResultRecord(result_id, 2, "after", "after-body",
+            1_800_000_000_001),))
+        release.set()
+        thread.join(3)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual((replies[0]["status"], replies[0]["reason"], replies[0]["payload"]),
+                         ("unavailable", "authority_unavailable", {}))
+        self.assertEqual((projector._sequence, len(projector._cursors), projector._journal), (0, 0, []))
+        self.assertNotIn("after-body", repr(replies[0]))
+
+    def test_result_cached_receipts_die_with_grant_epoch_and_visibility_round_trip(self):
+        result_id = "00000000-0000-0000-0000-000000000151"
+        grant = PhoneResultCollectionGrantV1("alice", "dev", "grant",
+            "00000000-0000-0000-0000-000000000251", (result_id,))
+        source = SyntheticResultsSource((SyntheticResultRecord(result_id, 1, "visible", "safe",
+            1_800_000_000_000),))
+        projector = PhoneRemoteResults(grant, source, clock=lambda: 10.0)
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=self.clock, results=projector)
+        raw = self.request("results.snapshot", {}, "epoch-bound-snapshot")
+        first = service.handle(raw, self.context)
+        self.assertEqual(first["status"], "ok")
+
+        projector.replace_grant(PhoneResultCollectionGrantV1("alice", "dev", "grant",
+            "00000000-0000-0000-0000-000000000252", (result_id,), version=2))
+        replaced = service.handle(raw, self.context)
+        self.assertEqual((replaced["status"], replaced["reason"]),
+                         ("unavailable", "authority_unavailable"))
+
+        fresh_raw = self.request("results.snapshot", {}, "visibility-bound-snapshot")
+        fresh = service.handle(fresh_raw, self.context)
+        source.replace((SyntheticResultRecord(result_id, 2, "hidden", "PROTECTED-CANARY",
+            1_800_000_000_001, classification="protected"),))
+        source.replace((SyntheticResultRecord(result_id, 3, "visible again", "safe again",
+            1_800_000_000_002),))
+        stale = service.handle(fresh_raw, self.context)
+        self.assertEqual((stale["status"], stale["reason"]),
+                         ("unavailable", "authority_unavailable"))
+        self.assertNotIn("PROTECTED-CANARY", repr(stale))
+        self.assertEqual(service.handle(self.request("results.snapshot", {}, "after-visibility"),
+                                        self.context)["status"], "ok")
+
+    def test_result_visibility_round_trip_during_preparation_withholds_candidate(self):
+        result_id = "00000000-0000-0000-0000-000000000161"
+        grant = PhoneResultCollectionGrantV1("alice", "dev", "grant",
+            "00000000-0000-0000-0000-000000000261", (result_id,))
+        source = SyntheticResultsSource((SyntheticResultRecord(result_id, 1, "visible", "before",
+            1_800_000_000_000),))
+        projector = PhoneRemoteResults(grant, source, clock=lambda: 10.0)
+        availability = self.service.owner_available
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=self.clock, owner_available=availability, results=projector)
+        arrived, release = threading.Event(), threading.Event()
+        availability.pause_before_commit("result-visibility-round-trip", arrived, release)
+        replies = []
+        thread = threading.Thread(name="result-visibility-round-trip", target=lambda: replies.append(
+            service.handle(self.request("results.snapshot", {}, "visibility-race"), self.context)))
+        thread.start()
+        self.assertTrue(arrived.wait(2))
+        source.replace((SyntheticResultRecord(result_id, 2, "protected", "NEVER-RETURN",
+            1_800_000_000_001, classification="protected"),))
+        source.replace((SyntheticResultRecord(result_id, 3, "visible", "before",
+            1_800_000_000_002),))
+        release.set()
+        thread.join(3)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual((replies[0]["status"], replies[0]["reason"]),
+                         ("unavailable", "authority_unavailable"))
+        self.assertNotIn("NEVER-RETURN", repr(replies[0]))
+        self.assertEqual((projector._sequence, len(projector._cursors)), (0, 0))
+
+    def test_cached_results_commit_never_invokes_projector_clock_callback(self):
+        result_id = "00000000-0000-0000-0000-000000000171"
+        source = SyntheticResultsSource((SyntheticResultRecord(result_id, 1, "visible", "safe",
+            1_800_000_000_000),))
+        armed = [False]
+        clock_calls = [0]
+        def projector_clock():
+            clock_calls[0] += 1
+            if armed[0]:
+                source.replace((SyntheticResultRecord(result_id, 2, "protected", "NEVER-RETURN",
+                    1_800_000_000_001, classification="protected"),))
+                source.replace((SyntheticResultRecord(result_id, 3, "visible", "visible again",
+                    1_800_000_000_002),))
+            return 10.0
+        projector = PhoneRemoteResults(PhoneResultCollectionGrantV1("alice", "dev", "grant",
+            "00000000-0000-0000-0000-000000000271", (result_id,)), source, clock=projector_clock)
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=self.clock, results=projector)
+        raw = self.request("results.snapshot", {}, "clock-bound-results")
+        first = service.handle(raw, self.context)
+        self.assertEqual(first["status"], "ok")
+        initial_calls = clock_calls[0]
+        armed[0] = True
+        replay = service.handle(raw, self.context)
+        self.assertEqual(replay, first)
+        self.assertEqual(clock_calls[0], initial_calls,
+                         "the projector clock is preparation-only, never called under commit guards")
+        self.assertFalse(any("NEVER-RETURN" in str(value) for value in (first, replay)))
+        source.replace((SyntheticResultRecord(result_id, 2, "protected", "NEVER-RETURN",
+            1_800_000_000_001, classification="protected"),))
+        source.replace((SyntheticResultRecord(result_id, 3, "visible", "visible again",
+            1_800_000_000_002),))
+        denied_replay = service.handle(raw, self.context)
+        self.assertEqual((denied_replay["status"], denied_replay["reason"]),
+                         ("unavailable", "authority_unavailable"))
+
+    def test_failed_results_preparation_does_not_retry_or_mutate_projector(self):
+        result_id = "00000000-0000-0000-0000-000000000181"
+        source = SyntheticResultsSource((SyntheticResultRecord(result_id, 1, "visible", "safe",
+            1_800_000_000_000),))
+        clock_calls = [0]
+
+        def fail_once_clock():
+            clock_calls[0] += 1
+            if clock_calls[0] == 1:
+                raise RuntimeError("synthetic clock failure")
+            return 10.0
+
+        projector = PhoneRemoteResults(PhoneResultCollectionGrantV1("alice", "dev", "grant",
+            "00000000-0000-0000-0000-000000000281", (result_id,)), source, clock=fail_once_clock)
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=self.clock, results=projector)
+        reply = service.handle(self.request("results.snapshot", {}, "failed-prepare"), self.context)
+        self.assertEqual((reply["status"], reply["reason"]),
+                         ("unavailable", "authority_unavailable"))
+        self.assertEqual(clock_calls[0], 1,
+                         "failed preparation must not be retried under commit guards")
+        self.assertEqual((projector._sequence, len(projector._journal), len(projector._cursors)),
+                         (0, 0, 0))
+
+    def test_unselected_protected_change_during_commit_does_not_leak_or_reset(self):
+        visible_id = "00000000-0000-0000-0000-000000000121"
+        protected_id = "00000000-0000-0000-0000-000000000122"
+        grant = PhoneResultCollectionGrantV1("alice", "dev", "grant",
+            "00000000-0000-0000-0000-000000000221", (visible_id,))
+        source = SyntheticResultsSource((
+            SyntheticResultRecord(visible_id, 1, "visible", "visible-body", 1_800_000_000_000),
+            SyntheticResultRecord(protected_id, 1, "hidden", "PROTECTED-CANARY",
+                1_800_000_000_000, classification="protected"),
+        ))
+        projector = PhoneRemoteResults(grant, source, clock=lambda: 10.0)
+        availability = self.service.owner_available
+        service = PhoneRemoteService(self.store, FakeContextVerifier(), self.media,
+            clock=self.clock, owner_available=availability, results=projector)
+        arrived, release = threading.Event(), threading.Event()
+        availability.pause_before_commit("unselected-protected-change", arrived, release)
+        replies = []
+        thread = threading.Thread(name="unselected-protected-change",
+            target=lambda: replies.append(service.handle(
+                self.request("results.snapshot", {}, "unselected-protected-change"), self.context)))
+        thread.start()
+        self.assertTrue(arrived.wait(2))
+        source.replace((
+            SyntheticResultRecord(visible_id, 1, "visible", "visible-body", 1_800_000_000_000),
+            SyntheticResultRecord(protected_id, 2, "hidden-new", "PROTECTED-CANARY-NEW",
+                1_800_000_000_001, classification="protected"),
+        ))
+        release.set()
+        thread.join(3)
+        self.assertFalse(thread.is_alive())
+        reply = replies[0]
+        self.assertEqual((reply["status"], reply["reason"]), ("ok", "none"))
+        self.assertEqual([item["result_id"] for item in reply["payload"]["items"]], [visible_id])
+        self.assertNotIn("PROTECTED-CANARY", repr(reply))
+        self.assertEqual(reply["payload"]["content_watermark"], 1)
 
     def test_voice_end_uses_replay_ledger_and_keeps_idempotent_receipt(self):
         offer, _, _ = self._offer(ticket="end-ticket")
@@ -1240,3 +1464,43 @@ class ServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PhoneCardServiceGateTests(unittest.TestCase):
+    def test_cards_do_not_depend_on_voice_or_allocate_voice_resources(self):
+        from tests.unit.test_phone_remote_result_commands import CardFixture
+        fixture=CardFixture();self.addCleanup(fixture.close)
+        fixture.service.voice_ready.set_ready(False)
+        self.assertEqual(fixture.sync()['status'],'ok')
+        self.assertEqual(fixture.action('results.pin')['status'],'ok')
+        self.assertEqual(fixture.service._peers,{})
+        self.assertEqual(fixture.service._owner_lease,{})
+        self.assertEqual(fixture.service._pending_media,{})
+        fixture.service.enabled=False
+        self.assertEqual(fixture.action('results.close')['reason'],'feature_off')
+        self.assertTrue(next(iter(fixture.registry._views.values())).payload['cards'][0]['open'])
+
+
+class ProofModeConstructorTests(unittest.TestCase):
+    def test_proof_verifier_cannot_widen_public_fake_constructor(self):
+        from types import SimpleNamespace
+        from jarvis.bot.phone_remote_connection import ConnectionRegistry, ConnectionClock, ProofContextVerifier, _CONNECTION_CONSTRUCTION
+        from jarvis.bot.phone_remote_service import _AUTHORITY_CHILD_CAPABILITY
+        db=sqlite3.connect(':memory:')
+        try:
+            store=PhoneAdmissionStore(db,FakeProtectedAnchor('host-test'))
+            host=SimpleNamespace(_anchor=store.anchor)
+            registry=ConnectionRegistry(host,ConnectionClock(),_CONNECTION_CONSTRUCTION)
+            class FakeSubclass(FakeContextVerifier):pass
+            for verifier in (FakeSubclass(),object(),registry.verifier):
+                with self.subTest(verifier=type(verifier).__name__),self.assertRaises(TypeError):
+                    PhoneRemoteService(store,verifier,FakeMediaAdapter())
+            with self.assertRaises(TypeError):
+                PhoneRemoteService(store,registry.verifier,FakeMediaAdapter(),clock=registry.clock.service,
+                    _connection_registry=registry,_authority_child_capability=_AUTHORITY_CHILD_CAPABILITY,
+                    _login_coordinator=object())
+            with self.assertRaises(TypeError):ProofContextVerifier(registry,object())
+            class RegistrySubclass(ConnectionRegistry):pass
+            with self.assertRaises(TypeError):ProofContextVerifier(object.__new__(RegistrySubclass),_CONNECTION_CONSTRUCTION)
+            service=PhoneRemoteService(store,FakeContextVerifier(),FakeMediaAdapter())
+            self.assertIs(type(service.verifier),FakeContextVerifier)
+        finally:db.close()

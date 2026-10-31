@@ -10,6 +10,7 @@ import contextlib
 import json
 import math
 import os
+import time
 import socket
 import sqlite3
 import stat
@@ -32,6 +33,10 @@ PROTOCOL = "mortimer.phone-authority-channel.v1"
 VERSION = 1
 PROTOCOL_V2 = "mortimer.phone-authority-channel.v2"
 VERSION_V2 = 2
+PROTOCOL_V3 = "mortimer.phone-authority-channel.v3"
+VERSION_V3 = 3
+PROTOCOL_V4 = "mortimer.phone-authority-channel.v4"
+VERSION_V4 = 4
 MAX_FRAME_BYTES = 65_536
 MAX_SEQUENCE = (1 << 64) - 1
 FRAME_FIELDS = frozenset({
@@ -206,16 +211,22 @@ class NativeProtectedAnchor:
         if hello["kind"] != "owner.hello" or hello["sequence"] != 1:
             self.close()
             raise ChannelProtocolError("owner handshake required")
-        if (type(hello["payload"]) is not dict
-                or hello["payload"].keys() != {"max_frame_bytes"}
-                or not _exact_int(hello["payload"]["max_frame_bytes"], MAX_FRAME_BYTES, MAX_FRAME_BYTES)):
+        try:
+            ready = self._accept_hello(hello["payload"])
+            self._receive_sequence = 1
+            self._owner_incarnation = hello["owner_incarnation"]
+            self._child_incarnation = hello["child_incarnation"]
+            self._correlation_id = hello["correlation_id"]
+            self._send("child.ready", ready, correlation_id=self._correlation_id)
+        except BaseException:
             self.close()
+            raise
+
+    def _accept_hello(self, payload):
+        if (type(payload) is not dict or payload.keys() != {"max_frame_bytes"}
+                or not _exact_int(payload["max_frame_bytes"], MAX_FRAME_BYTES, MAX_FRAME_BYTES)):
             raise ChannelProtocolError("unsupported owner handshake")
-        self._receive_sequence = 1
-        self._owner_incarnation = hello["owner_incarnation"]
-        self._child_incarnation = hello["child_incarnation"]
-        self._correlation_id = hello["correlation_id"]
-        self._send("child.ready", {}, correlation_id=self._correlation_id)
+        return {}
 
     @classmethod
     def from_inherited_environment(cls) -> "NativeProtectedAnchor":
@@ -298,6 +309,24 @@ class NativeProtectedAnchor:
         }
         encoded = encode_frame_payload(frame)
         try:
+            trace_path = os.environ.get("PHONE_REMOTE_AUTHORITY_RESTORE_WIRE_FILE")
+            restore_frame = (
+                (kind == "child.grant.acquire" and payload.get("operation") == "restore.prepare")
+                or (self._grant_operation == "restore.prepare"
+                    and kind in {"child.anchor.read", "child.anchor.advance",
+                                 "child.restore.database_pending", "child.restore.fenced"})
+                or (getattr(self._scope_local, "operation", None) == "restore.prepare"
+                    and kind == "child.shutdown_ack")
+            )
+            if trace_path and restore_frame:
+                trace = {"direction": "child", "kind": kind, "correlation_id": correlation_id,
+                         "sequence": self._send_sequence, "payload": payload}
+                trace_bytes = json.dumps(trace, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+                trace_fd = os.open(trace_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+                try:
+                    os.write(trace_fd, trace_bytes)
+                finally:
+                    os.close(trace_fd)
             self._socket.sendall(struct.pack(">I", len(encoded)) + encoded)
         except OSError as exc:
             self.close()
@@ -310,14 +339,15 @@ class NativeProtectedAnchor:
             operation = payload.get("operation") if type(payload) is dict else None
             if self._require_operation_context() != operation:
                 raise StoreUnavailable("store operation context does not match authority grant")
-        elif kind in {"child.anchor.read", "child.anchor.advance", "child.grant.release", "child.grant.abort"}:
+        elif kind in {"child.anchor.read", "child.anchor.advance", "child.grant.release",
+                      "child.grant.reject", "child.grant.abort", "child.restore.fenced"}:
             self._require_grant()
         correlation_id = str(uuid.uuid4())
         self._send(kind, payload, correlation_id=correlation_id)
         response = self._receive()
         if response["correlation_id"] != correlation_id:
             self.close()
-            raise ChannelProtocolError("response correlation mismatch")
+            raise ChannelProtocolError(f"response correlation mismatch for {kind}: {response['kind']}")
         if response["kind"] == "owner.error":
             code = response["payload"].get("code")
             if (response["payload"].keys() != {"code"}
@@ -354,7 +384,8 @@ class NativeProtectedAnchor:
                 and self._scope_local.allow_zero_grant_false is True
                 and self._scope_local.grant_count == 0
             )
-            if self._scope_local.grant_count != 1 and not valid_zero_grant_false:
+            if (self._scope_local.grant_count != 1
+                    and not valid_zero_grant_false):
                 raise StoreUnavailable("store method did not use exactly one authority grant")
         finally:
             self._scope_local.operation = None
@@ -384,6 +415,56 @@ class NativeProtectedAnchor:
         try:
             yield
         except StoreDenied:
+            if (isinstance(self, (NativeProtectedAnchorV3, NativeProtectedAnchorV4))
+                    and self._grant_operation == "restore.prepare"
+                    and self._grant_read_verified and self._anchor_state is not None
+                    and self._anchor_state.transition_state == "stable" and not self._closed):
+                grant_id = self._grant_id
+                try:
+                    payload = self._request("child.grant.release", {"grant_id": grant_id},
+                                            "owner.grant.released")
+                    if payload != {"grant_id": grant_id}:
+                        raise ChannelProtocolError("invalid restore preflight denial acknowledgment")
+                    self._clear_grant()
+                except BaseException as exc:
+                    self.close()
+                    raise StoreUnavailable("authority operation outcome is unknown") from exc
+                raise
+            if (isinstance(self, (NativeProtectedAnchorV3, NativeProtectedAnchorV4))
+                    and self._grant_operation == "session.challenge"
+                    and getattr(self._scope_local, "method", None) == "login_challenge_context"
+                    and self._grant_read_verified and not self._closed):
+                grant_id = self._grant_id
+                try:
+                    payload = self._request("child.grant.release", {"grant_id": grant_id},
+                                            "owner.grant.released")
+                    if payload != {"grant_id": grant_id}:
+                        raise ChannelProtocolError("invalid challenge denial release acknowledgment")
+                    self._clear_grant()
+                except BaseException as exc:
+                    self.close()
+                    raise StoreUnavailable("authority operation outcome is unknown") from exc
+                raise
+            if (isinstance(self, (NativeProtectedAnchorV3, NativeProtectedAnchorV4))
+                    and self._grant_operation == "session.login"
+                    and getattr(self._scope_local, "method", None) == "login_proof"
+                    and self._grant_read_verified and not self._closed
+                    and self._anchor_state is not None
+                    and self._anchor_state.transition_state == "stable"):
+                grant_id = self._grant_id
+                try:
+                    payload = self._request("child.grant.reject", {
+                        "grant_id": grant_id, "operation": "session.login",
+                        "code": "not_authorized",
+                    }, "owner.grant.rejected")
+                    if payload != {"grant_id": grant_id, "operation": "session.login",
+                                   "code": "not_authorized"}:
+                        raise ChannelProtocolError("invalid login denial acknowledgment")
+                    self._clear_grant()
+                except BaseException as exc:
+                    self.close()
+                    raise StoreUnavailable("authority operation outcome is unknown") from exc
+                raise
             if (not self.service_authority
                     or getattr(self._scope_local, "operation", None) != "service.authorize"
                     or getattr(self._scope_local, "method", None) not in {"current_binding", "binding_current"}
@@ -409,6 +490,14 @@ class NativeProtectedAnchor:
                 raise StoreUnavailable("authority operation outcome is unknown") from original
             raise
         else:
+            if getattr(self._scope_local, "operation", None) == "restore.prepare":
+                if (not self._grant_read_verified or self._anchor_state is None
+                        or self._anchor_state.transition_state != "pending"):
+                    if not self._abort_grant():
+                        raise StoreUnavailable("authority operation outcome is unknown")
+                    raise StoreUnavailable("restore operation did not reach pending state")
+                self.confirm_restore_database_pending()
+                return
             if not self._grant_read_verified:
                 if not self._abort_grant():
                     raise StoreUnavailable("authority operation outcome is unknown")
@@ -448,6 +537,84 @@ class NativeProtectedAnchor:
             self.close()
         return acknowledged
 
+    def _clear_grant(self) -> None:
+        self._grant_id = self._grant_operation = None
+        self._grant_owner_thread = None
+        self._grant_read_verified = False
+        self._anchor_state = None
+
+    def confirm_restore_database_pending(self) -> None:
+        grant_id = self._require_grant()
+        if (not isinstance(self, (NativeProtectedAnchorV3, NativeProtectedAnchorV4))
+                or self._grant_operation != "restore.prepare"
+                or self._anchor_state is None
+                or self._anchor_state.transition_state != "pending"):
+            raise StoreUnavailable("restore pending database state is required")
+        operation_id = self._anchor_state.transition_id
+        if not _canonical_uuid(operation_id):
+            self.close()
+            raise ChannelProtocolError("invalid restore operation identifier")
+        # This is deliberately one-way. The following fenced request is the
+        # owner-visible confirmation that the child committed and advanced.
+        self._send("child.restore.database_pending", {
+            "grant_id": grant_id, "operation_id": operation_id,
+        })
+
+    @contextlib.contextmanager
+    def restore_finish_context(self):
+        if (not isinstance(self, (NativeProtectedAnchorV3, NativeProtectedAnchorV4)) or self._grant_id is None
+                or self._grant_operation != "restore.prepare"
+                or self._grant_owner_thread != threading.get_ident()
+                or self._scope_lock.locked()
+                or not self._scope_lock.acquire(blocking=False)):
+            raise StoreUnavailable("restore continuation is unavailable")
+        self._scope_local.operation = "restore.prepare"
+        self._scope_local.method = "prepare_restore"
+        self._scope_local.thread_id = threading.get_ident()
+        self._scope_local.grant_count = 1
+        self._scope_local.restore_complete = False
+        try:
+            yield
+            if self._scope_local.restore_complete is not True or self._grant_id is not None:
+                self.close()
+                raise StoreUnavailable("restore continuation did not terminate the authority grant")
+        finally:
+            self._scope_local.operation = None
+            self._scope_local.method = None
+            self._scope_local.thread_id = None
+            self._scope_local.grant_count = 0
+            self._scope_lock.release()
+
+    def finish_restore_prepare(self) -> dict[str, object]:
+        grant_id = self._require_grant()
+        if (not isinstance(self, (NativeProtectedAnchorV3, NativeProtectedAnchorV4))
+                or self._grant_operation != "restore.prepare"
+                or self._anchor_state is None
+                or self._anchor_state.transition_state != "pending"):
+            raise StoreUnavailable("restore pending state is required")
+        state = self._anchor_state
+        correlation = str(uuid.uuid4())
+        operation_id = state.transition_id
+        if not _canonical_uuid(operation_id):
+            self.close()
+            raise ChannelProtocolError("invalid restore operation identifier")
+        self._send("child.restore.fenced", {"grant_id": grant_id,
+                    "operation_id": operation_id}, correlation_id=correlation)
+        response = self._receive()
+        expected = {"grant_id": grant_id, "operation_id": operation_id,
+                    "host_generation": state.host_generation, "transition_state": "pending"}
+        if (response["correlation_id"] != correlation
+                or response["kind"] != "owner.restore.prepared"
+                or response["payload"] != expected):
+            self.close()
+            raise StoreUnavailable("restore prepare acknowledgment is unavailable")
+        # The owner retires its grant before sending the prepared response;
+        # this endpoint retires its matching grant when that response arrives.
+        self._clear_grant()
+        self._scope_local.restore_complete = True
+        return {"host_generation": state.host_generation,
+                "transition_id": state.transition_id, "transition_state": "pending"}
+
     def read(self) -> AnchorState:
         grant_id = self._require_grant()
         payload = self._request("child.anchor.read", {"grant_id": grant_id}, "owner.anchor.state")
@@ -482,6 +649,10 @@ class NativeProtectedAnchor:
                 valid = (state.host_generation == current.host_generation + 1
                          and state.login_counter == current.login_counter)
                 step = "global_pending"
+            elif self._grant_operation == "restore.prepare":
+                valid = (state.host_generation == current.host_generation + 1
+                         and state.login_counter == current.login_counter)
+                step = "restore_pending"
             elif self._grant_operation == "session.login":
                 valid = (state.host_generation == current.host_generation
                          and state.login_counter == current.login_counter + 1)
@@ -541,10 +712,28 @@ class NativeProtectedAnchor:
             raise StoreUnavailable("cannot shut down with an active grant")
         frame = self._receive()
         if (frame["kind"] != "owner.shutdown"
-                or frame["payload"] != {"reason": "requested"}):
+                or frame["payload"] != {"reason": "requested"}
+                or (getattr(self._scope_local, "operation", None) == "restore.prepare"
+                    and frame["correlation_id"] == self._last_correlation_id)):
             self.close()
             raise ChannelProtocolError("invalid shutdown request")
+        if getattr(self._scope_local, "operation", None) == "restore.prepare":
+            phase = os.environ.get("PHONE_REMOTE_AUTHORITY_TEST_RESTORE_FAIL_PHASE")
+            if phase == "child-alive-after-close":
+                self.close()
+                while True:
+                    time.sleep(1)
+            if phase == "shutdown-no-ack":
+                while True:
+                    time.sleep(1)
+        if (getattr(self._scope_local, "operation", None) == "restore.prepare"
+                and os.environ.get("PHONE_REMOTE_AUTHORITY_TEST_RESTORE_FAIL_PHASE") == "shutdown-ack"):
+            self.close()
+            raise ChannelProtocolError("injected shutdown acknowledgment loss")
         self._send("child.shutdown_ack", {}, correlation_id=frame["correlation_id"])
+        if (getattr(self._scope_local, "operation", None) == "restore.prepare"
+                and os.environ.get("PHONE_REMOTE_AUTHORITY_TEST_RESTORE_FAIL_PHASE") == "child-exit-after-shutdown-ack"):
+            os._exit(78)
         self.close()
 
     def close(self) -> None:
@@ -582,6 +771,79 @@ class NativeProtectedAnchorV2(NativeProtectedAnchor):
             yield
 
 
+class NativeProtectedAnchorV3(NativeProtectedAnchorV2):
+    """Closed v3 channel adding challenge read and pre-mutation login denial."""
+    protocol = PROTOCOL_V3
+    version = VERSION_V3
+    operations = NativeProtectedAnchorV2.operations | frozenset({"session.challenge", "restore.prepare"})
+    service_authority = True
+
+
+class NativeProtectedAnchorV4(NativeProtectedAnchorV3):
+    """v4 envelope for the unchanged normal v3 operation schemas.
+
+    Recovery-specific v4 messages are implemented by the recovery owner; this
+    class intentionally exposes only the existing normal store/service grants.
+    """
+    protocol = PROTOCOL_V4
+    version = VERSION_V4
+    operations = NativeProtectedAnchorV3.operations - frozenset({"restore.prepare"})
+
+    def _accept_hello(self, payload):
+        from jarvis.bot.phone_remote_recovery import validate_normal_anchor
+        if (type(payload) is not dict
+                or payload.keys() != {"mode", "store_schema_version", "protected_anchor"}
+                or payload["mode"] != "normal"
+                or not _exact_int(payload["store_schema_version"], 1, 2)):
+            raise ChannelProtocolError("invalid normal v4 hello")
+        self.protected_anchor = validate_normal_anchor(payload["protected_anchor"])
+        if self.protected_anchor["anchor_version"] != payload["store_schema_version"]:
+            raise ChannelProtocolError("cross-version normal authority")
+        self._activated = False
+        self._store_open_released = False
+        return {"mode": "normal", "store_schema_version": payload["store_schema_version"]}
+
+    def activate(self, connection):
+        from jarvis.bot.phone_remote_recovery import normal_service_receipt
+        try:
+            if self._activated or self._grant_id is not None or not self._store_open_released:
+                raise ChannelProtocolError("normal activation is out of phase")
+            receipt = normal_service_receipt(connection, self.protected_anchor)
+            correlation = str(uuid.uuid4())
+            self._send("child.service.ready", receipt, correlation_id=correlation)
+            frame = self._receive()
+            tombstone = receipt["last_completed_restore"]
+            expected = {key: receipt[key] for key in
+                        ("host_id", "host_generation", "store_schema_version")}
+            expected["operation_id"] = None if tombstone is None else tombstone["operation_id"]
+            if (frame["kind"] != "owner.service.activate" or frame["correlation_id"] != correlation
+                    or frame["payload"] != expected
+                    or any(type(frame["payload"].get(key)) is not type(value)
+                           for key, value in expected.items())):
+                raise ChannelProtocolError("normal activation mismatch")
+            self._send("child.service.activated", expected, correlation_id=correlation)
+            self._activated = True
+        except BaseException:
+            self.close()
+            raise
+
+    def _request(self, kind, payload, expected):
+        observer = getattr(self, "_admission_observer", None)
+        if kind == "child.grant.acquire" and observer is not None:
+            observer("acquire", payload.get("operation"))
+        if (kind == "child.grant.acquire" and not self._activated
+                and payload.get("operation") != "store.open"):
+            self.close()
+            raise ChannelProtocolError("normal child is not activated")
+        result = super()._request(kind, payload, expected)
+        if kind == "child.grant.release" and observer is not None:
+            observer("released", self._grant_operation)
+        if kind == "child.grant.release" and self._grant_operation == "store.open":
+            self._store_open_released = True
+        return result
+
+
+
 _METHOD_OPERATIONS = {
     "store.read": frozenset({"status"}),
     "session.login": frozenset({"login"}),
@@ -598,7 +860,7 @@ _METHOD_OPERATIONS = {
 def open_store(factory: Callable[..., PhoneAdmissionStore], *args: Any,
                anchor: NativeProtectedAnchor, **kwargs: Any) -> PhoneAdmissionStore:
     """Construct exactly the existing store inside the `store.open` grant."""
-    if (factory is not PhoneAdmissionStore or type(anchor) not in {NativeProtectedAnchor, NativeProtectedAnchorV2}
+    if (factory is not PhoneAdmissionStore or type(anchor) not in {NativeProtectedAnchor, NativeProtectedAnchorV2, NativeProtectedAnchorV3, NativeProtectedAnchorV4}
             or len(args) != 1 or type(args[0]) is not sqlite3.Connection
             or set(kwargs) - {"failpoint", "process_epoch"} or args[0].in_transaction):
         raise StoreUnavailable("unsupported store construction")
@@ -609,8 +871,14 @@ def open_store(factory: Callable[..., PhoneAdmissionStore], *args: Any,
         raise StoreUnavailable("preprovisioned authority schema required")
     if connection.execute("SELECT singleton_id FROM phone_remote_meta WHERE singleton_id=1").fetchone() is None:
         raise StoreUnavailable("preprovisioned authority metadata required")
+    if type(anchor) is NativeProtectedAnchorV4:
+        from jarvis.bot.phone_remote_recovery import normal_service_receipt
+        # Check the complete protected/store pair before construction can write.
+        normal_service_receipt(connection, anchor.protected_anchor)
     with anchor._operation_context("store.open"):
         store = factory(*args, anchor=anchor, **kwargs)
+    if type(anchor) is NativeProtectedAnchorV4:
+        anchor.activate(connection)
     return store
 
 
@@ -623,16 +891,21 @@ def run_store_operation(operation: str, method: Callable[..., Any], *args: Any,
     method_owner = method.__self__
     method_function = method.__func__
     class_function = getattr(PhoneAdmissionStore, method_name, None)
-    v2 = type(anchor) is NativeProtectedAnchorV2
+    v2 = type(anchor) in {NativeProtectedAnchorV2, NativeProtectedAnchorV3, NativeProtectedAnchorV4}
+    v3 = type(anchor) in {NativeProtectedAnchorV3, NativeProtectedAnchorV4}
     method_map = dict(_METHOD_OPERATIONS)
     if v2:
         method_map["service.authorize"] = frozenset({"current_binding", "binding_current"})
         method_map["service.commit"] = frozenset()
+    if v3:
+        method_map["session.challenge"] = frozenset({"login_challenge_context"})
+        method_map["session.login"] = frozenset({"login_proof"})
+        method_map["restore.prepare"] = frozenset({"prepare_restore"})
     if (operation not in method_map
             or method_name not in method_map[operation]
             or type(method_owner) is not PhoneAdmissionStore
             or method_function is not class_function
-            or type(anchor) not in {NativeProtectedAnchor, NativeProtectedAnchorV2}
+            or type(anchor) not in {NativeProtectedAnchor, NativeProtectedAnchorV2, NativeProtectedAnchorV3, NativeProtectedAnchorV4}
             or method_owner.anchor is not anchor):
         raise StoreUnavailable("store method does not match operation")
     with anchor._operation_context(operation, method=method_name if v2 else None):
@@ -644,3 +917,40 @@ def run_store_operation(operation: str, method: Callable[..., Any], *args: Any,
             # accepted by the v2 operation context.
             anchor._scope_local.allow_zero_grant_false = True
     return result
+
+
+class RecoveryChildChannel(NativeProtectedAnchor):
+    """Private v4 recovery channel; no store grants or service construction."""
+    protocol = PROTOCOL_V4
+    version = VERSION_V4
+    operations = frozenset()
+
+    def __init__(self, channel, *, session):
+        from jarvis.bot.phone_remote_recovery import RecoveryProtocolSession
+        if type(session) is not RecoveryProtocolSession:
+            raise TypeError("a closed recovery session is required")
+        self.session = session
+        super().__init__(channel)
+        self._correlations = {self._correlation_id}
+
+    def _accept_hello(self, payload):
+        expected = dict(self.session.ready_payload)
+        del expected["maximum_store_schema_version"]
+        if payload != expected or type(payload.get("target_generation")) is not int:
+            raise ChannelProtocolError("recovery hello does not match configured identity")
+        return self.session.ready_payload
+
+    def serve(self):
+        try:
+            while True:
+                frame = self._receive()
+                correlation = frame["correlation_id"]
+                if correlation in self._correlations:
+                    raise ChannelProtocolError("replayed recovery correlation")
+                self._correlations.add(correlation)
+                kind, payload = self.session.handle(frame["kind"], frame["payload"])
+                self._send(kind, payload, correlation_id=correlation)
+                if kind == "child.shutdown_ack":
+                    return
+        finally:
+            self.close()

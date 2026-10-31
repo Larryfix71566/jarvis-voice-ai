@@ -1,5 +1,6 @@
 """Disposable SQLite/fake-anchor contract tests; no real services or keys."""
 import os
+import hashlib
 import sqlite3
 import tempfile
 import threading
@@ -9,6 +10,7 @@ from contextlib import contextmanager
 
 from jarvis.bot.phone_admission_store import (
     FakeProtectedAnchor, PhoneAdmissionStore, StoreDenied, StoreUnavailable, SCHEMA_SQL,
+    RESTORE_RECEIPT_SQL,
 )
 from jarvis.auth import ClientIdentity
 
@@ -59,6 +61,36 @@ class StoreTests(unittest.TestCase):
         self.assertIn("public_key", columns)
         self.assertNotIn("private_key", columns)
 
+    def test_schema_v2_receipt_is_validated_and_preserved_by_normal_authority_operations(self):
+        self.seed()
+        receipt = ("restore-test", "host-test", 2, "a" * 64, "b" * 64, "c" * 64, 1)
+        self.db.execute(RESTORE_RECEIPT_SQL)
+        self.db.execute("INSERT INTO phone_remote_restore_receipt VALUES(1,?,?,?,?,?,?,?)", receipt)
+        self.db.execute("UPDATE phone_remote_meta SET schema_version=2")
+        self.db.commit()
+        reopened = PhoneAdmissionStore(self.db, self.anchor)
+        self.assertEqual(reopened.status()["schema_version"], 2)
+        self.assertEqual(tuple(self.db.execute(
+            "SELECT operation_id,host_id,target_generation,manifest_sha256,checkpoint_sha256,"
+            "authority_sha256,receipt_version FROM phone_remote_restore_receipt WHERE singleton_id=1"
+        ).fetchone()), receipt)
+
+        incarnation = reopened.login(identity=identity(), session_id="s-v2", grant_id="g-a",
+            owner_id="alice", now=1, expires_at=100)
+        self.assertTrue(incarnation)
+        reopened.revoke_session(identity=identity(), session_id="s-v2", owner_id="alice")
+        self.assertEqual(tuple(self.db.execute(
+            "SELECT operation_id,host_id,target_generation,manifest_sha256,checkpoint_sha256,"
+            "authority_sha256,receipt_version FROM phone_remote_restore_receipt WHERE singleton_id=1"
+        ).fetchone()), receipt)
+
+    def test_receipt_schema_version_mismatch_fails_closed(self):
+        self.seed()
+        self.db.execute(RESTORE_RECEIPT_SQL)
+        self.db.commit()
+        with self.assertRaises(StoreUnavailable):
+            PhoneAdmissionStore(self.db, self.anchor)
+
     def test_existing_disposable_database_upgrades_idempotently_without_touching_legacy_rows(self):
         self.db.execute("CREATE TABLE legacy_state(id INTEGER PRIMARY KEY, value TEXT NOT NULL)")
         self.db.execute("INSERT INTO legacy_state VALUES(1,'untouched')")
@@ -104,6 +136,64 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(StoreDenied):
             self.login(session="s-a")
         self.assertEqual(self.store.status()["login_counter"], 2)
+
+    def test_login_challenge_context_is_current_and_rejects_unavailable_selector(self):
+        self.seed()
+        context = self.store.login_challenge_context(device_id="d-a", grant_id="g-a")
+        self.assertEqual((context.owner_id, context.device_id, context.grant_id),
+                         ("alice", "d-a", "g-a"))
+        self.assertEqual(context.public_key, b"public-a")
+        self.assertEqual(context.key_algorithm, "test-ed25519")
+        self.assertEqual(context.scopes, frozenset({"read", "voice"}))
+        self.assertEqual((context.host_id, context.host_generation), ("host-test", 3))
+        for device_id, grant_id in (("missing", "g-a"), ("d-a", "missing")):
+            with self.subTest(device_id=device_id, grant_id=grant_id), self.assertRaises(StoreDenied):
+                self.store.login_challenge_context(device_id=device_id, grant_id=grant_id)
+        self.store.revoke_grant(identity=identity(), grant_id="g-a", owner_id="alice")
+        with self.assertRaises(StoreDenied):
+            self.store.login_challenge_context(device_id="d-a", grant_id="g-a")
+
+    def test_login_proof_rechecks_owner_key_generation_and_expiry_before_transition(self):
+        self.seed()
+        context = self.store.login_challenge_context(device_id="d-a", grant_id="g-a")
+
+        def attempt(*, identity_value=identity(), expected_generation=context.host_generation,
+                    challenge_expiry=2_000, now_ms=1_999):
+            return self.store.login_proof(identity=identity_value, session_id="s-proof",
+                device_id=context.device_id, grant_id=context.grant_id, owner_id=context.owner_id,
+                expected_host_id=context.host_id, expected_host_generation=expected_generation,
+                expected_grant_generation=context.grant_generation,
+                expected_key_algorithm=context.key_algorithm,
+                expected_key_fingerprint=hashlib.sha256(context.public_key).hexdigest(),
+                challenge_expires_at_ms=challenge_expiry, monotonic_deadline_ms=61_000,
+                now_ms=now_ms, monotonic_now_ms=1_000, expires_at_ms=43_201_999)
+
+        with self.assertRaises(StoreDenied):
+            attempt(now_ms=2_000)
+        with self.assertRaises(StoreDenied):
+            attempt(identity_value=identity("bob"))
+        self.assertEqual(self.anchor.state.login_counter, 0)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM phone_remote_sessions").fetchone()[0], 0)
+
+        self.store.replace_device_credential(identity=identity(), device_id="d-a", owner_id="alice",
+            public_key=b"replacement", key_algorithm="test-ed25519-v2")
+        with self.assertRaises(StoreDenied):
+            attempt(expected_generation=context.host_generation)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM phone_remote_sessions").fetchone()[0], 0)
+        self.assertEqual(self.anchor.state.login_counter, 0)
+
+        fresh = self.store.login_challenge_context(device_id="d-a", grant_id="g-a")
+        incarnation = self.store.login_proof(identity=identity(), session_id="s-proof",
+            device_id=fresh.device_id, grant_id=fresh.grant_id, owner_id=fresh.owner_id,
+            expected_host_id=fresh.host_id, expected_host_generation=fresh.host_generation,
+            expected_grant_generation=fresh.grant_generation,
+            expected_key_algorithm=fresh.key_algorithm,
+            expected_key_fingerprint=hashlib.sha256(fresh.public_key).hexdigest(),
+            challenge_expires_at_ms=2_000, monotonic_deadline_ms=61_000,
+            now_ms=1_999, monotonic_now_ms=1_000, expires_at_ms=43_201_999)
+        self.assertEqual(incarnation, "host-test:4:1")
+        self.assertEqual(self.anchor.state.login_counter, 1)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM phone_remote_sessions WHERE session_id='s-proof'").fetchone()[0], 1)
 
     def test_supported_pre_restore_fence_blocks_snapshot_and_identical_tuple_reuse(self):
         """Only the mandatory pre-restore fence is tested; arbitrary rollback is not claimed."""
@@ -440,6 +530,73 @@ class StoreTests(unittest.TestCase):
                 else:
                     with self.assertRaises(StoreUnavailable):
                         PhoneAdmissionStore(db, anchor).status()
+                db.close()
+
+    def test_restore_prepare_preflight_and_crash_boundaries_are_fail_closed(self):
+        self.seed()
+        self.login()
+        initial = self.anchor.state
+        with self.assertRaises(StoreDenied):
+            self.store.prepare_restore(expected_host_id=initial.host_id,
+                                       expected_generation=initial.host_generation + 1)
+        self.assertEqual(self.anchor.state, initial)
+        self.assertEqual(tuple(self.db.execute(
+            "SELECT transition_state,host_generation FROM phone_remote_meta WHERE singleton_id=1"
+        ).fetchone()), ("stable", initial.host_generation))
+        self.assertEqual(self.db.execute(
+            "SELECT revoked_at FROM phone_remote_sessions WHERE session_id='s-a'"
+        ).fetchone()[0], None)
+
+        cases = {
+            "restore_before_anchor_pending": ("stable", "stable", 1),
+            "restore_anchor_pending": ("pending", "stable", 1),
+            "restore_before_db_commit": ("pending", "stable", 1),
+            "restore_db_pending": ("pending", "pending", 0),
+        }
+        for boundary, (anchor_state, database_state, active) in cases.items():
+            with self.subTest(boundary=boundary):
+                db = sqlite3.connect(":memory:", isolation_level=None)
+                anchor = FakeProtectedAnchor()
+                store = PhoneAdmissionStore(db, anchor)
+                store.add_device(identity=identity(), device_id="d", owner_id="alice",
+                                 public_key=b"public", key_algorithm="test")
+                store.add_grant(identity=identity(), grant_id="g", device_id="d", owner_id="alice",
+                                scopes=["read", "voice"])
+                store.login(identity=identity(), session_id="s", grant_id="g", owner_id="alice",
+                            now=1, expires_at=100)
+                initial = anchor.state
+                def fail(name):
+                    if name == boundary:
+                        raise RuntimeError("simulated restore prepare interruption")
+                store.failpoint = fail
+                with self.assertRaises(RuntimeError):
+                    store.prepare_restore(expected_host_id=initial.host_id,
+                                          expected_generation=initial.host_generation)
+                self.assertEqual(anchor.state.transition_state, anchor_state)
+                meta = db.execute(
+                    "SELECT transition_state,host_generation FROM phone_remote_meta WHERE singleton_id=1"
+                ).fetchone()
+                self.assertEqual(meta[0], database_state)
+                self.assertEqual(db.execute(
+                    "SELECT count(*) FROM phone_remote_sessions WHERE revoked_at IS NULL"
+                ).fetchone()[0], active)
+                if anchor_state == "stable":
+                    self.assertEqual(store.status()["host_generation"], initial.host_generation)
+                else:
+                    with self.assertRaises(StoreUnavailable):
+                        store.status()
+                    pending = anchor.state
+                    pending_meta = tuple(db.execute(
+                        "SELECT transition_id,transition_state FROM phone_remote_meta WHERE singleton_id=1"
+                    ).fetchone())
+                    store.failpoint = None
+                    with self.assertRaises(StoreUnavailable):
+                        store.prepare_restore(expected_host_id=initial.host_id,
+                                              expected_generation=initial.host_generation)
+                    self.assertEqual(anchor.state, pending)
+                    self.assertEqual(tuple(db.execute(
+                        "SELECT transition_id,transition_state FROM phone_remote_meta WHERE singleton_id=1"
+                    ).fetchone()), pending_meta)
                 db.close()
 
     def test_crashes_at_each_login_transition_boundary(self):
