@@ -13,10 +13,10 @@ import time
 import types
 import uuid
 import weakref
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 
-from jarvis.bot.phone_admission_store import (FakeProtectedAnchor, PhoneAdmissionStore, StoreDenied, StoreUnavailable)
+from jarvis.bot.phone_admission_store import (FakeProtectedAnchor, PhoneAdmissionStore, StoreDenied, StoreUnavailable, BrokerTicketTiming)
 from jarvis.bot.phone_remote_authority_channel import (
     NativeProtectedAnchorV2, NativeProtectedAnchorV3, NativeProtectedAnchorV4, run_store_operation,
 )
@@ -260,9 +260,13 @@ class FakeBoundedSink:
             self._queue.append(item)
             return True
 
-    def cancel_peer(self, peer_id):
+    def cancel_peer(self, peer_id, *, binding=None, incarnation=None, lifetime=None):
         with self._lock:
-            self._queue = [item for item in self._queue if item["peer_id"] != peer_id]
+            self._queue = [item for item in self._queue if not (
+                item["peer_id"] == peer_id
+                and (binding is None or item["binding"] == binding)
+                and (incarnation is None or item.get("incarnation") is incarnation)
+                and (lifetime is None or item.get("proof_lifetime") is lifetime))]
 
     def clear(self):
         with self._lock:
@@ -365,6 +369,8 @@ class PhoneRemoteService:
             self._runtime.sinks.add(self.output_sink)
         self._authority_child = child_authority
         self._authority_failed = False
+        self._broker_ticket_in_flight = False
+        self._handling_proof = False
         if _login_coordinator is not None and (
                 not child_authority or type(_login_coordinator) is not PhoneRemoteLogin
                 or _login_coordinator._store is not store or _login_coordinator._anchor is not store.anchor):
@@ -403,6 +409,112 @@ class PhoneRemoteService:
         if type(self.verifier) is not ProofContextVerifier or self.verifier.registry.permit is None:
             return True
         return self.verifier.lifetime_locked()
+
+    def _peer_lifetime_current(self, peer):
+        if type(self.verifier) is not ProofContextVerifier:
+            return True
+        record = peer.get("proof_lifetime")
+        return (record is not None and record.binding == peer["binding"]
+                and self.verifier.registry.lifetime_locked(record))
+
+    def _attach_voice_reply(self, record, reply):
+        rid = json.loads(reply._encoded).get("request_id")
+        with self._lock:
+            entry = self._ledger.get((self._binding_key(record.binding), rid))
+            if entry is not None and entry.get("proof_lifetime") is record:
+                entry["proof_reply"] = reply
+
+    def _retire_proof_lifetime(self, record):
+        # Sole worker, after its frozen continuation. Each captured attachment
+        # compares full binding and concrete resource/incarnation/service owner.
+        with self._lock:
+            for _, (peer_id, captured) in tuple(record.attachments.items()):
+                peer = self._peers.get(peer_id)
+                if (peer is captured and peer.get("proof_lifetime") is record
+                        and peer["binding"] == record.binding
+                        and peer["service_token"] is self._service_token):
+                    self._peers.pop(peer_id)
+                    self._clear_lease_locked(record.binding.owner_id, peer_id, peer["resource"])
+                    if self._active_resources.get(peer_id) is peer["resource"]:
+                        self._active_resources.pop(peer_id)
+                for sink in tuple(self._runtime.sinks):
+                    sink.cancel_peer(peer_id, binding=record.binding,
+                        incarnation=captured["incarnation"], lifetime=record)
+            for token, prepared in tuple(record.pending.items()):
+                if self._pending_media.get(token) is prepared:
+                    self._pending_media.pop(token)
+            record.attachments.clear()
+            record.pending.clear()
+            for key, entry in self._ledger.items():
+                if entry.get("proof_lifetime") is not record:
+                    continue
+                if entry.get("state") == "uncertain":
+                    continue
+                if entry.get("effect_acknowledged"):
+                    reply = entry.get("proof_reply")
+                    entry.update(state="retired_acknowledged" if reply is not None and reply._claimed else "withheld",
+                        receipt=response(key[1], "unavailable", "authority_unavailable"))
+        if record.binding is not None:
+            self.store.retire_broker_tickets(owner=record.broker_owner, binding=record.binding)
+
+    def _broker_consume(self, request, context, binding):
+        registry = self.verifier.registry
+        permit = registry.permit
+        if permit is None or permit.context is not context or permit.binding != binding:
+            raise StoreUnavailable("proof broker permit unavailable")
+        record = permit.record
+        purpose = "update" if request["operation"] == "voice.update" else "offer"
+        payload = request["payload"]
+        digest = hashlib.sha256(payload["sdp"].encode("utf-8", "strict")).hexdigest()
+        ticket_id = uuid.uuid4().hex + uuid.uuid4().hex
+        timing = None
+        with self.owner_available.commit_guard(binding.owner_id) as (owner_ready, _), self.voice_ready.commit_guard() as (voice_ready, _), self.clock.commit_guard():
+            if not self.enabled or not owner_ready or not voice_ready or not registry.lifetime_locked(record):
+                return None
+            wall, mono = registry.clock.image_locked()
+            with registry.host._lock, registry.lock:
+                if registry.host._quiescing or registry.host._closed or record.cancel.is_set():
+                    return None
+                record.voice_owned, record.cleanup_complete = True, False
+            with self._lock:
+                if self._broker_ticket_in_flight:
+                    raise StoreUnavailable("reentrant broker ticket intent")
+                self._broker_ticket_in_flight = True
+                self._ledger[(self._binding_key(binding), request["request_id"])]["proof_lifetime"] = record
+            deadline = min(mono + 30000, record.monotonic_deadline_ms)
+            wall_deadline = min(wall + 30000, record.expires_at_ms)
+            timing = BrokerTicketTiming(record.broker_owner, binding, mono, deadline,
+                time.monotonic() + (deadline - mono) / 1000)
+            run_store_operation("ticket.issue", self.store.issue_ticket, anchor=self.store.anchor,
+                identity=context.identity, ticket_id=ticket_id, session_id=binding.session_id,
+                owner_id=binding.owner_id, purpose=purpose, payload_digest=digest,
+                expires_at=wall_deadline / 1000,
+                now=wall / 1000, peer_id=payload.get("peer_id"), broker=timing, monotonic_ms=mono)
+        uncertain = False
+        try:
+            with self.owner_available.commit_guard(binding.owner_id) as (owner_ready, _), self.voice_ready.commit_guard() as (voice_ready, _), self.clock.commit_guard():
+                if not registry.lifetime_locked(record):
+                    registry.retire(record)
+                    return None
+                wall, mono = registry.clock.image_locked()
+                if (not self.enabled or not owner_ready or not voice_ready or mono >= timing.deadline_ms
+                        or wall >= wall_deadline or time.monotonic() >= timing.real_deadline):
+                    return None
+                with registry.host._lock:
+                    if registry.host._quiescing or registry.host._closed:
+                        return None
+                return self._consume_ticket(identity=context.identity, ticket_id=ticket_id,
+                    session_id=binding.session_id, owner_id=binding.owner_id, purpose=purpose,
+                    payload_digest=digest, now=wall / 1000, peer_id=payload.get("peer_id"),
+                    broker=timing, monotonic_ms=mono)
+        except BaseException:
+            uncertain = True
+            raise
+        finally:
+            if not uncertain:
+                self.store.retire_broker_tickets(owner=record.broker_owner,
+                    binding=binding, ticket_id=ticket_id)
+                self._broker_ticket_in_flight = False
 
     def _binding_current(self, binding, *, now):
         if type(self.verifier) is ProofContextVerifier and self.verifier.registry.permit is not None:
@@ -552,12 +664,13 @@ class PhoneRemoteService:
     def _finish_receipt(self, key, receipt):
         with self._lock:
             entry = self._ledger[key]
-            if entry.get("state") == "withheld":
+            if entry.get("state") in {"withheld", "retired_acknowledged"}:
                 return copy.deepcopy(entry["receipt"])
             if entry["operation"] in CARD_OPERATIONS and entry.get("state") == "done":
                 return copy.deepcopy(entry["receipt"])
             if entry.get("state") == "uncertain" or self._authority_failed:
                 entry.update(state="uncertain", receipt=None)
+                return response(key[1], "unavailable", "authority_unavailable")
             else:
                 entry.update(state="done", receipt=copy.deepcopy(receipt) if entry["operation"] in CARD_OPERATIONS else receipt)
         return receipt
@@ -580,6 +693,8 @@ class PhoneRemoteService:
             return key, None, response(request["request_id"], "denied", "request_conflict"), None
         if old["state"] in {"in_flight", "prepared", "applying", "applied-awaiting-ack"}:
             return key, None, response(request["request_id"], "denied", "request_conflict"), None
+        if old["state"] in {"uncertain", "withheld", "retired_acknowledged"}:
+            return key, None, response(request["request_id"], "unavailable", "authority_unavailable"), None
         try:
             current = self._binding_current(binding, now=self._now())
         except StoreUnavailable:
@@ -629,6 +744,9 @@ class PhoneRemoteService:
         if self._authority_failed:
             return response(request["request_id"], "unavailable", "authority_unavailable")
         if not self.store.binding_current_serialized(binding, now=now) or not self._proof_lifetime_current():
+            return response(request["request_id"], "denied", "not_authorized")
+        if (operation in {"voice.offer", "voice.update"} and type(self.verifier) is ProofContextVerifier
+                and not self.verifier.registry.lifetime_locked(self.verifier.registry.permit.record)):
             return response(request["request_id"], "denied", "not_authorized")
         if not self.enabled:
             return response(request["request_id"], "unavailable", "feature_off")
@@ -740,7 +858,8 @@ class PhoneRemoteService:
             return response(rid, "unavailable", "operation_unavailable")
         if "voice" not in binding.scopes:
             return response(rid, "denied", "not_authorized")
-        if not context.ticket_id:
+        proof_mode = type(self.verifier) is ProofContextVerifier
+        if not proof_mode and not context.ticket_id:
             return response(rid, "denied", "not_authorized")
         prior_peer = None
         prior_version = None
@@ -755,9 +874,15 @@ class PhoneRemoteService:
                     return response(rid, "denied", "not_authorized")
                 prior_version = prior_peer["version"]
                 prior_resource = prior_peer["resource"]
+        if proof_mode:
+            if not self.voice_ready.snapshot()[0]:
+                return response(rid, "unavailable", "voice_not_ready")
+            with self._lock:
+                if op == "voice.offer" and self._lease_owner_locked(binding.owner_id) is not None:
+                    return response(rid, "unavailable", "owner_busy")
         try:
             ticket_now = self._now()
-            consumed = self._consume_ticket(identity=context.identity,
+            consumed = self._broker_consume(request, context, binding) if proof_mode else self._consume_ticket(identity=context.identity,
                 ticket_id=context.ticket_id, session_id=context.session_id,
                 owner_id=context.owner_id, purpose="update" if op == "voice.update" else "offer",
                 payload_digest=hashlib.sha256(payload["sdp"].encode()).hexdigest(),
@@ -772,6 +897,13 @@ class PhoneRemoteService:
             return response(rid, "unavailable", "authority_unavailable")
         if consumed != binding:
             return response(rid, "denied", "not_authorized")
+        if proof_mode:
+            with self.clock.commit_guard():
+                if not self.verifier.registry.lifetime_locked(self.verifier.registry.permit.record):
+                    return response(rid, "denied", "not_authorized")
+                with self.verifier.registry.host._lock:
+                    if self.verifier.registry.host._quiescing:
+                        return response(rid, "denied", "not_authorized")
         prepare_now = self._now()
         if not self._binding_current(binding, now=prepare_now):
             return response(rid, "denied", "not_authorized")
@@ -790,9 +922,13 @@ class PhoneRemoteService:
         peer_id = prepared.peer_id
         response_payload = {"peer_id": peer_id, "sdp": prepared.answer}
         with self._lock:
+            if self._authority_failed:
+                return response(rid, "unavailable", "authority_unavailable")
             if prepared.token in self._pending_media:
                 return response(rid, "unavailable", "voice_not_ready")
             self._pending_media[prepared.token] = prepared
+            if proof_mode:
+                self.verifier.registry.permit.record.pending[prepared.token] = prepared
         commit_error = None
         published = False
         try:
@@ -800,7 +936,9 @@ class PhoneRemoteService:
                 with self.voice_ready.commit_guard() as (voice_ready_at_commit, _ready_version):
                     with self.clock.commit_guard() as (commit_now, _clock_version):
                         with self._service_commit():
-                            current_is_valid = self.store.binding_current_serialized(binding, now=commit_now)
+                            current_is_valid = self.store.binding_current_serialized(binding, now=commit_now) and self._proof_lifetime_current() and not self._authority_failed
+                            if proof_mode:
+                                current_is_valid = current_is_valid and self.verifier.registry.lifetime_locked(self.verifier.registry.permit.record)
                             if not current_is_valid:
                                 commit_error = response(rid, "denied", "not_authorized")
                             elif not self.enabled:
@@ -823,7 +961,12 @@ class PhoneRemoteService:
                                             incarnation = object()
                                             self._peers[peer_id] = {"binding": binding, "context": context,
                                                 "version": 1, "resource": prepared.resource,
-                                                "incarnation": incarnation, "service_token": self._service_token}
+                                                "incarnation": incarnation, "service_token": self._service_token,
+                                                **({"proof_lifetime": self.verifier.registry.permit.record} if proof_mode else {})}
+                                            if proof_mode:
+                                                record = self.verifier.registry.permit.record
+                                                record.attachments[incarnation] = (peer_id, self._peers[peer_id])
+                                                record.pending.pop(prepared.token, None)
                                             self._ledger[(self._binding_key(binding), rid)]["resource_incarnation"] = incarnation
                                             self._record_lease_locked(binding.owner_id, peer_id, prepared.resource)
                                             published = True
@@ -842,7 +985,12 @@ class PhoneRemoteService:
                                             incarnation = object()
                                             self._peers[peer_id] = {"binding": binding, "context": context,
                                                 "version": prior_version + 1, "resource": prepared.resource,
-                                                "incarnation": incarnation, "service_token": self._service_token}
+                                                "incarnation": incarnation, "service_token": self._service_token,
+                                                **({"proof_lifetime": self.verifier.registry.permit.record} if proof_mode else {})}
+                                            if proof_mode:
+                                                record = self.verifier.registry.permit.record
+                                                record.attachments[incarnation] = (peer_id, self._peers[peer_id])
+                                                record.pending.pop(prepared.token, None)
                                             self._ledger[(self._binding_key(binding), rid)]["resource_incarnation"] = incarnation
                                             published = True
         except StoreDenied:
@@ -860,6 +1008,16 @@ class PhoneRemoteService:
             published = False
             self._fence_authority()
             commit_error = response(rid, "unavailable", "authority_unavailable")
+        if proof_mode:
+            record = self.verifier.registry.permit.record
+            with self._lock:
+                record.pending.pop(prepared.token, None)
+                if published:
+                    self._ledger[(self._binding_key(binding), rid)]["effect_acknowledged"] = True
+            with self.clock.commit_guard():
+                if published and not self.verifier.registry.lifetime_locked(record):
+                    self.verifier.registry.retire(record)
+                    return response(rid, "unavailable", "authority_unavailable")
         if not published:
             with self._lock:
                 self._discard_prepared_locked(prepared)
@@ -1063,6 +1221,82 @@ class PhoneRemoteService:
             return self._results_error(rid, result_status)
         return response(rid, "ok", "none", payload)
 
+    def _proof_output(self, peer_id=None, server_output=None, *, draining=False):
+        registry = self.verifier.registry
+        queued = self.output_sink.peek() if draining else None
+        if draining and queued is None:
+            return None
+        if draining:
+            peer_id = queued["peer_id"]
+        with self._lock:
+            peer = self._peers.get(peer_id)
+            if draining and (peer is None or queued.get("binding") != peer["binding"]
+                    or any(queued.get(key) is not peer.get(key) for key in
+                           ("proof_lifetime", "incarnation", "resource", "service_token"))):
+                # Remove only the captured stale head. A replacement head or
+                # output for another incarnation/owner must remain untouched.
+                self.output_sink.dequeue(expected=queued)
+                return None
+            if peer is None:
+                return None if draining else False
+            binding = peer["binding"]
+            record = peer.get("proof_lifetime")
+        with self.clock.commit_guard():
+            if not self._peer_lifetime_current(peer):
+                if record is not None:
+                    registry.retire(record)
+                return None if draining else False
+        if not self.enabled or "read" not in binding.scopes or not self._binding_current(binding, now=self._now()):
+            return None if draining else False
+        if draining:
+            payload = queued["payload"]
+        else:
+            if self.output_policy is None:
+                return False
+            try:
+                payload = self.output_policy.prepare(server_output)
+            except Exception:
+                return False
+            if type(payload) is not bytes:
+                return False
+        committed = False
+        with self.owner_available.commit_guard(binding.owner_id) as (ready, _):
+            with self.clock.commit_guard() as (now, _):
+                with self._service_commit():
+                    authority_valid = self.store.binding_current_serialized(binding, now=now)
+                    valid = (authority_valid and self.enabled and ready and self._peer_lifetime_current(peer))
+                    with self._lock:
+                        valid = (valid and self._peers.get(peer_id) is peer
+                            and self._active_resources.get(peer_id) is peer["resource"]
+                            and self._lease_is_mine_locked(binding.owner_id, peer_id, peer["resource"]))
+                        if draining:
+                            valid = (valid and queued.get("proof_lifetime") is record
+                                and queued.get("incarnation") is peer["incarnation"]
+                                and queued.get("resource") is peer["resource"]
+                                and queued.get("service_token") is peer["service_token"])
+                    # R is released before H/C/Q. No callbacks in this gate.
+                    with registry.host._lock, registry.lock:
+                        valid = (valid and not registry.host._closed and not registry.host._fenced
+                            and registry.lifetime_state_locked(record))
+                        if draining:
+                            # Invalidated after the initial peek: discard the
+                            # exact item without publishing its bytes or
+                            # removing a concurrently replaced queue head.
+                            removed = self.output_sink.dequeue(expected=queued) is queued
+                            committed = valid and removed
+                        elif valid:
+                            committed = self.output_sink.enqueue_nonblocking(dict(peer_id=peer_id,
+                                binding=binding, payload=payload, incarnation=peer["incarnation"],
+                                resource=peer["resource"], service_token=peer["service_token"],
+                                proof_lifetime=record))
+                with registry.host._lock, registry.lock:
+                    valid = (not registry.host._closed and not registry.host._fenced
+                        and registry.lifetime_state_locked(record))
+                if not valid:
+                    registry.retire(record)
+                    return None if draining else False
+        return payload if draining and committed else (None if draining else committed)
+
     def emit_output(self, peer_id, server_output):
         """Prepare trusted server content, then linearly enqueue under the revoke guard.
 
@@ -1070,6 +1304,8 @@ class PhoneRemoteService:
         this facade never accepts it from phone JSON. The injected policy must
         deny unknown/legacy/protected content and require a destination grant.
         """
+        if type(self.verifier) is ProofContextVerifier:
+            return self._proof_output(peer_id, server_output)
         if not self.enabled:
             self.tick()
             return False
@@ -1121,6 +1357,8 @@ class PhoneRemoteService:
 
     def drain_output(self):
         """Dequeue one synthetic item only while its current binding is valid."""
+        if type(self.verifier) is ProofContextVerifier:
+            return self._proof_output(draining=True)
         if not self.enabled:
             self.tick()
             return None
@@ -1185,9 +1423,11 @@ class PhoneRemoteService:
                 with self.clock.commit_guard() as (now, _clock_version):
                     with self._service_commit():
                         try:
-                            current = self.store.binding_current_serialized(binding, now=now)
+                            authority_current = self.store.binding_current_serialized(binding, now=now)
+                            lifetime_current = self._peer_lifetime_current(item)
+                            current = authority_current and lifetime_current
                         except StoreUnavailable:
-                            current = False
+                            authority_current = lifetime_current = current = False
                         if not self.enabled or not owner_ready:
                             current = False
                         with self._lock:
@@ -1218,6 +1458,14 @@ class PhoneRemoteService:
                                                              removed["resource"])
                                     self._active_resources.pop(peer_id, None)
                                     self._cancel_peer_outputs_locked(peer_id)
+            if (removed is item and type(self.verifier) is ProofContextVerifier
+                    and (not authority_current or not lifetime_current)):
+                # A completed proof reply can still be sealed/claimed outside
+                # this worker. Retire its exact lifetime after releasing F/G/R
+                # so signout cannot publish that stale reply or take R -> H/C.
+                record = item.get("proof_lifetime")
+                if record is not None and record.binding == binding:
+                    self.verifier.registry.retire(record)
             item = removed
             if item:
                 closed += 1
@@ -1230,6 +1478,20 @@ class PhoneRemoteService:
         return self.tick()
 
     def handle(self, raw, context):
+        if type(self.verifier) is not ProofContextVerifier or not self._valid_context(context):
+            return self._handle(raw, context)
+        with self._lock:
+            if self._handling_proof:
+                self._fence_authority()
+                return response(None, "unavailable", "authority_unavailable")
+            self._handling_proof = True
+        try:
+            return self._handle(raw, context)
+        finally:
+            with self._lock:
+                self._handling_proof = False
+
+    def _handle(self, raw, context):
         try:
             request = parse_request(raw)
         except ProtocolError as error:
@@ -1338,6 +1600,8 @@ class _AuthorityChildServiceHost:
         self._anchor = None
         self._drained = threading.Event()
         self._ready = threading.Event()
+        self._terminal = threading.Event()
+        self._maintenance_stop = threading.Event()
         self._startup_error = None
         self._closed = False
         self._thread = threading.Thread(target=self._run, name="phone-authority-child", daemon=True)
@@ -1345,6 +1609,51 @@ class _AuthorityChildServiceHost:
         self._ready.wait()
         if self._startup_error is not None:
             raise StoreUnavailable("authority child unavailable") from self._startup_error
+        if self._connections is not None:
+            self._watchdog = threading.Thread(target=self._watch_retirement,
+                name="phone-retirement-watchdog", daemon=True)
+            self._watchdog.start()
+
+    def _terminal_failure(self, *, expired_only=False):
+        # Notification is NOT worker completion. Revalidate timeout ownership
+        # and publish terminal state in the same H -> C critical section.
+        registry = self._connections
+        with self._lock, registry.lock if registry is not None else nullcontext():
+            if expired_only:
+                now = time.monotonic()
+                retirement_expired = registry is not None and any(
+                    r.state == "retiring" and r.retirement_deadline is not None
+                    and now >= r.retirement_deadline
+                    and (r.in_flight or r.pending_sends or not r.cleanup_complete or not r.seals_complete)
+                    for r in registry.records.values())
+                drain_expired = (self._quiescing and not self._drained.is_set()
+                    and self._quiescence_deadline is not None and now >= self._quiescence_deadline)
+                if not retirement_expired and not drain_expired:
+                    return False
+            self._closed = self._fenced = True
+            self._terminal.set()
+            current = self._current
+            if current is not None:
+                current.settle(StoreUnavailable("authority_unavailable: completion uncertain"))
+            if registry is not None:
+                for r in tuple(registry.records.values()):
+                    registry._retire_locked(r)
+        # No socket close, login cleanup, SQLite or resource work under H/C.
+        if self._anchor is not None:
+            self._anchor.close()
+        return True
+
+    def _watch_retirement(self):
+        while not self._maintenance_stop.wait(.01):
+            deadline = self._connections.retirement_deadline()
+            with self._lock:
+                if self._quiescing:
+                    deadline = self._quiescence_deadline if deadline is None else min(deadline, self._quiescence_deadline)
+            if deadline is not None and time.monotonic() >= deadline:
+                if self._terminal_failure(expired_only=True):
+                    return
+            if not self._thread.is_alive():
+                return
 
     def _run(self):
         db = None
@@ -1399,7 +1708,18 @@ class _AuthorityChildServiceHost:
     def _serve_owned(self, service, store, anchor, db):
         """Serialized dispatch after startup; also exercises the local drain seam."""
         while True:
-            item = self._queue.get()
+            connections = getattr(self, "_connections", None)
+            if connections is not None:
+                try:
+                    connections.maintenance()
+                except BaseException:
+                    service._fence_authority()
+                    self._terminal_failure()
+                    break
+            try:
+                item = self._queue.get(timeout=.005) if connections is not None else self._queue.get()
+            except queue.Empty:
+                continue
             if item is None:
                 break
             method, args, kwargs, done = item
@@ -1422,6 +1742,12 @@ class _AuthorityChildServiceHost:
                 # after the frozen operation and output bookkeeping terminate.
                 failure = None
                 try:
+                    if connections is not None:
+                        connections.close_all()
+                        connections.maintenance()
+                        remaining = max(0, self._quiescence_deadline - time.monotonic())
+                        if not connections._sends_drained.wait(remaining):
+                            raise StoreUnavailable("owned send cleanup uncertain")
                     service._fence_authority()
                     db.close()
                 except BaseException as exc:
@@ -1431,7 +1757,10 @@ class _AuthorityChildServiceHost:
                     self._fenced = self._fenced or failure is not None
                     self._current = None
                     self._busy = False
-                self._drained.set()
+                    if failure is None:
+                        self._drained.set()
+                if failure is not None and hasattr(self, "_terminal"):
+                    self._terminal_failure()
                 done.settle(failure)
                 done.worker_finished.set()
                 if getattr(self, "_connections", None) is not None:
@@ -1466,8 +1795,6 @@ class _AuthorityChildServiceHost:
                     self._closed = True
                     if service._authority_failed:
                         self._fenced = True
-                        if self._quiescing:
-                            self._drained.set()
                 self._current = None
                 self._busy = False
                 if done.cancellation_requested() and not isinstance(result, BaseException):
@@ -1476,7 +1803,13 @@ class _AuthorityChildServiceHost:
             if (method == "shutdown" or service._authority_failed) and getattr(self, "_connections", None) is not None:
                 self._connections.close_all()
             if getattr(self, "_connections", None) is not None:
-                self._connections.finish_owned(done)
+                try:
+                    self._connections.finish_owned(done)
+                except BaseException:
+                    service._fence_authority()
+                    self._terminal_failure()
+                    self._queue.task_done()
+                    break  # cleanup not verified: do not fabricate worker_finished
             done.worker_finished.set()
             self._queue.task_done()
             if method == "shutdown" or service._authority_failed:
@@ -1591,8 +1924,11 @@ class _AuthorityChildServiceHost:
             # A local immutable envelope; no callback is ever run by the caller.
             completion = _OwnedCompletion(event, result_box, cancel_event=_cancel_event)
             self._queue.put_nowait((method, args, kwargs, completion))
-        while not event.wait(0.02 if _cancel_event is not None else None):
-            if _cancel_event.is_set():
+        while not event.wait(.02):
+            terminal = getattr(self, "_terminal", None)
+            if terminal is not None and terminal.is_set():
+                raise StoreUnavailable("authority_unavailable: worker completion uncertain")
+            if _cancel_event is not None and _cancel_event.is_set():
                 with self._lock:
                     completion.cancelled = True
                     try:
@@ -1609,7 +1945,12 @@ class _AuthorityChildServiceHost:
                             completion.worker_finished.set()
                     completion.settle(StoreUnavailable("cancelled; effects may have completed"))
         if _wait_worker:
-            completion.worker_finished.wait()
+            terminal = getattr(self, "_terminal", None)
+            while not completion.worker_finished.wait(.01):
+                if terminal is not None and terminal.is_set():
+                    raise StoreUnavailable("authority_unavailable: worker completion uncertain")
+            if terminal is not None and terminal.is_set():
+                raise StoreUnavailable("authority_unavailable: worker completion uncertain")
         result = result_box[0]
         if isinstance(result, StoreDenied):
             raise result
@@ -1685,8 +2026,15 @@ class _AuthorityChildServiceHost:
                 completion = _OwnedCompletion(threading.Event(), [])
                 self._queue.put_nowait(("__quiesce__", (), {}, completion))
             deadline = self._quiescence_deadline
+            if self._fenced:
+                raise StoreUnavailable("authority_unavailable: completion uncertain")
         remaining = max(0, deadline - time.monotonic())
-        drained = remaining > 0 and self._drained.wait(remaining)
+        drained = False
+        while remaining > 0 and not self._fenced:
+            if self._drained.wait(min(.02, remaining)):
+                drained = True
+                break
+            remaining = max(0, deadline - time.monotonic())
         if drained and getattr(self, "_connections", None) is not None:
             # Registry retirement cancels owned ASGI sends. Their actual join
             # shares the original deadline; caller settlement is insufficient.
@@ -1697,7 +2045,10 @@ class _AuthorityChildServiceHost:
                 self._closed = self._fenced = True
                 if self._current is not None:
                     self._current.settle(StoreUnavailable("authority_unavailable: completion uncertain"))
-            self._anchor.close()
+            if hasattr(self, "_terminal"):
+                self._terminal_failure()
+            else:
+                self._anchor.close()
             raise StoreUnavailable("authority_unavailable: completion uncertain")
         return {"operation_id": operation_id, "drained": True}
 

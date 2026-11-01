@@ -267,9 +267,10 @@ class ConnectionLease:
 
 
 class ConnectionReply:
-    __slots__ = ("_encoded", "_success")
+    __slots__ = ("_encoded", "_success", "_claimed")
     def __init__(self, encoded, success):
         self._encoded, self._success = encoded, success
+        self._claimed = False
     def __repr__(self):
         return "ConnectionReply(<redacted>)"
 
@@ -292,6 +293,14 @@ class _Record:
     in_flight: int = 0
     pending_sends: int = 0
     reply: object = None
+    broker_owner: object = field(default_factory=object)
+    voice_owned: bool = False
+    attachments: dict = field(default_factory=dict)
+    pending: dict = field(default_factory=dict)
+    cleanup_complete: bool = True
+    seals_queued: bool = False
+    seals_complete: bool = False
+    retirement_deadline: float | None = None
 
 
 @dataclass(frozen=True, repr=False)
@@ -329,6 +338,8 @@ class ProofContextVerifier:
         if p is None or p.completion is not self.registry.host._current:
             raise StoreUnavailable("proof request permit absent")
         wall, mono = self.registry.clock.image_locked()
+        # Frozen card continuations retain their established cancellation
+        # semantics. Voice peers independently validate retained lifetime.
         return wall < p.wall_deadline and mono < p.mono_deadline
 
 
@@ -363,25 +374,81 @@ class ConnectionRegistry:
         record.epoch = None
         record.cancel.set()
         record.reply = None
-        if record.in_flight == 0 and record.pending_sends == 0:
+        if record.retirement_deadline is None:
+            record.retirement_deadline = time.monotonic() + 5
+        if not record.seals_queued:
+            record.seals_queued = True
+            if record.admission is not None or record.challenge_id is not None:
+                self._retired.append((record, record.admission, record.challenge_id))
+                record.admission = record.challenge_id = None
+            else:
+                record.seals_complete = True
+        if (record.in_flight == 0 and record.pending_sends == 0
+                and record.cleanup_complete and record.seals_complete):
             record.state = "closed"
             self.records.pop(record.lease, None)
-            if record.admission is not None or record.challenge_id is not None:
-                self._retired.append((record.admission, record.challenge_id))
-                record.admission = record.challenge_id = None
 
     def _cleanup(self, *, blocking=True):
-        # Only the owner worker may wait for the login lock. Local close
-        # opportunistically retires idle seals without blocking the event loop.
+        # Never enter L under F, H, C or the service runtime lock.
         with self.lock:
             retired, self._retired = self._retired, []
         if not retired:
             return
-        # Local close must never block the event-loop behind proof execution.
-        # Capture C then release it; take L alone, or defer to the owned worker.
-        if not self.login._retire_connection_seals(retired, blocking=blocking):
+        if not self.login._retire_connection_seals([(a, c) for _, a, c in retired], blocking=blocking):
             with self.lock:
                 self._retired[:0] = retired
+        else:
+            with self.host._lock, self.lock:
+                for record, _, _ in retired:
+                    record.seals_complete = True
+                    self._retire_locked(record)
+
+    def lifetime_state_locked(self, record):
+        wall, mono = self.clock.image_locked()
+        return (not self.host._closed and not self.host._fenced
+                and type(record) is _Record and self.records.get(record.lease) is record
+                and record.state == "active" and not record.cancel.is_set()
+                and wall < record.expires_at_ms and mono < record.monotonic_deadline_ms)
+
+    def lifetime_locked(self, record):
+        """Retained proof lifetime; caller holds F, never relies on a permit."""
+        wall, mono = self.clock.image_locked()
+        with self.host._lock, self.lock:
+            return (not self.host._closed and not self.host._fenced
+                    and type(record) is _Record and self.records.get(record.lease) is record
+                    and record.state == "active" and not record.cancel.is_set()
+                    and wall < record.expires_at_ms and mono < record.monotonic_deadline_ms)
+
+    def retire(self, record):
+        with self.host._lock, self.lock:
+            if self.records.get(record.lease) is record:
+                self._retire_locked(record)
+
+    def maintenance(self):
+        """Bounded mailbox, independent of the request queue; worker owns cleanup."""
+        if threading.current_thread() is not self.host._thread:
+            raise StoreUnavailable("retirement requires the owner worker")
+        with self.clock.service._lock:
+            wall, mono = self.clock.image_locked()
+            with self.host._lock, self.lock:
+                for r in tuple(self.records.values()):
+                    if r.state == "active" and (wall >= r.expires_at_ms or mono >= r.monotonic_deadline_ms):
+                        self._retire_locked(r)
+                retiring = [r for r in self.records.values() if r.state == "retiring"]
+        for r in retiring:
+            if not r.cleanup_complete:
+                self.service._retire_proof_lifetime(r)
+                with self.host._lock, self.lock:
+                    r.cleanup_complete = True
+                    self._retire_locked(r)
+        self._cleanup()
+
+    def retirement_deadline(self):
+        # Watchdog deliberately never takes F/L or touches SQLite/resources.
+        with self.lock:
+            deadlines = [r.retirement_deadline for r in self.records.values()
+                         if r.retirement_deadline is not None]
+            return min(deadlines) if deadlines else None
 
     def open(self, token):
         if type(token) is not object:
@@ -412,7 +479,7 @@ class ConnectionRegistry:
             return (r.epoch, r.real_deadline) if r is not None else (None, 0)
 
     def expire_handshake(self, lease, token, epoch):
-        with self.lock:
+        with self.host._lock, self.lock:
             r = self._get(lease, token)
             if r is not None and epoch is not None and r.epoch is epoch and r.state in _PREAUTH:
                 self._retire_locked(r)
@@ -420,14 +487,14 @@ class ConnectionRegistry:
             return False
 
     def close(self, lease, token):
-        with self.lock:
+        with self.host._lock, self.lock:
             r = self._get(lease, token)
             if r is not None:
                 self._retire_locked(r)
         self._cleanup(blocking=False)
 
     def close_all(self):
-        with self.lock:
+        with self.host._lock, self.lock:
             for r in tuple(self.records.values()):
                 self._retire_locked(r)
 
@@ -435,17 +502,28 @@ class ConnectionRegistry:
         # Serialize with terminal host admission before retaining a send. The
         # worker publishes _closed before _drained, then cleans the registry;
         # that cleanup gap must not admit new application sends.
-        with self.host._lock, self.lock:
-            if self.host._closed or self.host._fenced or not self.host._proof_enabled:
-                return False
-            r = self._get(lease, token)
-            if r is None or r.state in {"retiring", "closed"} or r.cancel.is_set():
-                return False
-            if r.pending_sends:
-                raise StoreUnavailable("overlapping connection send")
-            r.pending_sends = 1
-            self._sends_drained.clear()
-            return r.cancel
+        try:
+            with self.clock.service._lock, self.host._lock, self.lock:
+                if self.host._closed or self.host._fenced or self.host._quiescing or not self.host._proof_enabled:
+                    return False
+                wall, mono = self.clock.image_locked()
+                r = self._get(lease, token)
+                if r is not None and r.state == "active" and (
+                        wall >= r.expires_at_ms or mono >= r.monotonic_deadline_ms):
+                    self._retire_locked(r)
+                    return False
+                if r is None or r.state in {"retiring", "closed"} or r.cancel.is_set():
+                    return False
+                if r.pending_sends:
+                    raise StoreUnavailable("overlapping connection send")
+                r.pending_sends = 1
+                self._sends_drained.clear()
+                return r.cancel
+        except StoreUnavailable:
+            # Terminal close frames must still be deliverable after a poisoned
+            # paired image. Fence outside F/H/C, then refuse application send.
+            self.host._terminal_failure()
+            return False
 
     def end_send(self, lease, token):
         with self.lock:
@@ -474,6 +552,8 @@ class ConnectionRegistry:
             if self.records.get(r.lease) is not r or r.state != "active" or r.cancel.is_set():
                 return ConnectionFailure()
             r.reply = (reply, encoded, success)
+        if self.permit is not None and self.permit.record is r:
+            self.service._attach_voice_reply(r, reply)
         return reply
 
     def claim(self, lease, token, reply):
@@ -492,6 +572,7 @@ class ConnectionRegistry:
                 if r.cancel.is_set() or wall >= r.expires_at_ms or mono >= r.monotonic_deadline_ms:
                     self._retire_locked(r)
                     return ConnectionFailure()
+                reply._claimed = True
                 return reply._encoded
 
     def invoke(self, method, lease, token, *args):
@@ -527,7 +608,10 @@ class ConnectionRegistry:
                 r.in_flight -= 1
                 if r.state in {"retiring", "closed"}:
                     self._retire_locked(r)
-        self._cleanup()
+        if self.service is not None:
+            self.maintenance()
+        else:
+            self._cleanup()
 
     def _connection_challenge(self, r, device_id, grant_id):
         with self.lock:
@@ -616,11 +700,14 @@ class ConnectionRegistry:
             request = parse_request(raw)
         except ProtocolError as exc:
             return self._seal(r, encode_response(response(exc.request_id, exc.status, exc.reason)), False)
-        if request["operation"] in {"voice.offer", "voice.update"}:
-            result = response(request["request_id"], "denied", "not_authorized")
-        else:
-            result = self.service.handle(raw, r.context)
-            if result.get("reason") == "not_authorized":
+        result = self.service.handle(raw, r.context)
+        if result.get("reason") == "not_authorized":
+            # Scope denial has no authority-bearing payload; a current read-only
+            # connection remains usable. Binding/lifetime failures still retire.
+            with self.clock.service._lock:
+                scope_denial = (request["operation"] in {"voice.offer", "voice.update"}
+                    and "voice" not in r.binding.scopes and self.lifetime_locked(r))
+            if not scope_denial:
                 return ConnectionFailure()
         encoded = encode_response(result, operation=request["operation"])
         return self._seal(r, encoded, result["status"] == "ok")

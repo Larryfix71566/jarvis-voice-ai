@@ -1504,3 +1504,48 @@ class ProofModeConstructorTests(unittest.TestCase):
             service=PhoneRemoteService(store,FakeContextVerifier(),FakeMediaAdapter())
             self.assertIs(type(service.verifier),FakeContextVerifier)
         finally:db.close()
+
+
+class ProofRetirementIdentityTests(unittest.TestCase):
+    setUp=ServiceTests.setUp
+    tearDown=ServiceTests.tearDown
+    def test_stale_cleanup_preserves_replaced_peer_and_other_owner_output(self):
+        from types import SimpleNamespace
+        binding=self.store.current_binding(identity=self.identity,owner_id='alice',device_id='dev',
+            session_id='session',login_incarnation=self.incarnation,now=2)
+        old=SimpleNamespace(binding=binding,broker_owner=object(),attachments={},pending={})
+        other=object();resource=object();incarnation=object()
+        captured=dict(binding=binding,resource=resource,incarnation=incarnation,
+            service_token=self.service._service_token,proof_lifetime=old)
+        old.attachments[incarnation]=('same-peer',captured)
+        replacement={**captured,'resource':object(),'incarnation':object(),'proof_lifetime':other}
+        self.service._peers['same-peer']=replacement
+        self.service._active_resources['same-peer']=replacement['resource']
+        self.service._owner_lease[binding.owner_id]=('same-peer',replacement['resource'])
+        for lifetime,inc,payload in ((old,incarnation,b'old'),(other,replacement['incarnation'],b'new')):
+            self.assertTrue(self.service.output_sink.enqueue_nonblocking(dict(peer_id='same-peer',
+                binding=binding,incarnation=inc,proof_lifetime=lifetime,payload=payload)))
+        self.service._retire_proof_lifetime(old)
+        self.service._retire_proof_lifetime(old)
+        self.assertIs(self.service._peers['same-peer'],replacement)
+        self.assertIs(self.service._active_resources['same-peer'],replacement['resource'])
+        self.assertEqual(len(self.service.output_sink),1)
+        self.assertEqual(self.service.output_sink.peek()['payload'],b'new')
+
+    def test_multiple_retired_incarnations_remove_only_their_exact_outputs(self):
+        from types import SimpleNamespace
+        binding=self.store.current_binding(identity=self.identity,owner_id='alice',device_id='dev',
+            session_id='session',login_incarnation=self.incarnation,now=2)
+        record=SimpleNamespace(binding=binding,broker_owner=object(),attachments={},pending={})
+        for _ in range(2):
+            inc=object();peer=dict(binding=binding,incarnation=inc,resource=object(),
+                service_token=self.service._service_token,proof_lifetime=record)
+            record.attachments[inc]=('same-peer',peer)
+            self.service.output_sink.enqueue_nonblocking(dict(peer_id='same-peer',binding=binding,
+                incarnation=inc,proof_lifetime=record,payload=b'old'))
+        self.service._peers['same-peer']=peer
+        self.service._active_resources['same-peer']=peer['resource']
+        self.service._owner_lease[binding.owner_id]=('same-peer',peer['resource'])
+        self.service._retire_proof_lifetime(record)
+        self.assertEqual(len(self.service.output_sink),0)
+        self.assertFalse(self.service._peers);self.assertFalse(self.service._owner_lease)

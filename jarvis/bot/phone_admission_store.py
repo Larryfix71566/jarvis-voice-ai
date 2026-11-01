@@ -12,6 +12,7 @@ import hashlib
 import math
 import sqlite3
 import threading
+import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -123,6 +124,16 @@ class SessionBinding:
     scopes: frozenset[str]
 
 
+@dataclass(frozen=True, eq=False, repr=False)
+class BrokerTicketTiming:
+    """Worker-owned optional lifetime; never decoded from phone input."""
+    owner: object
+    binding: SessionBinding
+    issued_ms: int
+    deadline_ms: int
+    real_deadline: float
+
+
 @dataclass(frozen=True)
 class LoginChallengeContext:
     """Current enrolled proof context returned only under a stable read grant."""
@@ -213,6 +224,7 @@ class PhoneAdmissionStore:
         self._lock = threading.RLock()
         # Tickets are process-local only: an intact restart cannot revive them.
         self._tickets: dict[str, dict[str, object]] = {}
+        self._owner_thread = threading.get_ident()
         if self.db.in_transaction:
             raise StoreUnavailable("store requires exclusive transaction ownership")
         # Never rely on the caller's SQLite default; DML contexts must have a
@@ -643,9 +655,60 @@ class PhoneAdmissionStore:
                 owner_id=owner_id, now=now_ms / 1000.0, expires_at=expires_at_ms / 1000.0,
                 anchor=anchor)
 
+    @staticmethod
+    def _valid_broker_binding(binding):
+        return (type(binding) is SessionBinding
+                and all(type(getattr(binding, k)) is str and getattr(binding, k)
+                    for k in ("owner_id", "device_id", "grant_id", "session_id",
+                              "login_incarnation", "host_id", "process_epoch"))
+                and all(type(getattr(binding, k)) is int and 0 < getattr(binding, k) <= (1 << 53) - 1
+                    for k in ("host_generation", "grant_generation", "session_generation"))
+                and type(binding.scopes) is frozenset
+                and all(type(scope) is str for scope in binding.scopes))
+
+    def _check_broker(self, broker, monotonic_ms):
+        if broker is None:
+            if monotonic_ms is not None:
+                raise StoreDenied("broker timing without owner")
+            return
+        if (threading.get_ident() != self._owner_thread
+                or type(broker) is not BrokerTicketTiming
+                or type(broker.owner) is not object or not self._valid_broker_binding(broker.binding)
+                or any(type(v) is not int or not 0 <= v <= (1 << 53) - 1
+                       for v in (broker.issued_ms, broker.deadline_ms, monotonic_ms))
+                or not 0 < broker.deadline_ms - broker.issued_ms <= 30_000
+                or monotonic_ms < broker.issued_ms or monotonic_ms >= broker.deadline_ms
+                or type(broker.real_deadline) is not float or not math.isfinite(broker.real_deadline)
+                or not 0 < broker.real_deadline - time.monotonic() <= 30):
+            raise StoreDenied("broker ticket lifetime unavailable")
+
+    def retire_broker_tickets(self, *, owner, binding, ticket_id=None):
+        """Local authority-decreasing cleanup. No SQLite, anchor or native grant."""
+        if (threading.get_ident() != self._owner_thread or type(owner) is not object
+                or not self._valid_broker_binding(binding)
+                or (ticket_id is not None and (type(ticket_id) is not str or not ticket_id))):
+            raise StoreDenied("invalid broker retirement")
+        with self._lock:
+            removed = []
+            for key, ticket in self._tickets.items():
+                if ticket_id is not None and key != ticket_id:
+                    continue
+                broker = ticket.get("broker")
+                matches = (type(broker) is BrokerTicketTiming
+                           and broker.owner is owner and broker.binding == binding)
+                if ticket_id is not None and not matches:
+                    raise StoreDenied("foreign broker ticket")
+                if matches:
+                    removed.append(key)
+            for key in removed:
+                del self._tickets[key]
+            return len(removed)
+
     def issue_ticket(self, *, identity: ClientIdentity, ticket_id: str, session_id: str, owner_id: str,
                      purpose: str, payload_digest: str, now: float, expires_at: float,
-                     peer_id: str | None = None) -> None:
+                     peer_id: str | None = None, broker: BrokerTicketTiming | None = None,
+                     monotonic_ms: int | None = None) -> None:
+        self._check_broker(broker, monotonic_ms)
         ticket_id = self._text(ticket_id, "ticket_id")
         session_id = self._text(session_id, "session_id")
         owner_id = self._text(owner_id, "owner_id")
@@ -682,6 +745,13 @@ class PhoneAdmissionStore:
                 raise StoreDenied("fresh process admission required")
             if ticket_id in self._tickets:
                 raise StoreDenied("ticket conflict")
+            if broker is not None:
+                current = SessionBinding(owner_id, row["device_id"], row["current_grant_id"], session_id,
+                    row["login_incarnation"], anchor.host_id, anchor.host_generation,
+                    row["grant_generation"], row["session_generation"], self.process_epoch, frozenset(scopes))
+                self._check_broker(broker, monotonic_ms)
+                if broker.binding != current or any(t.get("broker") is not None for t in self._tickets.values()):
+                    raise StoreDenied("broker ticket ownership or capacity")
             self._tickets[ticket_id] = {
                 "session_id": session_id, "owner_id": owner_id,
                 "device_id": row["device_id"], "grant_id": row["current_grant_id"],
@@ -693,12 +763,15 @@ class PhoneAdmissionStore:
                 "peer_id": peer_id,
                 "payload_digest": payload_digest, "expires_at": expires_at,
                 "consumed": False,
+                **({"broker": broker} if broker is not None else {}),
             }
 
     def consume_ticket(self, *, identity: ClientIdentity, ticket_id: str, session_id: str, owner_id: str,
                        purpose: str, payload_digest: str, now: float,
-                       peer_id: str | None = None) -> SessionBinding:
+                       peer_id: str | None = None, broker: BrokerTicketTiming | None = None,
+                       monotonic_ms: int | None = None) -> SessionBinding:
         """Atomically consume once only while current session identity matches."""
+        self._check_broker(broker, monotonic_ms)
         ticket_id = self._text(ticket_id, "ticket_id")
         session_id = self._text(session_id, "session_id")
         owner_id = self._verified_owner(identity, self._text(owner_id, "owner_id"))
@@ -753,6 +826,9 @@ class PhoneAdmissionStore:
                         raise StoreDenied("ticket scope or owner is stale")
                     if self._admission_key(session_id, row["current_incarnation"]) not in _PROCESS_ADMISSIONS:
                         raise StoreDenied("fresh process admission required")
+                    if ticket.get("broker") is not broker:
+                        raise StoreDenied("broker ticket owner mismatch")
+                    self._check_broker(broker, monotonic_ms)
                     ticket["consumed"] = True
                     return SessionBinding(owner_id, row["device_id"], row["grant_id"], session_id,
                         row["current_incarnation"], anchor.host_id, anchor.host_generation,

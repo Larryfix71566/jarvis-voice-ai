@@ -938,3 +938,13 @@ class ProofASGIConstructionTests(unittest.IsolatedAsyncioTestCase):
         async def send(event):sent.append(event)
         await create_phone_remote_connection_asgi()({'type':'http','path':ASGI_PATH},receive,send)
         self.assertEqual(sent[0]['status'],404)
+
+
+class ProofBrokerTransportProcessTests(unittest.TestCase):
+    def test_cooperative_blocked_voice_send_cancels_before_lifetime_capacity_release(self):
+        import os
+        if not os.environ.get('PHONE_REMOTE_AUTHORITY_OWNER_BIN'):
+            self.skipTest('requires fresh offline native owner')
+        from tests.unit.test_phone_remote_authority_service import ProofConnectionProcessTests
+        result=ProofConnectionProcessTests.run_case(self,'broker-blocked-send')
+        self.assertTrue(result['blocked_send_cancelled'])

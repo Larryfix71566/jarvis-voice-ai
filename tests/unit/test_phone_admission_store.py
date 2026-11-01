@@ -952,3 +952,84 @@ class StoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BrokerTicketTests(unittest.TestCase):
+    setUp=StoreTests.setUp
+    tearDown=StoreTests.tearDown
+    seed=StoreTests.seed
+    login=StoreTests.login
+    def broker(self):
+        import time
+        from jarvis.bot.phone_admission_store import BrokerTicketTiming
+        self.seed();incarnation=self.login()
+        binding=self.store.current_binding(identity=identity(),owner_id='alice',device_id='d-a',
+            session_id='s-a',login_incarnation=incarnation,now=2)
+        return BrokerTicketTiming(object(),binding,1000,31000,time.monotonic()+30)
+
+    def issue(self, broker, **extra):
+        return self.store.issue_ticket(identity=identity(),ticket_id='broker-ticket',session_id='s-a',
+            owner_id='alice',purpose='offer',payload_digest='digest',now=2,expires_at=32,
+            broker=broker,monotonic_ms=1000,**extra)
+
+    def consume(self, broker, mono=1000):
+        return self.store.consume_ticket(identity=identity(),ticket_id='broker-ticket',session_id='s-a',
+            owner_id='alice',purpose='offer',payload_digest='digest',now=2,broker=broker,monotonic_ms=mono)
+
+    def test_broker_exact_deadline_reclaim_and_legacy_survival(self):
+        broker=self.broker();self.issue(broker)
+        self.store.issue_ticket(identity=identity(),ticket_id='legacy',session_id='s-a',owner_id='alice',
+            purpose='offer',payload_digest='legacy',now=2,expires_at=20)
+        with self.assertRaises(StoreDenied):self.consume(broker,31000)
+        self.assertFalse(self.store._tickets['broker-ticket']['consumed'])
+        self.assertEqual(self.consume(broker,30999),broker.binding)
+        with self.assertRaises(StoreDenied):self.consume(broker,30999)
+        self.assertEqual(self.store.retire_broker_tickets(owner=broker.owner,binding=broker.binding),1)
+        self.assertEqual(set(self.store._tickets),{'legacy'})
+        self.assertEqual(self.store.retire_broker_tickets(owner=broker.owner,binding=broker.binding),0)
+
+    def test_broker_exact_types_capacity_and_owner_thread(self):
+        broker=self.broker()
+        for field,value in [('issued_ms',True),('deadline_ms',31000.0),('deadline_ms',31001),
+                            ('real_deadline',float('nan')),('binding',object()),('owner','owner')]:
+            with self.subTest(field=field,value=str(value)):
+                with self.assertRaises(StoreDenied):self.issue(replace(broker,**{field:value}))
+                self.assertFalse(self.store._tickets)
+        self.issue(broker)
+        with self.assertRaises(StoreDenied):
+            self.store.retire_broker_tickets(owner=object(),binding=broker.binding,ticket_id='broker-ticket')
+        failures=[]
+        def wrong_thread():
+            for action in (lambda:self.consume(broker),lambda:self.store.retire_broker_tickets(owner=broker.owner,binding=broker.binding)):
+                try:action()
+                except StoreDenied:failures.append(True)
+        t=threading.Thread(target=wrong_thread);t.start();t.join(1)
+        self.assertEqual(failures,[True,True]);self.assertFalse(self.store._tickets['broker-ticket']['consumed'])
+
+    def test_broker_binding_integer_types_and_foreign_timing_cannot_compare_equal(self):
+        broker=self.broker()
+        for field in ('host_generation','grant_generation','session_generation'):
+            for value in (True,1.0):
+                with self.subTest(field=field,value=value):
+                    malformed=replace(broker,binding=replace(broker.binding,**{field:value}))
+                    with self.assertRaises(StoreDenied):self.issue(malformed)
+                    self.assertFalse(self.store._tickets)
+        self.issue(broker)
+        with self.assertRaises(StoreDenied):self.consume(replace(broker))
+        for mono in (True,1000.0,-1,1<<53):
+            with self.subTest(monotonic=mono),self.assertRaises(StoreDenied):self.consume(broker,mono)
+        self.assertFalse(self.store._tickets['broker-ticket']['consumed'])
+
+    def test_real_monotonic_expiry_after_authority_entry_prevents_consumed_effect(self):
+        import time
+        from unittest.mock import patch
+        broker=self.broker();self.issue(broker)
+        original=self.store._authority_guard
+        @contextmanager
+        def stalled():
+            with original():
+                with patch('jarvis.bot.phone_admission_store.time.monotonic',return_value=broker.real_deadline):
+                    yield
+        self.store._authority_guard=stalled
+        with self.assertRaises(StoreDenied):self.consume(broker)
+        self.assertFalse(self.store._tickets['broker-ticket']['consumed'])

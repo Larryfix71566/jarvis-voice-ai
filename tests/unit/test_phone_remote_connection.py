@@ -253,3 +253,85 @@ class TerminalSendAdmissionTests(unittest.TestCase):
                 worker.join(1);self.assertFalse(worker.is_alive());self.assertEqual(result,[False])
                 self.assertEqual(registry.records[lease].pending_sends,0)
                 self.assertTrue(registry._sends_drained.is_set())
+
+
+class RetainedLifetimeTests(unittest.TestCase):
+    fixture=ConnectionClockLeaseTests.fixture
+    def test_retirement_is_nonextending_and_retains_slot_until_exact_cleanup(self):
+        clock,host,registry=self.fixture();token=object();lease=registry.open(token)
+        record=registry.records[lease]
+        record.state='active';record.expires_at_ms=20000;record.monotonic_deadline_ms=1000
+        record.cleanup_complete=False
+        with clock.service._lock:self.assertTrue(registry.lifetime_locked(record))
+        registry.close(lease,token);deadline=record.retirement_deadline
+        registry.close(lease,token)
+        self.assertEqual(record.retirement_deadline,deadline)
+        self.assertIs(registry.records[lease],record)
+        with clock.service._lock:self.assertFalse(registry.lifetime_locked(record))
+        self.assertFalse(registry.begin_send(lease,token))
+        record.cleanup_complete=True
+        registry.close(lease,token)
+        self.assertNotIn(lease,registry.records)
+
+    def test_retired_or_absent_lifetime_cannot_use_no_permit_fallback(self):
+        clock,host,registry=self.fixture();token=object();lease=registry.open(token)
+        record=registry.records[lease];record.state='active';record.expires_at_ms=20000;record.monotonic_deadline_ms=500
+        self.assertIsNone(registry.permit)
+        with clock.service._lock:
+            self.assertTrue(registry.lifetime_locked(record))
+            self.assertFalse(registry.lifetime_locked(None))
+        clock.set_time(wall_ms=1,monotonic_ms=500)
+        with clock.service._lock:self.assertFalse(registry.lifetime_locked(record))
+
+
+class RetirementWatchdogReviewTests(unittest.TestCase):
+    def test_stale_deadline_is_revalidated_and_true_stall_still_fences(self):
+        from unittest.mock import patch
+        from types import MethodType
+        from jarvis.bot.phone_remote_service import _AuthorityChildServiceHost
+        for mode in ('completed','replacement-retirement','stalled','drain-completed','drain-stalled'):
+            with self.subTest(mode=mode):
+                _,host,registry=ConnectionClockLeaseTests().fixture()
+                host._connections=registry;host._current=None
+                host._terminal=threading.Event();host._drained=threading.Event()
+                host._quiescence_deadline=None
+                waits=iter((False,True))
+                host._maintenance_stop=SimpleNamespace(wait=lambda _:next(waits))
+                host._thread=SimpleNamespace(is_alive=lambda:True)
+                closed=[]
+                def close_anchor():
+                    self.assertTrue(host._lock.acquire(blocking=False),'anchor close under H')
+                    host._lock.release()
+                    self.assertFalse(registry.lock._is_owned(),'anchor close under C')
+                    closed.append(True)
+                host._anchor=SimpleNamespace(close=close_anchor)
+                host._terminal_failure=MethodType(_AuthorityChildServiceHost._terminal_failure,host)
+                now=[100.0]
+                with patch('jarvis.bot.phone_remote_service.time.monotonic',side_effect=lambda:now[0]):
+                    token=object();lease=registry.open(token);record=registry.records[lease]
+                    survivor_token=object();survivor=registry.open(survivor_token)
+                    record.cleanup_complete=False;registry.close(lease,token)
+                    self.assertEqual(record.retirement_deadline,105)
+                    original=registry.retirement_deadline
+                    def snapshot_then_cleanup():
+                        deadline=original();now[0]=104.999
+                        if mode!='stalled':
+                            with host._lock,registry.lock:
+                                record.cleanup_complete=True;registry._retire_locked(record)
+                            self.assertNotIn(lease,registry.records)
+                        if mode=='replacement-retirement':
+                            registry.records[survivor].cleanup_complete=False
+                            registry.close(survivor,survivor_token)
+                            self.assertEqual(registry.records[survivor].retirement_deadline,109.999)
+                        if mode.startswith('drain-'):
+                            host._quiescing=True;host._quiescence_deadline=105
+                            if mode=='drain-completed':host._drained.set()
+                        now[0]=105.001
+                        return deadline
+                    registry.retirement_deadline=snapshot_then_cleanup
+                    _AuthorityChildServiceHost._watch_retirement(host)
+                terminal=mode in ('stalled','drain-stalled')
+                self.assertEqual(host._fenced,terminal)
+                self.assertEqual(host._terminal.is_set(),terminal)
+                self.assertEqual(bool(closed),terminal)
+                if not terminal:self.assertIn(survivor,registry.records)

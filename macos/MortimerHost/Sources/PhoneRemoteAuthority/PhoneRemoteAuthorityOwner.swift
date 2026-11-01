@@ -421,7 +421,48 @@ public final class PhoneRemoteAuthorityOwner {
         var childStatus: Int32 = 0
         var waited: pid_t
         var cleanupSignal = "none"
-        if owner.restoreHoldRequired {
+        var cleanupStages: [String] = []
+        if version == 4 && !owner.restoreHoldRequired {
+            // Ordinary retirement must not borrow restore persistence/hold semantics.
+            // There is one reaper. Only its exact-PID wait result releases lockFD.
+            let started = ProcessInfo.processInfo.systemUptime
+            let deadline = started + 2.5
+            func terminalReceipt(_ confirmed: Bool) {
+                guard !readyPath.isEmpty else { return }
+                let value: [String: Any] = ["pid": pid, "owner_incarnation": ownerID,
+                    "child_incarnation": childID, "confirmed_reap": confirmed,
+                    "signal": cleanupSignal, "stages": cleanupStages, "status": childStatus,
+                    "started": started, "deadline": deadline,
+                    "finished": ProcessInfo.processInfo.systemUptime,
+                    "singleton_held": true, "terminal_status": status]
+                if let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]) {
+                    try? data.write(to: URL(fileURLWithPath: readyPath + ".terminal"), options: .atomic)
+                }
+            }
+            let cleanup = ordinaryChildCleanup(pid: pid, healthy: status == 0, started: started,
+                now: { ProcessInfo.processInfo.systemUptime },
+                wait: { var value: Int32 = 0; let result = waitpid(pid, &value, WNOHANG)
+                    // Fixed offline test scenario: discard a real reap receipt
+                    // to model lost wait ownership without leaving an orphan.
+                    if scenario == "v4-test-reap-echild" && result == pid {
+                        return (-1, value, ECHILD)
+                    }
+                    return (result, value, result < 0 ? errno : 0) },
+                signal: { signal in let result = kill(pid, signal); return result == 0 ? 0 : errno },
+                pause: { usleep(5_000) })
+            waited = cleanup.reaped ? pid : -2
+            childStatus = cleanup.status
+            cleanupSignal = cleanup.signal
+            cleanupStages = cleanup.stages
+            guard waited == pid else {
+                terminalReceipt(false)
+                // ECHILD, unknown ownership, or an unresponsive kernel cannot
+                // justify signalling a reused PID or releasing singleton ownership.
+                while true { sleep(1) }
+            }
+            if status == 0 && (cleanupSignal != "none" || childStatus != 0) { status = 40 }
+            terminalReceipt(true)
+        } else if owner.restoreHoldRequired {
             if let marker = ProcessInfo.processInfo.environment["PHONE_REMOTE_AUTHORITY_RESTORE_REAP_WAIT_FILE"] {
                 try? Data("waiting".utf8).write(to: URL(fileURLWithPath: marker), options: .atomic)
             }
@@ -471,6 +512,44 @@ public final class PhoneRemoteAuthorityOwner {
             while true { sleep(1) }
         }
         return status
+    }
+
+    struct OrdinaryCleanupResult {
+        let reaped: Bool
+        let status: Int32
+        let signal: String
+        let stages: [String]
+    }
+
+    // Internal syscall seam: production uses only the spawned owned PID and
+    // WNOHANG. Tests model EINTR/ECHILD without signalling unrelated processes.
+    static func ordinaryChildCleanup(pid: pid_t, healthy: Bool, started: Double,
+        now: () -> Double, wait: () -> (pid_t, Int32, Int32),
+        signal: (Int32) -> Int32, pause: () -> Void) -> OrdinaryCleanupResult {
+        let deadline = started + 2.5
+        var status: Int32 = 0
+        var lastSignal = "none"
+        var stages: [String] = []
+        func poll(_ end: Double) -> pid_t {
+            while true {
+                let (result, value, error) = wait()
+                if result == pid { status = value; return result }
+                if result < 0 && error != EINTR { return -2 }
+                if result > 0 { return -2 }
+                if now() >= min(deadline, end) { return result == 0 ? 0 : -2 }
+                pause()
+            }
+        }
+        var result = poll(started + (healthy ? 0.25 : 0))
+        for (number, name, duration) in [(SIGTERM, "TERM", 0.25), (SIGKILL, "KILL", 2.0)] {
+            if result != 0 || now() >= deadline { break }
+            lastSignal = name
+            stages.append(name)
+            let error = signal(number)
+            if error != 0 && error != ESRCH { result = -2; break }
+            result = poll(min(deadline, now() + duration))
+        }
+        return OrdinaryCleanupResult(reaped: result == pid, status: status, signal: lastSignal, stages: stages)
     }
 
     private static func spawnChild(python: String, database: String, workingDirectory: String,
