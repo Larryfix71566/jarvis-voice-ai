@@ -1569,3 +1569,74 @@ has not run. The CI cause remains unproven, and no flaky/unrelated
 classification is claimed. Exact-source independent review remains pending;
 no production source, runtime behavior, model setting, or acceptance closure
 changed.
+
+### 2026-11-01 UTC — CI546 inert pilot capacity isolation claim
+
+Codex, on the registered `codex/ws05-worker-fixture-isolation-20261023` lane,
+continues the coordinator's exact-head CI diagnosis from published `5255b23d`.
+Fresh main `5310d1a` is already an ancestor; no merge content was needed. Local
+worktree/branch inventory and the current ownership scopes show no concurrent
+writer for this test. The local handoff remote was fetched; the GitHub connector
+separately verified public main. No production checkout is involved.
+
+The pre-edit claim is exactly `tests/unit/test_model_use_development_pilot.py`,
+this plan's dated progress, and the WS-05 block in `ROADMAP.md`. Model selection,
+production code, strict guards, minimum free space, dependency files, workflows,
+and other tests are excluded. No shared identifier is introduced.
+
+The five published failures occur before client construction. The pilot test,
+SDK, runtime and prune sources are unchanged from green `fff9fe8a`. Local target
+tests pass with both newly resolved CI dependencies (AnyIO 4.16.0 and
+python-dateutil 4.0.0), OpenAI 2.54.0 and current pytest/Pydantic/MCP versions.
+Collection and whole-unit execution order also preserve these target passes.
+A test-only free-space reading of 7 GiB reproduces all five exact empty-client
+failures while the two deliberate pre-session refusals still pass. The real
+`require_headroom` rejects session setup before SDK creation; the returned
+report retains failed cleanup rather than granting success. CI546 exposes
+neither that report nor a disk reading and has no workflow artifacts: this is
+a demonstrated ambient-capacity test defect, not proof of CI546's exact trigger.
+
+Planned repair: bind only the inert VM's exact test-home capacity reading to a
+deterministic value at the existing minimum, leaving the real guard active.
+Add a below-minimum scenario proving no guest/client effect and honest failed
+setup/cleanup, retain every existing scenario assertion, and include bounded
+content-free refusal fields when client construction fails. Compare the whole
+pilot module and adjacent host-simulation tests; keep independent review and
+exact-head CI as separate outstanding gates. No publication is authorized.
+
+#### 2026-11-01 UTC — Bounded test-isolation implementation and validation
+
+Pre-edit claim `c8e216093b047aed8642ba097cdef8549121a1f0` precedes test-only
+implementation `66f0cac769ce07c96761a28f4941c4d2e6368f05`, tree
+`8e871777d9a0d2d367a86b0181379e2b5921c7f7`. The exact inert-home capacity input is
+now deterministic at the unchanged minimum. The added one-byte-below-minimum
+case checks the real pre-clone refusal, initial failed setup, attempted revert,
+absent task record, unchanged template, no guest/client activity and explicitly
+unverified cleanup. All seven existing scenario assertions remain. A separate
+mutation probe bypassing `Images.require_headroom` makes this new case fail at
+the no-client assertion; this expected failure is not counted as a passing test.
+
+| Validation on implementation tree | Result and limit |
+|---|---|
+| Full unit suite | 7,521 passed, 583 subtests, 141 prerequisite skips, 20 warnings; 192.39 seconds pytest time |
+| Four pilot/source/capability modules, focused rerun | 329 passed, eight pre-existing local-review-diagnostic skips; included in the full unit inventory, not additional coverage |
+| Separate sandbox suite | 160 passed, no failures |
+| Roadmap/repository-reader regression subset | 126 passed; included in full unit inventory |
+| Roadmap drift checker and diff whitespace | Passed; zero roadmap errors/warnings |
+
+The successful rerun used an isolated Python 3.12.13 Mac environment with
+OpenAI 2.54.0, AnyIO 4.16.0, python-dateutil 4.0.0, pytest 9.2.0 and the inspected
+CI Pydantic/MCP versions. This is not an exact Ubuntu/Python 3.12.15 runner replay.
+External Python socket traffic was blocked; loopback fixtures used standard
+execution approval. Initial default-sandbox diagnostic runs had socket/IPC
+denials and are retained as failures, not runtime regressions or passes. Native
+owner prerequisites were not supplied in this CI-shaped unit run; its skips
+remain skips. No UI/device/display or production path was exercised.
+
+The five-failure low-capacity reproduction and the local repair establish a
+fixture-isolation defect. CI546 had no retained report or disk measurement, so
+its particular cause remains unproven. Independent source review and fresh
+exact-head CI remain mandatory before claiming that published failure closed.
+This evidence-only finalization leaves all implementation/test bytes unchanged;
+documentation reader/checker validation is repeated on the final docs commit.
+No publication or PR-description change occurs in this slice.
