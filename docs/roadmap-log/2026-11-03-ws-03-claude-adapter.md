@@ -2,7 +2,7 @@
 date: 2026-11-03
 system: claude
 rows: [WS-03]
-prs: [298]
+prs: [298, 300]
 ---
 
 # WS-03 — offline skill package adapter source, 2026-11-03
