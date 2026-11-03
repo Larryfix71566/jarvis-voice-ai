@@ -501,6 +501,53 @@ async def test_roadmap_snapshot_attests_complete_cards_and_each_guarded_log(road
     assert envelope.canonical_refs == (str(roadmap_project / 'ROADMAP.md'), str(roadmap_project / 'docs/roadmap-log/evidence.md'))
 
 
+def _padded_roadmap(size):
+    head = b'<details id="ws-17">\n<summary>Console</summary>\n- **Owner:** codex\n- **Status:** landed\n'
+    tail = b'\n</details>\n'
+    return head + b'x' * (size - len(head) - len(tail)) + tail
+
+
+async def _scoped_read(project, body, arguments):
+    registry = registry_for('repo_read_file', 'mcp-repo', Session(response(body)), pinned=True, root=project)
+    scope = execution('repo_read_file', arguments, privacy='approved_external')
+    envelope = await registry.call_classified('repo_read_file', arguments, execution_scope=scope)
+    policy, content = validate_tool_result(scope, envelope)
+    return envelope, content
+
+
+async def test_canonical_roadmap_between_generic_and_roadmap_limits_is_attested(project, monkeypatch):
+    monkeypatch.setattr(repo_logic, 'REPO_READ_MAX_BYTES', 1000)
+    monkeypatch.setattr(repo_logic, 'ROADMAP_READ_MAX_BYTES', 4000)
+    (project / 'ROADMAP.md').write_bytes(_padded_roadmap(2000))
+    body = repo_logic.repo_read_file(path='ROADMAP.md')
+    assert body['ok'] is True and 'roadmap' in body
+    envelope, content = await _scoped_read(project, body, {'path': 'ROADMAP.md'})
+    assert json.loads(content) == body
+    assert envelope.canonical_refs[0] == str(project / 'ROADMAP.md')
+
+
+async def test_canonical_roadmap_above_roadmap_limit_is_refused(project, monkeypatch):
+    monkeypatch.setattr(repo_logic, 'REPO_READ_MAX_BYTES', 1000)
+    # Build a body that is consistent with the file on disk (bytes, content,
+    # snapshot), so only the host's canonical-roadmap size bound can refuse it.
+    monkeypatch.setattr(repo_logic, 'ROADMAP_READ_MAX_BYTES', 8000)
+    (project / 'ROADMAP.md').write_bytes(_padded_roadmap(5000))
+    body = repo_logic.repo_read_file(path='ROADMAP.md')
+    assert body['ok'] is True and body['bytes'] == 5000 and 'roadmap' in body
+    monkeypatch.setattr(repo_logic, 'ROADMAP_READ_MAX_BYTES', 4000)
+    envelope, content = await _scoped_read(project, body, {'path': 'ROADMAP.md'})
+    assert json.loads(content) == {'ok': False, 'error': 'tool_source_scope_invalid'}
+
+
+async def test_non_roadmap_file_keeps_generic_limit_at_host(project, monkeypatch):
+    monkeypatch.setattr(repo_logic, 'REPO_READ_MAX_BYTES', 1000)
+    monkeypatch.setattr(repo_logic, 'ROADMAP_READ_MAX_BYTES', 4000)
+    (project / 'docs-plain.md').write_bytes(_padded_roadmap(2000))
+    body = {'ok': True, 'path': 'docs-plain.md', 'bytes': 2000, 'content': (project / 'docs-plain.md').read_text()}
+    envelope, content = await _scoped_read(project, body, {'path': 'docs-plain.md'})
+    assert json.loads(content) == {'ok': False, 'error': 'tool_source_scope_invalid'}
+
+
 @pytest.mark.parametrize('variant', ['card', 'omit-card', 'extra-field', 'provenance', 'hash', 'date', 'revision', 'dirty-type', 'repository-id', 'omit-log', 'log-hash', 'log-title', 'log-rows', 'log-path', 'disk-log', 'disk-card', 'old', 'future', 'naive', 'wrong-file', 'symlink'])
 async def test_roadmap_snapshot_cannot_self_attest_derived_or_changed_content(roadmap_project, variant):
     arguments = {'path': 'ROADMAP.md'}
