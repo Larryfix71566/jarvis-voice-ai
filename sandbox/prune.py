@@ -37,7 +37,9 @@ Rules, applied in order to every task record:
 than ``MIN_FREE_BYTES`` remain afterwards. ``Verifier.verify`` and
 ``Session.submit`` discard their own VMs as soon as they are finished with
 them. The ``com.mortimer.sandbox-prune`` launchd job runs this module daily
-for anything those paths missed (host restarts, abandoned sessions).
+for anything those paths missed (host restarts, abandoned sessions). ``main()`` lists
+would-delete or deleted VMs, retained VMs and malformed records separately, and exits 1
+when a deletion failed, 3 when any record is malformed, otherwise 0.
 """
 from __future__ import annotations
 
@@ -67,6 +69,7 @@ IDLE_SECONDS = 7 * 24 * 60 * 60
 LOW_DISK_BYTES = 100 * GIB
 LOW_DISK_IDLE_SECONDS = 24 * 60 * 60
 MIN_FREE_BYTES = 8 * GIB
+EXIT_RECORD_ISSUES = 3  # main(): a pass finished but some ownership/task records are malformed
 ENDED_PHASES = frozenset({"published", "reverted", "cancelled", "setup_failed"})
 # Controller.destroy accepts exactly these; "deleting" finishes an interrupted delete.
 DISPOSABLE = frozenset({"created", "failed", "stopped", "deleting"})
@@ -247,10 +250,11 @@ class Pruner:
 
     def run(self, *, dry_run: bool = False, now: float | None = None) -> dict:
         report = {"at": int(time.time()), "dry_run": dry_run, "free_before": free_bytes(self.controller.home),
-                  "destroyed": [], "failed": [], "kept": []}
+                  "destroyed": [], "failed": [], "kept": [], "retained": []}
         planned = self.plan(now)
         report["issues"] = list(self._issues)
         report["kept"].extend(self._retained)
+        report["retained"].extend(self._retained)
         for item in planned:
             if dry_run:
                 report["kept"].append(item)
@@ -267,6 +271,8 @@ class Pruner:
         for item in self._retained:
             if item not in report["kept"]:
                 report["kept"].append(item)
+            if item not in report["retained"]:
+                report["retained"].append(item)
         report["free_after"] = free_bytes(self.controller.home)
         if not dry_run and (report["destroyed"] or report["failed"] or report["issues"]):
             with (self.controller.home / "prune.log").open("a") as log:
@@ -319,18 +325,27 @@ def main(argv=None) -> int:
     settings = json.loads(settings_path.read_bytes())
     controller = Controller(args.home, settings["tart"], settings["softnet"])
     report = Pruner(controller, idle=int(args.idle_days * 86400)).run(dry_run=args.dry_run)
+    if args.dry_run:
+        verb, acted = "would delete", [item for item in report["kept"] if item not in report["retained"]]
+    else:
+        verb, acted = "deleted", report["destroyed"]
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:
-        verb = "would delete" if args.dry_run else "deleted"
-        for item in report["kept"] if args.dry_run else report["destroyed"]:
+        for item in acted:
             print("%s %s: %s" % (verb, item["vm"], item["reason"]))
+        for item in report["retained"]:
+            print("retained %s: %s" % (item["vm"], item["reason"]))
         for item in report["failed"]:
             print("failed %s: %s" % (item["vm"], item["error"]), file=sys.stderr)
-        print("%s %d VM(s); %.1f GiB free (was %.1f GiB)" % (
-            verb, len(report["kept"] if args.dry_run else report["destroyed"]),
+        for issue in report["issues"]:
+            print("record issue %s: %s" % (issue["record"], issue["category"]), file=sys.stderr)
+        print("%s %d VM(s); retained %d; %d record issue(s); %.1f GiB free (was %.1f GiB)" % (
+            verb, len(acted), len(report["retained"]), len(report["issues"]),
             report["free_after"] / GIB, report["free_before"] / GIB))
-    return 1 if report["failed"] else 0
+    if report["failed"]:
+        return 1
+    return EXIT_RECORD_ISSUES if report["issues"] else 0
 
 
 if __name__ == "__main__":

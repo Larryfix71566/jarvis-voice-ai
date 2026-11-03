@@ -1,5 +1,7 @@
+import contextlib
 import json
 import fcntl
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -337,6 +339,58 @@ class PruneTests(unittest.TestCase):
         task = self.task("abcdefabcdef", purpose="verification")
         self.assertEqual(prune.discard(self.c, task), "deleted")
         self.assertTrue(prune.discard(self.c, "000000000000").startswith("retained: "))
+
+    def run_main(self, *argv):
+        (self.root / "settings.json").write_text(json.dumps({"tart": "/missing/tart", "softnet": "/missing/softnet"}))
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(prune, "Controller", return_value=self.c), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = prune.main(["--home", str(self.root), *argv])
+        return code, out.getvalue(), err.getvalue()
+
+    def retained_setup(self):
+        finished = self.task("dd00eeee0001", purpose="verification")
+        development = self.task("dd00eeee0002", age=8 * 3600, purpose="development")
+        session = self.root / "sessions" / ("e" * 32)
+        session.mkdir(parents=True)
+        (session / "session.json").write_text("invalid json")
+        return finished, development
+
+    def test_main_dry_run_separates_would_delete_from_retained(self):
+        finished, development = self.retained_setup()
+        code, out, err = self.run_main("--dry-run")
+        self.assertEqual(self.deleted, [])
+        self.assertIn("would delete mortimer-" + finished, out)
+        self.assertNotIn("would delete mortimer-" + development, out)
+        self.assertIn("retained mortimer-" + development + ": unknown_owner_or_child", out)
+        self.assertIn("record issue sessions/" + "e" * 32 + "/session.json", err)
+        self.assertEqual(code, prune.EXIT_RECORD_ISSUES)
+
+    def test_main_real_run_reports_retained_and_record_issues(self):
+        finished, development = self.retained_setup()
+        code, out, err = self.run_main()
+        self.assertIn("mortimer-" + finished, self.deleted)
+        self.assertNotIn("mortimer-" + development, self.deleted)
+        self.assertIn("deleted mortimer-" + finished, out)
+        self.assertIn("retained mortimer-" + development, out)
+        self.assertIn("record issue", err)
+        self.assertEqual(code, prune.EXIT_RECORD_ISSUES)
+
+    def test_main_clean_pass_exits_zero(self):
+        finished = self.task("dd00eeee0003", purpose="verification")
+        code, out, err = self.run_main()
+        self.assertEqual(code, 0)
+        self.assertIn("deleted mortimer-" + finished, out)
+        self.assertNotIn("retained mortimer-", out)
+        self.assertEqual(err, "")
+
+    def test_main_json_report_lists_retained(self):
+        finished, development = self.retained_setup()
+        code, out, _ = self.run_main("--json", "--dry-run")
+        report = json.loads(out)
+        self.assertEqual([x["task"] for x in report["retained"]], [development])
+        self.assertTrue(report["issues"])
+        self.assertEqual(code, prune.EXIT_RECORD_ISSUES)
 
 
 if __name__ == "__main__":

@@ -210,3 +210,15 @@ This is partial availability: ambiguous development VMs stay retained and low
 disk may still refuse creation when no independently reclaimable verification
 VM exists. Final exact-source reviewer agreement and current CI remain open.
 No real cleanup, clone, VM verification, installation, merge or deployment.
+
+## 2026-11-03 — WS-28 prune operator report (Claude)
+
+Larry moved the remaining WS-28 fix to Claude on 2026-11-03. It closes the one
+change Claude's 2026-10-22 cross-review required before any real prune:
+`python3 -m sandbox.prune` now lists would-delete (dry run) or deleted VMs,
+retained VMs with their reason, and malformed ownership/task records
+separately, and exits 1 when a deletion failed, 3 when any record is
+malformed, otherwise 0. The report gains a `retained` list; `kept` is
+unchanged. Eligibility, locking, leases, the corruption policy and the
+fingerprint rules are unchanged; `prune.py` is fingerprinted, so the runner
+fingerprint changes with this source. No real prune, reclaim or clone was run.
