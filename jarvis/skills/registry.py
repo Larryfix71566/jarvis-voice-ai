@@ -591,7 +591,7 @@ class SkillRegistry:
         claim that unrelated content originated in an approved project.
         """
         from mcp_servers.mcp_repo.logic import (
-            REPO_READ_MAX_BYTES, REPO_SEARCH_MAX_RESULTS,
+            REPO_READ_MAX_BYTES, REPO_SEARCH_MAX_RESULTS, ROADMAP_READ_MAX_BYTES,
             ROADMAP_SNAPSHOT_MAX_BYTES, _roadmap_snapshot, resolve_repo_path,
         )
 
@@ -605,6 +605,7 @@ class SkillRegistry:
             if body is None:
                 return (str(expected),)
             canonical_roadmap = expected.relative_to(root).as_posix() == "ROADMAP.md"
+            read_max_bytes = ROADMAP_READ_MAX_BYTES if canonical_roadmap else REPO_READ_MAX_BYTES
             keys = {"ok", "path", "bytes", "content"}
             if canonical_roadmap and "roadmap" in body:
                 keys.add("roadmap")
@@ -613,7 +614,7 @@ class SkillRegistry:
                     or type(body["bytes"]) is not int or type(body["content"]) is not str
                     or body["path"] != expected.relative_to(root).as_posix()
                     or resolve_repo_path(root, body["path"]) != expected
-                    or not expected.is_file() or expected.stat().st_size > REPO_READ_MAX_BYTES
+                    or not expected.is_file() or expected.stat().st_size > read_max_bytes
                     or body["bytes"] != expected.stat().st_size
                     or (expected.read_bytes().decode("utf-8") if "roadmap" in body
                         else expected.read_text(encoding="utf-8")) != body["content"]):
