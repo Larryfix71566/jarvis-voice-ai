@@ -93,6 +93,7 @@ from jarvis.bot.follow_up import (
     follow_ups_enabled,
     progress_updates_enabled,
 )
+from jarvis.bot.brief_tool import brief_enabled, build_daily_brief_tool
 from jarvis.bot.status_tool import build_system_status_tool
 from jarvis.bot.weather_tool import build_local_weather_tool
 from jarvis.bot.weather_reuse import WeatherReuseBridge, current_weather_reuse, weather_reuse_scope
@@ -1197,6 +1198,10 @@ def stt_keyterms() -> list[str]:
         return list(STT_KEYTERMS)
 
 
+#: Peer addresses that count as this machine for daily_brief (R.10.5 condition 2).
+BRIEF_LOOPBACK_PEERS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
 def build_pipeline(
     transport: Any, runtime: Runtime, pusher: FramePusher | None = None,
     client_messages: Any = None,
@@ -1334,6 +1339,40 @@ def build_pipeline(
     # JARVIS_STATUS_TOOLS_ENABLED; read once here and passed explicitly to
     # the menu and the prompt so the three can never disagree (R9).
     status_enabled = jarvis_status_enabled()
+    # WS-13 P3m (plan R.0f): daily_brief, the mail-headlines tool. Read once
+    # here and passed to the menu, the prompt and registration.
+    brief_on = brief_enabled()
+    # The asking session's own transport facts, captured from pipecat's public
+    # events: the peer address (the Starlette WebSocket's client host) and
+    # whether the socket is still open. Both stay unset on WebRTC, and an
+    # unknown peer is never eligible (R.10.5 conditions 1 and 2).
+    brief_session: dict[str, Any] = {"peer": None, "open": False}
+    if brief_on and client_messages is not None:
+        @transport.event_handler("on_client_connected")
+        async def _brief_on_connected(_transport: Any, websocket: Any) -> None:
+            client = getattr(websocket, "client", None)
+            host = getattr(client, "host", None)
+            brief_session["peer"] = host if isinstance(host, str) else None
+            brief_session["open"] = True
+
+        @transport.event_handler("on_client_disconnected")
+        async def _brief_on_disconnected(_transport: Any, _websocket: Any) -> None:
+            brief_session["open"] = False
+
+    def _brief_eligible() -> bool:
+        return (client_messages is not None and brief_session["open"]
+                and brief_session["peer"] in BRIEF_LOOPBACK_PEERS)
+
+    def _brief_connected() -> bool:
+        return bool(brief_session["open"])
+
+    async def _brief_send(payload: dict) -> None:
+        await send_app_message(transport, {"type": "display", "display": payload})
+
+    _, daily_brief_handler = build_daily_brief_tool(
+        registry=runtime.registry, send_display=_brief_send,
+        eligible=_brief_eligible, connected=_brief_connected,
+        tz=ZoneInfo(settings.jarvis_timezone))
     # V3/V4: screen vision is a DIRECT Supervisor tool (like set_voice /
     # ui_control), never a delegation. Same kill-switch-at-registration
     # pattern as ui_control above.
@@ -1606,6 +1645,7 @@ def build_pipeline(
         progress=progress_enabled,
         follow_up=follow_up_enabled,
         weather=local_weather_on,
+        brief=brief_on,
     )
 
     # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
@@ -1730,6 +1770,8 @@ def build_pipeline(
     register_voice_tool("cost_summary", cost_summary_handler)
     if status_enabled:
         register_voice_tool("system_status", system_status_handler)
+    if brief_on:
+        register_voice_tool("daily_brief", daily_brief_handler)
     if ui_control_enabled:
         register_voice_tool("ui_control", ui_control_handler)
     if screen_enabled:
@@ -1800,6 +1842,7 @@ def build_pipeline(
             progress=progress_enabled,
             follow_up=follow_up_enabled,
             weather=local_weather_on,
+            brief=brief_on,
         )
     ]
     system_message = {"role": "system", "content": system_prompt}

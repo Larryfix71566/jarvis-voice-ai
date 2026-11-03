@@ -530,7 +530,9 @@ enum ArrivalIntent {
     /// Background jobs announced by their watchers when they finish
     /// (`jarvis/bot/plan_watcher.py`, `research_watcher.py`). They answer an
     /// earlier request, minutes later, so they never open by themselves.
-    static let backgroundTools: Set<String> = ["plan_ready", "research_report"]
+    /// `daily_brief` (WS-13 P3m, R.10.8): a brief never opens by itself until
+    /// WS-17 provides turn identity to tie it to the request that asked.
+    static let backgroundTools: Set<String> = ["plan_ready", "research_report", "daily_brief"]
     /// A result with no run ID (a direct supervisor tool such as local
     /// weather or a graph view) counts as the current answer only this soon
     /// after Larry last spoke.

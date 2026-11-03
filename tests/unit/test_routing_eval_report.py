@@ -190,7 +190,7 @@ def test_addenda_and_tools_are_independent_switches():
     # Four tools ship even with every kill switch off, so "no addenda" and
     # "no tools" are different states and must not be folded together.
     for profile in PROFILES.values():
-        assert set(profile) == {"addenda", "tools"}
+        assert set(profile) == {"addenda", "tools", "brief"}
         assert set(profile["addenda"]) == {
             "voice", "ui_control", "screen", "clipboard"}
 
@@ -322,3 +322,59 @@ def test_without_an_alternative_a_missing_delegation_fails():
 def test_a_multi_agent_case_needs_every_expected_agent():
     assert case_is_correct({"analyst", "scheduler"}, {"analyst", "scheduler"})
     assert not case_is_correct({"analyst", "scheduler"}, {"analyst"})
+
+
+# --- WS-13 P3m (plan R.10.17): the direct daily_brief expectation -----------------
+
+BRIEF_CALL = [("daily_brief", {"scope": "mail"})]
+
+
+def _brief_ok(**overrides):
+    kwargs = dict(tool="daily_brief", args={"scope": "mail"}, calls=BRIEF_CALL)
+    kwargs.update(overrides)
+    return case_is_correct({"none"}, kwargs.pop("actual", set()), None, None, **kwargs)
+
+
+def test_a_brief_case_passes_on_the_correct_stubbed_call():
+    assert _brief_ok()
+    assert _brief_ok(calls=[("daily_brief", {"scope": " Mail "})])   # normalised
+
+
+def test_a_brief_case_fails_on_a_no_op_answer():
+    # expect: none alone would accept this; the exact call is required.
+    assert not _brief_ok(calls=[])
+    assert not _brief_ok(calls=None)
+
+
+def test_a_brief_case_fails_on_the_wrong_direct_tool():
+    assert not _brief_ok(calls=[("system_status", {"scope": "mail"})])
+    assert not _brief_ok(calls=BRIEF_CALL + [("system_status", {"topic": "overview"})])
+
+
+def test_a_brief_case_fails_on_wrong_arguments():
+    assert not _brief_ok(calls=[("daily_brief", {"scope": "calendar"})])
+    assert not _brief_ok(calls=[("daily_brief", {})])
+
+
+def test_a_brief_case_fails_on_an_unwanted_delegation():
+    assert not _brief_ok(actual={"analyst"})
+
+
+def test_the_mail_send_negative_fails_when_the_brief_is_called():
+    assert case_is_correct({"none"}, set(), None, [], forbid_tool="daily_brief", calls=[])
+    assert not case_is_correct({"none"}, set(), None, ["daily_brief"],
+                               forbid_tool="daily_brief", calls=BRIEF_CALL)
+    assert not case_is_correct({"none"}, {"scheduler"}, None, [],
+                               forbid_tool="daily_brief", calls=[])
+
+
+def test_the_shipped_brief_cases_are_wired_to_the_scorer():
+    import yaml
+    from tests.evals.routing_eval import CASES_PATH, is_brief_case, profile_has_brief
+    cases = [c for c in yaml.safe_load(CASES_PATH.read_text()) if is_brief_case(c)]
+    positives = [c for c in cases if c.get("tool")]
+    negatives = [c for c in cases if c.get("forbid_tool")]
+    assert len(positives) >= 3 and negatives
+    assert all(c["tool"] == "daily_brief" and c["args"] == {"scope": "mail"} for c in positives)
+    assert any("email" in c["input"].lower() and c["input"].lower().startswith("send") for c in negatives)
+    assert profile_has_brief(None) is True and profile_has_brief("delegate-only") is False

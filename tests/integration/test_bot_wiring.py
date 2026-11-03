@@ -427,12 +427,30 @@ def test_six_functions_registered(runtime, fakes):
     # the handoff loop: show a command, Larry runs it, read the output back)
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "delegate_task", "follow_up", "list_screens",
+        "clear_clipboard", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
         "local_weather",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "system_status", "ui_control", "view_screen",
     ]
     assert llm.kwargs == {"api_key": "sk", "base_url": "http://llm", "model": "m"}
+
+
+def test_brief_kill_switch_unregisters_tool_and_swaps_the_addendum(runtime, fakes, monkeypatch):
+    """WS-13 P3m: JARVIS_BRIEF_ENABLED=false removes daily_brief from the
+    registered functions and the menu, and the prompt then says mail is not
+    connected instead of describing the tool."""
+    from jarvis.prompts import BRIEF_ADDENDUM, MAIL_UNAVAILABLE_ADDENDUM
+
+    monkeypatch.delenv("JARVIS_BRIEF_ENABLED", raising=False)
+    _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
+    assert "daily_brief" in llm.functions
+    assert BRIEF_ADDENDUM in _system_prompt_of(aggregators)
+    assert MAIL_UNAVAILABLE_ADDENDUM not in _system_prompt_of(aggregators)
+    monkeypatch.setenv("JARVIS_BRIEF_ENABLED", "false")
+    _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
+    assert "daily_brief" not in llm.functions
+    assert BRIEF_ADDENDUM not in _system_prompt_of(aggregators)
+    assert MAIL_UNAVAILABLE_ADDENDUM in _system_prompt_of(aggregators)
 
 
 def test_ui_control_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
@@ -442,7 +460,7 @@ def test_ui_control_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     monkeypatch.setenv("JARVIS_UI_CONTROL_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "delegate_task", "follow_up", "list_screens",
+        "clear_clipboard", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
         "local_weather",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "system_status", "view_screen",
@@ -458,7 +476,7 @@ def test_status_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     monkeypatch.setenv("JARVIS_STATUS_TOOLS_ENABLED", "false")
     _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "delegate_task", "follow_up", "list_screens",
+        "clear_clipboard", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
         "local_weather",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "ui_control", "view_screen",
@@ -481,7 +499,7 @@ def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch
     monkeypatch.setenv("JARVIS_SCREEN_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "delegate_task", "follow_up", "local_weather",
+        "clear_clipboard", "cost_summary", "daily_brief", "delegate_task", "follow_up", "local_weather",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "system_status", "ui_control",
     ]
