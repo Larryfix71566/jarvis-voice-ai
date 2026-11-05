@@ -2,7 +2,7 @@
 date: 2026-11-05
 system: claude
 rows: [WS-17]
-prs: []
+prs: [303]
 ---
 
 # WS-17 Kimi combined-main validation claim — 2026-11-05
