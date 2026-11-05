@@ -155,8 +155,13 @@ def _headline(raw: dict, labels: dict[str, str], now: datetime, tz: tzinfo) -> d
 def assemble_mail_brief(envelope_content: dict | None, *, error: str | None,
                         now: datetime, tz: tzinfo) -> dict:
     """The typed mail section. ``error`` (a closed, content-free code from the
-    caller) or any unusable content yields every account ``failed``; the
-    result is still a valid card. The returned dict is the section
+    caller) of ``timeout`` yields every account ``timeout`` (count unknown);
+    any other error or unusable content yields every account ``failed``; the
+    result is still a valid card. Outcome (plan R.10.7): sources that are
+    unavailable (``disabled``, ``not_configured``) are not failures. ``full``
+    = every available source is ok; ``partial`` = at least one available
+    source is ok or partial, or no source is available; ``all_failed`` = at
+    least one source is available and none is ok or partial. The returned dict is the section
     (``source``, ``accounts``, ``headlines``, ``more``) plus two bookkeeping
     keys that ``build_brief_payload`` lifts out of it: ``outcome``
     (``full`` | ``partial`` | ``all_failed``) and ``generated_at_local``."""
@@ -186,14 +191,18 @@ def assemble_mail_brief(envelope_content: dict | None, *, error: str | None,
         headlines = [_headline(m, labels, now, tz) for m in usable[:MAX_HEADLINES]]
         more = max(0, len(usable) - MAX_HEADLINES)
     else:
-        accounts = [_failed_account(key) for key in _ACCOUNT_ORDER]
+        status = STATUS_TIMEOUT if error == "timeout" else STATUS_FAILED
+        accounts = [_failed_account(key, status=status) for key in _ACCOUNT_ORDER]
     statuses = [a["status"] for a in accounts]
-    if all(s == STATUS_OK for s in statuses):
-        outcome = "full"
-    elif not any(s in (STATUS_OK, STATUS_PARTIAL) for s in statuses):
-        outcome = "all_failed"
-    else:
+    available = [s for s in statuses if s not in (STATUS_DISABLED, STATUS_NOT_CONFIGURED)]
+    if not available:
         outcome = "partial"
+    elif all(s == STATUS_OK for s in available):
+        outcome = "full"
+    elif any(s in (STATUS_OK, STATUS_PARTIAL) for s in available):
+        outcome = "partial"
+    else:
+        outcome = "all_failed"
     return {"source": "mail", "accounts": accounts, "headlines": headlines, "more": more,
             "outcome": outcome,
             "generated_at_local": now.astimezone(tz).strftime("%Y-%m-%d %H:%M")}

@@ -65,7 +65,7 @@ def test_mail_disabled_marks_every_account_disabled():
     s = build({"ok": False, "error": "mail_disabled"})
     assert {a["status"] for a in s["accounts"]} == {"disabled"}
     assert {a["status_text"] for a in s["accounts"]} == {"Mail is turned off"}
-    assert s["outcome"] == "all_failed"
+    assert s["outcome"] == "partial"      # nothing was available: not a failure (R.10.7)
 
 
 @pytest.mark.parametrize("raw,label", [
@@ -160,7 +160,7 @@ def test_markdown_is_left_literal():
 
 
 @pytest.mark.parametrize("c,error", [
-    (None, "failed"), (None, "timeout"), ("not a dict", None), ([], None),
+    (None, "failed"), ("not a dict", None), ([], None),
     ({"ok": False, "error": "something_else"}, None), ({"ok": True}, None),
     ({"ok": True, "accounts": "x"}, None), ({"ok": True, "accounts": []}, None),
     ({"ok": False, "error": "unknown_account"}, None),
@@ -176,16 +176,43 @@ def test_registry_or_content_failure_is_an_all_failed_card(c, error):
     build_brief_payload(s, result_id="r", ts=1.0)   # still a valid card
 
 
-def test_outcome_values():
-    full = build(content([acct("gmail"), acct("att")]))
-    part_one_ok = build(content([acct("gmail"), acct("att", status="failed", state="unknown",
-                                                     value=None, error="tls")]))
-    part_partial = build(content([acct("gmail", status="partial", state="lower_bound", value=2),
-                                  acct("att", status="not_configured", state="unknown", value=None)]))
-    none_ok = build(content([acct("gmail", status="timeout", state="unknown", value=None),
-                             acct("att", status="not_configured", state="unknown", value=None)]))
-    assert (full["outcome"], part_one_ok["outcome"], part_partial["outcome"], none_ok["outcome"]) \
-        == ("full", "partial", "partial", "all_failed")
+def _acc(key, status):
+    return acct(key, status=status, state="exact" if status == "ok" else "unknown",
+                value=1 if status == "ok" else None)
+
+
+@pytest.mark.parametrize("c,error,outcome", [
+    ({"ok": False, "error": "mail_disabled"}, None, "partial"),
+    (content([_acc("gmail", "not_configured"), _acc("att", "not_configured")]), None, "partial"),
+    (content([_acc("gmail", "ok"), _acc("att", "disabled")]), None, "full"),
+    (content([_acc("gmail", "ok"), _acc("att", "not_configured")]), None, "full"),
+    (content([_acc("gmail", "failed"), _acc("att", "not_configured")]), None, "all_failed"),
+    (content([_acc("gmail", "timeout"), _acc("att", "ok")]), None, "partial"),
+    (content([_acc("gmail", "partial"), _acc("att", "not_configured")]), None, "partial"),
+    (content([_acc("gmail", "ok"), _acc("att", "ok")]), None, "full"),
+    (content([_acc("gmail", "timeout"), _acc("att", "failed")]), None, "all_failed"),
+    (None, "timeout", "all_failed"),
+    (None, "failed", "all_failed"),
+])
+def test_outcome_values(c, error, outcome):
+    assert build(c, error=error)["outcome"] == outcome
+
+
+def test_timeout_error_marks_every_account_timed_out_with_unknown_count():
+    s = build(None, error="timeout")
+    assert {a["status"] for a in s["accounts"]} == {"timeout"}
+    assert {a["status_text"] for a in s["accounts"]} == {"Timed out"}
+    assert {a["reason"] for a in s["accounts"]} == {None}
+    assert {a["count_text"] for a in s["accounts"]} == {"unknown"}
+    assert {a["count_value"] for a in s["accounts"]} == {None}
+    assert s["outcome"] == "all_failed"
+
+
+def test_failed_error_marks_every_account_failed():
+    s = build(None, error="failed")
+    assert {a["status_text"] for a in s["accounts"]} == {"Couldn't read"}
+    assert {a["count_text"] for a in s["accounts"]} == {"unknown"}
+    assert s["outcome"] == "all_failed"
 
 
 def test_payload_shape_and_fixed_body():

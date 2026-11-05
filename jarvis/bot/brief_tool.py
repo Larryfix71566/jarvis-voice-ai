@@ -61,6 +61,8 @@ BAD_SCOPE_TEXT = "daily_brief failed: scope must be mail."
 #: One mail_headlines call is bounded at 12 s by the server
 #: (mcp_mail.logic.MAIL_CALL_DEADLINE_S); leave a little for the transport.
 JOB_TIMEOUT_S = 15.0
+#: Bound on the card send; a socket that never drains must not hold the job.
+SEND_TIMEOUT_S = 5.0
 MAIL_ARGUMENTS = {"window_hours": 24, "account": "all"}
 SOURCE_LABEL = "brief-mail"
 
@@ -78,6 +80,53 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class BriefJobs:
+    """Owns the brief job tasks for one session so that a disconnect or a
+    teardown can cancel them. Once closed it starts nothing."""
+
+    def __init__(self) -> None:
+        self._tasks: set[asyncio.Task] = set()
+        self._closed = False
+
+    def __len__(self) -> int:
+        return len(self._tasks)
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def start(self, coro: Awaitable[None], *, context: contextvars.Context) -> asyncio.Task:
+        if self._closed:
+            if asyncio.iscoroutine(coro):
+                coro.close()
+            raise RuntimeError("brief jobs closed")
+        task = asyncio.get_running_loop().create_task(coro, context=context)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
+    def cancel_all(self) -> int:
+        pending = [t for t in self._tasks if not t.done()]
+        for task in pending:
+            task.cancel()
+        return len(pending)
+
+    async def aclose(self, timeout: float = 2.0) -> None:
+        """Mark closed, cancel everything, wait (bounded) for the children.
+        Never raises."""
+        self._closed = True
+        try:
+            pending = [t for t in self._tasks if not t.done()]
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.wait(pending, timeout=timeout)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning("brief_jobs_close_error type=%s", type(exc).__name__)
+
+
 def build_daily_brief_tool(
     *,
     registry: Any,
@@ -86,6 +135,7 @@ def build_daily_brief_tool(
     connected: Callable[[], bool],
     now: Callable[[], datetime] = _utc_now,
     tz: tzinfo = timezone.utc,
+    jobs: BriefJobs | None = None,
 ) -> tuple[dict, Callable[[dict], Awaitable[str]]]:
     """Return (openai_tool_schema, async_handler) for daily_brief.
 
@@ -93,10 +143,18 @@ def build_daily_brief_tool(
     session with a loopback peer); ``connected()`` is evaluated again just
     before the card is sent. ``send_display(payload)`` delivers to the asking
     session and nobody else."""
-    tasks: set[asyncio.Task] = set()
+    jobs = BriefJobs() if jobs is None else jobs
 
     async def job() -> None:
         started = time.monotonic()
+        try:
+            await _job_body(started)
+        except asyncio.CancelledError:
+            _logger.info("brief_job_cancelled duration_ms=%d",
+                         int((time.monotonic() - started) * 1000))
+            raise
+
+    async def _job_body(started: float) -> None:
         _logger.info("brief_job_start scope=mail")
         content: dict | None = None
         error: str | None = None
@@ -138,14 +196,16 @@ def build_daily_brief_tool(
                          assembled["outcome"], elapsed_ms)
             return
         try:
-            await send_display(payload)
+            await asyncio.wait_for(send_display(payload), timeout=SEND_TIMEOUT_S)
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001
             _logger.warning("brief_job_send_failed type=%s duration_ms=%d",
                             type(exc).__name__, elapsed_ms)
             return
-        _logger.info("brief_job_done outcome=%s statuses=%s duration_ms=%d",
+        # A successful socket write is not an app acknowledgement; a durable
+        # ack is a later phase.
+        _logger.info("brief_job_sent outcome=%s statuses=%s duration_ms=%d",
                      assembled["outcome"], statuses, elapsed_ms)
 
     async def handler(arguments: dict) -> str:
@@ -159,13 +219,14 @@ def build_daily_brief_tool(
         if not allowed:
             _logger.info("brief_refused reason=not_eligible")
             return REFUSAL_TEXT
+        if jobs.closed:
+            _logger.info("brief_refused reason=closed")
+            return REFUSAL_TEXT
         ctx = contextvars.copy_context()
         # The job's own holder and no foreground run log (R.10.4).
         ctx.run(current_sensitive_turn.set, SensitiveTurn())
         ctx.run(current_run_logger.set, None)
-        task = asyncio.get_running_loop().create_task(job(), context=ctx)
-        tasks.add(task)
-        task.add_done_callback(tasks.discard)
+        jobs.start(job(), context=ctx)
         return ACK_TEXT
 
     return DAILY_BRIEF_SCHEMA, handler

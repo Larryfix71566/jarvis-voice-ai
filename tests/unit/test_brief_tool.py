@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import gc
 import json
 import logging
@@ -219,7 +220,7 @@ async def test_canaries_never_leave_the_card_payload(clean_contextvars, caplog):
     assert CANARY_S in inside and CANARY_T in inside
     logged = "\n".join(r.getMessage() + " " + str(r.args) for r in caplog.records)
     assert CANARY_S not in logged and CANARY_T not in logged
-    assert "brief_job_done" in logged
+    assert "brief_job_sent" in logged
     assert "bellsouth" not in logged
 
 
@@ -329,5 +330,155 @@ async def test_tasks_are_strongly_referenced_until_done(clean_contextvars):
     h = Harness(reg)
     await h.handler({"scope": "mail"})
     gc.collect()
+    await settle()
+    assert len(h.sent) == 1
+
+
+# --- session-owned cancellation, bounded send, teardown ----------------------------
+
+class BlockingRegistry:
+    """call_classified blocks on an event; records start, cancellation, contexts."""
+
+    def __init__(self, content=None):
+        self.content = content
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+        self.cancelled = False
+        self.completed = False
+        self.holder_seen = None
+        self.runlog_seen = "unset"
+
+    async def call_classified(self, name, arguments, *, execution_scope):
+        self.holder_seen = current_sensitive_turn.get()
+        self.runlog_seen = current_run_logger.get()
+        self.started.set()
+        try:
+            await self.release.wait()
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        self.completed = True
+        return issue_tool_result(execution_scope, json.dumps(self.content),
+                                 DataPolicy("confidential", "verified-host-confidential-source"),
+                                 "mail:att/gmail", ())
+
+
+class JobHarness:
+    def __init__(self, registry, send=None):
+        self.registry, self.sent, self.jobs = registry, [], brief_tool.BriefJobs()
+        self.send_started = asyncio.Event()
+        self.send_cancelled = False
+
+        async def default_send(payload):
+            self.sent.append(payload)
+
+        self._send = send or default_send
+
+        async def send(payload):
+            self.send_started.set()
+            try:
+                await self._send(payload)
+            except asyncio.CancelledError:
+                self.send_cancelled = True
+                raise
+
+        self.schema, self.handler = build_daily_brief_tool(
+            registry=registry, send_display=send, eligible=lambda: True,
+            connected=lambda: True, now=lambda: NOW, tz=TZ, jobs=self.jobs)
+
+
+async def test_disconnect_before_acquisition_cancels_the_job(clean_contextvars):
+    reg = BlockingRegistry(mail())
+    h = JobHarness(reg)
+    result = await h.handler({"scope": "mail"})
+    (task,) = list(h.jobs._tasks)
+    assert h.jobs.cancel_all() == 1          # before the loop ever ran the job
+    await asyncio.gather(task, return_exceptions=True)
+    assert result == ACK_TEXT
+    assert task.cancelled()
+    assert not reg.started.is_set() and not reg.completed
+    assert h.sent == [] and not h.send_started.is_set()
+    assert len(h.jobs) == 0
+
+
+async def test_disconnect_during_acquisition_cancels_the_registry_call(clean_contextvars, caplog):
+    caplog.set_level(logging.INFO)
+    reg = BlockingRegistry(mail())
+    h = JobHarness(reg)
+    await h.handler({"scope": "mail"})
+    (task,) = list(h.jobs._tasks)
+    await reg.started.wait()
+    assert h.jobs.cancel_all() == 1
+    await asyncio.gather(task, return_exceptions=True)
+    assert reg.cancelled and not reg.completed
+    assert h.sent == [] and not h.send_started.is_set()
+    assert "brief_job_cancelled" in caplog.text and "brief_job_sent" not in caplog.text
+    assert CANARY_S not in caplog.text
+
+
+async def test_disconnect_during_sending_cancels_the_send(clean_contextvars, caplog):
+    caplog.set_level(logging.INFO)
+    gate = asyncio.Event()
+
+    async def blocked(payload):
+        await gate.wait()
+
+    reg = BlockingRegistry(mail())
+    reg.release.set()
+    h = JobHarness(reg, send=blocked)
+    await h.handler({"scope": "mail"})
+    (task,) = list(h.jobs._tasks)
+    await h.send_started.wait()
+    assert h.jobs.cancel_all() == 1
+    await asyncio.gather(task, return_exceptions=True)
+    assert h.send_cancelled and task.cancelled()
+    assert "brief_job_cancelled" in caplog.text and "brief_job_sent" not in caplog.text
+
+
+async def test_a_send_that_never_returns_is_bounded(clean_contextvars, caplog, monkeypatch):
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr(brief_tool, "SEND_TIMEOUT_S", 0.05)
+
+    async def never(payload):
+        await asyncio.Event().wait()
+
+    reg = BlockingRegistry(mail())
+    reg.release.set()
+    h = JobHarness(reg, send=never)
+    await h.handler({"scope": "mail"})
+    await settle()
+    assert "brief_job_send_failed type=TimeoutError" in caplog.text
+    assert "brief_job_sent" not in caplog.text
+    assert len(h.jobs) == 0
+
+
+async def test_teardown_without_disconnect_closes_the_jobs(clean_contextvars):
+    reg = BlockingRegistry(mail())
+    h = JobHarness(reg)
+    await h.handler({"scope": "mail"})
+    (task,) = list(h.jobs._tasks)
+    await reg.started.wait()
+    await h.jobs.aclose()
+    assert task.done() and reg.cancelled
+    assert len(h.jobs) == 0 and h.jobs.closed
+    assert await h.handler({"scope": "mail"}) == REFUSAL_TEXT
+    assert len(h.jobs) == 0 and h.sent == []
+    with pytest.raises(RuntimeError):
+        h.jobs.start(asyncio.sleep(0), context=contextvars.copy_context())
+    await h.jobs.aclose()                    # idempotent, never raises
+
+
+async def test_job_has_its_own_holder_and_no_runlog_and_ack_comes_first(clean_contextvars):
+    foreground = SensitiveTurn()
+    current_sensitive_turn.set(foreground)
+    current_run_logger.set(object())
+    reg = BlockingRegistry(mail())
+    h = JobHarness(reg)
+    result = await h.handler({"scope": "mail"})
+    assert result == ACK_TEXT and h.sent == []       # returned before the job finished
+    await reg.started.wait()
+    assert reg.holder_seen is not None and reg.holder_seen is not foreground
+    assert reg.runlog_seen is None
+    reg.release.set()
     await settle()
     assert len(h.sent) == 1
