@@ -17,8 +17,8 @@ from pathlib import Path, PurePosixPath
 
 import yaml
 
-from jarvis.agent_skills import _split_frontmatter
-from jarvis.skill_authoring_validation import validate_skill_candidate
+from jarvis.agent_skills import _split_frontmatter, read_skill_registry
+from jarvis.skill_authoring_validation import SkillAuthoringReceipt, validate_skill_candidate
 from jarvis.skill_catalog import (
     MANIFEST, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, MAX_TEXT_FILE_BYTES, SLUG, TOP_LEVEL_FIELDS,
 )
@@ -125,7 +125,7 @@ BLOCKER_CODES = frozenset({
     "slug_exists_in_baseline_package", "slug_exists_in_baseline_fixtures", "baseline_changed",
     "payload_construction_refused", "validation_snapshot_refused", "validator_scope_refused",
     "validator_staging_failed", "validator_failed", "receipt_binding_mismatch", "validation_failed",
-    "validation_unrecognized_check_failed",
+    "validation_unrecognized_check_failed", "validation_check_unrecognized",
     "parser_fingerprint_unavailable", "adapter_code_unavailable", "adapter_internal_error",
     "cancelled", "cancel_check_failed",
 }) | REASONS | frozenset(f"validation_{n}_failed" for n in VALIDATOR_CHECKS)
@@ -655,6 +655,7 @@ def adapt_instruction_package(
     snapshot_digest = None
     receipt = None
     validator_refusal = None
+    validator_called = False
     payload_c = None
     fixture = None
     if state["cancelled"] is None and not _all_codes():
@@ -676,6 +677,7 @@ def adapt_instruction_package(
                 validator_refusal = "validation_snapshot_refused"
         if snapshot is not None:
             code = None
+            validator_called = True
             try:
                 receipt = validate_skill_candidate(snapshot, baseline=baseline, slug=slug)
             except SandboxError:
@@ -694,6 +696,13 @@ def adapt_instruction_package(
                 agg.add("inventory_incomplete")
             if after != before:
                 agg.add("inventory_changed")
+        if validator_called and receipt is None and validator_refusal is None:
+            agg.add("validator_failed")
+            validator_refusal = "validator_failed"
+        elif receipt is not None and not isinstance(receipt, SkillAuthoringReceipt):
+            agg.add("validator_failed")
+            validator_refusal = validator_refusal or "validator_failed"
+            receipt = None
         if receipt is not None:
             try:
                 if receipt.candidate_digest != snapshot.fingerprint or receipt.slug != slug:
@@ -704,6 +713,8 @@ def adapt_instruction_package(
                     passed = isinstance(c, dict) and c.get("passed") is True
                     label = name if isinstance(name, str) and name in VALIDATOR_CHECKS else "unrecognized_check"
                     checks.append({"name": label, "passed": passed})
+                    if label == "unrecognized_check":
+                        agg.add("validation_check_unrecognized")
                     if not passed:
                         agg.add(f"validation_{label}_failed")
                 if not (checks and all(c["passed"] for c in checks)):
@@ -865,19 +876,15 @@ def _semantic_stage(recs, rows, sidecar_row, sidecar, slug, slug_ok, source_dige
     if reg is None:
         agg.add("baseline_registry_missing")
     else:
+        # Same semantics as the runtime loader: legacy or strict schema-v2 only.
         try:
-            d = _yaml_mapping(reg.decode("utf-8"))
-        except (UnicodeError,) + _YAML_ERRORS:
-            d = None
+            names, pins, _version, valid = read_skill_registry(_MemoryRegistry(reg))
+        except Exception:
+            valid = False
+        if not valid:
             agg.add("baseline_registry_invalid")
-        else:
-            enabled = d.get("enabled") or [] if isinstance(d, dict) else None
-            revisions = d.get("revisions") or {} if isinstance(d, dict) else None
-            if not isinstance(d, dict) or not isinstance(enabled, list) or not isinstance(revisions, dict):
-                agg.add("baseline_registry_invalid")
-            elif slug_ok and (any(isinstance(n, str) and n.strip() == slug for n in enabled)
-                              or slug in revisions):
-                agg.add("slug_exists_in_registry")
+        elif slug_ok and (slug in names or slug in (pins or {})):
+            agg.add("slug_exists_in_registry")
     if slug_ok:
         for f in baseline.files:
             k = path_key(f.path)
@@ -885,6 +892,25 @@ def _semantic_stage(recs, rows, sidecar_row, sidecar, slug, slug_ok, source_dige
                 agg.add("slug_exists_in_baseline_package")
             if k.startswith(f"tests/fixtures/skills_authoring/{slug}/"):
                 agg.add("slug_exists_in_baseline_fixtures")
+
+
+class _MemoryRegistry:
+    """Read-only, in-memory stand-in for the registry path read_skill_registry expects.
+
+    Lets the adapter apply the runtime loader's exact registry semantics to the
+    supplied baseline bytes without writing them anywhere.
+    """
+
+    __slots__ = ("_data",)
+
+    def __init__(self, data: bytes):
+        self._data = data
+
+    def exists(self) -> bool:
+        return True
+
+    def read_text(self, encoding: str = "utf-8") -> str:
+        return self._data.decode(encoding)
 
 
 def _sidecar_rows(data: dict, rows, slug, source_digest, agg):
