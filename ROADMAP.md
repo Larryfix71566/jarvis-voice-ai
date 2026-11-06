@@ -626,6 +626,17 @@ land on main before code; no checkbox closes from this amendment. WS-28 remains 
 
 
 
+### Kimi combined-main revalidation claim — 2026-11-06
+
+- **Owner:** `codex` retains WS-17 and every release/operational next step; `kimi` owns only this bounded, read-only revalidation. Larry retains deployment, restart and live-acceptance decisions.
+- **Status:** claimed by this registration after it merges to main. Kimi's 2026-11-05 PASS above binds only `3695d78`. Main then took code from #304 (WS-03 adapter review fixes) and #301 (WS-13 mail-on-request, including Swift in `macos/JarvisKit` and `macos/MortimerHost`), reaching `78a8834ae37ab7d45d40a1782f34587ec2301cea`: 21 files outside `docs/` and `ROADMAP.md` differ from `3695d78`. Target: main once this claim lands; its tree outside `docs/` and `ROADMAP.md` must equal `78a8834`, otherwise Kimi stops and the target is rebound. No result is recorded yet.
+- **Implemented by:** Kimi runs the checks and has no source authorship in the target. Claude wrote this claim and the updated primer at Larry's request.
+- **Remaining work / acceptance:** Same fourteen checks as the 2026-11-05 run: publication-equivalent gates of `validate.yml`, `knowledge-base.yml` and `sandbox.yml`, both Swift suites and the clean-environment full `pytest` of `scripts/deploy_main.sh` phase A, with exact commands, exit codes, tallies, native skips and log hashes. Not covered: the exact combined-source independent review, source review of #301's WS-17-file Swift lines, the reviews of merged #295/#296, loaded identity, deployment and every live, physical or human check. A pass does not lift the hold by itself.
+- **Where:** claim on `claude/ws17-kimi-revalidation-claim-20261106`; Kimi evidence on `kimi/ws17-combined-main-revalidation-20261106`, created only after this claim lands; [claim log](docs/roadmap-log/2026-11-06-ws-17-kimi-combined-main-revalidation-claim.md).
+- **Scope:** As the 2026-11-05 validation above: read-only checks in a fresh Kimi worktree at the exact target; Kimi writes only this sub-section, dated WS-17 progress in `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` and WS-17 `docs/roadmap-log/` entries. No source, test, fixture, configuration or dependency edits, deployment, service operation, app launch, live call, credential or checkbox.
+- **Next step:** larry: merge this claim, then give Kimi the updated primer. kimi: revalidate the exact target and publish evidence as a docs-only PR; do not merge. Any later code-changing merge needs another validation before a deployment relies on it.
+- **Updated:** 11-06 (Claude registered the rebound revalidation after #304 and #301 changed code; no result, operational or acceptance change).
+
 
 
 
