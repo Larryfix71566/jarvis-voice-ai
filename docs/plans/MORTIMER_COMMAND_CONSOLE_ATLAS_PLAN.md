@@ -3686,3 +3686,7 @@ This completes only the registered local combined-main validation. It is not the
 ### 2026-11-05 — Validation evidence post-merge receipt
 
 Larry merged #305 as `e782048965db98c397398077b9965bde5d6b7108` after all five GitHub checks passed. Post-merge inspection found main's tree hash exactly equal to reviewed PR head `887743fa6b3407490ac2e699ab0cef2128c07342` (`56fa7976fdb98f1f40384f8bb3c8bff0aa791d96`), with no additional source difference. The roadmap checker again reports zero errors and warnings. Kimi's validation and evidence-publication scope is complete; the independent combined-source review and every operational/live gate remain separate.
+
+### 2026-11-06 — Kimi revalidation target corrected after #290
+
+Claim #309 originally bound the rerun to `78a8834`. After that claim merged, #290 landed as `137c668` and changed another 59 non-documentation files (+32,511/-477). Kimi's first target guard therefore stopped before creating a validation worktree or running any check. At Larry's direction, the registered target is corrected to main after this documentation amendment lands, provided its non-documentation tree equals `adc2b92948d7302765fceb9d233b0f72dcdb986e`. The fourteen checks and all read-only/operational limits are unchanged. No validation result exists yet; any later code-changing merge requires another rebind.
