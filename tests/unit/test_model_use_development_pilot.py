@@ -906,7 +906,7 @@ def test_receipt_parent_swap_inside_atomic_link_is_not_acknowledged(tmp_path, mo
 
 
 @pytest.mark.parametrize('scenario', ['public_pass', 'private_read', 'backend_failure', 'empty_oracle',
-                                    'cleanup_false', 'registry_model_drift', 'preparation_unavailable'])
+                                    'cleanup_false', 'registry_model_drift', 'preparation_unavailable', 'low_disk'])
 def test_actual_runtime_session_upgrade_sdk_and_all_profile_gates_are_wired(
         transport_env, git_source, tmp_path, monkeypatch, scenario):
     """Protocol wiring only: real classes/SDK, inert guest and MockTransport.
@@ -944,6 +944,26 @@ def test_actual_runtime_session_upgrade_sdk_and_all_profile_gates_are_wired(
             destination.write_bytes((real / relative).read_bytes())
     dependencies = pilot._source(commit, case)[2]
     home, identifier = image(tmp_path, dependencies)
+    # The VM is inert, so its capacity is another simulated host input. Keep
+    # Images.create's real headroom guard active; do not depend on the CI disk.
+    from sandbox import prune
+    capacity_reads = []
+    def simulated_capacity(queried_home):
+        assert Path(queried_home) == home
+        capacity_reads.append(queried_home)
+        return prune.MIN_FREE_BYTES - (1 if scenario == 'low_disk' else 0)
+    monkeypatch.setattr(prune, 'free_bytes', simulated_capacity)
+    refused_setup = []
+    if scenario == 'low_disk':
+        from jarvis.selfedit.service import SelfEditService
+        original_start = SelfEditService.start_session
+        def observe_start(service, *args, **kwargs):
+            result = original_start(service, *args, **kwargs)
+            states = [json.loads(path.read_bytes()) for path in
+                      (home / 'sessions').glob('*/session.json')]
+            refused_setup.append((result, [state['phase'] for state in states]))
+            return result
+        monkeypatch.setattr(SelfEditService, 'start_session', observe_start)
     (home / 'settings.json').write_text(json.dumps({'version': 1, 'tart': '/missing/tart',
         'softnet': '/missing/softnet', 'images': {'mortimer': identifier}}))
     guest_files, virtual_vms, guest_checks = {}, {'mortimer-image-' + identifier[:20]: 'stopped'}, []
@@ -1086,7 +1106,34 @@ def test_actual_runtime_session_upgrade_sdk_and_all_profile_gates_are_wired(
             image_home=home, profile='frontier-one', route='direct_api', limits=WorkloadLimits(deadline_seconds=60))
         assert not public['substrate_passed'] and public['reason'] == 'pilot_model_contract_changed'
         return
-    assert clients and all(client.is_closed() for client in clients)
+    assert capacity_reads
+    if scenario == 'low_disk':
+        # A real pre-clone refusal must neither call the SDK nor claim that a
+        # task lacking a native record was cleaned up successfully.
+        assert clients == [] and requests == [] and guest_checks == []
+        assert virtual_vms == {'mortimer-image-' + identifier[:20]: 'stopped'}
+        assert report['actual_selection_verified'] is True
+        assert report['status'] == 'cleanup_unverified' and not report['substrate_passed']
+        assert report['reason'] == 'pilot_agent_did_not_finish_verified'
+        assert report['cleanup']['verified'] is False
+        sessions = list((home / 'sessions').glob('*/session.json'))
+        assert len(sessions) == 1
+        state = json.loads(sessions[0].read_bytes())
+        assert len(refused_setup) == 1
+        result, phases = refused_setup[0]
+        assert result['ok'] is False and phases == ['setup_failed']
+        assert result['error'].startswith('Sandbox volume has ')
+        assert 'minimum 8 GiB' in result['error']
+        # Cleanup attempts a revert; that phase alone is not a cleanup ACK.
+        assert state['phase'] == 'reverted'
+        assert report['cleanup']['owned_tasks'] == [state['task']]
+        assert not (home / 'tasks' / state['task']).exists()
+        return
+    # Include only bounded receipt categories, never source, environment,
+    # credential, task-path or model-response payloads in failure diagnostics.
+    assert clients, {key: report.get(key) for key in
+                     ('status', 'reason', 'error_category', 'actual_selection_verified')}
+    assert all(client.is_closed() for client in clients)
     if private_read:
         assert not report['substrate_passed'] and report['result_policy'] == 'confidential'
         assert len(requests) == 1 and report['cleanup']['verified']

@@ -14,6 +14,7 @@ same replacement does hijack a plain script.
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import stat
 import subprocess
@@ -200,6 +201,117 @@ def test_deploy_main_never_runs_the_file_that_replaced_it(tmp_path: Path) -> Non
         time.sleep(0.01)
     assert "STOPPED: origin/main does not contain #80" in logs[0].read_text()
     assert not (tmp_path / "checkout" / "closure-checks").exists()
+
+
+def _generated_legacy_rollback(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """Render the actual non-held ROLLBACK.sh heredoc into a disposable fixture."""
+    source = SCRIPT.read_text(encoding="utf-8")
+    opener = '  cat > "$RB/ROLLBACK.sh" <<RBEOF\n'
+    assert source.count(opener) == 1
+    template = source.split(opener, 1)[1].split("\nRBEOF", 1)[0]
+    home = tmp_path / "home"
+    checkout = tmp_path / "checkout"
+    rollback_dir = home / "MortimerRollback" / "fixture"
+    checkout.mkdir()
+    rollback_dir.mkdir(parents=True)
+    wrapper = tmp_path / "render.sh"
+    rollback_script = rollback_dir / "ROLLBACK.sh"
+    wrapper.write_text(
+        "#!/bin/bash\nset -euo pipefail\n"
+        f"C={shlex.quote(str(checkout))}\n"
+        f"RB={shlex.quote(str(rollback_dir))}\n"
+        "PRIOR=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+        'SERVICES="bot admin"\nUIDN=4242\nSHORT=fixture\nTS=fixture\n'
+        f"cat > {shlex.quote(str(rollback_script))} <<RBEOF\n"
+        f"{template}\nRBEOF\n"
+    )
+    rendered = subprocess.run([BASH, str(wrapper)], capture_output=True, text=True, timeout=10)
+    assert rendered.returncode == 0, rendered.stderr
+    return rollback_script, checkout, rollback_dir
+
+
+def _fake_rollback_commands(tmp_path: Path) -> tuple[Path, Path]:
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    call_log = tmp_path / "calls.log"
+    for name in ("osascript", "sleep", "pkill", "git", "tar", "rm", "ditto", "launchctl", "open"):
+        command = fake_bin / name
+        command.write_text('#!/bin/sh\nprintf "%s\\n" "' + name + ' $*" >> "$CALL_LOG"\nexit 0\n')
+        command.chmod(command.stat().st_mode | stat.S_IEXEC)
+    return fake_bin, call_log
+
+
+def _seed_rollback_state(checkout: Path, rollback_dir: Path) -> dict[str, bytes]:
+    files = {
+        checkout / "data" / "jarvis.db": b"current-db",
+        checkout / "data" / "jarvis.db-wal": b"current-wal",
+        checkout / "data" / "jarvis.db-shm": b"current-shm",
+        checkout / "macos" / "MortimerHost" / ".build" / "MortimerHost.app" / "Contents" / "Info.plist": b"current-app",
+        rollback_dir / "jarvis.db": b"snapshot-db",
+    }
+    for path, content in files.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+    return files
+
+
+@pytest.mark.skipif(BASH is None, reason="bash is not installed")
+@pytest.mark.parametrize("args", [
+    ("--restore-db",),
+    ("unsupported",),
+    ("--restore-db", "unsupported"),
+    ("unsupported", "--restore-db"),
+    ("unsupported", "middle", "--restore-db"),
+    ("unsupported", "--restore-db", "after"),
+    ("",),
+    ("--",),
+])
+def test_generated_legacy_rollback_rejects_every_argument_before_effects(
+    tmp_path: Path, args: tuple[str, ...]
+) -> None:
+    rollback_script, checkout, rollback_dir = _generated_legacy_rollback(tmp_path)
+    state = _seed_rollback_state(checkout, rollback_dir)
+    fake_bin, call_log = _fake_rollback_commands(tmp_path)
+    before = {path: path.read_bytes() for path in state}
+    env = {"HOME": str(tmp_path / "home"), "PATH": f"{fake_bin}{os.pathsep}/usr/bin:/bin",
+           "CALL_LOG": str(call_log), "LANG": "C"}
+
+    result = subprocess.run([BASH, str(rollback_script), *args], env=env,
+                            capture_output=True, text=True, timeout=10)
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr == "rollback accepts no arguments\n"
+    assert not call_log.exists(), "argument refusal must precede every external side effect"
+    assert {path: path.read_bytes() for path in state} == before
+
+
+@pytest.mark.skipif(BASH is None, reason="bash is not installed")
+def test_generated_legacy_rollback_preserves_no_argument_code_app_path(tmp_path: Path) -> None:
+    rollback_script, checkout, rollback_dir = _generated_legacy_rollback(tmp_path)
+    _seed_rollback_state(checkout, rollback_dir)
+    fake_bin, call_log = _fake_rollback_commands(tmp_path)
+    env = {"HOME": str(tmp_path / "home"), "PATH": f"{fake_bin}{os.pathsep}/usr/bin:/bin",
+           "CALL_LOG": str(call_log), "LANG": "C"}
+
+    result = subprocess.run([BASH, str(rollback_script)], env=env,
+                            capture_output=True, text=True, timeout=10)
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert call_log.read_text().splitlines() == [
+        "osascript -e tell application id \"com.mortimer.host\" to quit",
+        "sleep 3",
+        "pkill -x MortimerHost",
+        "git -C " + str(checkout) + " checkout -q -f --detach aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tar -C " + str(checkout) + " -xzf " + str(rollback_dir) + "/code.tgz",
+        "rm -rf " + str(checkout) + "/macos/MortimerHost/.build/MortimerHost.app",
+        "ditto " + str(rollback_dir) + "/MortimerHost.app " + str(checkout) + "/macos/MortimerHost/.build/MortimerHost.app",
+        "launchctl kickstart -k gui/4242/com.mortimer.bot",
+        "launchctl kickstart -k gui/4242/com.mortimer.admin",
+        "sleep 8",
+        "open " + str(checkout) + "/macos/MortimerHost/.build/MortimerHost.app",
+    ]
 
 
 def _swift_gate_harness(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:

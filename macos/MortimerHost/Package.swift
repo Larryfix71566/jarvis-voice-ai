@@ -8,6 +8,20 @@ let package = Package(
         .package(path: "../JarvisKit"),
     ],
     targets: [
+        .target(
+            name: "PhoneRemoteAuthority",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .executableTarget(
+            name: "PhoneRemoteAuthorityOwner",
+            dependencies: ["PhoneRemoteAuthority"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "PhoneRemoteAuthorityTests",
+            dependencies: ["PhoneRemoteAuthority"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         .executableTarget(
             name: "MortimerHost",
             dependencies: ["JarvisKit"],

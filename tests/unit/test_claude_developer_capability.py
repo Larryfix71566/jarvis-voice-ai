@@ -407,6 +407,9 @@ def test_fresh_environment_does_not_mutate_or_borrow_parent_authority(tmp_path, 
 
 @pytest.fixture
 def worker_boundary(tmp_path, monkeypatch):
+    """Build a worker request without installing its cwd or env in this process."""
+    parent_env = dict(os.environ)
+    parent_cwd = Path.cwd()
     contract = probe.frozen_contract('claude-opus', 'subscription')
     parent = owned_capture_parent(tmp_path, monkeypatch)
     with tempfile.TemporaryDirectory(prefix='mortimer-native40-capability-', dir=parent) as temporary:
@@ -416,64 +419,87 @@ def worker_boundary(tmp_path, monkeypatch):
         request = directory / 'request.json'
         request.write_bytes(probe.canonical(packet)); request.chmod(0o600)
         env = probe.worker_environment(directory, contract)
-        monkeypatch.chdir(directory)
-        for key in list(os.environ): monkeypatch.delenv(key, raising=False)
-        for key, value in env.items(): monkeypatch.setenv(key, value)
-        yield request, packet
+        assert dict(os.environ) == parent_env
+        assert Path.cwd() == parent_cwd
+        yield request, packet, env
 
 
-def test_owned_worker_boundary_accepts_exact_isolation(worker_boundary, monkeypatch):
-    # Pytest adds this after the fixture yields; it is intentionally not part
-    # of the production fresh-worker environment.
-    monkeypatch.delenv('PYTEST_CURRENT_TEST', raising=False)
-    probe.validate_worker_boundary(*worker_boundary)
-
-
-@pytest.mark.parametrize('change', ['cwd', 'mode', 'db', 'token', 'keyhealth', 'screen', 'admin'])
-def test_direct_worker_cannot_borrow_ambient_authority(worker_boundary, monkeypatch, change):
-    monkeypatch.delenv('PYTEST_CURRENT_TEST', raising=False)
-    request, packet = worker_boundary
-    if change == 'cwd': monkeypatch.chdir(probe.CAPTURE_PARENT)
-    elif change == 'mode': request.parent.chmod(0o755)
-    else:
-        key, value = {'db': ('JARVIS_DB_PATH', '/private/tmp/unowned.db'),
-            'token': ('JARVIS_SERVICE_TOKEN', 'PUBLIC_SYNTHETIC'), 'keyhealth': ('JARVIS_KEY_HEALTH_ENABLED', 'true'),
-            'screen': ('JARVIS_SCREEN_ENABLED', 'true'), 'admin': ('JARVIS_ADMIN_URL', 'http://foreign.invalid')}[change]
-        monkeypatch.setenv(key, value)
-    with pytest.raises(probe.CapabilityUnavailable): probe.validate_worker_boundary(request, packet)
-
-
-@pytest.mark.parametrize('case', ['positive', 'foreign_uid', 'malformed', 'extra_environment'])
-def test_actual_new_python_worker_checks_system_marker_only(worker_boundary, case):
-    request, packet = worker_boundary
-    environment = probe.worker_environment(request.parent, packet['contract'])
+def run_worker_boundary_check(request, environment, case='positive'):
+    """Exercise the production boundary in an isolated process with explicit env."""
     program = r'''
 import json, os, sys
 from pathlib import Path
 from scripts import verify_claude_developer_capability as cap
-# macOS normalizes an inherited forged marker at exec; create the inverse
-# after that OS startup but before this exact application boundary check.
-if sys.argv[2]=='foreign_uid': os.environ['__CF_USER_TEXT_ENCODING']=f'0x{os.getuid()+1:X}:0x0:0x0'
-if sys.argv[2]=='malformed': os.environ['__CF_USER_TEXT_ENCODING']='not-a-system-marker'
-if sys.argv[2]=='extra_environment': os.environ['UNAPPROVED_EXTRA_AUTHORITY']='PUBLIC_SYNTHETIC_NOT_A_CREDENTIAL'
-request=Path(sys.argv[1]);packet=json.loads(request.read_bytes())
-# The production constant remains fixed; this inert test uses only the
-# pytest-owned project receipt anchor already captured by worker_boundary.
+request=Path(sys.argv[1]); packet=json.loads(request.read_bytes()); case=sys.argv[2]
 cap.CAPTURE_PARENT=request.parent.parent
+if case == 'cwd': os.chdir(cap.CAPTURE_PARENT)
+elif case == 'mode': request.parent.chmod(0o755)
+elif case in ('db', 'token', 'keyhealth', 'screen', 'admin'):
+    key, value = {'db': ('JARVIS_DB_PATH', '/private/tmp/unowned.db'),
+        'token': ('JARVIS_SERVICE_TOKEN', 'PUBLIC_SYNTHETIC'),
+        'keyhealth': ('JARVIS_KEY_HEALTH_ENABLED', 'true'),
+        'screen': ('JARVIS_SCREEN_ENABLED', 'true'),
+        'admin': ('JARVIS_ADMIN_URL', 'http://foreign.invalid')}[case]
+    os.environ[key] = value
+# macOS normalizes inherited forged marker at exec; create the inverse after
+# startup but before this exact application boundary check.
+if case == 'foreign_uid': os.environ['__CF_USER_TEXT_ENCODING']=f'0x{os.getuid()+1:X}:0x0:0x0'
+if case == 'malformed': os.environ['__CF_USER_TEXT_ENCODING']='not-a-system-marker'
+if case == 'extra_environment': os.environ['UNAPPROVED_EXTRA_AUTHORITY']='PUBLIC_SYNTHETIC_NOT_A_CREDENTIAL'
 try:
-    cap.validate_worker_boundary(request,packet)
+    cap.validate_worker_boundary(request, packet)
 except cap.CapabilityUnavailable as exc:
     print('REFUSED:'+str(exc))
 else:
     print('BOUNDARY_ACCEPTED_NO_NATIVE_OR_MCP')
+finally:
+    if case == 'mode': request.parent.chmod(0o700)
 '''
-    import subprocess
-    result = subprocess.run([sys.executable, '-c', program, str(request), case],
-        cwd=request.parent, env=environment, capture_output=True, text=True, timeout=5, check=True)
+    return subprocess.run([sys.executable, '-c', program, str(request), case],
+        cwd=request.parent, env=dict(environment), capture_output=True, text=True,
+        timeout=5, check=True)
+
+
+def test_owned_worker_boundary_accepts_exact_isolation(worker_boundary):
+    request, _, environment = worker_boundary
+    result = run_worker_boundary_check(request, environment)
+    assert result.stdout.strip() == 'BOUNDARY_ACCEPTED_NO_NATIVE_OR_MCP'
+
+
+@pytest.mark.parametrize('change', ['cwd', 'mode', 'db', 'token', 'keyhealth', 'screen', 'admin'])
+def test_direct_worker_cannot_borrow_ambient_authority(worker_boundary, change):
+    request, _, environment = worker_boundary
+    result = run_worker_boundary_check(request, environment, case=change)
+    assert result.stdout.startswith('REFUSED:')
+    assert 'BOUNDARY_ACCEPTED' not in result.stdout
+
+
+@pytest.mark.parametrize('case', ['positive', 'foreign_uid', 'malformed', 'extra_environment'])
+def test_actual_new_python_worker_checks_system_marker_only(worker_boundary, case):
+    request, _, environment = worker_boundary
+    result = run_worker_boundary_check(request, environment, case=case)
     if case == 'positive': assert result.stdout.strip() == 'BOUNDARY_ACCEPTED_NO_NATIVE_OR_MCP'
     else: assert result.stdout.startswith('REFUSED:') and 'BOUNDARY_ACCEPTED' not in result.stdout
     assert not (request.parent/'probe.db').exists() and not (request.parent/'mcp-discovery.json').exists()
     assert not (request.parent/'result.json').exists()
+
+
+def test_parent_notifier_poll_cannot_write_into_worker_directory(worker_boundary):
+    request, _, _ = worker_boundary
+    from jarvis.admin.reminder_notifier import ReminderNotifier
+    # Import-time module initialization may set its documented default; take
+    # the parent-state baseline after that one-time setup, before the poll.
+    parent_env = dict(os.environ)
+    parent_cwd = Path.cwd()
+    parent_db = Path(parent_env['JARVIS_DB_PATH'])
+    worker_db = request.parent / 'probe.db'
+    assert parent_db.resolve() != worker_db.resolve()
+    # Deterministically exercise the same parent tick that can race the child.
+    ReminderNotifier(post=lambda _: False).tick_once()
+    assert dict(os.environ) == parent_env
+    assert Path.cwd() == parent_cwd
+    assert parent_db.is_file()
+    assert not worker_db.exists()
 
 
 def test_no_clobber_reservation_precedes_any_live_capture(tmp_path, monkeypatch):

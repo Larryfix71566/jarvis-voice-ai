@@ -1498,3 +1498,145 @@ and acceptance gates remain unchanged.
 Validation for this documentation-only change is recorded in its WS-05 roadmap
 log and PR. No source, test behavior, configuration, deployment or live evidence
 is added.
+
+### 2026-10-30 UTC — Fresh-worker fixture isolation candidate
+
+- Branch: `codex/ws05-worker-fixture-isolation-20261023`, refreshed from
+  verified GitHub `main` `5310d1a9305035f43143fcffad6161619281f475`.
+  The registered branch and any open PR were absent at the refresh; the exact
+  pre-existing Codex test-only claim remains the authority. No competing PR
+  for the fixture file was found.
+- Candidate changes only `tests/unit/test_claude_developer_capability.py`:
+  request construction now returns the worker environment without installing
+  it or its working directory in the parent; all worker-boundary checks run in
+  fresh child processes with explicit `cwd`/`env`. A deterministic regression
+  ticks the reminder notifier with its fake post callback and checks that the
+  temporary parent DB is used while the worker `probe.db` remains absent.
+  Existing refusal, UID/system-marker, environment, ownership and no-artifact
+  assertions remain in place. No notifier/runtime path changed.
+- Validation: `python3.12 -m py_compile tests/unit/test_claude_developer_capability.py`
+  and `git diff --check` pass. The focused pytest module and regression could
+  not run in this executor: Python 3.12 has no `pytest` or `yaml` module, and
+  no dependency was installed. Independent review of this combined integration and current exact-head CI
+  remain pending. This is a local fixture-only candidate, not a
+  CI repair acceptance or production change.
+
+### 2026-10-31 — Provider-cancellation deadline phase test claim (proposed)
+
+CI run `41159320847`, validation job `124413109250`, failed only
+`tests/unit/test_model_execution_deadlines.py::test_provider_swallowing_cancellation_cannot_return_or_publish_late_result[False-True]`.
+The test timed out waiting for its fake provider's `entered` event. This does
+not prove that the provider swallowed cancellation incorrectly: its 20 ms
+request deadline starts before durable budget admission, and the provider is
+invoked only after that preflight. A controlled 30 ms delay in local budget
+admission reproduced the same observable symptom (provider not entered;
+worker terminates with `TimeoutError`), while the unchanged exact test passed
+locally. The CI root cause remains unproven.
+
+The bounded follow-up is test-only on
+`codex/ws05-deadline-confirmed-phase-20261031`, with source scope exactly
+`tests/unit/test_model_execution_deadlines.py`. For the three existing
+`(explicit_cancel, uncancel)` cases, allow admission to finish with a longer
+initial request timeout, wait for the actual fake-provider entry, then use the
+existing `expire_at_confirmed_phase` fixture for the deadline case or explicit
+`worker.cancel()` for cancellation. Preserve both parameter axes and every
+late-result, client-close, event, and no-ledger assertion. The existing
+`test_short_host_deadline_before_admission_never_creates_a_provider_or_reservation`
+continues to cover genuine early timeout during budget admission; do not add
+sleep-based synchronization, relax assertions, or change production deadlines.
+
+No edit to `jarvis/model_execution.py`, production code, CI workflow, harness,
+settings, dependencies, or another test path is claimed. The separate registered
+WS-05 fresh-worker fixture branch remains scoped to
+`tests/unit/test_claude_developer_capability.py`. The test-only claim was recorded
+locally in `bf5fd6a2a857ce1c3a64d6827b43cee9bfd1c322`; source candidate
+`465060b0758fe44018814353ddf2d862c7128025` changes only the exact test path
+above. Validation completed in a disposable Python 3.12.13 venv at
+`/tmp/ws05-deadline-test-venv312`, with the existing repository test venv
+site-packages visible and Anthropic's dependencies aligned to
+`requirements-lock.txt` (`anthropic 0.125.0`, `pydantic 2.13.4`,
+`pydantic-core 2.46.4`, `anyio 4.14.2`; pytest 9.1.1 and pytest-asyncio
+1.4.0). The complete deadline module passed 16 tests. The seven related
+model-execution/budget/ledger modules (`test_model_execution.py`,
+`test_model_execution_deadlines.py`, `test_model_execution_limits.py`,
+`test_model_budget.py`, `test_model_budget_preflight.py`,
+`test_model_budget_transport.py`, and `test_usage_ledger.py`) passed 230
+tests. Commands used `PYTHONDONTWRITEBYTECODE=1` and
+`--confcutdir=tests/unit`; no provider traffic was made. The initial failed
+runs before installing the missing dependency are historical and superseded
+by this complete run. The original CI run remains failed; corrected-head CI
+has not run. The CI cause remains unproven, and no flaky/unrelated
+classification is claimed. Exact-source independent review remains pending;
+no production source, runtime behavior, model setting, or acceptance closure
+changed.
+
+### 2026-11-01 UTC — CI546 inert pilot capacity isolation claim
+
+Codex, on the registered `codex/ws05-worker-fixture-isolation-20261023` lane,
+continues the coordinator's exact-head CI diagnosis from published `5255b23d`.
+Fresh main `5310d1a` is already an ancestor; no merge content was needed. Local
+worktree/branch inventory and the current ownership scopes show no concurrent
+writer for this test. The local handoff remote was fetched; the GitHub connector
+separately verified public main. No production checkout is involved.
+
+The pre-edit claim is exactly `tests/unit/test_model_use_development_pilot.py`,
+this plan's dated progress, and the WS-05 block in `ROADMAP.md`. Model selection,
+production code, strict guards, minimum free space, dependency files, workflows,
+and other tests are excluded. No shared identifier is introduced.
+
+The five published failures occur before client construction. The pilot test,
+SDK, runtime and prune sources are unchanged from green `fff9fe8a`. Local target
+tests pass with both newly resolved CI dependencies (AnyIO 4.16.0 and
+python-dateutil 4.0.0), OpenAI 2.54.0 and current pytest/Pydantic/MCP versions.
+Collection and whole-unit execution order also preserve these target passes.
+A test-only free-space reading of 7 GiB reproduces all five exact empty-client
+failures while the two deliberate pre-session refusals still pass. The real
+`require_headroom` rejects session setup before SDK creation; the returned
+report retains failed cleanup rather than granting success. CI546 exposes
+neither that report nor a disk reading and has no workflow artifacts: this is
+a demonstrated ambient-capacity test defect, not proof of CI546's exact trigger.
+
+Planned repair: bind only the inert VM's exact test-home capacity reading to a
+deterministic value at the existing minimum, leaving the real guard active.
+Add a below-minimum scenario proving no guest/client effect and honest failed
+setup/cleanup, retain every existing scenario assertion, and include bounded
+content-free refusal fields when client construction fails. Compare the whole
+pilot module and adjacent host-simulation tests; keep independent review and
+exact-head CI as separate outstanding gates. No publication is authorized.
+
+#### 2026-11-01 UTC — Bounded test-isolation implementation and validation
+
+Pre-edit claim `c8e216093b047aed8642ba097cdef8549121a1f0` precedes test-only
+implementation `66f0cac769ce07c96761a28f4941c4d2e6368f05`, tree
+`8e871777d9a0d2d367a86b0181379e2b5921c7f7`. The exact inert-home capacity input is
+now deterministic at the unchanged minimum. The added one-byte-below-minimum
+case checks the real pre-clone refusal, initial failed setup, attempted revert,
+absent task record, unchanged template, no guest/client activity and explicitly
+unverified cleanup. All seven existing scenario assertions remain. A separate
+mutation probe bypassing `Images.require_headroom` makes this new case fail at
+the no-client assertion; this expected failure is not counted as a passing test.
+
+| Validation on implementation tree | Result and limit |
+|---|---|
+| Full unit suite | 7,521 passed, 583 subtests, 141 prerequisite skips, 20 warnings; 192.39 seconds pytest time |
+| Four pilot/source/capability modules, focused rerun | 329 passed, eight pre-existing local-review-diagnostic skips; included in the full unit inventory, not additional coverage |
+| Separate sandbox suite | 160 passed, no failures |
+| Roadmap/repository-reader regression subset | 126 passed; included in full unit inventory |
+| Roadmap drift checker and diff whitespace | Passed; zero roadmap errors/warnings |
+
+The successful rerun used an isolated Python 3.12.13 Mac environment with
+OpenAI 2.54.0, AnyIO 4.16.0, python-dateutil 4.0.0, pytest 9.2.0 and the inspected
+CI Pydantic/MCP versions. This is not an exact Ubuntu/Python 3.12.15 runner replay.
+External Python socket traffic was blocked; loopback fixtures used standard
+execution approval. Initial default-sandbox diagnostic runs had socket/IPC
+denials and are retained as failures, not runtime regressions or passes. Native
+owner prerequisites were not supplied in this CI-shaped unit run; its skips
+remain skips. No UI/device/display or production path was exercised.
+
+The five-failure low-capacity reproduction and the local repair establish a
+fixture-isolation defect. CI546 had no retained report or disk measurement, so
+its particular cause remains unproven. Independent source review and fresh
+exact-head CI remain mandatory before claiming that published failure closed.
+This evidence-only finalization leaves all implementation/test bytes unchanged;
+documentation reader/checker validation is repeated on the final docs commit.
+No publication or PR-description change occurs in this slice.

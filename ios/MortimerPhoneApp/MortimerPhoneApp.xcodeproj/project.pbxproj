@@ -1,0 +1,132 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* MortimerPhoneCore in Frameworks */ = {isa = PBXBuildFile; productRef = A70000000000000000000001 /* MortimerPhoneCore */; };
+		A10000000000000000000002 /* MortimerPhoneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* MortimerPhoneApp.swift */; };
+		A10000000000000000000003 /* PhonePreviewRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* PhonePreviewRootView.swift */; };
+		A10000000000000000000004 /* PhonePreviewFakeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* PhonePreviewFakeTransport.swift */; };
+		A10000000000000000000005 /* PhonePreviewUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* PhonePreviewUITests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A30000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A40000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A50000000000000000000001;
+			remoteInfo = MortimerPhoneApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* MortimerPhoneApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MortimerPhoneApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* PhonePreviewRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhonePreviewRootView.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* PhonePreviewFakeTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhonePreviewFakeTransport.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* PhonePreviewUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhonePreviewUITests.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000006 /* MortimerPhoneApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MortimerPhoneApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000007 /* MortimerPhoneAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MortimerPhoneAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A60000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* MortimerPhoneCore in Frameworks */, ); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000002 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A80000000000000000000001 = {
+			isa = PBXGroup;
+			children = (A80000000000000000000002 /* Products */, A80000000000000000000003 /* App */, A80000000000000000000004 /* App Tests */, );
+			sourceTree = "<group>";
+		};
+		A80000000000000000000002 /* Products */ = {isa = PBXGroup; name = Products; children = (A20000000000000000000006 /* MortimerPhoneApp.app */, A20000000000000000000007 /* MortimerPhoneAppTests.xctest */, ); sourceTree = "<group>"; };
+		A80000000000000000000003 /* App */ = {isa = PBXGroup; path = MortimerPhoneApp; sourceTree = "<group>"; children = (A20000000000000000000001 /* MortimerPhoneApp.swift */, A20000000000000000000002 /* PhonePreviewRootView.swift */, A20000000000000000000003 /* PhonePreviewFakeTransport.swift */, A20000000000000000000005 /* Info.plist */, ); };
+		A80000000000000000000004 /* App Tests */ = {isa = PBXGroup; path = MortimerPhoneAppTests; sourceTree = "<group>"; children = (A20000000000000000000004 /* PhonePreviewUITests.swift */, ); };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 /* MortimerPhoneApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AB0000000000000000000008 /* App Config List */;
+			buildPhases = (A60000000000000000000003 /* Sources */, A60000000000000000000001 /* Frameworks */, A60000000000000000000004 /* Resources */, );
+			buildRules = ();
+			dependencies = ();
+			name = MortimerPhoneApp;
+			packageProductDependencies = (A70000000000000000000001 /* MortimerPhoneCore */, );
+			productName = MortimerPhoneApp;
+			productReference = A20000000000000000000006 /* MortimerPhoneApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A50000000000000000000002 /* MortimerPhoneAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AB0000000000000000000009 /* UI Test Config List */;
+			buildPhases = (A60000000000000000000005 /* Sources */, A60000000000000000000002 /* Frameworks */, A60000000000000000000006 /* Resources */, );
+			buildRules = ();
+			dependencies = (A50000000000000000000003 /* PBXTargetDependency */, );
+			name = MortimerPhoneAppTests;
+			packageProductDependencies = ();
+			productName = MortimerPhoneAppTests;
+			productReference = A20000000000000000000007 /* MortimerPhoneAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A40000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {BuildIndependentTargetsInParallel = 1; LastUpgradeCheck = 2720; TargetAttributes = {A50000000000000000000002 = {CreatedOnToolsVersion = 27.2; TestTargetID = A50000000000000000000001; }; A50000000000000000000001 = {CreatedOnToolsVersion = 27.2; }; }; };
+			buildConfigurationList = AB0000000000000000000007 /* Project Config List */;
+			compatibilityVersion = "Xcode 14.0";
+			mainGroup = A80000000000000000000001;
+			packageReferences = (A70000000000000000000002 /* XCLocalSwiftPackageReference "../MortimerPhoneCore" */, );
+			productRefGroup = A80000000000000000000002 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (A50000000000000000000001 /* MortimerPhoneApp */, A50000000000000000000002 /* MortimerPhoneAppTests */, );
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A60000000000000000000004 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000006 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A60000000000000000000003 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000002 /* MortimerPhoneApp.swift in Sources */, A10000000000000000000003 /* PhonePreviewRootView.swift in Sources */, A10000000000000000000004 /* PhonePreviewFakeTransport.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000005 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000005 /* PhonePreviewUITests.swift in Sources */, ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A50000000000000000000003 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = A50000000000000000000001 /* MortimerPhoneApp */; targetProxy = A30000000000000000000001 /* PBXContainerItemProxy */; };
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+/* End PBXContainerItemProxy section */
+
+/* Begin XCBuildConfiguration section */
+		AB0000000000000000000001 /* Project Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 6.2; }; name = Debug; };
+		AB0000000000000000000002 /* Project Release */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; SWIFT_VERSION = 6.2; }; name = Release; };
+		AB0000000000000000000003 /* App Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; CODE_SIGNING_REQUIRED = NO; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = MortimerPhoneApp/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.mortimer.phonepreview; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_VERSION = 6.2; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Debug; };
+		AB0000000000000000000004 /* App Release */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; CODE_SIGNING_REQUIRED = NO; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = MortimerPhoneApp/Info.plist; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.mortimer.phonepreview; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = "iphoneos iphonesimulator"; SWIFT_VERSION = 6.2; TARGETED_DEVICE_FAMILY = "1,2"; }; name = Release; };
+		AB0000000000000000000005 /* UI Test Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; CODE_SIGNING_REQUIRED = NO; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.mortimer.phonepreview.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = iphonesimulator; SWIFT_VERSION = 6.2; TARGETED_DEVICE_FAMILY = "1,2"; TEST_TARGET_NAME = MortimerPhoneApp; }; name = Debug; };
+		AB0000000000000000000006 /* UI Test Release */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; CODE_SIGNING_REQUIRED = NO; GENERATE_INFOPLIST_FILE = YES; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = com.example.mortimer.phonepreview.tests; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; SUPPORTED_PLATFORMS = iphonesimulator; SWIFT_VERSION = 6.2; TARGETED_DEVICE_FAMILY = "1,2"; TEST_TARGET_NAME = MortimerPhoneApp; }; name = Release; };
+		AB0000000000000000000007 /* Project Config List */ = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000001 /* Project Debug */, AB0000000000000000000002 /* Project Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		AB0000000000000000000008 /* App Config List */ = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000003 /* App Debug */, AB0000000000000000000004 /* App Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		AB0000000000000000000009 /* UI Test Config List */ = {isa = XCConfigurationList; buildConfigurations = (AB0000000000000000000005 /* UI Test Debug */, AB0000000000000000000006 /* UI Test Release */, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A70000000000000000000002 /* XCLocalSwiftPackageReference "../MortimerPhoneCore" */ = {isa = XCLocalSwiftPackageReference; relativePath = ../MortimerPhoneCore; };
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A70000000000000000000001 /* MortimerPhoneCore */ = {isa = XCSwiftPackageProductDependency; package = A70000000000000000000002 /* XCLocalSwiftPackageReference "../MortimerPhoneCore" */; productName = MortimerPhoneCore; };
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A40000000000000000000001 /* Project object */;
+}

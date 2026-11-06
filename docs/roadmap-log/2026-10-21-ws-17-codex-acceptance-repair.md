@@ -349,3 +349,20 @@ The [scrubbed source receipt](../acceptance/command-console/receipts/ws17-native
 records hashes/results and keeps runtime/private/live/human/observation limits
 explicit. Metadata publication changes no verified application/test/config bytes
 and closes no checkbox. Historical non-passing attempts remain non-passing.
+
+
+### 2026-10-30 UTC — Generated rollback guard claim adopted on current integration base
+
+The coordinator adopted the independently reviewed narrow claim branch-locally in PR #290 under §3's one-final-merge exception. Owner Codex; branch `codex/ws17-generated-rollback-guard-20261030`; status claimed on this branch only. Exact base `838bac7d76dd282f21ad019dd9234b693c612fc3`, tree `4db3552baee2803adbe2a07c3f0bc0323dcb2552`; previous `ee510cfc8fbfd0973f1a7b7f83699f2ea11738f5` is historical. Scope is `scripts/deploy_main.sh` and synthetic `tests/unit/test_deploy_main.py`. New non-held generated rollback scripts reject every nonempty argument vector before effects, preserving no-argument and held behavior. The guard does not sanitize archives or finish D3/hook coverage. The branch includes the accepted R3.13 base content; no R3.15 files were part of this WS-17-only candidate. A later separate local combined review candidate includes both independently accepted source deltas without merging their claims; it remains unpublished. Claim docs must be committed before source. Independent review, CI and the single final merge remain separate gates.
+
+
+### 2026-10-30 UTC — Guard candidate validated on latest PR base
+
+Local candidate `2cb5af7e3207579ade6341d066baf56926c74673` is based directly on current PR #290 head `838bac7d76dd282f21ad019dd9234b693c612fc3` (tree `4db3552baee2803adbe2a07c3f0bc0323dcb2552`). Claim-doc registration commit `23896c5fb47c6fde4dbe0c4416b439f44ce2e192` precedes source. The previous `ee510cfc8fbfd0973f1a7b7f83699f2ea11738f5` is historical. Exact changed file SHA-256 values: `scripts/deploy_main.sh` `9ba119c37fb6080f16378e77e398ded16b722b5fa05539f4e10dee08be289ed4`; `tests/unit/test_deploy_main.py` `0bbdc6f3b42f19c91c993eb259950cd4fde16e82df68a9c9acb8baf9e75eeade`.
+
+Command `.venv/bin/python -m pytest tests/unit/test_deploy_main.py tests/unit/test_deploy_held.py -q` passes **87 tests in 4.61s**. Runtime Python 3.12.13. Dependencies were installed only in `/tmp/ws17-generated-rollback-guard-20261030/.venv`, using `uv pip install --python ... -c requirements-lock.txt` and exact repository pins: pytest9.1.1, pytest-asyncio1.4.0, PyYAML6.0.3, OpenAI2.53.0, Anthropic0.125.0, pydantic-settings2.14.2, MCP1.29.0, keyring25.7.0 (with their lock-constrained transitive requirements). The test module's local HTTP stub uses an ephemeral loopback port; no production services or external endpoints were contacted. Initial minimal-environment attempts failed during fixture setup due missing import packages; the final exact two-module run passed after lock-constrained dependencies were added. Independent source review and CI are pending. No publication, merge, deployment, restore, live/runtime or acceptance action occurred.
+
+
+### Combined local review checkpoint (2026-10-30)
+
+The accepted WS-17 guard source and the separately claimed/accepted R3.15 pure proof verifier are assembled in local source checkpoint `6eaf6214e02bd8c6f9e3384effb7737f2266302a` (tree `626af61eb1075bd89b83bbf7522d5d70ec507ec2`) on `codex/ws17-r315-combined-20261030`, based on current published PR #290 head `838bac7d76dd282f21ad019dd9234b693c612fc3`. Ownership scopes remain separate. Combined focused pytest command over the two deploy modules and proof-verifier module passed 107 tests and 71 subtests under isolated Python 3.12.13, cryptography 50.0.0, OpenSSL 4.0.1. Independent combined review is pending. This is not a published result and does not close restore/deployment or live-acceptance gates.
