@@ -5,7 +5,8 @@
 revision 3 its review of `5e37696` (R.0a), revision 4 its review of `b3d7c0f`
 (R.0b), and revision 5 its review of `4994861` (R.0c). Revision 6 records Larry's
 decisions D1–D9 (R.0d, R.5); revision 7 records Codex's P1 clearance and its last
-P3 correction (R.0e). §R is authoritative. The August text after §R is
+P3 correction (R.0e); revision 8 records Larry's 2026-11-03 choice to put mail
+headlines on request ahead of P2 (R.0f). §R is authoritative. The August text after §R is
 history: R.9 says which parts remain background, and R.10–R.12 govern wherever they
 differ. Implements
 roadmap track **T5** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.5), tracked as
@@ -27,6 +28,76 @@ Nothing here is implemented, tested or accepted. No mailbox, calendar, provider 
 credential was touched. Approval works in two steps: first Larry answers D1–D9
 (R.5); then each increment in R.6 is claimed, built, cross-reviewed and accepted on
 its own. This section does not authorize implementation.
+
+### R.0f Revision 8 (2026-11-03, Larry: mail headlines on request before P2)
+
+**Why.** Larry reported that the console answers "Gmail unavailable" when he asks
+about mail. Claude traced it on main `30580f5`: no source produces that phrase.
+No agent holds `mcp-mail` (`config/agents.yaml`; `config/mcp_servers.yaml:100–103`)
+and no brief module exists, so nothing in the UI can reach mail, and the phrase is
+most likely the Supervisor's own wording. That is untested; the run log for the
+turn on the Mac would confirm it. This also closes Gate 0 of Codex's
+[2026-10-28 delivery proposal](../reviews/WS13_MAIL_DELIVERY_PLAN_PROPOSAL_2026-10-28.md):
+there is no Mortimer mail report to repair.
+
+**Decision (Larry, 2026-11-03, Claude Duet channel).** Offered three options (mail
+headlines on request; P2 then P3 as written; honest wording only), Larry answered
+"Mail headlines first". This amends D1's order for one increment: **P3m**, a
+requested, mail-only subset of P3, comes before P2. D2–D9 are unchanged: no agent
+holds mail, the card is `confidential` (D4 a), copy, share, export and display
+transfer stay blocked (D8 a), and no model reads mail.
+
+**P3m — requested mail headlines.** One claim on WS-13 (branch
+`claude/ws13-mail-on-request-20261103`). It reuses P1 unchanged.
+- **Tool.** The Supervisor's direct `daily_brief(scope)` tool (R.4, R.10.15),
+  registered like `system_status`, with `scope` limited to `"mail"` in this
+  increment. Kill switch `JARVIS_BRIEF_ENABLED` (reserved in §3), read once at the
+  registration site and shared with the menu and the prompt.
+- **Supervisor result.** Always one fixed sentence, returned before acquisition
+  (R.10.3, R.10.4): "Putting your mail together." When the asking session is not
+  eligible, the fixed refusal "The brief needs the Mortimer app." and zero source
+  calls (R.10.5).
+- **Job.** Runs in its own task under `contextvars.copy_context()`, with a
+  brief-owned `SensitiveTurn` and no foreground `RunLogger` (R.10.4). One
+  `call_classified("mail_headlines", {"window_hours": 24, "account": "all"})` with
+  a host-owned confidential scope (R.10.2, R.10.9). Logs are content-free (R.10.3).
+- **Card.** A typed `brief` display payload (R.10.16) with `data_policy`
+  `confidential` set by the emitter and `arrival: "requested"` (R.10.8): one row per
+  account with its status code (`ok`, `partial`, `failed` with its reason,
+  `timeout`, `not_configured`, `disabled`) and its count (exact, lower bound or
+  unknown, never a false zero, R.10.10), then the newest headlines as literal
+  strings. The generic `body` carries fixed host text only, never source text, so an
+  older app shows a safe placeholder. Delivered only to the asking session, after a
+  final check that it is still connected (R.10.5).
+- **Honest answers.** A prompt addendum sends every question about the user's mail
+  to `daily_brief`. With the switch off, a different addendum says mail is not
+  connected and forbids improvising an availability claim. Sending, replying,
+  deleting and calendar questions get the missing-tool sentence of Supervisor rule 10.
+- **Native (written on Linux, untested until Larry's Mac).** JarvisKit
+  `DisplayPayload` decodes the `brief` section; a MortimerHost renderer shows it as
+  literal `Text`, with no Markdown and no text selection; a `brief` card never opens
+  by itself (R.10.8, until WS-17 provides turn identity).
+
+**Deviations from R.10, recorded for Codex's review.**
+1. R.10.5 eligibility checks condition 1 (native `/ws-client` transport) and
+   condition 2 (loopback peer) only. Condition 3, the `protected_display_v1`
+   capability with `instance_id` from `brief/hello`, and the shared
+   `eligible_sessions.py` foundation stay with P2. Residual: today any local
+   native-protocol client is eligible, the same C2 boundary R.10.5 already states.
+2. R.10.7's durable slots, acknowledgement and probe, and migration `0035_brief`,
+   are not built. A requested result is emitted once and never re-sent; a send
+   that fails is logged (content-free) and dropped.
+3. D5's spoken "Your brief arrived." after the app applies the card needs that
+   acknowledgement, so P3m speaks only the fixed tool result.
+4. R.10.16's export serializer is not built: under D4 (a) and D8 (a) copy, share
+   and export of a `brief` card are already blocked by `isProtectedLocal`.
+5. No calendar, reminders, scheduled watcher, `day` argument or `brief-counts`.
+
+**Acceptance for P3m** (subset of R.12): S3-1 (own context), S3-2 (eligibility,
+conditions 1–2), S3-9 and S3-14 (canaries; byte-identical tool result), S3-6 and
+S3-13 offline on the payload (no source text in `body`), S3-7 (routing scorer
+requires the direct call), plus Larry's Mac check that the card shows Gmail and
+AT&T with their real status. P1's M1-1 repeat stays open and separate.
 
 ### R.0e Revision 7 (2026-10-10, P1 cleared; the store's failure rule)
 
