@@ -769,3 +769,108 @@ def test_fixed_schema_error_order_is_independent_of_dict_insertion_order():
         {"code": "unknown_field", "location": "$.intent"},
         {"code": "missing_field", "location": "$.intent.title"},
     ]
+
+
+# Review-fix regressions, 2026-11-06 (Claude review of d2e7a61, findings F1-F4).
+def test_preflight_error_order_is_independent_of_dict_insertion_order():
+    # F1: preflight errors in a known container follow the documented field
+    # order, not the caller's key insertion order, on both input routes.
+    def text_payload(reverse):
+        payload = fixture_payload()
+        payload["intent"]["title"] = "a\x00"
+        payload["intent"]["audience"] = "b\x00"
+        if reverse:
+            payload["intent"] = dict(reversed(list(payload["intent"].items())))
+        return payload
+
+    expected = [
+        {"code": "invalid_text", "location": "$.intent.title"},
+        {"code": "invalid_text", "location": "$.intent.audience"},
+    ]
+    for reverse in (False, True):
+        payload = text_payload(reverse)
+        assert validate_new_app_contract(payload)["errors"] == expected
+        raw = json.dumps(payload, ensure_ascii=False)
+        assert parse_new_app_contract(raw)["errors"] == expected
+
+    # The node-limit location is fixed as well: reversing spec keys cannot
+    # move the first limit_exceeded.
+    def limit_payload(reverse):
+        payload = linked_payload(requirements=1, cases=1)
+        payload["spec"]["requirements"][0]["acceptance_case_ids"] = [
+            f"A{index:04d}" for index in range(4090)
+        ]
+        if reverse:
+            payload["spec"] = dict(reversed(list(payload["spec"].items())))
+        return payload
+
+    first = validate_new_app_contract(limit_payload(False))
+    second = validate_new_app_contract(limit_payload(True))
+    assert first == second
+    assert parse_new_app_contract(json.dumps(limit_payload(True))) == first
+    limit_errors = [error for error in first["errors"] if error["code"] == "limit_exceeded"]
+    assert len(limit_errors) == 1
+    assert limit_errors[0]["location"].startswith(
+        "$.spec.requirements[0].acceptance_case_ids["
+    )
+
+
+def test_preflight_error_priority_is_type_then_limit_then_text():
+    # F2: within the currently visited known container, type/cycle errors come
+    # before node/depth limit errors, which come before text/size errors,
+    # regardless of documented field order.
+    payload = fixture_payload()
+    payload["intent"]["title"] = "a\x00"
+    payload["intent"]["audience"] = 3.5
+    result = validate_new_app_contract(payload)
+    assert result["errors"] == [
+        {"code": "invalid_type", "location": "$.intent.audience"},
+        {"code": "invalid_text", "location": "$.intent.title"},
+    ]
+
+    payload = fixture_payload()
+    payload["intent"]["title"] = "a\x00"
+    payload["intent"]["constraints"] = nested_list(7)
+    result = validate_new_app_contract(payload)
+    assert [error["code"] for error in result["errors"]] == [
+        "limit_exceeded",
+        "invalid_text",
+    ]
+    assert result["errors"][0]["location"].startswith("$.intent.constraints")
+    assert result["errors"][1] == {"code": "invalid_text", "location": "$.intent.title"}
+
+
+def test_node_limit_produces_exactly_one_limit_exceeded():
+    # F3: once the node budget is spent the preflight stops; a 4,090-item list
+    # yields exactly one limit_exceeded, not one per remaining node plus the
+    # errors-cap entry.
+    payload = linked_payload(requirements=1, cases=1)
+    payload["spec"]["requirements"][0]["acceptance_case_ids"] = [
+        f"A{index:04d}" for index in range(4090)
+    ]
+    result = validate_new_app_contract(payload)
+    assert_invalid(result, "limit_exceeded")
+    assert len(result["errors"]) == 1
+    assert result["errors"][0]["location"].startswith(
+        "$.spec.requirements[0].acceptance_case_ids["
+    )
+
+
+def test_type_check_never_invokes_metaclass_comparison_hooks():
+    # F4: the allowed-type check uses identity, so a metaclass __eq__ is never
+    # called while rejecting an arbitrary object.
+    calls = []
+
+    class CountingMeta(type):
+        def __eq__(cls, other):
+            calls.append(other)
+            return False
+
+    class HostileObject(metaclass=CountingMeta):
+        pass
+
+    payload = fixture_payload()
+    payload["intent"]["title"] = HostileObject()
+    result = validate_new_app_contract(payload)
+    assert_invalid(result, "invalid_type", "$.intent.title")
+    assert calls == []

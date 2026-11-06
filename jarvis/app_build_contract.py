@@ -59,6 +59,12 @@ _CHILDREN = {
 
 _ALLOWED_TYPES = (dict, list, str, int, bool, type(None))
 
+# Preflight error priority within the currently visited known container:
+# type/cycle first, then node/depth limit, then text/size.  Codes not listed
+# here (invalid_text) sort last.  Sorting is stable, so equal-priority errors
+# keep their documented field order.
+_PREFLIGHT_PRIORITY = {"invalid_type": 0, "limit_exceeded": 1}
+
 
 class _DuplicateKey(ValueError):
     pass
@@ -73,14 +79,24 @@ class _State:
         self.errors = []
         self.active = set()
         self.nodes = 0
+        self.node_limit_hit = False
+        # Buffer stack used to order preflight errors per known container.
+        # Each known schema object buffers the errors of one visited field so
+        # they can be emitted in fixed priority order; nested containers are
+        # delivered into the enclosing field buffer atomically.
+        self.buffers = []
+
+    def _pending(self):
+        return len(self.errors) + sum(len(buffer) for buffer in self.buffers)
 
     @property
     def stopped(self):
-        return len(self.errors) > _MAX_ERRORS
+        return self.node_limit_hit or self._pending() > _MAX_ERRORS
 
     def add(self, code, location):
-        if not self.stopped:
-            self.errors.append({"code": code, "location": location})
+        if self._pending() <= _MAX_ERRORS:
+            target = self.buffers[-1] if self.buffers else self.errors
+            target.append({"code": code, "location": location})
 
     def tick(self):
         self.nodes += 1
@@ -179,9 +195,69 @@ def _preflight_text(value, location, state):
         state.add("invalid_text", location)
 
 
+def _preflight_known_object(value, location, depth, fields, children, state):
+    """Preflight a known schema object in documented field order.
+
+    Known fields are visited in their documented ``_FIELDS`` order, then
+    unknown keys are counted (their values are never traversed).  Each
+    visited field contributes one error segment; segments are emitted in the
+    fixed priority of type/cycle, then node/depth limit, then text/size,
+    keeping documented field order inside one priority.  The first node-limit
+    error stops the traversal.
+    """
+    present = {}
+    unknown_keys = []
+    for key, item in value.items():
+        if type(key) is str and key in fields:
+            present[key] = item
+        else:
+            unknown_keys.append(key)
+
+    segments = []
+    for key in fields:
+        if key not in present:
+            continue
+        if not state.tick():
+            if state._pending() <= _MAX_ERRORS:
+                segments.append((1, [{"code": "limit_exceeded", "location": location}]))
+            state.node_limit_hit = True
+            break
+        buffer = []
+        state.buffers.append(buffer)
+        try:
+            _preflight(
+                present[key],
+                _field_path(location, key),
+                depth + 1,
+                children.get(key),
+                state,
+            )
+        finally:
+            state.buffers.pop()
+        if buffer:
+            priority = min(_PREFLIGHT_PRIORITY.get(error["code"], 2) for error in buffer)
+            segments.append((priority, buffer))
+        if state.stopped:
+            break
+    if not state.node_limit_hit:
+        for key in unknown_keys:
+            if not state.tick():
+                if state._pending() <= _MAX_ERRORS:
+                    segments.append(
+                        (1, [{"code": "limit_exceeded", "location": location}])
+                    )
+                state.node_limit_hit = True
+                break
+
+    segments.sort(key=lambda segment: segment[0])
+    target = state.buffers[-1] if state.buffers else state.errors
+    for _, segment in segments:
+        target.extend(segment)
+
+
 def _preflight(value, location, depth, schema, state):
     """Bound known input without invoking subclass or arbitrary-object hooks."""
-    if type(value) not in _ALLOWED_TYPES:
+    if not any(type(value) is allowed for allowed in _ALLOWED_TYPES):
         state.add("invalid_type", location)
         return
 
@@ -191,6 +267,7 @@ def _preflight(value, location, depth, schema, state):
         return
     if not state.tick():
         state.add("limit_exceeded", location)
+        state.node_limit_hit = True
         return
     if is_container and depth > _MAX_DEPTH:
         state.add("limit_exceeded", location)
@@ -207,24 +284,19 @@ def _preflight(value, location, depth, schema, state):
             object_kind = schema[1] if schema is not None and schema[0] == "object" else None
             fields = _FIELDS.get(object_kind)
             children = _CHILDREN.get(object_kind, {})
-            for key, item in value.items():
-                if not state.tick():
-                    state.add("limit_exceeded", location)
-                    return
-                if type(key) is not str:
-                    continue
-                if fields is not None and key not in fields:
-                    continue
-                child_schema = children.get(key) if fields is not None else None
-                _preflight(
-                    item,
-                    _field_path(location, key) if fields is not None else location,
-                    depth + 1,
-                    child_schema,
-                    state,
-                )
-                if state.stopped:
-                    return
+            if fields is None:
+                for key, item in value.items():
+                    if not state.tick():
+                        state.add("limit_exceeded", location)
+                        state.node_limit_hit = True
+                        return
+                    if type(key) is not str:
+                        continue
+                    _preflight(item, location, depth + 1, None, state)
+                    if state.stopped:
+                        return
+            else:
+                _preflight_known_object(value, location, depth, fields, children, state)
         else:
             item_kind = schema[1] if schema is not None and schema[0] == "array" else None
             item_schema = ("object", item_kind) if item_kind is not None else None
