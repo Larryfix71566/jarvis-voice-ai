@@ -2,7 +2,7 @@
 date: 2026-11-06
 system: claude
 rows: [WS-17]
-prs: []
+prs: [309]
 ---
 
 # WS-17 Kimi combined-main revalidation claim — 2026-11-06
