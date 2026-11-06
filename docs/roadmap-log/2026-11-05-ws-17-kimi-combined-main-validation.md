@@ -201,3 +201,13 @@ web/node_modules/
 The earlier native figures are informational only: MortimerHost is now 590 executed / 5 prerequisite skips / 0 failures versus 582 / 5 / 0 at `a672239`; JarvisKit remains 235 / 0 failures, matching `d38c886`. No check failed and no failure retry was required.
 
 **Verdict: PASS for combined-main validation of `3695d78fc79c6c19db45fafc03a3adf0b48cb2a5`.** This corroborating run is likewise not the combined-source independent review, not a deployment, not loaded or installed identity, and not live, physical or human acceptance. Installation, restoration, restarts and live tests remain held.
+
+---
+
+## Post-merge receipt — #305
+
+Larry merged #305 at `e782048965db98c397398077b9965bde5d6b7108`. All five GitHub checks completed successfully on reviewed head `887743fa6b3407490ac2e699ab0cef2128c07342`: `validate`, `allowlist`, `policy-tests`, `knowledge-base` and `controller-tests`.
+
+Post-merge `origin/main` and the reviewed PR head have the identical tree hash `56fa7976fdb98f1f40384f8bb3c8bff0aa791d96`; `git diff --stat HEAD origin/main` was empty. The diff against `f874cf1a757b03d98336aca36ef08fb13c15c7a6` outside `docs/` and `ROADMAP.md` also remained empty. `python3 scripts/check_roadmap.py` again reported `0 errors, 0 warnings`, and `git diff --check origin/main...HEAD` was clean.
+
+This receipt records merge identity only. It does not rerun or replace either validation report and does not establish the independent combined-source review, deployment, loaded identity or live, physical or human acceptance.
