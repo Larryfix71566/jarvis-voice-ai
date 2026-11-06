@@ -2,7 +2,7 @@
 date: 2026-11-06
 system: claude
 rows: [WS-31]
-prs: []
+prs: [310]
 ---
 
 # WS-31 Claude NR1 independent review claim — 2026-11-06
