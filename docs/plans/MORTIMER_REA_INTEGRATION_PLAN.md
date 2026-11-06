@@ -285,7 +285,7 @@ Sanitized documentation publication preserves the full research, original citati
 
 ## 11. WS-31 NR1 — no-reference contract readiness (2026-10-22)
 
-**Decision:** advance one pure, offline contract slice for new app ideas. NR1 validates draft `AppIntent` and `BehaviorSpec` data and their digest relationship. It does not create an app, call a model, launch a build, issue approval, enable a Skill or acquire a reference. This is the smallest W2 increment that can proceed after its matching claim lands on main without external REA acquisition, reference rights or an actual user app brief. Synthetic examples are fixtures, not a user app request.
+**Decision:** advance one pure, offline contract slice for new app ideas. NR1 validates draft `AppIntent` and `BehaviorSpec` data and their digest relationship. It does not create an app, call a model, launch a build, issue approval, enable a Skill or acquire a reference. This is the smallest W2 increment that can proceed after its matching claim lands on main without external REA acquisition, reference rights or an actual user app brief. Synthetic examples are fixtures, not Larry's selected product requirements.
 
 The broader completion dispatch allows disjoint preparation to progress while existing repairs continue; it does not remove their acceptance, privacy, publication or deployment gates. The historical “all existing acceptance first” wording above remains applicable to activation/release; it must not be read as blocking this separately registered data-only increment. NR1 is not Mortimer self-improvement: its subject is a new application's intended behavior, even though the supporting contract code will live in Mortimer.
 
