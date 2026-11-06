@@ -11,6 +11,7 @@ import yaml
 
 import jarvis.skill_authoring_validation as validation
 import jarvis.skill_package_adapter as adapter
+from jarvis.agent_skills import read_skill_registry
 from jarvis.skill_authoring_validation import SkillAuthoringReceipt
 from jarvis.skill_service import ToolInventory
 from sandbox.artifacts import Candidate, File, SandboxError
@@ -643,6 +644,75 @@ def test_baseline_registry_missing_or_invalid_blocks():
     b = Candidate((File("skills/other-skill/SKILL.md", 0o644, OTHER),))
     _blocked(_run(baseline=b), "baseline_registry_missing")
     _blocked(_run(baseline=_baseline(registry=b"enabled: [unclosed\n")), "baseline_registry_invalid")
+
+
+# Review of #300 (2026-11-05): the baseline registry must follow the runtime reader's semantics.
+INVALID_REGISTRIES = [
+    b"{schema_version: 2, enabled: false, revisions: false}\n",
+    b"{schema_version: 2, enabled: [], revisions: {}, extra: true}\n",
+    b"{schema_version: 999, enabled: [], revisions: {}}\n",
+    b"{schema_version: 2, enabled: [true], revisions: {}}\n",
+    b"{schema_version: 2, enabled: [other-skill], revisions: {}}\n",
+]
+
+
+@pytest.mark.parametrize("raw", INVALID_REGISTRIES)
+def test_registry_rejected_by_runtime_reader_blocks(raw, tmp_path):
+    path = tmp_path / "skills.yaml"
+    path.write_bytes(raw)
+    assert read_skill_registry(path)[3] is False
+    _blocked(_run(baseline=_baseline(registry=raw)), "baseline_registry_invalid")
+
+
+@pytest.mark.parametrize("raw", [
+    REGISTRY,
+    b"schema_version: 2\nenabled: [other-skill]\nrevisions:\n  other-skill: " + b"b" * 64 + b"\n",
+    b"enabled: [other-skill]\n",
+    b"{}\n",
+])
+def test_registry_accepted_by_runtime_reader_still_produces(raw, tmp_path):
+    path = tmp_path / "skills.yaml"
+    path.write_bytes(raw)
+    assert read_skill_registry(path)[3] is True
+    r = _run(baseline=_baseline(registry=raw))
+    assert r.payload is not None and r.report["blockers"] == []
+
+
+def test_existing_slug_in_legacy_registry_blocks():
+    _blocked(_run(baseline=_baseline(registry=b"enabled: [' sample-import ']\n")), "slug_exists_in_registry")
+
+
+def test_baseline_registry_is_read_in_memory(monkeypatch):
+    seen = []
+
+    def spy(config_path=None):
+        seen.append(config_path)
+        return read_skill_registry(config_path)
+
+    monkeypatch.setattr(adapter, "read_skill_registry", spy)
+    assert _run().payload is not None
+    assert len(seen) == 1 and not isinstance(seen[0], Path)
+    assert seen[0].read_text(encoding="utf-8") == REGISTRY.decode()
+
+
+@pytest.mark.parametrize("returned", [None, object(), {"checks": [{"name": "package_schema", "passed": True}]}])
+def test_missing_or_foreign_receipt_blocks(monkeypatch, returned):
+    monkeypatch.setattr(adapter, "validate_skill_candidate", lambda candidate, *, baseline, slug: returned)
+    r = _run()
+    _blocked(r, "validator_failed")
+    assert r.report["validation"]["receipt"] is None
+
+
+def test_unrecognized_passing_check_blocks(monkeypatch):
+    def future(candidate, *, baseline, slug):
+        return SkillAuthoringReceipt(slug, candidate.fingerprint, "", 1, 1,
+                                     ({"name": "future_unknown", "passed": True},))
+
+    monkeypatch.setattr(adapter, "validate_skill_candidate", future)
+    r = _run()
+    _blocked(r, "validation_check_unrecognized")
+    assert r.report["validation"]["receipt"]["checks"] == [{"name": "unrecognized_check", "passed": True}]
+    assert "future_unknown" not in r.report_json.decode()
 
 
 @pytest.mark.parametrize("slug,code", [("Bad_Slug", "slug_invalid"), ("skill-creator", "slug_reserved"),
