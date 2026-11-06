@@ -23,9 +23,15 @@ struct DisplayContentView: View {
     @State private var viewport: CGSize = .zero
 
     var body: some View {
+        // WS-13 P3m: the mail brief is protected by design and renders as
+        // literal text, so unlike weather it is shown even when protected.
+        if payload.kind == "brief", let card = payload.brief {
+            ScrollView {
+                BriefCardView(card: card).padding(12)
+            }
         // WS-15 PR 2: a weather card renders as ONE card (summary, hours,
         // week, map with radar); anything else keeps the standard layout.
-        if payload.kind == "weather", let card = payload.weather, !payload.isProtectedLocal {
+        } else if payload.kind == "weather", let card = payload.weather, !payload.isProtectedLocal {
             ScrollView {
                 WeatherCardView(card: card).padding(12)
             }

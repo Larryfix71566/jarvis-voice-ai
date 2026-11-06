@@ -61,11 +61,17 @@ PROFILES: dict[str, dict] = {
         "addenda": {"voice": True, "ui_control": True,
                     "screen": True, "clipboard": True},
         "tools": True,
+        # WS-13 P3m (plan R.10.17): the daily_brief schema and its prompt
+        # addendum, behind the same switch production reads. A separate key,
+        # not an addendum flag, because voice_workflow_eval forwards the
+        # addenda dict straight to the Orchestrator.
+        "brief": True,
     },
     "delegate-only": {
         "addenda": {"voice": False, "ui_control": False,
                     "screen": False, "clipboard": False},
         "tools": False,
+        "brief": False,
     },
 }
 DEFAULT_PROFILE = "parity"
@@ -129,6 +135,11 @@ def resolve_profile(name: str | None) -> tuple[str, dict[str, bool], bool]:
         )
     profile = PROFILES[chosen]
     return chosen, dict(profile["addenda"]), bool(profile["tools"])
+
+
+def profile_has_brief(name: str | None) -> bool:
+    """Whether this profile shows the daily_brief schema (and its addendum)."""
+    return bool(PROFILES[resolve_profile(name)[0]]["brief"])
 
 
 def _category_of(expect: set[str]) -> str:
@@ -235,8 +246,20 @@ def case_is_correct(
     actual: set[str],
     or_tool: str | None = None,
     tools_called: list[str] | None = None,
+    *,
+    tool: str | None = None,
+    args: dict | None = None,
+    calls: list[tuple[str, dict]] | None = None,
+    forbid_tool: str | None = None,
 ) -> bool:
     """Did this case route correctly?
+
+    `tool` (with `args`) is a DIRECT-tool expectation (plan R.10.17): the
+    scorer requires that exact tool, called with matching normalised
+    arguments, as the ONLY direct tool called (`calls` is the recorded
+    (name, arguments) list), and no delegation. A no-op answer, a wrong
+    tool, wrong arguments or any delegation fails. `forbid_tool` names a tool
+    that must NOT have been called (a negative case, e.g. "send an email").
 
     `or_tool` names a DIRECT tool that is an equally correct answer — for
     a case where two mechanisms reach the same place, so insisting on the
@@ -244,6 +267,16 @@ def case_is_correct(
     a way to excuse a miss: the tool must actually have been called, so a
     turn that did nothing still fails.
     """
+    if forbid_tool and forbid_tool in {name for name, _ in (calls or ())} | set(tools_called or ()):
+        return False
+    if tool is not None:
+        if actual:
+            return False
+        made = list(calls or ())
+        if not made or {name for name, _ in made} != {tool}:
+            return False
+        want = _normalize_args(args)
+        return any(_normalize_args(arguments) == want for _, arguments in made)
     if expected == {"none"}:
         return not actual
     if actual == expected:
@@ -251,6 +284,16 @@ def case_is_correct(
     if or_tool and not actual and or_tool in (tools_called or ()):
         return True
     return False
+
+
+def is_brief_case(case: dict) -> bool:
+    """A case about the mail brief: it expects daily_brief, or forbids it."""
+    return "daily_brief" in (case.get("tool"), case.get("forbid_tool"))
+
+
+def _normalize_args(args: dict | None) -> dict[str, str]:
+    """Case-insensitive, whitespace-trimmed string view of an arguments dict."""
+    return {str(k): str(v).strip().lower() for k, v in (args or {}).items()}
 
 
 def _normalize(expect) -> set[str]:
@@ -323,16 +366,25 @@ async def run_eval() -> tuple[float, dict[str, tuple[int, int]]]:
     # ui_control at all is the finding, whatever the stub returns -- so the
     # stub does not have to be production-faithful to be useful, and we are
     # not inventing plausible tool results.
-    async def _stub(_arguments: dict) -> str:
-        return "ok"
+    # Every stub records (name, arguments) so a direct-tool case can be scored
+    # on the exact call (R.10.17). The brief stub has no source access.
+    recorded_calls: list[tuple[str, dict]] = []
 
+    def _stub_for(tool_name: str):
+        async def _stub(arguments: dict) -> str:
+            recorded_calls.append((tool_name, dict(arguments or {})))
+            return "ok"
+        return _stub
+
+    brief_on = profile_has_brief(os.environ.get("EVAL_PROFILE"))
     extra_tools = [
-        (schema, _stub)
+        (schema, _stub_for(schema["function"]["name"]))
         for schema in supervisor_tool_schemas(
             None,
             ui_control=flags["ui_control"],
             screen=flags["screen"],
             clipboard=flags["clipboard"],
+            brief=brief_on,
         )
     ] if show_tools else []
     voice_catalog = (catalog_summary(load_voice_catalog())
@@ -352,6 +404,8 @@ async def run_eval() -> tuple[float, dict[str, tuple[int, int]]]:
     await registry.start()
 
     cases = yaml.safe_load(CASES_PATH.read_text(encoding="utf-8"))
+    # Brief cases only make sense where the model can see daily_brief.
+    cases = [c for c in cases if brief_on or not is_brief_case(c)]
     correct = 0
     results: list[tuple[str, bool]] = []
     try:
@@ -359,6 +413,7 @@ async def run_eval() -> tuple[float, dict[str, tuple[int, int]]]:
             expected = _normalize(case["expect"])
             delegated: list[str] = []
             tools_called: list[str] = []
+            recorded_calls.clear()
 
             def on_event(event: dict) -> None:
                 if event.get("type") == "delegate_start":
@@ -391,14 +446,19 @@ async def run_eval() -> tuple[float, dict[str, tuple[int, int]]]:
                 # aggregate already counts it (len(cases) is the
                 # denominator), so dropping it here would make the category
                 # totals disagree with the aggregate.
-                results.append((_category_of(expected), False))
+                results.append(("brief" if is_brief_case(case)
+                                else _category_of(expected), False))
                 continue
 
             actual = set(delegated)
             ok = case_is_correct(expected, actual,
-                                 case.get("or_tool"), tools_called)
+                                 case.get("or_tool"), tools_called,
+                                 tool=case.get("tool"), args=case.get("args"),
+                                 calls=list(recorded_calls),
+                                 forbid_tool=case.get("forbid_tool"))
             correct += ok
-            results.append((_category_of(expected), bool(ok)))
+            category = "brief" if is_brief_case(case) else _category_of(expected)
+            results.append((category, bool(ok)))
             mark = "ok " if ok else "MISS"
             print(f"[{i:2d}/{len(cases)}] {mark} expect={sorted(expected)} "
                   f"got={sorted(actual)}  {case['input']!r}")

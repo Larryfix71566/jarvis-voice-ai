@@ -93,6 +93,8 @@ from jarvis.bot.follow_up import (
     follow_ups_enabled,
     progress_updates_enabled,
 )
+from jarvis.bot.brief_tool import BriefJobs, brief_enabled, build_daily_brief_tool
+from jarvis.bot.ws_transport import send_frame_checked
 from jarvis.bot.status_tool import build_system_status_tool
 from jarvis.bot.weather_tool import build_local_weather_tool
 from jarvis.bot.weather_reuse import WeatherReuseBridge, current_weather_reuse, weather_reuse_scope
@@ -1197,6 +1199,10 @@ def stt_keyterms() -> list[str]:
         return list(STT_KEYTERMS)
 
 
+#: Peer addresses that count as this machine for daily_brief (R.10.5 condition 2).
+BRIEF_LOOPBACK_PEERS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
 def build_pipeline(
     transport: Any, runtime: Runtime, pusher: FramePusher | None = None,
     client_messages: Any = None,
@@ -1334,6 +1340,43 @@ def build_pipeline(
     # JARVIS_STATUS_TOOLS_ENABLED; read once here and passed explicitly to
     # the menu and the prompt so the three can never disagree (R9).
     status_enabled = jarvis_status_enabled()
+    # WS-13 P3m (plan R.0f): daily_brief, the mail-headlines tool. Read once
+    # here and passed to the menu, the prompt and registration.
+    brief_on = brief_enabled()
+    # The asking session's own transport facts, captured from pipecat's public
+    # events: the peer address (the Starlette WebSocket's client host) and
+    # whether the socket is still open. Both stay unset on WebRTC, and an
+    # unknown peer is never eligible (R.10.5 conditions 1 and 2).
+    brief_session: dict[str, Any] = {"peer": None, "open": False}
+    brief_jobs = BriefJobs()
+    runtime.brief_jobs = brief_jobs
+    if brief_on and client_messages is not None:
+        @transport.event_handler("on_client_connected")
+        async def _brief_on_connected(_transport: Any, websocket: Any) -> None:
+            client = getattr(websocket, "client", None)
+            host = getattr(client, "host", None)
+            brief_session["peer"] = host if isinstance(host, str) else None
+            brief_session["open"] = True
+
+        @transport.event_handler("on_client_disconnected")
+        async def _brief_on_disconnected(_transport: Any, _websocket: Any) -> None:
+            brief_session["open"] = False
+            brief_jobs.cancel_all()
+
+    def _brief_eligible() -> bool:
+        return (client_messages is not None and brief_session["open"]
+                and brief_session["peer"] in BRIEF_LOOPBACK_PEERS)
+
+    def _brief_connected() -> bool:
+        return bool(brief_session["open"])
+
+    async def _brief_send(payload: dict) -> None:
+        await send_app_message_checked(transport, {"type": "display", "display": payload})
+
+    _, daily_brief_handler = build_daily_brief_tool(
+        registry=runtime.registry, send_display=_brief_send, jobs=brief_jobs,
+        eligible=_brief_eligible, connected=_brief_connected,
+        tz=ZoneInfo(settings.jarvis_timezone))
     # V3/V4: screen vision is a DIRECT Supervisor tool (like set_voice /
     # ui_control), never a delegation. Same kill-switch-at-registration
     # pattern as ui_control above.
@@ -1606,6 +1649,7 @@ def build_pipeline(
         progress=progress_enabled,
         follow_up=follow_up_enabled,
         weather=local_weather_on,
+        brief=brief_on,
     )
 
     # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
@@ -1730,6 +1774,8 @@ def build_pipeline(
     register_voice_tool("cost_summary", cost_summary_handler)
     if status_enabled:
         register_voice_tool("system_status", system_status_handler)
+    if brief_on:
+        register_voice_tool("daily_brief", daily_brief_handler)
     if ui_control_enabled:
         register_voice_tool("ui_control", ui_control_handler)
     if screen_enabled:
@@ -1800,6 +1846,7 @@ def build_pipeline(
             progress=progress_enabled,
             follow_up=follow_up_enabled,
             weather=local_weather_on,
+            brief=brief_on,
         )
     ]
     system_message = {"role": "system", "content": system_prompt}
@@ -2010,14 +2057,9 @@ def _unwrap_client_message(message: Any) -> dict | None:
     return message
 
 
-async def send_app_message(transport: Any, message: dict) -> None:
-    """Server->client app message, on whichever transport is running.
-
-    Both cases go through ``transport.output()``: the data channel on
-    SmallWebRTC, a protobuf message frame on the WebSocket. Keep it that
-    way -- this is the one sender, and parity between the two client
-    paths rests on it (docs/acceptance/adaptive-interface/C6-parity.md).
-    """
+def _prepare_app_message(message: dict) -> dict:
+    """The one envelope path for server->client app messages: tag a display
+    payload with the foreground request id, then wrap it for RTVI."""
     if message.get("type") == "display" and isinstance(message.get("display"), dict):
         payload = dict(message["display"])
         payload.pop("origin_request_id", None)
@@ -2026,8 +2068,31 @@ async def send_app_message(transport: Any, message: dict) -> None:
             _logger.info("display_dispatch request_id=%s request_sequence=%d",
                          request.request_id, request.sequence)
         message = {**message, "display": payload}
+    return _wrap_rtvi(message)
+
+
+async def send_app_message(transport: Any, message: dict) -> None:
+    """Server->client app message, on whichever transport is running.
+
+    Both cases go through ``transport.output()``: the data channel on
+    SmallWebRTC, a protobuf message frame on the WebSocket. Keep it that
+    way -- this is the one sender, and parity between the two client
+    paths rests on it (docs/acceptance/adaptive-interface/C6-parity.md).
+
+    It cannot report a failed send: pipecat swallows the error and logs its
+    text. Callers that must know a send failed, and must not have its text
+    logged (the brief), use ``send_app_message_checked``.
+    """
     await transport.output().send_message(
-        OutputTransportMessageUrgentFrame(message=_wrap_rtvi(message)))
+        OutputTransportMessageUrgentFrame(message=_prepare_app_message(message)))
+
+
+async def send_app_message_checked(transport: Any, message: dict) -> None:
+    """Like ``send_app_message`` (same envelope) on the WebSocket transport,
+    but raises ``CheckedSendError`` with a fixed reason code when the frame
+    could not be written, and logs no exception text."""
+    await send_frame_checked(
+        transport, OutputTransportMessageUrgentFrame(message=_prepare_app_message(message)))
 
 
 async def run_session(transport: Any, webrtc_connection: Any = None,
@@ -2970,6 +3035,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                     "stt_ledger_row_failed", exc, session_id=runtime.session_id,
                 )
     finally:
+        # Session-owned brief jobs: the teardown path when no disconnect
+        # callback fires (WebRTC, crashes). Before registry.stop().
+        brief_jobs = getattr(runtime, "brief_jobs", None)
+        if brief_jobs is not None:
+            try:
+                await brief_jobs.aclose()
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning("brief_jobs_close_failed type=%s", type(exc).__name__)
         if getattr(runtime, "skill_creator_dispatch_registered", False):
             from jarvis.bot.skill_creator_dispatch import unregister_session
 

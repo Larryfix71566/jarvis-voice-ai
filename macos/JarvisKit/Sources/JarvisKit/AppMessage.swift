@@ -250,7 +250,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         runID = nil; ts = timestamp; surface = .window; tool = nil
         commands = nil; note = nil; expectOutput = nil; content = nil
         chars = nil; truncated = nil; dataPolicy = nil; opaqueRef = nil
-        weather = nil; roadmap = nil; roadmapTimezone = nil
+        weather = nil; brief = nil; roadmap = nil; roadmapTimezone = nil
         subjectKey = nil; freshUntil = nil; weatherSource = nil
         originRequestID = nil
     }
@@ -287,6 +287,10 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
     /// Lenient: nil when absent, malformed or of an unknown schema, so the
     /// markdown body still renders.
     public let weather: WeatherCard?
+    /// WS-13 P3m: the mail brief card (kind "brief"). Lenient like `weather`:
+    /// nil when absent, malformed or of an unknown version, so the fixed host
+    /// body still renders. Every string in it is literal text, never Markdown.
+    public let brief: BriefCard?
     public let roadmap: RoadmapSnapshot?
     public let roadmapTimezone: String?
     /// CC7a.4: exact content identity and original fetch expiry. Invalid
@@ -309,7 +313,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         case expectOutput = "expect_output"
         case content, chars, truncated
         case dataPolicy = "data_policy", opaqueRef = "opaque_ref"
-        case weather, roadmap
+        case weather, brief, roadmap
         case roadmapTimezone = "roadmap_timezone"
         case subjectKey = "subject_key", freshUntil = "fresh_until"
         case weatherSource = "weather_source"
@@ -343,6 +347,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         dataPolicy = try c.decodeIfPresent(String.self, forKey: .dataPolicy)
         opaqueRef = try c.decodeIfPresent(String.self, forKey: .opaqueRef)
         weather = (try? c.decodeIfPresent(WeatherCard.self, forKey: .weather)) ?? nil
+        brief = (try? c.decodeIfPresent(BriefCard.self, forKey: .brief)) ?? nil
         roadmapTimezone = try? c.decodeIfPresent(String.self, forKey: .roadmapTimezone)
         let roadmapValue = try? c.decodeIfPresent(RoadmapSnapshot.self, forKey: .roadmap)
         roadmap = roadmapValue.flatMap { $0.isValid ? $0 : nil }
@@ -572,5 +577,87 @@ public extension AppMessage {
             return .locationRequest(try dec.decode(LocationRequest.self, from: payload))
         default:               return .unknown(type: kind, raw: p)
         }
+    }
+}
+
+
+/// WS-13 P3m (MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md R.10.16): the typed brief
+/// card built by jarvis/brief.py (version 1). Every string is source text or
+/// a fixed host phrase and must be rendered literally (`Text(verbatim:)`):
+/// no Markdown, no links, no selection.
+public struct BriefCard: Sendable, Equatable, Decodable {
+    public let version: Int
+    public let sections: [BriefSection]
+    public let generatedAtLocal: String
+
+    enum CodingKeys: String, CodingKey {
+        case version, sections
+        case generatedAtLocal = "generated_at_local"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let version = try c.decode(Int.self, forKey: .version)
+        // An unknown version falls back to the payload's fixed body.
+        guard version == 1 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .version, in: c, debugDescription: "unsupported brief version")
+        }
+        self.version = version
+        sections = try c.decode([BriefSection].self, forKey: .sections)
+        generatedAtLocal = (try? c.decodeIfPresent(String.self, forKey: .generatedAtLocal)) ?? ""
+    }
+}
+
+public struct BriefSection: Sendable, Equatable, Decodable {
+    public let source: String
+    public let accounts: [BriefAccount]
+    public let headlines: [BriefHeadline]
+    /// How many further headlines were left out beyond the cap.
+    public let more: Int
+
+    enum CodingKeys: String, CodingKey { case source, accounts, headlines, more }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        source = try c.decode(String.self, forKey: .source)
+        accounts = try c.decode([BriefAccount].self, forKey: .accounts)
+        headlines = try c.decode([BriefHeadline].self, forKey: .headlines)
+        more = (try? c.decodeIfPresent(Int.self, forKey: .more)) ?? 0
+    }
+}
+
+public struct BriefAccount: Sendable, Equatable, Decodable {
+    public let key: String
+    public let label: String
+    /// ok | partial | failed | timeout | not_configured | disabled
+    public let status: String
+    public let statusText: String
+    /// Fixed host label for a failed account ("login rejected", ...), else nil.
+    public let reason: String?
+    /// exact | lower_bound | unknown. An unknown count is never zero.
+    public let countState: String
+    public let countValue: Int?
+    public let countText: String
+
+    enum CodingKeys: String, CodingKey {
+        case key, label, status, reason
+        case statusText = "status_text"
+        case countState = "count_state"
+        case countValue = "count_value"
+        case countText = "count_text"
+    }
+}
+
+public struct BriefHeadline: Sendable, Equatable, Decodable {
+    public let accountLabel: String
+    public let sender: String
+    public let subject: String
+    public let receivedLocal: String
+
+    enum CodingKeys: String, CodingKey {
+        case sender, subject
+        case accountLabel = "account_label"
+        case receivedLocal = "received_local"
     }
 }

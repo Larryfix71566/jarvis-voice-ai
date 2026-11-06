@@ -231,6 +231,55 @@ final class AppMessageTests: XCTestCase {
         XCTAssertEqual(p.body, "In Folly Beach it's 82°F.")
     }
 
+    // WS-13 P3m: the typed mail brief card. UNTESTED: written on Linux, no
+    // Swift toolchain was available.
+    private func briefFrame(version: Int = 1) -> Data {
+        let json = """
+        {"id":"m","label":"rtvi-ai","type":"server-message","data":
+          {"type":"display","display":{"kind":"brief","surface":"window","title":"Mail",
+           "body":"Your mail headlines are in this card.","images":[],"basemap_images":[],"links":[],
+           "data_policy":"confidential","arrival":"requested","result_id":"r1","revision":1,"outcome":"partial",
+           "brief":{"version":\(version),"generated_at_local":"2026-11-03 10:00","sections":[
+             {"source":"mail","more":3,
+              "accounts":[
+                {"key":"gmail","label":"Gmail","status":"ok","status_text":"Signed in","reason":null,
+                 "count_state":"exact","count_value":2,"count_text":"2"},
+                {"key":"att","label":"AT&T","status":"failed","status_text":"Couldn't read","reason":"login rejected",
+                 "count_state":"unknown","count_value":null,"count_text":"unknown"}],
+              "headlines":[{"account_label":"Gmail","sender":"**Ann** <a@x.test>","subject":"[hi](http://x.test)","received_local":"09:30"}]}]}}}}
+        """
+        return Data(json.utf8)
+    }
+
+    func testDecodeDisplayBriefCard() throws {
+        let message = try XCTUnwrap(try AppMessage.decode(frame: briefFrame()))
+        guard case .display(let p) = message else { return XCTFail("expected .display") }
+        XCTAssertEqual(p.kind, "brief")
+        XCTAssertTrue(p.isProtectedLocal)
+        let card = try XCTUnwrap(p.brief)
+        let section = try XCTUnwrap(card.sections.first)
+        XCTAssertEqual(section.more, 3)
+        XCTAssertEqual(section.accounts.map(\.label), ["Gmail", "AT&T"])
+        XCTAssertEqual(section.accounts[0].countText, "2")
+        XCTAssertEqual(section.accounts[1].reason, "login rejected")
+        XCTAssertNil(section.accounts[1].countValue)
+        XCTAssertEqual(section.accounts[1].countText, "unknown")
+        // Source text stays literal: Markdown characters are not interpreted.
+        XCTAssertEqual(section.headlines[0].sender, "**Ann** <a@x.test>")
+        XCTAssertEqual(section.headlines[0].subject, "[hi](http://x.test)")
+    }
+
+    func testUnknownBriefVersionFallsBackToTheFixedBody() throws {
+        let message = try XCTUnwrap(try AppMessage.decode(frame: briefFrame(version: 2)))
+        guard case .display(let p) = message else { return XCTFail("expected .display") }
+        XCTAssertNil(p.brief)
+        XCTAssertEqual(p.body, "Your mail headlines are in this card.")
+    }
+
+    func testResponsePayloadHasNoBrief() {
+        XCTAssertNil(DisplayPayload(responseText: "x", timestamp: 1).brief)
+    }
+
     func testResponsePayloadHasNoWeather() {
         XCTAssertNil(DisplayPayload(responseText: "x", timestamp: 1).weather)
     }

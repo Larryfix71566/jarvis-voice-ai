@@ -32,6 +32,7 @@ for client app messages.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Awaitable, Callable
 
 from pipecat.frames.frames import Frame, InputTransportMessageFrame
@@ -42,8 +43,59 @@ from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketParams,
     FastAPIWebsocketTransport,
 )
+from starlette.websockets import WebSocketState
 
 MessageHandler = Callable[[Any], Awaitable[None]]
+
+_logger = logging.getLogger(__name__)
+
+
+class CheckedSendError(Exception):
+    """A checked send did not reach the socket. The message is always a fixed
+    short reason code, never exception text (which could carry payload bytes)."""
+
+
+async def send_frame_checked(transport: Any, frame: Frame) -> None:
+    """Send one frame on a ``FastAPIWebsocketTransport`` and raise
+    ``CheckedSendError`` if it cannot be written.
+
+    pipecat's own ``send_message`` swallows every failure and logs the
+    exception text, so a caller can neither learn that a send failed nor keep
+    the text out of its logs. This mirrors ``_write_frame`` / ``client.send``
+    with the same guards, but reports failure with a code only."""
+    if not isinstance(transport, FastAPIWebsocketTransport):
+        raise CheckedSendError("unsupported_transport")
+    # pipecat 1.4.0 private attributes (pinned in requirements.txt); a test in
+    # tests/unit/test_brief_checked_send.py pins them.
+    out = transport.output()
+    client = out._client
+    params = out._params
+    websocket = client._websocket
+    try:
+        usable = (not client.is_closing and client.is_connected
+                  and websocket.application_state != WebSocketState.DISCONNECTED)
+    except Exception:  # noqa: BLE001
+        usable = False
+    if not usable:
+        _logger.info("checked_send_failed reason=not_connected")
+        raise CheckedSendError("not_connected")
+    if not params.serializer:
+        raise CheckedSendError("no_serializer")
+    try:
+        payload = await params.serializer.serialize(frame)
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("checked_send_failed reason=serialize_failed type=%s", type(exc).__name__)
+        raise CheckedSendError("serialize_failed") from None
+    if not payload:
+        raise CheckedSendError("empty_payload")
+    try:
+        if isinstance(payload, (bytes, bytearray)):
+            await websocket.send_bytes(bytes(payload))
+        else:
+            await websocket.send_text(payload)
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("checked_send_failed reason=send_failed type=%s", type(exc).__name__)
+        raise CheckedSendError("send_failed") from None
 
 
 def websocket_params(audio_filter: Any = None) -> FastAPIWebsocketParams:

@@ -521,6 +521,13 @@ FOLLOW_UP_ADDENDUM = """Follow-ups: when the user asks you to wait and then chec
 
 WEATHER_ADDENDUM = """Local weather: for weather, rain, umbrella or forecast questions with no place named ("what's the weather", "is it going to rain", "what's the week look like"), call local_weather yourself. It finds where the user is right now from this device; never delegate these, never name or guess a place, and never use a remembered place for current weather. Relay its answer as given, including "approximately" when it says so. When it says a weather card with radar was sent to the screen, the radar is on that card: never say you have no radar. For any place the user names ("weather in Alpharetta", "Spartanburg weather again"), delegate to the analyst with that exact place; never call local_weather first. Repeat requests still use the named place and native retained result when valid. If a guard refuses a wrong local target, correct the named dispatch or ask for clarification; do not silently substitute device weather."""
 
+# WS-13 P3m (plan R.0f): mail headlines on request. Exactly one of the two
+# addenda ships, chosen by the same boolean that registers daily_brief
+# (JARVIS_BRIEF_ENABLED, read once at the pipeline.py registration site).
+BRIEF_ADDENDUM = """Email: for any question about the user's email, inbox, Gmail or AT&T mail, call daily_brief with scope "mail" yourself; never delegate it. Say only the sentence the tool returns. The headlines appear on a card, so never read out or invent senders, subjects or counts, and never say mail is "unavailable" on your own. Sending, replying to or deleting mail, and calendar questions, are a missing tool: say "that isn't something I have a tool for yet"."""
+
+MAIL_UNAVAILABLE_ADDENDUM = """Email: mail is not connected to you. For any question about the user's email, inbox, Gmail or AT&T mail, say plainly "Mail isn't connected to me yet." and offer nothing else. Never claim a specific account is unavailable and never guess why."""
+
 
 def build_supervisor_prompt(
     *,
@@ -540,6 +547,7 @@ def build_supervisor_prompt(
     progress: bool = False,
     follow_up: bool = False,
     weather: bool = False,
+    brief: bool | None = None,
 ) -> str:
     """Assemble the Supervisor system prompt for one configuration.
 
@@ -567,6 +575,11 @@ def build_supervisor_prompt(
         (progress, PROGRESS_ADDENDUM),
         (follow_up, FOLLOW_UP_ADDENDUM),
         (weather, WEATHER_ADDENDUM),
+        # Tri-state: True ships the daily_brief addendum, False (the switch is
+        # off) ships the honest "not connected" one, None (a caller that does
+        # not decide, such as the CLI) leaves the prompt as it always was.
+        (brief is True, BRIEF_ADDENDUM),
+        (brief is False, MAIL_UNAVAILABLE_ADDENDUM),
     ):
         if enabled:
             prompt += "\n" + addendum

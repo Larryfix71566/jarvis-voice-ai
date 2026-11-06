@@ -93,6 +93,14 @@ transfer stay blocked (D8 a), and no model reads mail.
    and export of a `brief` card are already blocked by `isProtectedLocal`.
 5. No calendar, reminders, scheduled watcher, `day` argument or `brief-counts`.
 
+**Progress, 2026-11-03 (Claude).** Claimed via #299. Implemented on
+`claude/ws13-mail-on-request-20261103`: `jarvis/brief.py`, `jarvis/bot/brief_tool.py`,
+registration in `pipeline.py` (eligibility from pipecat's `on_client_connected`
+peer and `on_client_disconnected`), menu and prompt flags, routing cases, and the
+Swift card (untested here). Offline tests pass on Linux, Python 3.12; the prompt
+addendum is not yet in the routing eval's Orchestrator prompt (a two-line
+`Orchestrator` pass-through outside this scope), so brief cases score the menu only.
+
 **Acceptance for P3m** (subset of R.12): S3-1 (own context), S3-2 (eligibility,
 conditions 1–2), S3-9 and S3-14 (canaries; byte-identical tool result), S3-6 and
 S3-13 offline on the payload (no source text in `body`), S3-7 (routing scorer

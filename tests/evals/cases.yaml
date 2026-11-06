@@ -158,3 +158,16 @@
 - {input: "submit the expense tracker build for review", expect: app_builder}
 - {input: "update my expense tracker", expect: app_builder}
 - {input: "update your own interface", expect: developer}
+
+# 2026-11-03 — WS-13 P3m (MORTIMER_MAIL_CALENDAR_BRIEF_PLAN.md R.10.17).
+# Email questions go to the direct daily_brief tool, never to a specialist.
+# `tool` + `args` make the scorer require that exact call with no
+# delegation (a no-op answer fails); `forbid_tool` is the negative: mail
+# SENDING is a missing tool, so no daily_brief call and no delegation.
+# Scored only under a profile that shows the brief (parity); reported on
+# their own "brief" line.
+- {input: "what's new in my email", expect: none, tool: daily_brief, args: {scope: mail}}
+- {input: "any new Gmail?", expect: none, tool: daily_brief, args: {scope: mail}}
+- {input: "check my inbox", expect: none, tool: daily_brief, args: {scope: mail}}
+- {input: "did I get anything on my AT&T email", expect: none, tool: daily_brief, args: {scope: mail}}
+- {input: "send an email to Dana saying I'll be late", expect: none, forbid_tool: daily_brief}
