@@ -550,9 +550,9 @@ roadmap-specific event/native decoding paths and tests. General source/privacy
 limits, other owners and all acceptance criteria remain unchanged. Current
 base is `555fe86`; local source repair preserves all dated logs, verifies the
 complete log set before digest-bound provenance, and retains finite count,
-byte and display ceilings. No publication, merge, deployment or controller
-model change is authorized. Independent static review and offline verification passed with documented
-skips/warnings; larry decides publication. See the existing plan's dated entry
+byte and display ceilings. Larry subsequently approved branch publication and a draft PR for review;
+merge, deployment and controller model changes remain unauthorized. Independent
+static review and offline verification passed with documented skips/warnings. See the existing plan's dated entry
 and [repair log](docs/roadmap-log/2026-11-06-ws-17-roadmap-log-limits.md).
 
 ### Acceptance checklist — remaining

@@ -25,3 +25,10 @@ The full suite preceded three additional passing focused tests; source was
 unchanged. Native refresh coverage includes large complete replies and
 oversized-reply preservation of existing state. No live
 acceptance, publication, merge or deployment is claimed.
+
+
+Publication continuation: Larry approved pushing the repair branch and opening
+a review PR. Reconciled current main `adc2b92` (WS-03 documentation-only #308)
+without conflicts; all existing owners and changes were preserved. Source
+bytes remain those reviewed at `77ec147`. Refresh focused tests and the
+roadmap checker after reconciliation; no merge or deployment is authorized.
