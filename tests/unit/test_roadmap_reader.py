@@ -170,3 +170,61 @@ def test_log_count_and_total_size_refuse_instead_of_partial_snapshot(tmp_path, m
     monkeypatch.setattr(logic, 'ROADMAP_LOG_TOTAL_MAX_BYTES', 10)
     with pytest.raises(logic.RepoPathError, match='total byte limit'):
         logic._roadmap_snapshot(tmp_path, card('WS-17'))
+
+
+def test_full_log_capacity_and_one_over_fail_closed(tmp_path, monkeypatch):
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    (tmp_path / 'ROADMAP.md').write_text(card('WS-17'))
+    logs = tmp_path / 'docs/roadmap-log'; logs.mkdir(parents=True)
+    for index in range(logic.ROADMAP_LOG_MAX_FILES):
+        (logs / f'{index:04}.md').write_text('---\ndate: 2026-11-06\nrows: [WS-17]\n---\n# Evidence\n')
+    result = logic.repo_read_file('ROADMAP.md')
+    assert result['ok'], result.get('error')
+    assert len(result['roadmap']['logs']) == logic.ROADMAP_LOG_MAX_FILES
+    (logs / 'overflow.md').write_text('malformed files also count')
+    result = logic.repo_read_file('ROADMAP.md')
+    assert result['ok'] is False and 'file limit' in result['error']
+    assert 'content' not in result and 'roadmap' not in result
+
+
+def test_log_total_counts_actual_bytes_when_files_grow(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    (tmp_path / 'ROADMAP.md').write_text(card('WS-17'))
+    logs = tmp_path / 'docs/roadmap-log'; logs.mkdir(parents=True)
+    raw = '---\ndate: 2026-11-06\nrows: [WS-17]\n---\n# Evidence\n'
+    for name in ['a.md', 'b.md']:
+        (logs / name).write_text(raw)
+    original_stat = Path.stat
+    def stale_size(path, *args, **kwargs):
+        actual = original_stat(path, *args, **kwargs)
+        return SimpleNamespace(st_size=1) if path.parent == logs else actual
+    monkeypatch.setattr(Path, 'stat', stale_size)
+    monkeypatch.setattr(logic, 'ROADMAP_LOG_TOTAL_MAX_BYTES', len(raw.encode()) * 2 - 1)
+    result = logic.repo_read_file('ROADMAP.md')
+    assert result['ok'] is False and 'total byte limit' in result['error']
+    assert 'content' not in result and 'roadmap' not in result
+
+
+def test_roadmap_snapshot_bound_accepts_growth_but_never_truncates(tmp_path, monkeypatch):
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    monkeypatch.setattr(logic, '_roadmap_cards', lambda content: ([{'details': 'x' * 600000}], []))
+    snapshot = logic._roadmap_snapshot(tmp_path, '')
+    assert len(snapshot['cards'][0]['details']) == 600000
+    monkeypatch.setattr(logic, '_roadmap_cards', lambda content: ([{'details': 'x' * logic.ROADMAP_SNAPSHOT_MAX_BYTES}], []))
+    import pytest
+    with pytest.raises(logic.RepoPathError, match='no workstreams were silently truncated'):
+        logic._roadmap_snapshot(tmp_path, '')
+
+
+def test_skipped_oversize_logs_still_count_toward_declared_total(tmp_path, monkeypatch):
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    (tmp_path / 'ROADMAP.md').write_text(card('WS-17'))
+    logs = tmp_path / 'docs/roadmap-log'; logs.mkdir(parents=True)
+    for name in ['a.md', 'b.md']:
+        (logs / name).write_text('x' * 20)
+    monkeypatch.setattr(logic, 'REPO_READ_MAX_BYTES', 10)
+    monkeypatch.setattr(logic, 'ROADMAP_LOG_TOTAL_MAX_BYTES', 30)
+    result = logic.repo_read_file('ROADMAP.md')
+    assert result['ok'] is False and 'total byte limit' in result['error']
+    assert 'content' not in result and 'roadmap' not in result

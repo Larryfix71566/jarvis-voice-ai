@@ -171,10 +171,10 @@ def repo_read_file(path: str) -> dict:
 
 
 # A derived presentation of the canonical source, never another status store.
-ROADMAP_SNAPSHOT_MAX_BYTES = 512 * 1024
-# One canonical roadmap ref plus each log must fit the existing 256-ref
-# source envelope. Refuse excess history explicitly; never weaken that bound.
-ROADMAP_LOG_MAX_FILES = 255
+ROADMAP_SNAPSHOT_MAX_BYTES = 1024 * 1024
+# Bound log discovery independently of the source envelope. The host verifies
+# every log and commits larger sets to one digest without raising its ref cap.
+ROADMAP_LOG_MAX_FILES = 1024
 ROADMAP_LOG_TOTAL_MAX_BYTES = 4 * 1024 * 1024
 _ROADMAP_STATES = frozenset({"proposed", "claimed", "in-progress", "review", "landed", "accepted", "blocked", "parked"})
 
@@ -262,25 +262,36 @@ def _roadmap_logs(root: Path) -> tuple[list[dict], list[str]]:
         directory = resolve_repo_path(root, "docs/roadmap-log")
         if not directory.is_dir():
             return [], ["Dated roadmap log directory is missing"]
-        files = sorted(directory.glob("*.md"))
-        if len(files) > ROADMAP_LOG_MAX_FILES:
-            raise RepoPathError("Roadmap logs exceed the file limit; snapshot was not truncated")
-        total = 0
+        files = []
+        # Stop collecting as soon as the bound is exceeded; do not materialize
+        # an unbounded directory listing before checking the limit.
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if entry.name.endswith(".md"):
+                    files.append(directory / entry.name)
+                    if len(files) > ROADMAP_LOG_MAX_FILES:
+                        raise RepoPathError("Roadmap logs exceed the file limit; snapshot was not truncated")
+        files.sort()
+        total = declared_total = 0
         for file in files:
             # Validate every child, including symlinks, through the same guards.
             relative = file.relative_to(root.resolve()).as_posix()
             try:
                 resolved = resolve_repo_path(root, relative)
                 size = resolved.stat().st_size
-                total += size
-                if total > ROADMAP_LOG_TOTAL_MAX_BYTES:
+                declared_total += size
+                if declared_total > ROADMAP_LOG_TOTAL_MAX_BYTES:
                     raise RepoPathError("Roadmap logs exceed the total byte limit; snapshot was not truncated")
                 if size > REPO_READ_MAX_BYTES:
                     issues.append(f"{relative}: exceeds guarded per-file read limit")
                     continue
-                raw = resolved.read_bytes()
+                with resolved.open("rb") as stream:
+                    raw = stream.read(min(REPO_READ_MAX_BYTES, ROADMAP_LOG_TOTAL_MAX_BYTES - total) + 1)
                 if len(raw) > REPO_READ_MAX_BYTES:
                     raise RepoPathError("Roadmap log grew beyond the read limit")
+                total += len(raw)
+                if total > ROADMAP_LOG_TOTAL_MAX_BYTES:
+                    raise RepoPathError("Roadmap logs exceed the total byte limit; snapshot was not truncated")
                 text = raw.decode("utf-8")
                 match = re.match(r'\A---\r?\n(.*?)\r?\n---(?:\r?\n|$)', text, re.S)
                 metadata = yaml.safe_load(match[1]) if match else None
@@ -338,7 +349,7 @@ def _roadmap_snapshot(root: Path, content: str) -> dict:
         "dirty": dirty, "source_kind": "local_checkout"},
         "cards": cards, "logs": logs, "issues": issues + log_issues}
     if len(json.dumps(snapshot, ensure_ascii=False).encode("utf-8")) > ROADMAP_SNAPSHOT_MAX_BYTES:
-        raise RepoPathError("Roadmap snapshot exceeds 512 KiB; no workstreams were silently truncated")
+        raise RepoPathError("Roadmap snapshot exceeds 1024 KiB; no workstreams were silently truncated")
     return snapshot
 
 def repo_list_files(subdir: str = "", pattern: str = "") -> dict:

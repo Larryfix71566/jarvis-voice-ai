@@ -71,7 +71,7 @@ final class ConsoleActionCoordinator {
         if reply.status == "pending_user" { return true }
         roadmapReads.removeValue(forKey: reply.requestID)
         if reply.status == "ok", reply.code == "roadmap_snapshot",
-           let value = reply.data?["display"], let bytes = try? JSONEncoder().encode(value), bytes.count <= 600 * 1024,
+           let value = reply.data?["display"], let bytes = try? JSONEncoder().encode(value), bytes.count <= 1200 * 1024,
            let payload = try? JSONDecoder().decode(DisplayPayload.self, from: bytes),
            workspace.refreshRoadmap(pending.target, payload: payload) {
             publishInventory()

@@ -3686,3 +3686,29 @@ This completes only the registered local combined-main validation. It is not the
 ### 2026-11-05 — Validation evidence post-merge receipt
 
 Larry merged #305 as `e782048965db98c397398077b9965bde5d6b7108` after all five GitHub checks passed. Post-merge inspection found main's tree hash exactly equal to reviewed PR head `887743fa6b3407490ac2e699ab0cef2128c07342` (`56fa7976fdb98f1f40384f8bb3c8bff0aa791d96`), with no additional source difference. The roadmap checker again reports zero errors and warnings. Kimi's validation and evidence-publication scope is complete; the independent combined-source review and every operational/live gate remain separate.
+
+
+## 2026-11-06 — Bounded roadmap log/read/display repair
+
+Larry approved a branch-local registration exception for Codex's reader/tests,
+then explicitly included host attestation and roadmap-specific event/native
+paths and tests. Baseline `555fe86` has 266 logs and a 536,219-byte snapshot,
+exceeding the old 255-file and 512 KiB bounds. The isolated repair keeps all
+logs, caps enumeration at 1,024 files, preserves the 4 MiB declared/actual log
+budget and guarded per-file cap, and uses bounded reads. Host verification
+still rebuilds and compares every log. Above 255 valid logs, a SHA-256 manifest
+commitment replaces the individual envelope refs, bound to the existing
+repository scope and sealed result; the general 256-ref limit stays unchanged.
+Roadmap snapshots permit 1 MiB and roadmap display envelopes 1,200 KiB in all
+four delivery checks. Generic result size/privacy limits stay unchanged; a
+future oversized full tool result still fails closed rather than truncating.
+
+Implementation remains local on `codex/roadmap-log-limit-20261106`. Independent
+static review approved with no actionable defects. Backend unit/integration:
+7,997 passed, 145 skipped, 583 subtests passed, 18 warnings; final focused
+roadmap/attestation regressions: 156 passed. Full JarvisKit: 239 passed;
+MortimerHost roadmap controls: 10 passed. Policy: 9 passed; offline evaluations:
+13 passed. Latency budget, import smoke, frontend build and roadmap checker
+passed. Skips and warnings remain disclosed, not converted to acceptance. Existing live acceptance,
+publication, merge and deployment gates remain open. No controller model,
+credentials, service state or production checkout was changed.

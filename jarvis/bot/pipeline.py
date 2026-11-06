@@ -499,7 +499,7 @@ async def _read_console_roadmap(runtime: Any, request: dict) -> dict:
         raise ValueError("roadmap_source_protected")
     payload["data_policy"] = policy.level
     payload["roadmap_timezone"] = runtime.settings.jarvis_timezone
-    if len(json.dumps(payload, ensure_ascii=True, allow_nan=False).encode("utf-8")) > 600 * 1024:
+    if len(json.dumps(payload, ensure_ascii=True, allow_nan=False).encode("utf-8")) > 1200 * 1024:
         raise ValueError("roadmap_snapshot_too_large")
     return payload
 

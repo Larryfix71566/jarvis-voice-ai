@@ -153,8 +153,8 @@ TOOL_RESULT_EVENT_MAX = 20_000
 
 # WS-17: one complete local roadmap observation, without duplicating its raw
 # Markdown. These are event bounds only, never model/history/source grants.
-ROADMAP_EVENT_MAX_BYTES = 600 * 1024
-ROADMAP_EVENT_SNAPSHOT_MAX_BYTES = 512 * 1024
+ROADMAP_EVENT_MAX_BYTES = 1200 * 1024
+ROADMAP_EVENT_SNAPSHOT_MAX_BYTES = 1024 * 1024
 
 
 def _tool_result_observation(tool: str, arguments: dict, result: str) -> str:
