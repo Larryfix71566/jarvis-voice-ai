@@ -2,7 +2,7 @@
 date: 2026-11-06
 system: claude
 rows: [WS-31]
-prs: []
+prs: [313]
 ---
 
 # WS-31 NR1 independent exact-source review — Claude, 2026-11-06
@@ -55,7 +55,7 @@ The existing `test_fixed_schema_error_order_is_independent_of_dict_insertion_ord
 - Raw route: a whitespace envelope one byte over 65,536 returns `limit_exceeded` at `$` while the same mapping validates; at exactly 65,536 bytes it validates. Depth-9 nesting under an unknown key is refused at `$` before parsing.
 - Read against §11 with no finding: exact field sets and unknown-field handling; `schema_version` rejects booleans; `mode`, `platform` and `kind` refuse other values as `unsupported_contract`; ID patterns; two-way requirement/case links, orphan cases and missing oracles; `invalid` always has null digests and an empty question list; `needs_input` only with a blocking question; `build_authorized` is a constant false; error locations use only fixed schema names and indices; outputs are built fresh, so there are no aliases into the input.
 
-Not tested here: the full repository suite and CI for this record (CI on this PR is affected by the roadmap-log file limit already failing on main, recorded separately); Python 3.12 (CI's version) for the probes.
+Not tested here: the full repository suite (repository CI on this PR covers it); Python 3.12, CI's version, for the probes.
 
 ## Remaining action
 
