@@ -154,3 +154,27 @@ async def test_console_kill_switch_prevents_roadmap_read(monkeypatch):
         pytest.fail('disabled console performed work')
     ns.update(_read_console_roadmap=forbidden, send_app_message=forbidden)
     await ns['handle_console'](request(operation='refresh'))
+
+
+@pytest.mark.parametrize('size,accepted', [(700000, True), (1300000, False)])
+async def test_refresh_roadmap_wire_bound_accepts_growth_and_refuses_overflow(monkeypatch, size, accepted):
+    original = body()
+    original['roadmap']['cards'][0]['details'] = 'x' * size
+    monkeypatch.setitem(globals(), 'body', lambda: original)
+    if accepted:
+        result = await read_helper()(runtime(Registry()), request(operation='refresh'))
+        assert result['roadmap']['cards'][0]['details'] == 'x' * size
+    else:
+        with pytest.raises(ValueError, match='invalid_tool_result_content'):
+            await read_helper()(runtime(Registry()), request(operation='refresh'))
+
+
+async def test_refresh_wire_bound_counts_unicode_json_expansion(monkeypatch):
+    source = body()
+    source['roadmap']['cards'][0]['details'] = '\U0001f642' * 110000
+    class UnicodeRegistry:
+        async def call_classified(self, tool, arguments, *, execution_scope):
+            return issue_tool_result(execution_scope, json.dumps(source, ensure_ascii=False),
+                                     DataPolicy('approved_external', 'test-source'), 'repo', ('ROADMAP.md',))
+    with pytest.raises(ValueError, match='roadmap_snapshot_too_large'):
+        await read_helper()(runtime(UnicodeRegistry()), request(operation='refresh'))
