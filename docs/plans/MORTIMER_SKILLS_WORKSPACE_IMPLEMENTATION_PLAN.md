@@ -3320,3 +3320,7 @@ Kimi's independent review of #300 (head `d0317ad`, merged as `f874cf1`), posted 
 2. **Receipt contract.** If the validator returned no receipt, or a receipt whose only check was unknown but passing, a payload was produced. Now, once the validator runs, the result must be a `SkillAuthoringReceipt` bound to the snapshot; anything else blocks with `validator_failed`. Any check name outside the validator's known list blocks with the new code `validation_check_unrecognized`, whether it passed or not. Checks that only appear on failure are still not required.
 
 Evidence: 15 new regression tests; 8 fail on the unfixed adapter and all pass with the fix. The adapter suite is now 136 tests; together with the existing skills suites, 328 pass. Changes stay inside the adapter and its test file. Installation, activation and SW-A–L are unchanged; accepted count stays 2/12.
+
+## 2026-11-06 — review fix merged
+
+Larry merged #304 on 2026-11-06 at 02:30 UTC as `5cd7532c56cca820925a35acefc3db2db2db18ff`; docs PR #302 landed with it. All five CI checks had passed on head `723ad07`. The merge came before Kimi's re-review, which is still owed on that exact head against the two 2026-11-05 findings; any new finding becomes a new fix. No source, installation, activation or acceptance change; accepted count stays 2/12.
