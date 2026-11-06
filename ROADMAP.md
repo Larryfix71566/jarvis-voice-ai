@@ -610,6 +610,18 @@ land on main before code; no checkbox closes from this amendment. WS-28 remains 
 - **Next step:** codex: reconcile #254 roadmap findings and #275 under their respective owners; obtain exact combined-source independent review and combined-main validation before any separately authorized operational recovery. Diagnose actual readiness failure through the canonical target-bound path only when operations are authorized. Keep installation/restoration/restarts/live tests held; #224 historical verification does not certify current main.
 - **Updated:** 10-27 UTC (merged source/evidence identities reconciled; no operational or acceptance change)
 
+### Kimi combined-main validation claim — 2026-11-05
+
+- **Owner:** `codex` retains WS-17, its implementation and every release/operational next step above; `kimi` owns only this bounded, read-only combined-main validation. Larry retains deployment, restart and live-acceptance decisions.
+- **Status:** claimed by this validation registration after it merges to main. Larry dispatched Kimi on 2026-11-05 because Codex, the usual reviewer, is out of usage this week; Kimi ran the same kind of local combined-main verification under WS-24 on 2026-10-26 at `5581d4f`. Target: main as it stands once this claim lands. Its tree outside `docs/` and `ROADMAP.md` must equal `f874cf1a757b03d98336aca36ef08fb13c15c7a6` (merge of #300); otherwise Kimi stops and the target is rebound. No validation result is recorded yet.
+- **Implemented by:** Kimi runs the checks and has no source authorship in the target. Claude wrote this claim and the validation primer at Larry's request.
+- **Remaining work / acceptance:** Kimi runs, on macOS, the publication-equivalent gates of `.github/workflows/validate.yml`, `knowledge-base.yml` and `sandbox.yml`, both Swift suites (`macos/JarvisKit`, `macos/MortimerHost`) and the clean-environment full `pytest` that `scripts/deploy_main.sh` phase A runs, then records exact commands, exit codes, tallies, skips and log hashes. The 10-26 run had no Swift suites, and Swift source changed after the last full native record (`a672239`, 10-22). This validation does not cover the exact combined-source independent review (the other half of the next step above, still unassigned), the open source reviews of merged #295/#296, installed or loaded identity, deployment, or any live, physical or human check. A pass does not lift the hold above by itself; Larry decides separately.
+- **Where:** claim on `claude/ws17-kimi-validation-claim-20261105`, landed via #303; Kimi evidence on `kimi/ws17-combined-main-validation-20261105`, created only after this claim lands; [claim log](docs/roadmap-log/2026-11-05-ws-17-kimi-combined-main-validation-claim.md).
+- **Plan:** existing WS-17 plan, `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md`, dated entry 2026-11-05.
+- **Scope:** Read-only checks in a fresh Kimi worktree at the exact target. Kimi writes only this sub-section, dated WS-17 progress in the plan above and WS-17 `docs/roadmap-log/` entries. No source, test, fixture, configuration or dependency edits; no `~/jarvis-voice-ai-clean`; no `scripts/deploy_main.sh`; no service, launchd, app install or launch; no `RUN_LIVE`, provider call, credential or vault; no other system's workspace; no checkbox; WS-17's main fields above stay Codex's.
+- **Next step:** larry: merge this claim, then give Kimi the primer. kimi: validate the exact target and publish evidence as a docs-only PR; do not merge. Any later merge that changes code, including draft #301's Swift, needs a fresh validation before a deployment relies on it.
+- **Updated:** 11-05 (Claude registered Kimi's bounded combined-main validation at Larry's request; no result, operational or acceptance change).
+
 
 
 
