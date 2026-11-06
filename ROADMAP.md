@@ -542,6 +542,19 @@ exact-head CI. No model change, installation or live acceptance follows.
 <details id="ws-17">
 <summary>WS-17 — Command Console CC7a: conversation-first stage · Codex remaining implementation</summary>
 
+### Bounded roadmap reader repair — 2026-11-06
+
+Larry approved a narrow branch-local registration exception for Codex on
+`codex/roadmap-log-limit-20261106`: reader and tests, host attestation, and
+roadmap-specific event/native decoding paths and tests. General source/privacy
+limits, other owners and all acceptance criteria remain unchanged. Current
+base is `555fe86`; local source repair preserves all dated logs, verifies the
+complete log set before digest-bound provenance, and retains finite count,
+byte and display ceilings. Larry subsequently approved branch publication and a draft PR for review;
+merge, deployment and controller model changes remain unauthorized. Independent
+static review and offline verification passed with documented skips/warnings. See the existing plan's dated entry
+and [repair log](docs/roadmap-log/2026-11-06-ws-17-roadmap-log-limits.md).
+
 ### Acceptance checklist — remaining
 
 The earlier one-row and card-operation subparts keep their recorded passes. Current live checks and future implementation gates are separate below.

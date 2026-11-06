@@ -584,3 +584,79 @@ async def test_roadmap_snapshot_cannot_self_attest_derived_or_changed_content(ro
     assert policy.level == 'confidential'
     assert json.loads(content) == {'ok': False, 'error': 'tool_source_scope_invalid'}
     assert CANARY not in content
+
+
+@pytest.mark.parametrize('count', [255, 256, 266, 1024])
+@pytest.mark.parametrize('floor', ['approved_external', 'confidential'])
+async def test_large_roadmap_log_set_is_fully_verified_with_bounded_refs(roadmap_project, count, floor):
+    import hashlib
+    logs = roadmap_project / 'docs/roadmap-log'
+    for index in reversed(range(count - 1)):
+        (logs / f'{index:04}.md').write_text('---\ndate: 2026-11-06\nrows: [WS-17]\n---\n# Evidence\n')
+    arguments = {'path': 'ROADMAP.md'}
+    body = repo_logic.repo_read_file(**arguments)
+    assert body['ok'], body.get('error')
+    assert len(body['roadmap']['logs']) == count
+    registry = registry_for('repo_read_file', 'mcp-repo', Session(response(body)), pinned=True, root=roadmap_project)
+    scope = execution('repo_read_file', arguments, privacy=floor)
+    envelope = await registry.call_classified('repo_read_file', arguments, execution_scope=scope)
+    policy, content = validate_tool_result(scope, envelope)
+    assert policy.level == floor
+    assert json.loads(content) == body
+    if count == 255:
+        assert len(envelope.canonical_refs) == 256
+    else:
+        manifest = json.dumps(body['roadmap']['logs'], sort_keys=True, ensure_ascii=False, separators=(',', ':'))
+        digest = hashlib.sha256(manifest.encode()).hexdigest()
+        assert envelope.canonical_refs == (str(roadmap_project / 'ROADMAP.md'), 'roadmap-log-set:sha256:' + digest)
+
+
+@pytest.mark.parametrize('variant', ['body-hash', 'body-path', 'body-title', 'body-order', 'disk-change', 'disk-add', 'disk-remove', 'disk-symlink'])
+async def test_large_log_set_cannot_bypass_exact_host_verification(roadmap_project, variant):
+    logs = roadmap_project / 'docs/roadmap-log'
+    for index in range(256):
+        (logs / f'{index:04}.md').write_text('---\ndate: 2026-11-06\nrows: [WS-17]\n---\n# Evidence\n')
+    arguments = {'path': 'ROADMAP.md'}
+    body = repo_logic.repo_read_file(**arguments)
+    assert body['ok']
+    entry = body['roadmap']['logs'][0]
+    if variant == 'body-hash': entry['sha256'] = '0' * 64
+    elif variant == 'body-path': entry['path'] = 'docs/roadmap-log/invented.md'
+    elif variant == 'body-title': entry['title'] = 'Forged title'
+    elif variant == 'body-order': body['roadmap']['logs'].reverse()
+    elif variant == 'disk-change': (logs / '0000.md').write_text('Changed')
+    elif variant == 'disk-add': (logs / 'new.md').write_text((logs / '0000.md').read_text())
+    elif variant == 'disk-remove': (logs / '0000.md').unlink()
+    elif variant == 'disk-symlink':
+        (logs / '0000.md').unlink()
+        (roadmap_project / '.env').write_text(CANARY)
+        (logs / '0000.md').symlink_to(roadmap_project / '.env')
+    registry = registry_for('repo_read_file', 'mcp-repo', Session(response(body)), pinned=True, root=roadmap_project)
+    scope = execution('repo_read_file', arguments)
+    envelope = await registry.call_classified('repo_read_file', arguments, execution_scope=scope)
+    policy, content = validate_tool_result(scope, envelope)
+    assert policy.level != 'approved_external'
+    assert json.loads(content) == {'ok': False, 'error': 'tool_source_scope_invalid'}
+
+
+async def test_aggregate_log_commitment_is_stable_and_changes_with_verified_metadata(roadmap_project):
+    logs = roadmap_project / 'docs/roadmap-log'
+    for index in range(256):
+        (logs / f'{index:04}.md').write_text('---\ndate: 2026-11-06\nrows: [WS-17]\n---\n# Evidence\n')
+    async def refs():
+        arguments = {'path': 'ROADMAP.md'}
+        body = repo_logic.repo_read_file(**arguments)
+        registry = registry_for('repo_read_file', 'mcp-repo', Session(response(body)), pinned=True, root=roadmap_project)
+        scope = execution('repo_read_file', arguments)
+        envelope = await registry.call_classified('repo_read_file', arguments, execution_scope=scope)
+        policy, _ = validate_tool_result(scope, envelope)
+        assert policy.level == 'approved_external'
+        return envelope.canonical_refs
+    before = await refs()
+    assert await refs() == before
+    entry = logs / '0000.md'
+    entry.write_text(entry.read_text().replace('# Evidence', '# New title'))
+    changed = await refs()
+    assert changed != before
+    entry.rename(logs / 'renamed.md')
+    assert await refs() != changed

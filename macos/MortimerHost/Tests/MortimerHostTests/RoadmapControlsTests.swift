@@ -23,11 +23,11 @@ final class RoadmapControlsTests: XCTestCase {
     private var now: Date { ISO8601DateFormatter().date(from: "2026-10-17T18:00:00Z")! }
     // Current-roadmap wording plus distinct canaries pin ownership, landed vs
     // accepted, historic failures and prerequisite-gated acceptance separately.
-    private func payload(revision: String = "a", repository: String = "d", policy: String = "approved_external", timezone: String = "America/New_York", readAt: String = "2026-10-17T18:00:00Z") throws -> DisplayPayload {
+    private func payload(revision: String = "a", repository: String = "d", policy: String = "approved_external", timezone: String = "America/New_York", readAt: String = "2026-10-17T18:00:00Z", padding: Int = 4500) throws -> DisplayPayload {
         func card(_ id: String, _ owner: String, _ status: String, _ lifecycle: String, _ author: String, _ checklist: [[String: Any]], _ next: String = "") -> [String: Any] {
             ["id": id, "title": "\(id) — Interface \(id)", "status": status, "lifecycle": lifecycle, "owner": owner,
              "fields": ["Owner": owner, "Status": status, "Implemented by": author, "Next step": next, "Scope": "interface"],
-             "details": "DETAIL-\(id) " + (id == "WS-01" ? String(repeating: "padding ", count: 4500) : "source details"), "checklist": checklist]
+             "details": "DETAIL-\(id) " + (id == "WS-01" ? String(repeating: "padding ", count: padding) : "source details"), "checklist": checklist]
         }
         let cards = [
             card("WS-01", "codex and claude", "landed foundation; acceptance open", "landed", "claude", [
@@ -181,7 +181,7 @@ final class RoadmapControlsTests: XCTestCase {
         let task = Task { await coordinator.refreshRoadmap(request) }
         try await wait { !transport.requests.isEmpty }
         let pending = try XCTUnwrap(transport.requests.last)
-        let replacement = try payload(revision: "f")
+        let replacement = try payload(revision: "f", padding: 90000)
         let snapshot = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(replacement.roadmap!))
         let data: JSONValue = .object(["display": .object(["title": .string("Project roadmap"), "body": .string("refreshed"), "roadmap": snapshot, "roadmap_timezone": .string(zone), "data_policy": .string("approved_external")])])
         XCTAssertTrue(coordinator.acceptRoadmapReply(ConsoleResult(sessionID: session, generation: UUID(), requestID: pending.requestID, status: "ok", code: "roadmap_snapshot", summary: "wrong generation", data: data)))
@@ -210,6 +210,18 @@ final class RoadmapControlsTests: XCTestCase {
         XCTAssertEqual(failure, .invalid)
         XCTAssertEqual(store.results[0].payload.body, "ordinary read")
         XCTAssertTrue(store.roadmapRefreshStatus[item.id]!.contains("stale"))
+        // An oversized successful reply must likewise preserve the prior
+        // snapshot, filters and pin instead of accepting partial content.
+        let oversizedTask = Task { await coordinator.refreshRoadmap(ConsoleRequest(sessionID: session, generation: generation, requestID: UUID(), revision: store.consoleRevision, action: .roadmapControl, target: item.id.uuidString, args: ["operation": .string("refresh")])) }
+        try await wait { transport.requests.count == 3 }
+        let oversizedRequest = try XCTUnwrap(transport.requests.last)
+        let oversized: JSONValue = .object(["display": .object(["title": .string("Project roadmap"), "body": .string(String(repeating: "x", count: 1300000)), "roadmap": snapshot, "data_policy": .string("approved_external")])])
+        XCTAssertTrue(coordinator.acceptRoadmapReply(ConsoleResult(sessionID: session, generation: generation, requestID: oversizedRequest.requestID, status: "ok", code: "roadmap_snapshot", summary: "too large", data: oversized)))
+        let oversizedResult = await oversizedTask.value
+        XCTAssertEqual(oversizedResult, .invalid)
+        XCTAssertEqual(store.results[0].payload.body, "ordinary read")
+        XCTAssertEqual(store.results[0].roadmapFilter.workstreams, ["WS-02"])
+        XCTAssertTrue(store.pinnedIDs.contains(item.id))
     }
 
     func testRenderedCompactAndExpandedRoadmapExposeFilterLabelsAndLateCard() throws {

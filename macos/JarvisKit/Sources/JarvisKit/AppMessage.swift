@@ -232,7 +232,7 @@ public struct RoadmapSnapshot: Codable, Sendable, Equatable {
                   && validDay(log.date) && !log.rows.isEmpty
                   && log.rows.allSatisfy({ matches($0, "^WS-[0-9]+$") })
               }),
-              let data = try? JSONEncoder().encode(self), data.count <= 512 * 1024 else { return false }
+              let data = try? JSONEncoder().encode(self), data.count <= 1024 * 1024 else { return false }
         let timestamp = ISO8601DateFormatter()
         timestamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if timestamp.date(from: provenance.readAt) != nil { return true }

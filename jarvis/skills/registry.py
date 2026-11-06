@@ -643,6 +643,15 @@ class SkillRegistry:
                 if encoded != json.dumps(verified, sort_keys=True, ensure_ascii=False, allow_nan=False):
                     raise ValueError("tool_source_scope_invalid")
                 refs = tuple(str(resolve_repo_path(root, entry["path"])) for entry in verified["logs"])
+                if len(refs) > 255:
+                    # Provenance commitment, not a directory permission: every
+                    # member was just rebuilt and compared above. The sealed
+                    # content retains all paths and hashes; this digest binds
+                    # the full ordered set without weakening the 256-ref cap.
+                    manifest = json.dumps(verified["logs"], sort_keys=True,
+                                          ensure_ascii=False, separators=(",", ":"))
+                    digest = hashlib.sha256(manifest.encode("utf-8")).hexdigest()
+                    return (str(expected), "roadmap-log-set:sha256:" + digest)
                 return (str(expected), *refs)
             return (str(expected),)
         allowed = {"subdir", "pattern"} if tool_name == "repo_list_files" else {"query", "subdir"}
