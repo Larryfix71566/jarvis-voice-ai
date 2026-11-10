@@ -144,7 +144,7 @@ system PATH, `PYTHONDONTWRITEBYTECODE=1`, and HOME/TMPDIR inside EVIDENCE,
    **9/9 mutations refused**, as described above.
 10. `$PY "$EVIDENCE/measure_limits.py" "$VALIDATION" "$REVIEW"` and
     `$PY "$EVIDENCE/measure_limits.py" "$REVIEW"`; `$PY
-    "$EVIDENCE/host_boundary.py"`: serializer/parser binary searches and
+    "$EVIDENCE/host_boundary.py" "$VALIDATION" "$EVIDENCE"`: serializer/parser binary searches and
     end-to-end boundary smoke described above. An initial measurement used
     legacy JSON spacing; the host smoke detected it, all scoped measurements
     were corrected and rerun, and only corrected figures are reported here.
