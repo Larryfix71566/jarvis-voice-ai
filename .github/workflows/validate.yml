@@ -1,6 +1,9 @@
 on:
   pull_request:
     branches: [main]
+  # Also run on main itself so a merge that breaks the gates is caught there.
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -46,10 +49,33 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      # Larry approved 2026-11-10: CI installs the production lock
+      # (requirements-lock.txt), not the loose requirements.txt. The weekly
+      # dependency-drift workflow covers the loose list.
+      # The lock is generated on macOS. openwakeword's Linux-only tflite-runtime
+      # dependency has no Python 3.12 wheels and is never installed in
+      # production, so CI installs openwakeword without dependencies; every
+      # other pin installs exactly.
       - name: Install backend dependencies
-        run: pip install -r requirements.txt
+        run: |
+          grep -v '^openwakeword==' requirements-lock.txt > "$RUNNER_TEMP/requirements-ci.txt"
+          pip install -r "$RUNNER_TEMP/requirements-ci.txt"
+          pip install --no-deps "$(grep '^openwakeword==' requirements-lock.txt)"
       - name: Backend import smoke
         run: python -c "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
+
+      # Gate 2a: undefined-name check (ruff F821). --isolated ignores any
+      # ruff config. These three files have known undefined names that their
+      # owners fix under their own rows; remove each ignore when fixed:
+      #   jarvis/bot/pipeline.py (Callable), tests/unit/test_mcp_mail_registry.py
+      #   (subprocess), tests/unit/test_phone_remote_service.py (PreparedMedia).
+      - name: Undefined-name check (ruff F821)
+        run: >-
+          ruff check --isolated --select F821
+          --per-file-ignores "jarvis/bot/pipeline.py:F821"
+          --per-file-ignores "tests/unit/test_mcp_mail_registry.py:F821"
+          --per-file-ignores "tests/unit/test_phone_remote_service.py:F821"
+          jarvis mcp_servers scripts services sandbox tests
 
       # Gate 3: unit tests (C2, MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md
       # — blocking now that the suite has been green on main for a while and
