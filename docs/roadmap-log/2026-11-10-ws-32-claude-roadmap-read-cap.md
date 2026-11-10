@@ -2,34 +2,36 @@
 date: 2026-11-10
 system: claude
 rows: [WS-32]
-prs: [275, 296]
+prs: [275, 296, 322]
 ---
 
-# WS-32 — canonical roadmap read cap raised to 1 MiB, Claude, 2026-11-10
+# WS-32 — roadmap reads carry the text once; read cap 1 MiB, Claude, 2026-11-10
 
-System: Claude (Claude Code cloud session `session_01EHREEUSG5e6zqMeBYUecdg`, started from Larry's Claude Duet channel). Planned and checked by the thread session; code and tests implemented by a Claude Sonnet subagent from that plan.
-Branch: `claude/ws32-roadmap-read-cap-20261110`, based on main `c5e1550`.
+System: Claude (Claude Code cloud session `session_01EHREEUSG5e6zqMeBYUecdg`, started from Larry's Claude Duet channel). Planned, measured and checked by the thread session; code and tests implemented by Claude Sonnet subagents from that plan.
+Branch: `claude/ws32-roadmap-read-cap-20261110`, based on main `c5e1550`, PR #322.
 
-Why: Larry, 2026-11-10 14:51:35 UTC, in his Claude Duet channel, after being told that `ROADMAP_READ_MAX_BYTES` (384 KiB) makes the reader refuse `ROADMAP.md` once it grows past it: "The limit is causing more issues that it needs too". At 15:24:22 UTC he answered the plan to bring this PR before the freeze SHA with "Proceed".
+Why: Larry, 2026-11-10, in his Claude Duet channel: at 14:51:35 UTC "The limit is causing more issues that it needs too"; at 15:24:22 UTC "Proceed"; at 15:41:01 UTC "Yes, fix it too", answering whether to also stop sending the roadmap twice per read.
 
-Change: `ROADMAP_READ_MAX_BYTES` in `mcp_servers/mcp_repo/logic.py` goes from `384 * 1024` to `1024 * 1024`, equal to `ROADMAP_SNAPSHOT_MAX_BYTES`. The host verifier in `jarvis/skills/registry.py` imports the same constant, so it follows without an edit. Unchanged: the 256,000-byte cap for every other file, stat-before-read and the second-read race check, the 1 MiB parsed-snapshot cap, the 1024-file / 4 MiB log caps, the display-event caps in `jarvis/agents/base.py` (1 MiB snapshot, 1200 KiB envelope), the Swift `RoadmapPayload` check (encoded payload at most 1 MiB, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`) and the host tool-result cap (`_MAX_RESULT_CHARACTERS = 1_000_000` in `jarvis/privacy_policy.py`).
+## Change
 
-Which limit binds after this change. Measured with Python 3.12 against main `c5e1550` by growing the real `ROADMAP.md` synthetically, either by appending copies of existing workstream cards under new ids or by appending prose outside any card; not measured on a Mac:
+1. `ROADMAP_READ_MAX_BYTES` (`mcp_servers/mcp_repo/logic.py`) goes from 384 KiB to 1 MiB. The host verifier in `jarvis/skills/registry.py` imports it.
+2. A roadmap read result carries the text once. `_roadmap_snapshot` now returns a compact source snapshot, schema `mortimer.roadmap.source.v1`: provenance (including the text's sha256), the dated logs and the Git/log issues, with no cards. Cards are a pure function of the text, so the new `expand_roadmap_snapshot(content, source)` rebuilds the full `mortimer.roadmap.v1` snapshot from the single copy after checking the source schema, its exact keys and that the provenance sha256 matches the text.
+3. The console still receives the complete v1 snapshot: `jarvis/agents/base.py` (the roadmap display event) and `jarvis/bot/display.py` (the console refresh) expand it. A failed check gives the existing "roadmap unavailable" result. No Swift change.
 
-| Limit | Applies to | Card growth: last accepted / first refused roadmap bytes | Prose growth |
-|---|---|---|---|
-| Host tool-result cap, 1,000,000 characters of the sealed result (`sort_keys`, `ensure_ascii=True` JSON of content plus snapshot) | every scoped `repo_read_file('ROADMAP.md')` through the registry, which is how agents and the console read it | 357,172 / 366,564 | 478,057 accepted |
-| Snapshot cap, 1 MiB | every read, scoped or direct | 556,010 / 597,808 | not reached below 1 MiB |
-| Read cap, now 1 MiB (was 384 KiB) | every read | above both | 1 MiB |
+What the host attests is unchanged in mechanism: the registry rebuilds the compact snapshot from guarded disk reads and requires exact JSON equality with the result, and checks the text against the file byte for byte, as before. A forged `cards` key, an altered text and every earlier tamper case are refused (tests).
 
-Today's 301,854-byte roadmap gives a 519,580-byte snapshot and an 823,292-character sealed result. Before #318 the 357,442-byte roadmap gave 906,984 characters, still under the cap.
+## Measured limits
 
-So for agents and the console this change adds headroom only when the roadmap grows outside workstream cards (up to about 478 KB instead of 384 KiB). When it grows inside cards, the host tool-result cap was already the binding limit below 384 KiB and still is, at about 357 to 367 KB. The sealed result is large because it carries the roadmap twice: once as `content` and again inside the snapshot's card `details`.
+Python 3.12, main `c5e1550` code ("before") against this branch ("after"), the same 302,915-byte `ROADMAP.md`, grown synthetically by appending copies of existing workstream cards under new ids ("card growth") or prose outside any card ("prose growth"). Each pair is the last accepted and first refused roadmap size in bytes. Not measured on a Mac.
 
-Not changed, and why:
-- The host tool-result cap also bounds what enters model context and the subscription transport buffers (`jarvis/model_execution.py`, `jarvis/subscription_tools.py`); raising it would send more than a million characters of roadmap into a model turn.
-- The snapshot cap is mirrored by the display-event bounds and the Swift payload check; raising it needs a Swift change that CI does not build or test.
-- Removing the duplicated roadmap text from the agent-facing result would move the real limit, but it changes what the host attests and seals, so it is a separate decision.
+| Path | Before, card growth | After, card growth | Before, prose growth | After, prose growth |
+|---|---|---|---|---|
+| Agent read through the host (1,000,000-character tool-result cap) | 359,294 / 368,686 | 902,223 / 922,512 | 389,395 / 411,015 | 908,275 / 929,895 |
+| Console event and console refresh (1 MiB snapshot) | 359,294 / 368,686 | 559,193 / 600,991 | 389,395 / 411,015 | 908,275 / 929,895 |
+
+Today's roadmap: sealed result 826,936 characters before, 379,372 after.
+
+The agent limit stays under the 1 MiB read cap because the sealed result escapes non-ASCII characters (`ensure_ascii`) and carries the logs. The console limit for card growth is the existing 1 MiB snapshot bound, mirrored by the display-event bounds in `base.py` and the Swift `RoadmapPayload` check; raising it needs a Swift change that CI does not build, so it is left as is.
 
 Evidence: see the PR body for the exact test commands and counts at the pushed head.
 
