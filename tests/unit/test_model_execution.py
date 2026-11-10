@@ -998,10 +998,13 @@ async def test_route_workload_mismatch_fails_before_client_creation():
 
 @pytest.mark.asyncio
 async def test_request_deadline_cancels_the_await_and_returns_no_late_result():
-    client = FakeClient(delay=0.1)
+    # The deadline also covers admission and lifecycle setup before the call.
+    # Give that setup ample headroom on a loaded runner; the fake call still
+    # outlasts the deadline by far, so the deadline must cancel it mid-await.
+    client = FakeClient(delay=10)
     events = []
     request = ModelExecutionRequest(
-        "developer", "task-9", "parent-9", "hello", timeout_s=0.005
+        "developer", "task-9", "parent-9", "hello", timeout_s=0.25
     )
     with pytest.raises(TimeoutError):
         await execute_chat(request, resolved_route(capabilities=("text",)),
@@ -1081,8 +1084,10 @@ async def test_deadline_includes_admission_wait_and_does_not_create_client():
     holder = asyncio.create_task(occupy_only_slot())
     await slot_started.wait()
     created = []
+    # Enough headroom to reach the queue on a loaded runner; the held slot
+    # never frees, so the deadline still expires while queued.
     request = ModelExecutionRequest(
-        "developer", "task-11", "parent-11", "hello", timeout_s=0.005
+        "developer", "task-11", "parent-11", "hello", timeout_s=0.25
     )
     with pytest.raises(TimeoutError):
         await execute_chat(
