@@ -336,7 +336,16 @@ def test_submit_after_done_delegates_to_workspace(registry_file, monkeypatch):
     _wait_for_job(c, "done")
     res = c.post("/api/appbuild/submit").json()
     assert res["ok"] is True
-    assert res["pr_url"] == "https://example.invalid/pr/1"
+    if res.get("started"):
+        # The endpoint waits only briefly for its worker, then answers
+        # "submitting"; the worker records the PR link on the job.
+        assert res["state"] == "submitting"
+        job = _wait_for_job(c, "done")
+        assert job["submitted"] is True
+        pr_url = job["pr_url"]
+    else:
+        pr_url = res["pr_url"]
+    assert pr_url == "https://example.invalid/pr/1"
     workspace = srv._appbuild_workspace
     assert workspace.submit_count == 1
     duplicate = c.post("/api/appbuild/submit").json()
