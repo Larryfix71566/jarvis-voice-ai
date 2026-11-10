@@ -526,6 +526,27 @@ async def test_canonical_roadmap_between_generic_and_roadmap_limits_is_attested(
     assert envelope.canonical_refs[0] == str(project / 'ROADMAP.md')
 
 
+async def test_canonical_roadmap_above_former_cap_is_attested_with_default_limits(project):
+    (project / 'ROADMAP.md').write_bytes(_padded_roadmap(400 * 1024))
+    body = repo_logic.repo_read_file(path='ROADMAP.md')
+    assert body['ok'] is True and 'roadmap' in body
+    envelope, content = await _scoped_read(project, body, {'path': 'ROADMAP.md'})
+    assert json.loads(content) == body
+    assert envelope.canonical_refs[0] == str(project / 'ROADMAP.md')
+
+
+async def test_card_heavy_roadmap_over_host_result_cap_is_refused_whole(project):
+    # Documents the limit that binds scoped roadmap reads before the 1 MiB read
+    # cap: the sealed result carries the card text twice (content and snapshot)
+    # and must fit the host's 1,000,000-character tool-result cap. Refused
+    # whole, never truncated.
+    (project / 'ROADMAP.md').write_bytes(_padded_roadmap(500 * 1024))
+    body = repo_logic.repo_read_file(path='ROADMAP.md')
+    assert body['ok'] is True and 'roadmap' in body
+    envelope, content = await _scoped_read(project, body, {'path': 'ROADMAP.md'})
+    assert json.loads(content) == {'ok': False, 'error': 'tool_reported_failure'}
+
+
 async def test_canonical_roadmap_above_roadmap_limit_is_refused(project, monkeypatch):
     monkeypatch.setattr(repo_logic, 'REPO_READ_MAX_BYTES', 1000)
     # Build a body that is consistent with the file on disk (bytes, content,

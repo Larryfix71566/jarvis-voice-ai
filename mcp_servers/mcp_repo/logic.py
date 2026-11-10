@@ -14,9 +14,14 @@ from pathlib import Path
 
 # ⚙ TUNING KNOB — largest ordinary file repo_read_file will return (D20).
 REPO_READ_MAX_BYTES = 256_000
-# The canonical roadmap also carries a complete bounded parsed snapshot. Its
-# source cap is separate so roadmap growth never raises other file limits.
-ROADMAP_READ_MAX_BYTES = 384 * 1024
+# The canonical ROADMAP.md source cap is separate from REPO_READ_MAX_BYTES so
+# roadmap growth never raises other file limits. It equals
+# ROADMAP_SNAPSHOT_MAX_BYTES (1 MiB); the parsed snapshot is bounded separately
+# below, and because it repeats each card's text, a card-heavy roadmap reaches
+# the snapshot bound before this source bound. Scoped reads through the host
+# are bounded earlier still by the 1,000,000-character tool-result cap in
+# jarvis/privacy_policy.py, which counts the content and the snapshot together.
+ROADMAP_READ_MAX_BYTES = 1024 * 1024
 
 # ⚙ TUNING KNOB — cap on repo_list_files/repo_search result counts (D20).
 REPO_SEARCH_MAX_RESULTS = 50

@@ -117,6 +117,46 @@ def test_roadmap_limit_is_separate_from_generic_file_limit(tmp_path, monkeypatch
     assert 'content' not in refused and 'roadmap' not in refused
 
 
+def _roadmap_text(size):
+    head = card('WS-01') + '\n'
+    # The card holds a non-ASCII dash; pad by encoded length so bytes == size.
+    return head + 'p' * (size - len(head.encode('utf-8')))
+
+
+def test_default_roadmap_limits():
+    assert logic.ROADMAP_READ_MAX_BYTES == 1024 * 1024
+    assert logic.REPO_READ_MAX_BYTES == 256_000
+    assert logic.ROADMAP_READ_MAX_BYTES <= logic.ROADMAP_SNAPSHOT_MAX_BYTES
+
+
+def test_default_limit_reads_roadmap_above_former_384_kib_cap(tmp_path, monkeypatch):
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    size = 600 * 1024
+    assert 384 * 1024 < size < logic.ROADMAP_READ_MAX_BYTES
+    text = _roadmap_text(size)
+    (tmp_path / 'ROADMAP.md').write_text(text)
+    (tmp_path / 'plain.md').write_text(text)
+
+    result = logic.repo_read_file('ROADMAP.md')
+    assert result['ok'] is True
+    assert len(text.encode('utf-8')) == size
+    assert result['bytes'] == size
+    assert result['content'] == text
+    assert len(result['roadmap']['cards']) == 1
+    ordinary = logic.repo_read_file('plain.md')
+    assert ordinary['ok'] is False
+    assert '256000 byte limit' in ordinary['error']
+
+
+def test_default_limit_refuses_roadmap_above_one_mib(tmp_path, monkeypatch):
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    (tmp_path / 'ROADMAP.md').write_text(_roadmap_text(logic.ROADMAP_READ_MAX_BYTES + 1))
+    refused = logic.repo_read_file('ROADMAP.md')
+    assert refused['ok'] is False
+    assert f'{logic.ROADMAP_READ_MAX_BYTES} byte limit' in refused['error']
+    assert 'content' not in refused and 'roadmap' not in refused
+
+
 def test_roadmap_second_read_enforces_dedicated_limit(tmp_path, monkeypatch):
     monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
     doc = tmp_path / 'ROADMAP.md'
