@@ -144,7 +144,7 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 - **Where:** `codex/ws35-c10-baseline-20261111` into `next` (C10 instructions); `codex/ws35-contract-review-20261111` (#334, contract review). Code items branch from `next`, except F1 from `main`.
 - **Plan:** `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §4 (WS-35) and §5; add only dated progress for this lane
 - **Scope:** The files named for those items in the plan's §4 WS-35 table: `docs/acceptance/**` (C10); every MortimerHost source and test file that reads `layoutVersion` (C1a); `.github/workflows/validate.yml` (B1, B5, after A1); `macos/MortimerHost/Sources/MortimerHost/Display/**`, `App/AppMessageRouter.swift`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift` (C4); the C5 result and carousel files; `ios/MortimerPhoneCore/**` and the shared orb package (C9). Hand-off order for shared files is the plan's §4 "Hand-off points"; overlaps with other rows are CX-29.
-- **Next step:** kimi: review C10 instructions; larry: capture the verified freeze baseline in `docs/acceptance/ws35-c10-freeze-performance-baseline.md` before C1a merges; codex: develop C1a separately. Claude addresses #334’s contract findings before C4; F1 requires named acceptance-fix approval before merge.
+- **Next step:** kimi: review C10 instructions; larry: capture the verified freeze baseline in `docs/acceptance/ws35-c10-freeze-performance-baseline.md` before C1a merges; codex: develop C1a separately. claude: address the three findings in `docs/roadmap-log/2026-11-11-ws35-c0-contract-review.md` for #332 before C4; kimi: complete independent contract review. F1 requires named acceptance-fix approval before merge.
 - **Updated:** 11-11
 
 </details>
