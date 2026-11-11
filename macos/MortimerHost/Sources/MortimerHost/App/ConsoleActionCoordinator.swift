@@ -749,8 +749,8 @@ final class ConsoleActionCoordinator {
             return drawer.scrollTabs(direction) ? .applied : .invalid
         case .appearanceSet:
             guard let layout = intArg(request, "layout") ?? request.target.flatMap(Int.init),
-                  (0...2).contains(layout) else { return .invalid }
-            UserDefaults.standard.set(layout, forKey: "mortimer.interface.layoutVersion")
+                  layout == InterfaceLayoutVersion.current else { return .invalid }
+            InterfaceLayoutVersion.migrate()
             return .applied
         case .consoleCaption:
             guard let expanded = boolArg(request, "expanded") else { return .invalid }

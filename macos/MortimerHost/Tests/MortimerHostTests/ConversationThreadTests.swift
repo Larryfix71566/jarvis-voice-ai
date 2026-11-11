@@ -37,22 +37,14 @@ final class ConversationThreadTests: XCTestCase {
         XCTAssertTrue(ConversationThread.isEnabled(defaults))
     }
 
-    func testSpokenAnswersBecomeResultsOnlyInLayoutTwoWithTheThreadOff() {
-        XCTAssertFalse(ConversationThread.routesSpokenAnswersToResults(layoutVersion: 2, threadEnabled: true))
-        XCTAssertTrue(ConversationThread.routesSpokenAnswersToResults(layoutVersion: 2, threadEnabled: false))
-        for layout in [0, 1, 7] {
-            XCTAssertFalse(ConversationThread.routesSpokenAnswersToResults(layoutVersion: layout, threadEnabled: false))
-            XCTAssertFalse(ConversationThread.routesSpokenAnswersToResults(layoutVersion: layout, threadEnabled: true))
-        }
+    func testSpokenAnswersBecomeResultsOnlyWithTheThreadOff() {
+        XCTAssertFalse(ConversationThread.routesSpokenAnswersToResults(threadEnabled: true))
+        XCTAssertTrue(ConversationThread.routesSpokenAnswersToResults(threadEnabled: false))
     }
 
-    func testThreadShowsOnlyInLayoutTwoWithTheSwitchOn() {
-        XCTAssertTrue(ConversationThread.showsThread(layoutVersion: 2, threadEnabled: true))
-        XCTAssertFalse(ConversationThread.showsThread(layoutVersion: 2, threadEnabled: false))
-        XCTAssertFalse(ConversationThread.showsThread(layoutVersion: 1, threadEnabled: true))
-        XCTAssertFalse(ConversationThread.showsThread(layoutVersion: 0, threadEnabled: true))
-        XCTAssertFalse(ConversationThread.showsThread(layoutVersion: 9, threadEnabled: true),
-                       "An unknown layout resolves to layout 1, which keeps its own stage.")
+    func testThreadShowsOnlyWithTheSwitchOn() {
+        XCTAssertTrue(ConversationThread.showsThread(threadEnabled: true))
+        XCTAssertFalse(ConversationThread.showsThread(threadEnabled: false))
     }
 
     func testRowsKeepBothSpeakersFullTextInOrder() throws {

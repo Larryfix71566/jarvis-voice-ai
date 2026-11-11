@@ -666,8 +666,18 @@ final class ConsoleActionCoordinatorTests: XCTestCase {
         XCTAssertFalse(notices.captionExpanded)
         XCTAssertEqual(routed.execute(request(.consoleStatus, args: ["open": .bool(false)])), .applied)
         XCTAssertFalse(notices.statusOpen)
+        let layoutKey = InterfaceLayoutVersion.preferenceKey
+        let previousLayout = UserDefaults.standard.object(forKey: layoutKey)
+        defer {
+            if let previousLayout { UserDefaults.standard.set(previousLayout, forKey: layoutKey) }
+            else { UserDefaults.standard.removeObject(forKey: layoutKey) }
+        }
         XCTAssertEqual(routed.execute(request(.appearanceSet, target: "2")), .applied)
-        XCTAssertEqual(UserDefaults.standard.integer(forKey: "mortimer.interface.layoutVersion"), 2)
+        for retired in [0, 1, -1, 99] {
+            XCTAssertEqual(routed.execute(request(.appearanceSet, target: String(retired))), .invalid)
+            XCTAssertEqual(routed.execute(request(.appearanceSet, args: ["layout": .number(Double(retired))])), .invalid)
+            XCTAssertEqual(UserDefaults.standard.integer(forKey: layoutKey), 2)
+        }
         // The width slider went with the wave it shaped (2026-09-24), so the
         // dB windows are what this action sets. Whatever was stored before is
         // put back rather than left at the test's value.

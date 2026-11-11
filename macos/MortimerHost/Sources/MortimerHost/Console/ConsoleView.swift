@@ -2,29 +2,20 @@ import SwiftUI
 import AppKit
 import JarvisKit
 
-/// APP plan §3 P1 + parity sweep 2026-08-30 — the console window,
-/// matched to the web's App.tsx layout: full-bleed VoiceWave · topbar ·
-/// error banner · stage (with in-page display panels while the display
-/// window is closed) · docked, drag-resizable drawer · bottombar.
-/// Keyboard: T toggles the Log tab (three-case), Escape closes the
-/// drawer (App.tsx:512-528), SPACE PTT lives in MicControlsView.
+/// The Command Console window: top bar, adaptive voice/workspace stage,
+/// docked resizable drawer, and microphone controls.
+/// Keyboard: T toggles the Log tab, Escape closes the drawer, and Space
+/// push-to-talk lives in MicControlsView.
 struct ConsoleView: View {
     /// App-scoped coordinator shared by the visual and voice console paths.
-    /// Optional keeps previews and the legacy layout usable before app
+    /// Optional keeps previews usable before app
     /// startup has completed its one-shot router wiring.
     let consoleCoordinator: ConsoleActionCoordinator?
 
     init(consoleCoordinator: ConsoleActionCoordinator? = nil) {
         self.consoleCoordinator = consoleCoordinator
     }
-    // C9.5 / G30 — see MortimerHostApp for the default and one-time migration.
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
-    private var activeLayoutVersion: Int {
-        InterfaceLayoutVersion.resolve(layoutVersion)
-    }
     @EnvironmentObject private var client: JarvisClient
-    @Environment(AgentRunStore.self) private var agentRuns
-    @Environment(DisplayResultStore.self) private var displayResults
     @Environment(DisplayWindowStore.self) private var displayWindow
     @Environment(DrawerState.self) private var drawer
     @Environment(WorkspaceStore.self) private var workspace
@@ -33,10 +24,6 @@ struct ConsoleView: View {
         VoiceState.derive(state: client.state, botIsSpeaking: client.botIsSpeaking)
     }
 
-    /// The stage's horizontal center in window coordinates — the wave's
-    /// peak follows THIS, not the window center, so an open drawer
-    /// slides the wave over (VoiceWave.tsx stageCxRef).
-    @State private var stageCenterX: CGFloat?
     /// Live width during a resize drag (committed to drawer.width on end).
     @State private var dragWidth: Double?
     @State private var dragStartWidth: Double?
@@ -47,19 +34,12 @@ struct ConsoleView: View {
 
     private var visibleDrawerWidth: Double {
         let requested = dragWidth ?? drawer.width
-        return activeLayoutVersion >= 1 ? AdaptiveLayoutMetrics.drawerWidth(requested, windowWidth: windowWidth) : requested
+        return AdaptiveLayoutMetrics.drawerWidth(requested, windowWidth: windowWidth)
     }
 
     var body: some View {
         ZStack {
             AppTheme.bg.ignoresSafeArea()
-            if activeLayoutVersion == 0 {
-            VoiceWaveView(voiceState: voiceState,
-                          stageCenterX: stageCenterX,
-                          wakePulse: client.wakePulse)
-                .ignoresSafeArea()
-            }
-
             VStack(spacing: 0) {
                 TopBarView()
                 if case .failed(let why) = client.state {
@@ -67,32 +47,14 @@ struct ConsoleView: View {
                 }
                 HStack(spacing: 0) {
                     ZStack {
-                        if activeLayoutVersion >= 2 {
-                            CommandConsoleView(voiceState: voiceState,
-                                              wideWindow: windowWidth >= AppTuning.wideLayoutMinWidth,
-                                              coordinator: consoleCoordinator)
-                        } else if activeLayoutVersion == 1 {
-                            AdaptiveStageView(voiceState: voiceState, wideWindow: windowWidth >= AppTuning.wideLayoutMinWidth)
-                        } else {
-                        OrbFieldView(voiceState: voiceState)
-                        // The web's in-page DisplayPanel stack: window-
-                        // surface results float here while the display
-                        // window is closed (DisplayPanel.tsx:365 — popup
-                        // open means external only).
-                        if !displayWindow.isWindowOpen {
-                            ForEach(displayWindow.panels) { panel in
-                                SingleDisplayPanel(panel: panel)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity,
-                                           alignment: .topTrailing)
-                            }
-                        }
-                        }
+                        CommandConsoleView(voiceState: voiceState,
+                                           wideWindow: windowWidth >= AppTuning.wideLayoutMinWidth,
+                                           coordinator: consoleCoordinator)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .onGeometryChange(for: CGRect.self) { proxy in
                         proxy.frame(in: .global)
                     } action: { frame in
-                        stageCenterX = frame.midX
                         // While the display window is closed the stage IS
                         // the panels' viewport — what "fit to window" on a
                         // panel's title bar fills (DisplayWindowStore.fit).
@@ -194,9 +156,7 @@ struct ConsoleView: View {
                         // constrained without changing the saved preference.
                         if dragStartWidth == nil { dragStartWidth = visibleDrawerWidth }
                         let requested = (dragStartWidth ?? visibleDrawerWidth) - value.translation.width
-                        dragWidth = activeLayoutVersion >= 1
-                            ? AdaptiveLayoutMetrics.drawerWidth(requested, windowWidth: windowWidth)
-                            : DrawerState.clampWidth(requested, windowWidth: windowWidth)
+                        dragWidth = AdaptiveLayoutMetrics.drawerWidth(requested, windowWidth: windowWidth)
                         NSCursor.resizeLeftRight.set()
                     }
                     .onEnded { _ in

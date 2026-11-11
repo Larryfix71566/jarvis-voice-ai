@@ -120,7 +120,7 @@ final class SupportingDisplayAcceptanceTests: XCTestCase {
         XCTAssertEqual(display.panels.count, 4, "stage selection preserves result history")
     }
 
-    func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+    func testRetiredLayoutPreferencesPreserveSupportingGridAndReadingState() throws {
         _ = NSApplication.shared
         NSApplication.shared.accessibilitySetValue(true,
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
@@ -149,7 +149,7 @@ final class SupportingDisplayAcceptanceTests: XCTestCase {
                 else { UserDefaults.standard.removeObject(forKey: key) }
             }
         }
-        for layout in [0, 1, 2] {
+        for layout in [0, 1, 2, -1, 99] {
             defaults.set(layout, forKey: "mortimer.interface.layoutVersion")
             XCTAssertTrue(workspace.sendToDisplay(.result(result.id)))
             let view = NSHostingView(rootView: DisplayWindowView().defaultAppStorage(defaults)
@@ -163,29 +163,8 @@ final class SupportingDisplayAcceptanceTests: XCTestCase {
             window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.3))
             let controls = labels(in: view)
-            if layout == 1 {
-                let button = try XCTUnwrap(controls["Original display panels"])
-                let frame = try XCTUnwrap(button.value(forKey: "accessibilityFrame") as? NSValue).rectValue
-                let viewport = window.convertToScreen(view.convert(view.bounds, to: nil))
-                XCTAssertTrue(viewport.insetBy(dx: -1, dy: -1).contains(frame))
-                try snapshot(view, name: "supporting-adaptive")
-                let press = NSSelectorFromString("accessibilityPerformPress")
-                XCTAssertTrue(button.responds(to: press))
-                guard button.responds(to: press) else { return }
-                typealias Press = @convention(c) (AnyObject, Selector) -> Bool
-                let action = unsafeBitCast(button.method(for: press), to: Press.self)
-                XCTAssertTrue(action(button, press))
-                RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-                XCTAssertNil(workspace.supportingContent)
-                XCTAssertNil(labels(in: view)["Original display panels"])
-                try snapshot(view, name: "supporting-original-panels")
-            } else if layout == 0 {
-                XCTAssertNil(controls["Original display panels"], "legacy layout retains its panel stack")
-                try snapshot(view, name: "supporting-legacy")
-            } else {
-                XCTAssertNil(controls["Original display panels"])
-                try snapshot(view, name: "supporting-command-console")
-            }
+            XCTAssertNil(controls["Original display panels"], "Retired preferences cannot restore layout 1")
+            try snapshot(view, name: "supporting-command-console-stored-\(layout)")
             XCTAssertEqual(display.panels.map(\.id), panelIDs, "switching presentation must not create or remove results")
             XCTAssertEqual(workspace.activeID, result.id)
             XCTAssertTrue(workspace.pinnedIDs.contains(result.id))

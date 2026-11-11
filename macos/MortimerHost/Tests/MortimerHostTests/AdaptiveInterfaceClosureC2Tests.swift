@@ -171,7 +171,7 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
         {"type":"agent","name":"developer","display_name":"Developer","state":"working",
          "run_id":"r-c2","task":"synthetic","model":"fixture","model_fallback":false}
         """.utf8))))
-        let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, compactPresentation: true, hidesLettering: true)
+        let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, hidesLettering: true)
             .environmentObject(client).environment(runs).environment(DrawerState())
             .environment(DisplayResultStore()).environment(ConversationStore()).environment(ConsoleNoticeState())
             .environment(\.mortimerReduceMotion, true)
@@ -197,7 +197,7 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
         {"type":"agent","name":"developer","display_name":"Developer","state":"working",
          "run_id":"r-reduce-motion","task":"synthetic","model":"fixture","model_fallback":false}
         """.utf8))))
-        let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, compactPresentation: true, hidesLettering: true)
+        let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, hidesLettering: true)
             .environmentObject(client).environment(runs).environment(DrawerState())
             .environment(DisplayResultStore()).environment(ConversationStore()).environment(ConsoleNoticeState())
             .environment(\.mortimerReduceMotion, true)
@@ -222,7 +222,7 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
         {"type":"agent","name":"developer","display_name":"Developer","state":"working",
          "run_id":"r-clock","task":"synthetic","model":"fixture","model_fallback":false}
         """.utf8))))
-        let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, compactPresentation: true, hidesLettering: true)
+        let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, hidesLettering: true)
             .environmentObject(client).environment(runs).environment(DrawerState())
             .environment(DisplayResultStore()).environment(ConversationStore()).environment(ConsoleNoticeState())
             .environment(\.mortimerReduceMotion, true)

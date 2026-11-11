@@ -168,10 +168,10 @@ final class ConsoleActionBarTests: XCTestCase {
         }
     }
 
-    func testOtherLayoutsKeepTheirOwnRows() throws {
+    func testRetiredLayoutPreferenceCannotRestoreDuplicateRows() throws {
         let found = try labels(layoutVersion: 1, width: 1600, withBar: false)
         for label in ["Pin", "Close Weather — Folly Beach", "Copy selected result"] {
-            XCTAssertTrue(found.contains(label), "layout 1 lost \(label): \(found)")
+            XCTAssertFalse(found.contains(label), "retired layout restored \(label): \(found)")
         }
     }
 }
