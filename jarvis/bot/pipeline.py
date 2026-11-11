@@ -1113,13 +1113,32 @@ def _log_console_validation_failure(kind: str, _error: ValueError) -> None:
     _logger.warning(event)
 
 
-def _compose_display(composer: Any, payload: dict) -> list[dict]:
-    """Payloads to send for ``payload``: just it when no composer exists
-    (byte-identical to the legacy path), else the composer's output."""
+def _compose_display_items(composer: Any, payload: dict) -> list[tuple[dict, str | None]]:
+    """``(payload, origin)`` pairs to send for ``payload``: just it when no
+    composer exists (byte-identical to the legacy path), else the composer's
+    output.  ``origin`` is ``None`` (the emit site's context stamps the
+    request) except for the closing revision of an answer pushed out by the
+    composer's cap, which carries its owning request id (contract 1.5 rule 10).
+    """
     if composer is None:
-        return [payload]
+        return [(payload, None)]
     request = _foreground_request.get()
-    return composer.compose(payload, request_id=request.request_id if request else None)
+    return composer.compose_items(payload, request_id=request.request_id if request else None)
+
+
+def _compose_display(composer: Any, payload: dict) -> list[dict]:
+    """Payloads only (no origins); the emit sites use ``_compose_display_items``."""
+    return [item for item, _origin in _compose_display_items(composer, payload)]
+
+
+async def _send_display(transport: Any, item: dict, origin: str | None) -> None:
+    """Send one composed display payload; only the composer's emit helpers
+    pass an explicit origin (every other caller keeps the context variable)."""
+    message = {"type": "display", "display": item}
+    if origin is None:
+        await send_app_message(transport, message)
+    else:
+        await send_app_message(transport, message, origin_request_id=origin)
 
 
 def make_agent_event_handler(transport: Any, composer: Any = None, approvals: Any = None) -> Any:
@@ -1150,17 +1169,21 @@ def make_agent_event_handler(transport: Any, composer: Any = None, approvals: An
         request = _foreground_request.get()
         return request.request_id if request else None
 
-    def _compose(payload: dict) -> list[dict]:
+    def _compose(payload: dict) -> list[tuple[dict, str | None]]:
         # Inlined (not _compose_display) so this closure stays self-contained.
         if composer is None:
-            return [payload]
-        return composer.compose(payload, request_id=_request_id())
+            return [(payload, None)]
+        return composer.compose_items(payload, request_id=_request_id())
 
-    def _schedule(message: dict) -> None:
+    def _schedule(message: dict, origin: str | None = None) -> None:
         try:
-            asyncio.get_running_loop().create_task(send_app_message(transport, message))
+            if origin is None:
+                coro = send_app_message(transport, message)
+            else:
+                coro = send_app_message(transport, message, origin_request_id=origin)
+            asyncio.get_running_loop().create_task(coro)
         except RuntimeError:
-            pass  # no running loop (tests calling the handler directly)
+            coro.close()  # no running loop (tests calling the handler directly)
 
     def on_agent_event(event: dict) -> None:
         bot_event_log(event)
@@ -1254,9 +1277,9 @@ def make_agent_event_handler(transport: Any, composer: Any = None, approvals: An
                 event.get("agent"), payload.get("kind"),
             )
             outgoing = _compose(payload)
-            for extra in outgoing[:-1]:
-                _schedule({"type": "display", "display": extra})
-            message = {"type": "display", "display": outgoing[-1]}
+            for extra, extra_origin in outgoing[:-1]:
+                _schedule({"type": "display", "display": extra}, extra_origin)
+            message = {"type": "display", "display": outgoing[-1][0]}
         elif etype == "delegate_start":
             if composer is not None:
                 composer.delegation_started(_request_id(), str(event.get("run_id") or ""))
@@ -1282,8 +1305,8 @@ def make_agent_event_handler(transport: Any, composer: Any = None, approvals: An
             if composer is not None:
                 composer.delegation_finished(_request_id(), str(event.get("run_id") or ""))
             for flushed in weather_merger.finalize_all(str(event.get("run_id") or "")):
-                for item in _compose(flushed):
-                    _schedule({"type": "display", "display": item})
+                for item, item_origin in _compose(flushed):
+                    _schedule({"type": "display", "display": item}, item_origin)
             if composer is not None:
                 completion = composer.take_completion(_request_id())
                 if completion is not None:
@@ -1559,8 +1582,8 @@ def build_pipeline(
         _mark_weather_context()
         _logger.info("display_payload tool=local_weather surface=%s agent=supervisor kind=%s",
                      payload.get("surface"), payload.get("kind"))
-        for item in _compose_display(display_composer, payload):
-            await send_app_message(transport, {"type": "display", "display": item})
+        for item, origin in _compose_display_items(display_composer, payload):
+            await _send_display(transport, item, origin)
 
     local_weather_on = True
     # W12 — both read their kill switch once, here, and pass it to the menu,
@@ -1796,9 +1819,8 @@ def build_pipeline(
         message shape the client already handles."""
         _logger.info("display_payload tool=%s surface=%s agent=%s kind=direct",
                      payload.get("tool"), payload.get("surface"), "supervisor")
-        for item in _compose_display(display_composer, payload):
-            asyncio.create_task(
-                send_app_message(transport, {"type": "display", "display": item}))
+        for item, origin in _compose_display_items(display_composer, payload):
+            asyncio.create_task(_send_display(transport, item, origin))
 
     # Late-bound: the context aggregators are created further down, after
     # tools are registered. The holder is populated there; a tool can only
@@ -2315,13 +2337,21 @@ def _unwrap_client_message(message: Any) -> dict | None:
     return message
 
 
-def _prepare_app_message(message: dict) -> dict:
+def _prepare_app_message(message: dict, origin_request_id: str | None = None) -> dict:
     """The one envelope path for server->client app messages: tag a display
-    payload with the foreground request id, then wrap it for RTVI."""
+    payload with the foreground request id, then wrap it for RTVI.
+
+    ``origin_request_id`` is used instead of the context variable when given;
+    only the composer's emit helpers pass it (the closing revision of an
+    answer pushed out by the cap belongs to another request, 1.5 rule 10).
+    """
     if message.get("type") == "display" and isinstance(message.get("display"), dict):
         payload = dict(message["display"])
         payload.pop("origin_request_id", None)
-        if (request := _foreground_request.get()) is not None:
+        if origin_request_id is not None:
+            payload["origin_request_id"] = origin_request_id
+            _logger.info("display_dispatch request_id=%s explicit_origin=1", origin_request_id)
+        elif (request := _foreground_request.get()) is not None:
             payload["origin_request_id"] = request.request_id
             _logger.info("display_dispatch request_id=%s request_sequence=%d",
                          request.request_id, request.sequence)
@@ -2329,7 +2359,7 @@ def _prepare_app_message(message: dict) -> dict:
     return _wrap_rtvi(message)
 
 
-async def send_app_message(transport: Any, message: dict) -> None:
+async def send_app_message(transport: Any, message: dict, origin_request_id: str | None = None) -> None:
     """Server->client app message, on whichever transport is running.
 
     Both cases go through ``transport.output()``: the data channel on
@@ -2342,7 +2372,8 @@ async def send_app_message(transport: Any, message: dict) -> None:
     logged (the brief), use ``send_app_message_checked``.
     """
     await transport.output().send_message(
-        OutputTransportMessageUrgentFrame(message=_prepare_app_message(message)))
+        OutputTransportMessageUrgentFrame(
+            message=_prepare_app_message(message, origin_request_id)))
 
 
 async def send_app_message_checked(transport: Any, message: dict) -> None:
@@ -2801,8 +2832,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await pusher.push(TTSSpeakFrame(text=text))
 
             async def _push_plan_display(payload: dict) -> None:
-                for item in _compose_display(runtime.display_composer, payload):
-                    await send_app_message(transport, {"type": "display", "display": item})
+                for item, origin in _compose_display_items(runtime.display_composer, payload):
+                    await _send_display(transport, item, origin)
 
             plan_watcher = PlanWatcher(
                 speak=_speak_plan,
@@ -2825,8 +2856,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await pusher.push(TTSSpeakFrame(text=text))
 
             async def _push_research_display(payload: dict) -> None:
-                for item in _compose_display(runtime.display_composer, payload):
-                    await send_app_message(transport, {"type": "display", "display": item})
+                for item, origin in _compose_display_items(runtime.display_composer, payload):
+                    await _send_display(transport, item, origin)
 
             research_watcher = ResearchWatcher(
                 speak=_speak_research,
@@ -3160,8 +3191,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                         "text": str(payload.get("answer", ""))[:12000],
                         "tool": "shared_content",
                     }
-                    for item in _compose_display(runtime.display_composer, shared_display):
-                        await send_app_message(transport, {"type": "display", "display": item})
+                    for item, origin in _compose_display_items(runtime.display_composer, shared_display):
+                        await _send_display(transport, item, origin)
             else:
                 result = shared_transfer.handle(msg)
                 if msg.get("type") == "input/cancel":

@@ -60,7 +60,7 @@ APPROVAL_STATES = frozenset({"approved", "declined", "resolved", "superseded", "
 APPROVAL_DECISIONS = frozenset({"approve", "decline"})
 APPROVAL_RESULT_CODES = frozenset({
     "accepted", "duplicate", "unknown_approval", "expired", "already_settled",
-    "protected_turn", "stale_session", "disabled",
+    "protected_turn", "stale_session", "not_ready", "disabled",
 })
 
 MAX_SUMMARY = 600
@@ -130,15 +130,31 @@ def _exact_keys(message: Any, allowed: frozenset[str], name: str) -> dict[str, A
     return message
 
 
-def _header(message: dict, type_name: str, session_id: str, generation: str) -> tuple[str, str]:
+def _require_current(sid: str, gen: str, session_id: str, generation: str) -> None:
+    """Raise ``stale_session`` unless the parsed ids are the session's (contract 2.2, 3.6).
+
+    Only called after every identity field of the message has parsed, so the
+    caller has ids to answer with.
+    """
+    if sid != _uuid(session_id, "session_id"):
+        raise TypedRequestError("stale session", "stale_session")
+    if gen != _uuid(generation, "generation"):
+        raise TypedRequestError("stale generation", "stale_session")
+
+
+def _header(message: dict, type_name: str, session_id: str, generation: str,
+            *, defer_session_check: bool = False) -> tuple[str, str]:
+    """Check type and version, parse session and generation, then compare them.
+
+    With ``defer_session_check`` the comparison is left to the caller (via
+    ``_require_current``) so it can parse its other ids first.
+    """
     if message.get("type") != type_name or type(message.get("version")) is not int or message["version"] != VERSION:
         raise TypedRequestError(f"unsupported {type_name}")
     sid = _uuid(message.get("session_id"), "session_id")
     gen = _uuid(message.get("generation"), "generation")
-    if sid != _uuid(session_id, "session_id"):
-        raise TypedRequestError("stale session")
-    if gen != _uuid(generation, "generation"):
-        raise TypedRequestError("stale generation")
+    if not defer_session_check:
+        _require_current(sid, gen, session_id, generation)
     return sid, gen
 
 
@@ -186,13 +202,15 @@ def _pair_ok(status: Any, code: Any, codes: frozenset[str], name: str) -> None:
 def validate_turn_typed(message: Any, *, session_id: str, generation: str) -> dict[str, Any]:
     """Validate a client ``turn/typed`` message (contract 2.2, seven rules).
 
-    Returns the normalised message (canonical UUIDs, trimmed text).  Rules 1
-    to 4 raise with ``code=None`` (no reply); rules 5 to 7 raise with
-    ``code="invalid_text"``.
+    Returns the normalised message (canonical UUIDs, trimmed text).  Rules 1,
+    2, 3a and 4 raise with ``code=None`` (no reply).  A session or generation
+    mismatch (3b), checked only after the three ids parse, raises
+    ``code="stale_session"``.  Rules 5 to 7 raise with ``code="invalid_text"``.
     """
     msg = _exact_keys(message, _TURN_TYPED_KEYS, "turn/typed")  # rule 1
-    sid, gen = _header(msg, TURN_TYPED, session_id, generation)  # rules 2, 3
+    sid, gen = _header(msg, TURN_TYPED, session_id, generation, defer_session_check=True)  # rules 2, 3a
     request_id = _uuid(msg.get("request_id"), "request_id")  # rule 4
+    _require_current(sid, gen, session_id, generation)  # rule 3b: stale only once the ids parse
     text = normalize_text(msg.get("text"))  # rule 5
     if msg.get("source") not in TURN_SOURCES:  # rule 6
         raise TypedRequestError("invalid source", "invalid_text")
@@ -286,12 +304,16 @@ def validate_approval_decide(message: Any, *, session_id: str, generation: str) 
     """Validate a client ``approval/decide`` (contract 3.6).
 
     Exactly seven keys; there is no free-text field.  Every failure raises
-    with ``code=None``: the message carries no text the bot may answer to.
+    with ``code=None`` (no reply: the message has no trustworthy identity)
+    except a session or generation mismatch, which raises
+    ``code="stale_session"`` once all four ids have parsed (3.6), so the
+    caller has a ``request_id`` and ``approval_id`` to answer with.
     """
     msg = _exact_keys(message, _DECIDE_KEYS, "approval/decide")
-    sid, gen = _header(msg, APPROVAL_DECIDE, session_id, generation)
+    sid, gen = _header(msg, APPROVAL_DECIDE, session_id, generation, defer_session_check=True)
     request_id = _uuid(msg.get("request_id"), "request_id")
     approval_id = _uuid(msg.get("approval_id"), "approval_id")
+    _require_current(sid, gen, session_id, generation)
     if msg.get("decision") not in APPROVAL_DECISIONS:
         raise TypedRequestError("invalid decision")
     try:

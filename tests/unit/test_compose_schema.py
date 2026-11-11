@@ -247,7 +247,8 @@ def test_validate_rejects_bad_urls_and_sanitizer_drops_them():
 # ---- envelope (1.2)
 
 def payload(**kw):
-    p = {"kind": "markdown", "title": "t", "body": "b", "answer_id": ANSWER_ID, "layout": sample()}
+    p = {"kind": "markdown", "title": "t", "body": "b", "answer_id": ANSWER_ID, "answer_revision": 2,
+         "layout": sample()}
     p.update(kw)
     return p
 
@@ -260,9 +261,31 @@ def test_envelope():
     bare = payload()
     del bare["answer_id"]
     assert validate_envelope(bare)
-    orphan = payload()
-    del orphan["layout"]
-    assert validate_envelope(orphan)
+    # answer_id and answer_revision travel together (1.2)
+    no_rev = payload()
+    del no_rev["answer_revision"]
+    assert validate_envelope(no_rev)
+    only_rev = payload()
+    del only_rev["answer_id"]
+    assert validate_envelope(only_rev)
+    # id + revision with no layout is a legacy-fields revision that keeps identity (1.5 rule 11)
+    no_layout = payload()
+    del no_layout["layout"]
+    assert validate_envelope(no_layout) == []
+    # a layout needs both
+    layout_only = payload()
+    del layout_only["answer_id"], layout_only["answer_revision"]
+    assert validate_envelope(layout_only)
+    # layout.revision must equal answer_revision
+    assert validate_envelope(payload(answer_revision=3))
+    assert validate_envelope(payload(answer_revision=1))
+    # revision is an int >= 1 and not a bool
+    for bad_rev in (True, 0, -1, "2", 2.0, None):
+        assert validate_envelope(payload(answer_revision=bad_rev)), bad_rev
+    assert validate_envelope({"kind": "text", "title": "t", "body": "b", "answer_id": ANSWER_ID,
+                              "answer_revision": 1}) == []
+    assert validate_envelope({"kind": "text", "title": "t", "body": "b", "answer_id": ANSWER_ID,
+                              "answer_revision": True})
     legacy_missing = payload()
     del legacy_missing["body"]
     assert validate_envelope(legacy_missing)

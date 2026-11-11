@@ -42,6 +42,7 @@ def fx(name: str) -> dict:
     ("approval_settled.json", validate_approval_settled),
     ("approval_decide.json", validate_approval_decide),
     ("approval_result.json", validate_approval_result),
+    ("approval_result_not_ready.json", validate_approval_result),
 ])
 def test_contract_examples_validate_as_written(name, fn):
     message = fx(name)
@@ -94,12 +95,55 @@ def test_rule2_type_and_version(override):
 
 
 def test_rule3_session_and_generation_must_match():
+    # parseable but not current: stale_session (2.2), the caller has ids to reply with
     for override in ({"session_id": "00000000-0000-4000-8000-0000000000ff"},
-                     {"generation": "00000000-0000-4000-8000-0000000000ff"},
-                     {"session_id": "not-a-uuid"}, {"generation": 5}):
+                     {"generation": "00000000-0000-4000-8000-0000000000ff"}):
+        with pytest.raises(TypedRequestError) as e:
+            validate_turn_typed(bad(**override), **KW)
+        assert e.value.code == "stale_session"
+    # unparseable identity: no reply
+    for override in ({"session_id": "not-a-uuid"}, {"generation": 5}, {"session_id": None}):
         with pytest.raises(TypedRequestError) as e:
             validate_turn_typed(bad(**override), **KW)
         assert e.value.code is None
+
+
+def test_stale_session_needs_a_parseable_request_id():
+    for rid in ("nope", None, 7, ""):
+        with pytest.raises(TypedRequestError) as e:
+            validate_turn_typed(bad(session_id="00000000-0000-4000-8000-0000000000ff", request_id=rid), **KW)
+        assert e.value.code is None
+        with pytest.raises(TypedRequestError) as e:
+            validate_turn_typed(bad(generation="00000000-0000-4000-8000-0000000000ff", request_id=rid), **KW)
+        assert e.value.code is None
+
+
+def test_stale_session_checks_nothing_else_about_the_message():
+    m = bad(session_id="00000000-0000-4000-8000-0000000000ff", text="x" * 5000, source="nope")
+    with pytest.raises(TypedRequestError) as e:
+        validate_turn_typed(m, **KW)
+    assert e.value.code == "stale_session"
+
+
+def test_stale_session_reply_validates_against_the_bots_ids():
+    # T4: the reply to a stale message carries the bot's current ids and the client's request id
+    stale = bad(session_id="00000000-0000-4000-8000-0000000000ff")
+    with pytest.raises(TypedRequestError) as e:
+        validate_turn_typed(stale, **KW)
+    assert e.value.code == "stale_session"
+    reply = build_turn_result(session_id=SID, generation=GEN, request_id=stale["request_id"],
+                              code="stale_session")
+    assert reply["code"] == "stale_session" and reply["status"] == "rejected"
+    assert reply["session_id"] == SID and reply["generation"] == GEN
+    assert validate_turn_result(reply, **KW) == reply
+    m = fx("approval_decide.json")
+    m["session_id"] = "00000000-0000-4000-8000-0000000000ff"
+    with pytest.raises(TypedRequestError) as e:
+        validate_approval_decide(m, **KW)
+    assert e.value.code == "stale_session"
+    areply = build_approval_result(session_id=SID, generation=GEN, request_id=m["request_id"],
+                                   approval_id=m["approval_id"], code="stale_session")
+    assert validate_approval_result(areply, **KW) == areply and areply["session_id"] == SID
 
 
 def test_uppercase_uuids_match_as_uuids():
@@ -237,7 +281,7 @@ def test_settled_states():
 def test_decide_rules():
     for kw in ({"decision": "yes"}, {"decision": "Approve"}, {"decision": None}, {"request_id": "x"},
                {"approval_id": "x"}, {"version": 2}, {"type": "approval/x"},
-               {"session_id": GEN}, {"generation": SID}):
+               {"session_id": "x"}, {"generation": 5}):
         m = fx("approval_decide.json")
         m.update(kw)
         with pytest.raises(TypedRequestError) as e:
@@ -248,6 +292,26 @@ def test_decide_rules():
     m["approval_id"] = m["approval_id"].upper()
     out = validate_approval_decide(m, **KW)
     assert out["decision"] == "decline" and out["approval_id"] == m["approval_id"].lower()
+
+
+def test_decide_stale_session_and_generation():
+    for kw in ({"session_id": GEN}, {"generation": SID}):
+        m = fx("approval_decide.json")
+        m.update(kw)
+        with pytest.raises(TypedRequestError) as e:
+            validate_approval_decide(m, **KW)
+        assert e.value.code == "stale_session"
+
+
+def test_decide_stale_with_an_unparseable_id_has_no_code():
+    for bad_id in ({"request_id": "x"}, {"approval_id": "x"}, {"request_id": None}, {"approval_id": 3}):
+        for stale in ({"session_id": GEN}, {"generation": SID}):
+            m = fx("approval_decide.json")
+            m.update(bad_id)
+            m.update(stale)
+            with pytest.raises(TypedRequestError) as e:
+                validate_approval_decide(m, **KW)
+            assert e.value.code is None
 
 
 def test_decide_has_no_free_text_field():
@@ -265,6 +329,10 @@ def test_approval_result_codes():
         out = build_approval_result(request_id=base["request_id"], approval_id=base["approval_id"],
                                     code=code, **KW)
         assert out["status"] == ("accepted" if code == "accepted" else "rejected")
+    assert "not_ready" in tr.APPROVAL_RESULT_CODES
+    nr = build_approval_result(request_id=base["request_id"], approval_id=base["approval_id"],
+                               code="not_ready", **KW)
+    assert nr["status"] == "rejected" and validate_approval_result(nr, **KW) == nr
     for status, code in [("accepted", "expired"), ("rejected", "accepted"), ("rejected", "nope")]:
         m = dict(base, status=status, code=code)
         with pytest.raises(TypedRequestError):
