@@ -454,6 +454,16 @@ class ForegroundRequests:
             self.continuation_calls.pop(next(iter(self.continuation_calls)))
 
 
+def command_console_flag_enabled() -> bool:
+    """The one read of ``JARVIS_COMMAND_CONSOLE_ENABLED`` (C7-py, contract 2.5).
+
+    On unless the variable is explicitly ``false``, ``0`` or ``no``; a blank or
+    unset value is on.
+    """
+    return os.environ.get("JARVIS_COMMAND_CONSOLE_ENABLED", "").strip().lower() not in (
+        "false", "0", "no")
+
+
 def approvals_flag_enabled() -> bool:
     """``JARVIS_APPROVALS_ENABLED`` (default on): the approval list and the
     spoken bare-yes check. Off leaves the voice path exactly as it was."""
@@ -1628,7 +1638,7 @@ def build_pipeline(
         await send_app_message(transport, message)
 
     _, ui_control_handler = build_ui_control_tool(_send_ui_message)
-    command_console_enabled = os.environ.get("JARVIS_COMMAND_CONSOLE_ENABLED", "false").strip().lower() in ("1", "true", "yes")
+    command_console_enabled = command_console_flag_enabled()
     runtime.command_console_enabled = command_console_enabled
     weather_query_lock = asyncio.Lock()
 
@@ -2937,8 +2947,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             generation=runtime.console_generation,
         )
         shared_content_enabled = (
-            os.environ.get("JARVIS_COMMAND_CONSOLE_ENABLED", "false").strip().lower()
-            in ("1", "true", "yes") and
+            command_console_flag_enabled() and
             os.environ.get("JARVIS_SHARED_CONTENT_ENABLED", "false").strip().lower()
             in ("1", "true", "yes")
         )
@@ -3058,7 +3067,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
 
         async def handle_console(message: Any) -> None:
             """Route versioned console requests through the bounded backend contract."""
-            if os.environ.get("JARVIS_COMMAND_CONSOLE_ENABLED", "").strip().lower() in ("false", "0", "no"):
+            if not command_console_flag_enabled():
                 return
             msg = _unwrap_client_message(message)
             if msg is None:

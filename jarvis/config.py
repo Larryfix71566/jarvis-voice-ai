@@ -181,7 +181,7 @@ class Settings(BaseSettings):
 
     # Command Console / shared-content gates. Shared content is subordinate
     # to the console gate and can never enable itself independently.
-    jarvis_command_console_enabled: bool = False
+    jarvis_command_console_enabled: bool = True
     jarvis_shared_content_enabled: bool = False
 
     # Procedures-as-hints (MORTIMER_MEMORY_PROCEDURES_PLAN.md D20) — kill
@@ -367,11 +367,11 @@ def bridge_settings_to_env(settings=None) -> None:
         )
         os.environ.setdefault(
             "JARVIS_COMMAND_CONSOLE_ENABLED",
-            "true" if getattr(settings, "jarvis_command_console_enabled", False) else "false",
+            "true" if getattr(settings, "jarvis_command_console_enabled", True) else "false",
         )
         os.environ.setdefault(
             "JARVIS_SHARED_CONTENT_ENABLED",
-            "true" if (getattr(settings, "jarvis_command_console_enabled", False)
+            "true" if (getattr(settings, "jarvis_command_console_enabled", True)
                         and getattr(settings, "jarvis_shared_content_enabled", False)) else "false",
         )
         if getattr(settings, "tavily_api_key", None):
