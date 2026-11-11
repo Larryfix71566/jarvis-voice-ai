@@ -153,7 +153,7 @@ Decision 1 (freeze with `next`) is Larry's 01:58:16 answer. Larry answered decis
 
 ## 9. Not tested
 
-- That GitHub's hosted `macos-15-intel` runner with Xcode 26.3 builds and tests MortimerHost (B1's first run settles it).
+- That GitHub's hosted `macos-26-intel` runner with Xcode 26.3 builds and tests all three B1 packages (B1's first run settles it). The original `macos-15-intel` proposal cannot run JarvisKit or MortimerHost, whose manifests require macOS 26; an SDK alone does not satisfy the test executables' deployment target.
 - That Liquid Glass stays readable on carousel panels at an acceptable GPU cost (a half-day spike in C5, then Instruments on Larry's Mac).
 - That a typed request can reuse the bot's context-injection path (`jarvis/bot/late_result.py`, `pipeline.py` line 1581) as a real user turn with transcript and sensitive-turn handling intact (a C7-py unit test).
 - Every size and day count in §5.
@@ -169,3 +169,5 @@ Decision 1 (freeze with `next`) is Larry's 01:58:16 answer. Larry answered decis
 
 - 2026-11-11 (Codex, WS-35): independently reviewed C0/C0b #332 at `1f8aca7`; three contract clarifications requested (fallback revision identity, direct-result completion, legacy transcript-to-result route). Verdict: `docs/roadmap-log/2026-11-11-ws35-c0-contract-review.md`. Larry approved the starter-prompt claim exception and review publication. C10 steps next; no code or live acceptance performed.
 - 2026-11-11 (Codex, WS-35 C10): baseline instructions ready at `docs/acceptance/ws35-c10-freeze-performance-baseline.md`; commands/output paths checked against freeze sources. Measurements not run. Larry captures the verified freeze baseline before C1a merges; Kimi reviews the instructions. #334 carries the separate C0/C0b review.
+
+- 2026-11-11 (Codex, WS-35 B1): added full JarvisKit, MortimerHost and MortimerPhoneCore `swift test` jobs as an independent matrix in `validate.yml`, preserving A1 triggers and all existing jobs. Corrected the incompatible macOS 15 runner proposal to the officially listed `macos-26-intel`, retaining Xcode 26.3 via `DEVELOPER_DIR`, without installing tools or lowering deployment targets. Static validation and nine policy tests pass; local Swift suites were not rerun while other lane tests were active. Hosted execution, named reviews and acceptance remain pending. Evidence and runner sources: `docs/roadmap-log/2026-11-11-ws35-b1-swift-ci.md`.
