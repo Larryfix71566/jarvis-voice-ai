@@ -144,6 +144,23 @@ KEYHEALTH_RECOVERED_TEMPLATE = (
     "briefly."
 )
 
+# WS-34 C7-py (contract sections 3.8 and 3.10): the three fixed sentences
+# the typed-request / approval handlers (jarvis/bot/typed_request.py) build
+# a user turn or a spoken question from. The client sends an id and an enum
+# only; the only strings that reach the model through an approval are the
+# agent, tool and ref the BOT recorded, each pattern-checked before it was
+# stored. These are user-role turns (the user pressed the button), so they
+# carry no "[system]" prefix.
+APPROVE_TURN_TEMPLATE = (
+    "Confirmed. Go ahead with the pending {tool} from {agent}.{ref}"
+)
+DECLINE_TURN_TEMPLATE = (
+    "Declined. Do not run the pending {tool} from {agent}."
+)
+APPROVAL_WHICH_TEMPLATE = (
+    "{count} things are waiting for your approval: {items}. Which one do you mean?"
+)
+
 # AGENT_DISCIPLINE — the ONE rule block appended to every sub-agent
 # prompt (Larry 2026-08-18: "consolidate to less than 15% of the agent's
 # prompt").

@@ -43,7 +43,8 @@ from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import (OutputTransportMessageUrgentFrame, LLMContextFrame,
     LLMFullResponseStartFrame, LLMFullResponseEndFrame, InterruptionFrame,
     TranscriptionFrame, UserStartedSpeakingFrame, BotStoppedSpeakingFrame,
-    FunctionCallInProgressFrame, FunctionCallResultFrame, FunctionCallCancelFrame)
+    FunctionCallInProgressFrame, FunctionCallResultFrame, FunctionCallCancelFrame,
+    TTSSpeakFrame)
 from pipecat.observers.base_observer import BaseObserver
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.pipeline.pipeline import Pipeline
@@ -136,7 +137,7 @@ from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.research_watcher import ResearchWatcher
 from jarvis.bot.screen_tool import build_list_screens_tool, build_view_screen_tool
-from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+from jarvis.bot.sensitive_turn import SensitiveTurn, arm_from_text, current_sensitive_turn
 from jarvis.bot.shared_content import (
     SharedContentService,
     analyze_shared_content_via_boundary,
@@ -152,7 +153,18 @@ from jarvis.bot.speaker_gate import (
     TranscriptGate,
 )
 from jarvis.bot.tool_schemas import supervisor_tool_schemas
-from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
+from jarvis.bot.transcript_log import (
+    TranscriptLogger,
+    TranscriptObserver,
+    _log_transcript,
+    _persist,
+)
+from jarvis.bot.typed_request import (
+    ApprovalBook,
+    TypedRequestSession,
+    APPROVAL_DECIDE,
+    TURN_TYPED,
+)
 from jarvis.bot.ui_control import build_ui_control_tool
 from jarvis.bot.ui_control import ui_control_enabled as ui_control_flag_enabled
 from jarvis.bot.usage_watcher import UsageMetricsObserver
@@ -327,6 +339,21 @@ class ForegroundRequests:
                 self.current = None
             await self.announce(request, "cancelled")
 
+    async def accept_typed(self, text: str, timestamp: str, user_id: str) -> None:
+        """Leave exactly the state a finalized transcript leaves (C7-py).
+
+        A typed turn has no TranscriptionFrame, so without this ``before_push``
+        would mint no request for it and its display payloads would carry a
+        null origin. ``user_id`` is ``typed:<request_id>`` or
+        ``approval:<approval_id>``, which is how the app matches the
+        ``console/turn`` it receives to the message it sent.
+        """
+        await self.cancel(self.current)
+        self.parts = [text.strip()]
+        self.input_chars = len(self.parts[0])
+        self.input_overflow = False
+        self.input_identity = (timestamp, user_id)
+
     async def before_push(self, source, frame) -> None:
         if isinstance(frame, UserStartedSpeakingFrame):
             if source is self.user_aggregator:
@@ -425,6 +452,130 @@ class ForegroundRequests:
             self.calls.pop(next(iter(self.calls)))
         while len(self.continuation_calls) > 256:
             self.continuation_calls.pop(next(iter(self.continuation_calls)))
+
+
+def approvals_flag_enabled() -> bool:
+    """``JARVIS_APPROVALS_ENABLED`` (default on): the approval list and the
+    spoken bare-yes check. Off leaves the voice path exactly as it was."""
+    return os.environ.get("JARVIS_APPROVALS_ENABLED", "").strip().lower() not in (
+        "false", "0", "no")
+
+
+def typed_request_flag_enabled() -> bool:
+    """``JARVIS_TYPED_REQUEST_ENABLED`` (default on, contract 2.4 rule 10)."""
+    return os.environ.get("JARVIS_TYPED_REQUEST_ENABLED", "").strip().lower() not in (
+        "false", "0", "no")
+
+
+#: How long a typed turn waits for its own interruption to pass TranscriptLogger.
+TYPED_INTERRUPT_WAIT_S = 1.0
+
+
+class InterruptionPassed(BaseObserver):
+    """Resolves a waiter once a given InterruptionFrame has left TranscriptLogger.
+
+    TranscriptLogger clears the sensitive flag whenever an InterruptionFrame
+    passes it. A typed turn interrupts and arms at the same moment, so arming
+    before that frame arrives would let it clear the flag just set. The typed
+    start therefore queues its own InterruptionFrame, waits here for that exact
+    frame (by id) to pass, and only then clears and arms.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.source: Any = None
+        self._waiting: dict[int, asyncio.Future] = {}
+
+    def watch(self, frame_id: int) -> asyncio.Future:
+        future = asyncio.get_running_loop().create_future()
+        self._waiting[frame_id] = future
+        return future
+
+    def forget(self, frame_id: int) -> None:
+        self._waiting.pop(frame_id, None)
+
+    async def on_push_frame(self, data) -> None:
+        frame = data.frame
+        if (isinstance(frame, InterruptionFrame) and data.source is self.source
+                and data.direction == FrameDirection.DOWNSTREAM):
+            future = self._waiting.pop(frame.id, None)
+            if future is not None and not future.done():
+                future.set_result(True)
+
+
+class BareYesGate(FrameProcessor):
+    """Spoken half of the bare-yes rule (contract 3.10).
+
+    Sits directly before the user aggregator. A finalized, non-empty transcript
+    that is a bare yes while two or more approvals are open is dropped and a
+    fixed question is spoken instead (no model call); everything else passes
+    untouched. Any error passes the frame (fail open, as the speaker gate does).
+
+    Known limit: a spoken turn that arrives as two final transcripts ("yes",
+    then "the plan one") with two approvals open has its first transcript
+    dropped and the question spoken, and the second goes to the Supervisor on
+    its own. Nothing is approved wrongly in that case.
+    """
+
+    def __init__(self, book: ApprovalBook, *, is_sensitive, offer_pending, speak, **kwargs: Any):
+        super().__init__(**kwargs)
+        self._book, self._is_sensitive = book, is_sensitive
+        self._offer_pending, self._speak = offer_pending, speak
+
+    async def process_frame(self, frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+        if (direction == FrameDirection.DOWNSTREAM and isinstance(frame, TranscriptionFrame)
+                and getattr(frame, "finalized", True) and (frame.text or "").strip()):
+            question = None
+            try:
+                question = self._book.yes_verdict(
+                    frame.text, sensitive=bool(self._is_sensitive()),
+                    offer_pending=bool(self._offer_pending()), source="voice")
+            except Exception:  # noqa: BLE001 - never eat a user's words on a fault
+                _logger.warning("bare_yes_gate_error")
+            if question is not None:
+                try:
+                    await self._speak(question)
+                except Exception:  # noqa: BLE001
+                    _logger.info("approval_question_not_spoken")
+                return
+        await self.push_frame(frame, direction)
+
+
+async def start_typed_turn(runtime: Runtime, pusher: FramePusher, aggregators: Any,
+                           text: str, tag: str) -> bool:
+    """Make ``text`` the user's next turn, as a spoken one would be (C7-py).
+
+    Queues its own InterruptionFrame (a spoken barge-in; in-flight delegations
+    survive it) and waits, bounded, for that exact frame to pass
+    TranscriptLogger BEFORE clearing and arming the sensitive flag: that logger
+    clears the flag on every interruption, so arming first could be undone. If
+    the frame never passes, nothing is stored and False is returned (the caller
+    replies not_ready). No consent parsing, no speaker gate, no transcription
+    frame and so no ``user-transcription`` echo.
+    """
+    if not runtime.alive:
+        return False
+    interruption = InterruptionFrame()
+    passed = runtime.interruption_passed.watch(interruption.id)
+    await pusher.push(interruption)
+    try:
+        await asyncio.wait_for(passed, timeout=TYPED_INTERRUPT_WAIT_S)
+    except asyncio.TimeoutError:
+        runtime.interruption_passed.forget(interruption.id)
+        _logger.warning("typed_turn_interruption_not_confirmed")
+        return False
+    if not runtime.alive:
+        return False
+    runtime.sensitive_turn.clear()
+    arm_from_text(text)  # before anything is logged or stored
+    _log_transcript("USER:", text)
+    if not _voice_is_sensitive():
+        _persist(runtime.session_id, "user", text)
+    await runtime.foreground_requests.accept_typed(text, f"{time.time():.6f}", tag)
+    runtime.voice_sources.append(aggregators.user(), text)
+    await aggregators.user().push_context_frame()
+    return True
 
 
 def request_bound_service(service_class, requests: ForegroundRequests):
@@ -697,6 +848,12 @@ class Runtime:
     foreground_requests: Any = None
     # C3: per-connection AnswerComposer, None when the kill switch is off.
     display_composer: Any = None
+    # C7-py: per-connection pending-approval list (None when
+    # JARVIS_APPROVALS_ENABLED is off), the observer that tells the typed
+    # start its interruption has passed TranscriptLogger, and that logger.
+    approvals: Any = None
+    interruption_passed: Any = None
+    transcript_source: Any = None
     # Command Console state is created per pipeline in build_pipeline() and
     # read by run_session()'s message handlers. It lives here because the
     # two functions share no scope: #80 read these as build_pipeline locals
@@ -955,7 +1112,7 @@ def _compose_display(composer: Any, payload: dict) -> list[dict]:
     return composer.compose(payload, request_id=request.request_id if request else None)
 
 
-def make_agent_event_handler(transport: Any, composer: Any = None) -> Any:
+def make_agent_event_handler(transport: Any, composer: Any = None, approvals: Any = None) -> Any:
     """Plan Phase 6 step 6.3: log agent events AND feed them to the UI.
 
     on_event callbacks are sync (agents/base.py EventCallback), so the async
@@ -998,6 +1155,14 @@ def make_agent_event_handler(transport: Any, composer: Any = None) -> Any:
     def on_agent_event(event: dict) -> None:
         bot_event_log(event)
         etype = event.get("type")
+        if etype == "agent_tool_result" and approvals is not None:
+            # C7-py (contract 3.3): a preview result opens an approval entry.
+            # The list never calls a tool; it only records what to ask about.
+            try:
+                approvals.observe(event, origin_id=_request_id(),
+                                  sensitive=_voice_is_sensitive())
+            except Exception:  # noqa: BLE001 - never break the event path
+                _logger.warning("approval_observe_failed")
         if etype == "agent_tool_result":
             # Activity ticker (Larry 2026-08-21, "like how claude displays
             # updates to current work"): every finished tool call becomes
@@ -1300,9 +1465,34 @@ def build_pipeline(
     # C3: read once; off means every display site sends today's exact payload.
     display_composer = AnswerComposer() if composed_answers_enabled() else None
     runtime.display_composer = display_composer
+    # C7-py: read once; off means no list, nothing published, no spoken check.
+    if approvals_flag_enabled():
+        def _emit_approval_message(message: dict) -> None:
+            if not runtime.alive:
+                return
+            async def _send() -> None:
+                try:
+                    await send_app_message(transport, message)
+                except Exception:  # noqa: BLE001
+                    _logger.info("approval_message_delivery_unconfirmed")
+            try:
+                asyncio.get_running_loop().create_task(_send())
+            except RuntimeError:
+                pass  # no running loop (tests)
+
+        def _schedule_approval_expiry(delay: float, fn: Any) -> Any:
+            try:
+                return asyncio.get_running_loop().call_later(delay, fn)
+            except RuntimeError:
+                return None
+
+        runtime.approvals = ApprovalBook(
+            session_id=runtime.session_id, generation=console_generation,
+            emit=_emit_approval_message, schedule=_schedule_approval_expiry)
+    runtime.interruption_passed = InterruptionPassed()
     delegate_schema, delegate_handler = build_delegate_tool(
         sub_agents,
-        on_event=make_agent_event_handler(transport, display_composer),
+        on_event=make_agent_event_handler(transport, display_composer, runtime.approvals),
         max_parallel=settings.jarvis_max_parallel_delegations,
         session_id=runtime.session_id,
         # Barge-in survival: run_session fills runtime.late_delivery["fn"]
@@ -2012,9 +2202,24 @@ def build_pipeline(
     # the conversations table (the memory sweep folds that table into
     # long-term memory — observed live 2026-08-21: TV dialogue persisted).
     runtime.speaker_gate = speaker_transcript_gate
-    runtime.foreground_requests.install(speaker_transcript_gate or stt, aggregators.user(), aggregators.assistant())
+    # C7-py: the spoken bare-yes check sits last before the aggregator, so it
+    # becomes the one input source ForegroundRequests and TranscriptObserver
+    # count each transcript on (they must see only what the model receives).
+    bare_yes_gate = None
+    if runtime.approvals is not None:
+        async def _speak_fixed(text: str) -> None:
+            await pusher.push(TTSSpeakFrame(text=text))
+
+        bare_yes_gate = BareYesGate(
+            runtime.approvals, is_sensitive=_voice_is_sensitive,
+            offer_pending=lambda: runtime.pending_content_offer is not None,
+            speak=_speak_fixed)
+    runtime.transcript_source = bare_yes_gate or speaker_transcript_gate
+    runtime.foreground_requests.install(
+        bare_yes_gate or speaker_transcript_gate or stt, aggregators.user(), aggregators.assistant())
 
     transcript = TranscriptLogger(session_id=runtime.session_id)
+    runtime.interruption_passed.source = transcript
 
     pipeline_steps = [
         transport.input(),
@@ -2035,6 +2240,8 @@ def build_pipeline(
     pipeline_steps.append(stt)
     if speaker_transcript_gate is not None:
         pipeline_steps.append(speaker_transcript_gate)
+    if bare_yes_gate is not None:
+        pipeline_steps.append(bare_yes_gate)
     pipeline_steps.extend([
         aggregators.user(),
         runtime.weather_context,
@@ -2351,7 +2558,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             enabled=settings.jarvis_late_result_neutralize_enabled, sources=runtime.voice_sources,
         )
         observers = [
-            TranscriptObserver(runtime.session_id, only_from=runtime.speaker_gate,
+            TranscriptObserver(runtime.session_id, only_from=runtime.transcript_source,
                                on_consent=handle_voice_consent),
             InterruptionNotifier(
                 inject_silent,
@@ -2375,6 +2582,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             ),
             late_neutralizer,
             WeatherContextRelayObserver(runtime.weather_context, llm),
+            runtime.interruption_passed,
         ]
         if os.environ.get("JARVIS_DEBUG_OBSERVER"):
             # Temporary diagnostic: print every function-call frame hop with
@@ -2636,6 +2844,51 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             )
             progress_watcher.start()
             runtime.timing["progress"] = progress_watcher  # W12: progress_updates
+
+        # ---- C7-py: typed requests and approvals (contract sections 2 and 3) ----
+        async def start_typed_turn_bound(text: str, tag: str) -> bool:
+            return await start_typed_turn(runtime, pusher, aggregators, text, tag)
+
+        async def _send_typed_reply(message: dict) -> None:
+            await send_app_message(transport, message)
+
+        async def _speak_fixed_line(text: str) -> None:
+            await pusher.push(TTSSpeakFrame(text=text))
+
+        typed_session = TypedRequestSession(
+            session_id=runtime.session_id, generation=runtime.console_generation,
+            send=_send_typed_reply, start_turn=start_typed_turn_bound, speak=_speak_fixed_line,
+            is_alive=lambda: runtime.alive, is_sensitive=_voice_is_sensitive,
+            book=runtime.approvals, typed_enabled=typed_request_flag_enabled(),
+            offer_pending=lambda: runtime.pending_content_offer is not None)
+        typed_tasks: set[asyncio.Task] = set()
+
+        def _spawn_typed(coro: Any) -> None:
+            # Detached on purpose: on the WebSocket this handler runs on the
+            # client-message processor's input task, which must stay free to
+            # carry the very InterruptionFrame start_typed_turn waits for.
+            async def guarded() -> None:
+                try:
+                    await coro
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001
+                    _logger.warning("typed_request_handler_failed")
+            task = asyncio.create_task(guarded())
+            typed_tasks.add(task)
+            task.add_done_callback(typed_tasks.discard)
+
+        async def handle_turn_typed(message: Any) -> None:
+            msg = _unwrap_client_message(message)
+            if msg is None or msg.get("type") != TURN_TYPED:
+                return
+            _spawn_typed(typed_session.handle_turn(msg))
+
+        async def handle_approval_decide(message: Any) -> None:
+            msg = _unwrap_client_message(message)
+            if msg is None or msg.get("type") != APPROVAL_DECIDE:
+                return
+            _spawn_typed(typed_session.handle_decide(msg))
 
         voice_state = {"current": catalog["default"]}
 
@@ -2934,6 +3187,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await handle_console(message)
                 await handle_shared_content(message)
                 await handle_location(message)
+                await handle_turn_typed(message)
+                await handle_approval_decide(message)
         elif client_messages is not None:
             # WebSocket transport (native-audio plan §3.2 findings): no
             # connection object and no on_app_message event — the same two
@@ -2941,7 +3196,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             client_messages.bind(handle_voice_set, handle_ui_noop,
                                   handle_console_result, handle_console_ready,
                                   handle_console, handle_shared_content,
-                                  handle_location)
+                                  handle_location, handle_turn_typed,
+                                  handle_approval_decide)
 
         runner = PipelineRunner()
         try:
@@ -2952,6 +3208,10 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # the top of on_client_disconnected; this covers every other end.)
             runtime.alive = False
             notices.clear_live_session(runtime.session_id)
+            if runtime.approvals is not None:
+                runtime.approvals.close()
+            for typed_task in list(typed_tasks):
+                typed_task.cancel()
             shared_transfer.close()
             await watcher.stop()
             await memory_watcher.stop()
