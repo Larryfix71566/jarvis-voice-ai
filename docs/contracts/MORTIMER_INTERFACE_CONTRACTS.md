@@ -1,6 +1,6 @@
 # Mortimer interface contracts (C0 and C0b)
 
-- **Status:** draft for review in a PR into `next` (closure plan items C0 and C0b). Codex and Kimi review; Larry answers §7.
+- **Status:** draft for review in a PR into `next` (closure plan items C0 and C0b). Codex and Kimi review. Larry answered §7 on 2026-11-11 at 03:52:52 UTC ("Go with your picks"); the answers are recorded in §7 and applied in the sections they change.
 - **Plan items:** C0 and C0b of `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` (rows at lines 64 and 65).
 - **Tree:** every `file:line` below was read at `c314fd4` on branch `claude/ws17-freeze-sha-20261111`. That is `5777e98` plus docs-only commits, so code lines match the freeze SHA.
 - **Who builds from this:** Sonnet writes the Python message types and tests. Kimi builds C3, C7-py, C7b, C4 and C5. Codex builds C2, C6 and C7a and reviews.
@@ -312,11 +312,12 @@ These are behaviours C7-py must test. The mechanism is C7-py's choice. The plan 
 8. **Refuse when the session is ending.** If `runtime.alive` is false, reply `not_ready` and start nothing (`pipeline.py:2452-2453`).
 9. **No echo.** The bot must not send a `user-transcription` frame for a typed turn. The app adds the user's line itself (2.5). Test: record the frames sent for a typed turn and assert none has that type. If the chosen mechanism cannot avoid the frame, change 2.5 to "the app waits for the bot's frame" in this document before C7b lands. One or the other, never both.
 10. **Kill switch.** `JARVIS_TYPED_REQUEST_ENABLED`, default on, read once at registration. Off: the handler replies `disabled`.
+11. **A bare yes follows 3.10.** Typed text that is a bare yes is handled exactly as a spoken one (§3.10). It never approves when more than one approval is open.
 
 ### 2.5 What the app must do
 
 - Add `case typedRequest(TypedRequest)` to `ClientMessage` (`ClientMessage.swift:6-19`). It is a closed enum so no caller invents a type.
-- Send only when `client.consoleSessionID` and `consoleGeneration` are set. They come from `console/hello` (`AppMessageRouter.swift:143-148`), which the bot sends only when `JARVIS_COMMAND_CONSOLE_ENABLED` is true (`pipeline.py:2409-2414`; it defaults to false at `:1401`). With no hello, the composer field is disabled and says why.
+- Send only when `client.consoleSessionID` and `consoleGeneration` are set. They come from `console/hello` (`AppMessageRouter.swift:143-148`), which the bot sends only when `JARVIS_COMMAND_CONSOLE_ENABLED` is true (`pipeline.py:2409-2414`). Larry's answer to §7 question 5: on `next` this flag defaults to **on**. Today it is read in four places with two different defaults: false at `pipeline.py:1401` and `:2643` and in `jarvis/config.py:184` (bridged at `:369-371`), but on unless explicitly false at `pipeline.py:2764`. C7-py must make all four agree on the new default through one helper, and keep `false` as the kill switch. With no hello, the composer field is disabled and says why.
 - On `accepted`, append the text to `ConversationStore` as one user entry. On `rejected`, keep the text in the composer and show the reason. Never both.
 - A `chip` request comes from an `actions` block of kind `ask` (1.4). It uses the same message.
 - ⌘K focuses the composer. It sends nothing by itself.
@@ -353,6 +354,7 @@ Hard rules:
 4. A decision for an unknown, expired or settled approval does nothing and says so.
 5. On a sensitive turn no approval is published and no decision is accepted. The user answers by voice.
 6. Decline never runs anything.
+7. A bare yes approves only when exactly one approval is open (§3.10).
 
 ### 3.3 The pending list (bot)
 
@@ -466,11 +468,26 @@ Whether the Supervisor then reliably delegates the confirmation with the ref is 
 - Approvals never appear on a carousel card (`mortimer-ui-directions.html:454`).
 - Buttons disable after a tap until `approval/result` or `approval/settled` arrives. An `expired` or `superseded` item is removed with one line of text saying which.
 - The buttons have text labels and VoiceOver labels that include the summary. The yellow token is never the only cue.
+- When the bot asks which item a bare yes meant (§3.10), each open item's buttons stay in place; the question adds no new control.
 - The file-send offer keeps its own protocol and its own buttons (`AttachmentTrayView.swift:28-36`). The thread may show it inline by calling the same `onApproveOffer` closure. It does not use `approval/decide`.
 
-### 3.10 Files
+### 3.10 A bare yes with more than one approval open
 
-- Python: `jarvis/bot/typed_request.py` (the approval types, the pending list and both handlers live beside the typed request, as the plan's C7-py row says), `jarvis/prompts.py` (two templates), registration lines and the `agent_tool_result` hook in `jarvis/bot/pipeline.py`. Tests: `tests/unit/test_typed_request.py`, fixtures under `tests/fixtures/typed_request/`.
+Larry's answer to §7 question 1 (2026-11-11 03:52:52 UTC, "Go with your picks", choosing the coordinator's recommendation): a typed or spoken bare yes approves only when exactly one approval is open. With two or more open, Mortimer asks which, because approving the wrong one cannot be undone.
+
+This is a code rule, not only a prompt rule:
+
+1. **What counts as a bare yes.** A pure function `is_bare_yes(text)` in `jarvis/bot/typed_request.py`. After lowercasing, trimming, and removing trailing punctuation, the text is exactly one of a fixed list: `yes`, `yeah`, `yep`, `yup`, `sure`, `ok`, `okay`, `confirm`, `confirmed`, `approve`, `approved`, `go ahead`, `do it`, `yes please`. Anything longer or different is not bare ("yes, the plan one" is not bare and goes to the Supervisor as usual, which then has the words it needs).
+2. **Zero or one open.** The turn goes to the Supervisor unchanged. Rule 9 handles it, as today.
+3. **Two or more open.** The bot does not deliver the turn to the Supervisor. It speaks one fixed question built in code from a template in `jarvis/prompts.py` (`APPROVAL_WHICH_TEMPLATE`), naming each open item by agent and tool in pending order, for example "Two things are waiting: a plan from Developer and a comparison from Analyst. Which one?". It uses `TTSSpeakFrame`, with no model call, the way `ProgressWatcher` speaks. Nothing is approved and nothing settles. The user's next turn ("the plan", or a button tap) goes through the normal path.
+4. **Where the check runs.** For typed text, in the `turn/typed` handler before 2.4's rule 1. For speech, on the final user transcript after `TranscriptGate` and before the context aggregator. The spoken check is a pipeline insertion in `jarvis/bot/pipeline.py` and is C7-py's. It must not run on a protected or sensitive turn, where no approval is open by rule 5 anyway.
+5. **Logging.** One content-free line: `approval_yes_ambiguous open=<n> source=<typed|voice>`.
+
+Untested until C7-py's tests exist: whether a spoken bare yes reaches the check as one final transcript, and whether holding it back leaves the context aggregator in a clean state. Tests: `is_bare_yes` cases both ways; with two open items, a bare yes produces the question and no context message; with one open, it passes through unchanged.
+
+### 3.11 Files
+
+- Python: `jarvis/bot/typed_request.py` (the approval types, the pending list and both handlers live beside the typed request, as the plan's C7-py row says), `jarvis/prompts.py` (three templates: approve, decline and `APPROVAL_WHICH_TEMPLATE`), registration lines, the `agent_tool_result` hook, the spoken bare-yes check (§3.10) and the `JARVIS_COMMAND_CONSOLE_ENABLED` helper (§2.5) in `jarvis/bot/pipeline.py`, and `jarvis/config.py:184` (that flag's default). Tests: `tests/unit/test_typed_request.py`, fixtures under `tests/fixtures/typed_request/`.
 - Not touched: `jarvis/bot/console_protocol.py`, `tests/fixtures/command_console/protocol.json`, `ConsoleProtocol.swift`, `App/ConsoleActionRegistry.swift`.
 - Swift: `ClientMessage.swift` (`case approvalDecide`), `AppMessage.swift` (decode the three bot messages), `Stores/ApprovalStore.swift` (new), `Stores/DisplayResultStore.swift`, `Console/ConversationThreadView.swift`, `App/AppMessageRouter.swift`, `Stores/ConversationStore.swift`.
 
@@ -499,14 +516,14 @@ These must be gone when C1a, C5 and C6 land:
 - `Stores/ConversationStore.swift:30-32` defines `latestCaptions` and `liveCaption`. Delete both when their last reader goes.
 - The `compactConversation` setting and its two toggles (`AdaptiveStageView.swift:19`, `:160-161`; `ConsoleActionBar.swift:27`, `:527-529`).
 
-`Drawer/LogTab.swift:40` also reads `conversation.entries`. Whether the Log tab counts is open question 3.
+`Drawer/LogTab.swift:40` also reads `conversation.entries`. Larry's answer to §7 question 3: the Log tab stays, as history. It is the one other reader allowed; nothing else may draw conversation turns.
 
 ### 4.3 How a reviewer checks it
 
 Run from the repo root. Each command must print only the allowed lines.
 
 ```bash
-# 1. Who reads the transcript. Allowed: ConversationThreadView.swift (and LogTab.swift if question 3 says so).
+# 1. Who reads the transcript. Allowed: ConversationThreadView.swift and LogTab.swift (§7 question 3: the Log tab stays).
 grep -rn "conversation\.entries\|\.latestCaptions\|liveCaption(" macos/MortimerHost/Sources --include=*.swift \
   | grep -v "Stores/ConversationStore.swift"
 
@@ -569,7 +586,7 @@ The idle colour in code is still `#7C8CFF` (`AppTuning.swift:127`). Changing it,
 
 ### 5.3 Type tokens
 
-The mockup page names three web font families (`mortimer-ui-directions.html:10`): Manrope for headings, Inter for body, JetBrains Mono for meta. The app bundles no custom font; a search of `macos/MortimerHost/Sources` for those names and for `.custom(` finds nothing. So the contract defines roles and sizes, on the system fonts. Adopting the web fonts is open question 4.
+The mockup page names three web font families (`mortimer-ui-directions.html:10`): Manrope for headings, Inter for body, JetBrains Mono for meta. The app bundles no custom font; a search of `macos/MortimerHost/Sources` for those names and for `.custom(` finds nothing. So the contract defines roles and sizes, on the system fonts. Larry's answer to §7 question 4: keep the system fonts. No font files are bundled.
 
 | Token | Size / weight | Use | Mockup line |
 |---|---|---|---|
@@ -613,12 +630,17 @@ Typed request and approval (`tests/unit/test_typed_request.py`):
 - a preview result (`pending` or `needs_confirmation`) creates one pending item; a non-preview result from the same agent and tool settles it as `resolved`;
 - approve on an expired or settled id is rejected and injects nothing;
 - the injected text contains the recorded ref exactly and no client-supplied string;
-- the handler module names no registry, MCP or sidecar call.
+- the handler module names no registry, MCP or sidecar call;
+- `is_bare_yes` accepts each listed phrase (with case and trailing punctuation varied) and rejects "yes, the plan" and "yes and also";
+- with two open approvals a bare yes yields the `APPROVAL_WHICH_TEMPLATE` question, injects no context message and settles nothing; with one open it passes through unchanged;
+- the four `JARVIS_COMMAND_CONSOLE_ENABLED` reads agree: unset means on, `false` means off.
 
-## 7. Open questions for Larry
+## 7. Decisions (answered by Larry)
 
-1. **Typed "yes" to an approval.** With the buttons, should typing "yes" in the composer also approve the newest pending item, the way saying "yes" does? This draft says yes, because typed text is an ordinary user turn and the Supervisor treats it like speech. The alternative is buttons and voice only.
-2. **Self-edit previews.** Rule 9 lets a self-edit start without waiting for a yes; the pull request is the approval. Should the new inline approval change that, so a self-edit waits for Approve? This draft keeps today's behaviour.
-3. **The drawer's Log tab.** It shows the same turns as the thread, plus run chips (`Drawer/LogTab.swift:40`). Box 881 still tests "Output and Log lineage". Does the Log tab stay as history, or does the one-surface rule remove it? This draft allows it and nothing else.
-4. **Fonts.** Keep the system fonts with the sizes in 5.3, or bundle Manrope, Inter and JetBrains Mono from the mockups? This draft keeps the system fonts.
-5. **Command Console flag.** The typed request and the approval buttons need the `console/hello` handshake, which is off unless `JARVIS_COMMAND_CONSOLE_ENABLED` is true. Should `next` turn it on by default, now that the Command Console is the only layout?
+Larry answered all five on 2026-11-11 at 03:52:52 UTC: "Go with your picks", choosing the coordinator's recommendations (which kept the draft's defaults for 2 to 5 and changed 1).
+
+1. **Typed or spoken "yes" to an approval.** A bare yes approves only when exactly one approval is open. With two or more open, Mortimer asks which. This changes the draft, which had let a yes approve the newest item. Applied in §3.10, §3.2 rule 7 and §2.4 rule 11.
+2. **Self-edit previews.** Unchanged: a self-edit still starts after the spoken preview, and the pull request stays the real approval (§3.3, last paragraph).
+3. **The drawer's Log tab.** Stays, as history (§4.2).
+4. **Fonts.** System fonts, with the sizes in §5.3. Nothing is bundled.
+5. **Command Console flag.** On by default on `next` (§2.5), with all four reads made to agree.
