@@ -280,6 +280,7 @@ Validation (a pure function in `jarvis/bot/typed_request.py`, same style as `val
 5. `text` is a string. After trimming it has 1 to 4,000 Unicode scalars. It has no control characters except newline and tab. Count scalars on both sides, as `ConsoleActionRegistry.swift:59-62` does.
 6. `source` is `"composer"` or `"chip"`.
 7. The compact UTF-8 message is at most `MAX_MESSAGE`, 32 KiB (`console_protocol.py:10`).
+8. After trimming, `text` does not start with `[system]` (any case). The bot's own code treats content with that prefix as a system note, not a user message (`jarvis/bot/voice_guidance.py:85-90`), so typed text must not be able to pass itself off as one. Speech cannot produce this prefix in practice; typing can. A failure replies `invalid_text`.
 
 A message that fails rule 1 to 4 gets no reply, because it has no trustworthy identity. That is how `ConsoleSession.accept` treats malformed requests (`jarvis/bot/console_session.py:71-75`). Log one content-free line.
 
@@ -297,7 +298,7 @@ A message that fails rule 1 to 4 gets no reply, because it has no trustworthy id
 }
 ```
 
-`status` is `accepted` or `rejected`. `code` is one of `accepted`, `duplicate`, `invalid_text`, `stale_session`, `not_ready`, `disabled`. The reply never echoes the text.
+`status` is `accepted` or `rejected`. `code` is one of `accepted`, `duplicate`, `invalid_text`, `stale_session`, `not_ready`, `disabled`. The reply never echoes the text. `stale_session` is reserved: no v1 path sends it, because a message with the wrong session or generation gets no reply (2.2 rule 3).
 
 A repeated `request_id` returns the first reply again and starts no second turn. Keep at most 128 replies for 300 seconds, the same bounds as `ConsoleSession` (`console_session.py:31-32`).
 
@@ -308,19 +309,20 @@ These are behaviours C7-py must test. The mechanism is C7-py's choice. The plan 
 1. **It is a user turn.** The text enters the LLM context as a `role: "user"` message and starts exactly one model run. It is not a `[system]` note. `inject_context` is the existing channel for adding a user message and pushing a context frame (`pipeline.py:2444-2447`).
 2. **Sensitivity is checked first.** Call `arm_from_text(text)` before anything is logged or stored, as the spoken path does (`jarvis/bot/transcript_log.py:160`). A typed turn starts a new turn, so clear the previous turn's flag first, as `UserStartedSpeakingFrame` does (`transcript_log.py:138-143`).
 3. **The transcript is written once.** Store the text in the conversations table as role `user`, unless the turn is sensitive (`transcript_log.py:161-163`, `:196-201`). On a sensitive turn the log line carries no text.
-4. **It gets a foreground request.** Display payloads for this turn must carry an `origin_request_id` (`pipeline.py:2063-2069`) and the app must receive `console/turn` (`pipeline.py:311-316`), or the composer cannot join its results and the answer cannot come to the front (box 193). `ForegroundRequests` binds only to a `TranscriptionFrame` from the input source today (`pipeline.py:350-361`). How a typed turn gets its binding is the open mechanism. Test: a typed request followed by a display-worthy tool result yields a payload with a non-null `origin_request_id`.
+4. **It gets a foreground request.** Display payloads for this turn must carry an `origin_request_id` (`pipeline.py:2063-2069`) and the app must receive `console/turn` (`pipeline.py:311-316`), or the composer cannot join its results and the answer cannot come to the front (box 193). `ForegroundRequests` binds only to a `TranscriptionFrame` from the input source today (`pipeline.py:350-361`). Mechanism (C7-py): `ForegroundRequests` gains a typed-turn binding. The foreground `request_id` stays server-minted, and the `console/turn` it announces carries `input_user_id` = `typed:<request_id>`, where `<request_id>` is the client's `turn/typed` id. The client's id is never the join key for answers. Test: a typed request followed by a display-worthy tool result yields a payload with a non-null `origin_request_id`.
 5. **No voice consent parsing.** Typed text is never passed to `handle_voice_consent` (`pipeline.py:2266-2292`). A file-send offer is answered by its own controls.
 6. **No speaker gate.** There is no audio to score. `TranscriptGate` is not involved.
 7. **It interrupts speech.** If Mortimer is speaking, the typed request ends that speech as a spoken barge-in would. In-flight delegations survive, as they do for barge-in (`CLAUDE.md`, "Barge-in survival"). Untested. Test: a typed request during TTS leaves a running delegation's run row to finish.
 8. **Refuse when the session is ending.** If `runtime.alive` is false, reply `not_ready` and start nothing (`pipeline.py:2452-2453`).
 9. **No echo.** The bot must not send a `user-transcription` frame for a typed turn. The app adds the user's line itself (2.5). Test: record the frames sent for a typed turn and assert none has that type. If the chosen mechanism cannot avoid the frame, change 2.5 to "the app waits for the bot's frame" in this document before C7b lands. One or the other, never both.
-10. **Kill switch.** `JARVIS_TYPED_REQUEST_ENABLED`, default on, read once at registration. Off: the handler replies `disabled`.
+10. **Kill switches.** `JARVIS_TYPED_REQUEST_ENABLED`, default on, read once at registration. Off: the handler replies `disabled`. Approvals have their own switch, `JARVIS_APPROVALS_ENABLED`, default on (§3.3), because the approval half inserts a check into the voice path and must be removable without turning typing off.
 11. **A bare yes follows 3.10.** Typed text that is a bare yes is handled exactly as a spoken one (§3.10). It never approves when more than one approval is open.
 
 ### 2.5 What the app must do
 
 - Add `case typedRequest(TypedRequest)` to `ClientMessage` (`ClientMessage.swift:6-19`). It is a closed enum so no caller invents a type.
 - Send only when `client.consoleSessionID` and `consoleGeneration` are set. They come from `console/hello` (`AppMessageRouter.swift:143-148`), which the bot sends only when `JARVIS_COMMAND_CONSOLE_ENABLED` is true (`pipeline.py:2409-2414`). Larry's answer to §7 question 5: on `next` this flag defaults to **on**. Today it is read in four places with two different defaults: false at `pipeline.py:1401` and `:2643` and in `jarvis/config.py:184` (bridged at `:369-371`), but on unless explicitly false at `pipeline.py:2764`. C7-py must make all four agree on the new default through one helper, and keep `false` as the kill switch. With no hello, the composer field is disabled and says why.
+- Match the `console/turn` for a typed request by `input_user_id == "typed:<request_id>"` (2.4 rule 4), never by timing.
 - On `accepted`, append the text to `ConversationStore` as one user entry. On `rejected`, keep the text in the composer and show the reason. Never both.
 - A `chip` request comes from an `actions` block of kind `ask` (1.4). It uses the same message.
 - ⌘K focuses the composer. It sends nothing by itself.
@@ -451,7 +453,9 @@ Validation: exactly these seven keys; `version == 1`; session and generation mat
 }
 ```
 
-`code` is one of `accepted`, `duplicate`, `unknown_approval`, `expired`, `already_settled`, `protected_turn`, `stale_session`, `disabled`. A repeated `request_id` returns the first reply.
+`code` is one of `accepted`, `duplicate`, `unknown_approval`, `expired`, `already_settled`, `protected_turn`, `stale_session`, `disabled`. A repeated `request_id` returns the first reply. `stale_session` is reserved here too and no v1 path sends it. A decision whose turn could not be delivered stays settled and still replies `accepted`; re-opening it would let one retried tap count twice.
+
+**Kill switch.** `JARVIS_APPROVALS_ENABLED`, default on, read once at registration. Off: no pending list is kept, no `approval/pending` or `approval/settled` is sent, `approval/decide` replies `disabled`, and the spoken bare-yes check (§3.10) is not inserted, so the voice path is what it is today.
 
 ### 3.8 What the bot does on an accepted decision
 
@@ -485,6 +489,7 @@ This is a code rule, not only a prompt rule:
 3. **Two or more open.** The bot does not deliver the turn to the Supervisor. It speaks one fixed question built in code from a template in `jarvis/prompts.py` (`APPROVAL_WHICH_TEMPLATE`), naming each open item by agent and tool in pending order, for example "Two things are waiting: a plan from Developer and a comparison from Analyst. Which one?". It uses `TTSSpeakFrame`, with no model call, the way `ProgressWatcher` speaks. Nothing is approved and nothing settles. The user's next turn ("the plan", or a button tap) goes through the normal path.
 4. **Where the check runs.** For typed text, in the `turn/typed` handler before 2.4's rule 1. For speech, on the final user transcript after `TranscriptGate` and before the context aggregator. The spoken check is a pipeline insertion in `jarvis/bot/pipeline.py` and is C7-py's. It must not run on a protected or sensitive turn, where no approval is open by rule 5 anyway.
 5. **Logging.** One content-free line: `approval_yes_ambiguous open=<n> source=<typed|voice>`.
+6. **Known limit (v1).** The spoken check looks at one final transcript at a time. A spoken "yes" that the speech service splits across two final transcripts is checked piece by piece, so it may not be recognised as bare. Revisit after a live session.
 
 Untested until C7-py's tests exist: whether a spoken bare yes reaches the check as one final transcript, and whether holding it back leaves the context aggregator in a clean state. Tests: `is_bare_yes` cases both ways; with two open items, a bare yes produces the question and no context message; with one open, it passes through unchanged.
 
