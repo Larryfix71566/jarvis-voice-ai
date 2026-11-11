@@ -1,9 +1,9 @@
 on:
   pull_request:
-    branches: [main]
-  # Also run on main itself so a merge that breaks the gates is caught there.
+    branches: [main, next]
+  # Also run on main and next themselves so a merge that breaks the gates is caught there.
   push:
-    branches: [main]
+    branches: [main, next]
 
 permissions:
   contents: read

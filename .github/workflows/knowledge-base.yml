@@ -2,9 +2,9 @@ name: Knowledge base
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, next]
   push:
-    branches: [main]
+    branches: [main, next]
 
 permissions:
   contents: read
