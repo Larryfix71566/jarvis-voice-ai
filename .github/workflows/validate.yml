@@ -145,5 +145,30 @@ jobs:
           xcodebuild -version
           xcrun swift --version
           xcrun --sdk macosx --show-sdk-version
+      # The existing Host process tests need the offline owner and Python.
+      # Use only the hosted image's installed Python; never fetch a toolchain.
+      - name: Prepare offline authority process fixtures
+        if: matrix.package == 'macos/MortimerHost'
+        shell: bash
+        run: |
+          python_bin="$(command -v python3.12 || true)"
+          if [ ! -x "$python_bin" ]; then
+            for candidate in "$RUNNER_TOOL_CACHE"/Python/3.12.*/x64/bin/python3.12; do
+              if [ -x "$candidate" ]; then
+                python_bin="$candidate"
+                break
+              fi
+            done
+          fi
+          test -x "$python_bin"
+          "$python_bin" -c 'import sys; assert sys.version_info[:2] == (3, 12); from jarvis.bot import phone_admission_store, phone_remote_authority_channel'
+          swift build --package-path macos/MortimerHost --product PhoneRemoteAuthorityOwner
+          owner_bin="$(swift build --package-path macos/MortimerHost --show-bin-path)/PhoneRemoteAuthorityOwner"
+          test -x "$owner_bin"
+          {
+            echo "PHONE_REMOTE_AUTHORITY_OWNER_BIN=$owner_bin"
+            echo "PHONE_REMOTE_AUTHORITY_PYTHON=$python_bin"
+            echo "PHONE_REMOTE_AUTHORITY_TEST_ROOT=$GITHUB_WORKSPACE"
+          } >> "$GITHUB_ENV"
       - name: Run full package test suite
         run: swift test --package-path "${{ matrix.package }}"
