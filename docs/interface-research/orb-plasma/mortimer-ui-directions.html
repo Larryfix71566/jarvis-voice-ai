@@ -528,17 +528,17 @@ a{color:var(--accent)}
     </div>
   </div>
 
-  <h3 id="orb-depth">Depth for the orb itself: three options to pick from</h3>
+  <h3 id="orb-depth">Depth for the orb itself: you picked 3, refraction, with the shadow from 1 (Nov 11)</h3>
   <p>Each is the approved orb, unchanged, with one depth treatment added, on the same sample rail so only the treatment differs. They follow the state buttons above. Untick "Depth on" to see the orb as approved. The crystal glass stays as it is in all three; none brings back a frosted rim.</p>
   <div class="depth-grid">
     <figure><canvas class="eorb" data-depth="1" aria-hidden="true"></canvas><figcaption><b>1 · Shadow and cast light</b><span>The orb floats above the rail: a soft shadow under it, and the energy's light focused through the ball into a coloured pool that brightens with the voice.</span><label class="pg-rm"><input type="checkbox" data-depth-toggle="1" checked> Depth on</label><span class="cost">Swift: two gradient fills outside the glass, cheap. Needs about a quarter of the orb's height free below it.</span></figcaption></figure>
     <figure><canvas class="eorb" data-depth="2" aria-hidden="true"></canvas><figcaption><b>2 · Tilt parallax</b><span>The glass reflections slide one way and the core the other as you move, and the shaded side turns with you, like looking round a real ball. Here it follows your pointer or finger and sways slowly otherwise.</span><label class="pg-rm"><input type="checkbox" data-depth-toggle="2" checked> Depth on</label><span class="cost">Swift: offsets only, near free. Mac follows the pointer; the phone would follow its tilt. Off under Reduce Motion.</span></figcaption></figure>
-    <figure><canvas class="eorb" data-depth="3" aria-hidden="true"></canvas><figcaption><b>3 · Refraction</b><span>The rail behind the orb bends through it, magnified and upside down in the middle and squeezed at the rim as a solid glass ball would, with a faint upside-down echo of the arcs on the far wall.</span><label class="pg-rm"><input type="checkbox" data-depth-toggle="3" checked> Depth on</label><span class="cost">Swift: the costly one. It has to sample what's behind the orb every frame, likely a Metal shader, the app's first.</span></figcaption></figure>
+    <figure><canvas class="eorb" data-depth="3" aria-hidden="true"></canvas><figcaption><b>3 · Refraction, with 1’s shadow <span class="pick-badge">Your pick</span></b><span>The rail behind the orb bends through it, magnified and upside down in the middle and squeezed at the rim as a solid glass ball would, with a faint upside-down echo of the arcs on the far wall. Option 1’s shadow and cast light sit under it.</span><label class="pg-rm"><input type="checkbox" data-depth-toggle="3" checked> Depth on</label><span class="cost">Swift: the costly one. It has to sample what's behind the orb every frame, likely a Metal shader, the app's first.</span></figcaption></figure>
   </div>
   <dl class="facts">
     <div><dt>Speed (10% budget)</dt><dd>1: two extra fills a frame, outside the glass; expected to fit. 2: one gradient and two offsets a frame; expected to fit, plus motion readings on the phone. 3: re-draws or samples the backdrop across the whole orb every frame; the most likely to break the 10% budget over the crystal shell (box 810, <code>ROADMAP.md:810</code>). SwiftUI Canvas cannot see the views behind it, so 3 needs either the rail drawn again inside the orb or a <code>layerEffect</code> shader, and nothing in the app uses Metal today. None of this is measured; the arcs probe in <code>OrbShellFrameTimeTests</code> would settle it.</dd></div>
     <div><dt>Flash safety</dt><dd>1: the cast light follows the orb's capped brightness, so it changes no faster than the orb. 2: changes position, not brightness. 3: the far-wall echo is a fixed share of the same capped frame, so it rides the same cap; the refracted rail is steady, but text scrolling behind the orb would move through it magnified, which may distract. Checked by reasoning on the code, not on pixels.</dd></div>
-    <div><dt>Combining</dt><dd>1 and 2 stack without conflict: shadow below, tilt inside. 3 can sit with either but costs the most. Reduce Motion stills 2; Reduce Transparency would turn 3 off.</dd></div>
+    <div><dt>Your pick, and the fallback</dt><dd>Refraction with option 1's shadow and cast light is in the spec. It gets measured first, before the rest of the orb is built. If it costs more than the 10% budget, the proposed fallback is 1 and 2 together, and that switch needs your OK. Under Reduce Transparency it is off and the orb uses the existing opaque fallback.</dd></div>
   </dl>
 
   <h3>Proposed colours, Mortimer's rust kept</h3>
@@ -1247,7 +1247,8 @@ function drawGlassShell(ctx, cx, cy, r, stateRGB, level, opt) {
     var Wc=Math.max(1,Math.round(r.width*dpr)),Hc=Math.max(1,Math.round(r.height*dpr));
     if(cv.width!==Wc||cv.height!==Hc){cv.width=Wc;cv.height=Hc;}
     var x=o.x,cx=Wc/2,cy=Hc*o.cyF,Rg=Math.min(Wc,Hc)*o.f,P=o.P,s=S[MAP[st]];
-    var D=o.depth&&(!o.tg||o.tg.checked)?o.depth:0;   // which depth option is on for this orb (0 = the approved orb as is)
+    var D=o.depth&&(!o.tg||o.tg.checked)?o.depth:0;
+    if(o.depth===3) o.cyF=.44;   // which depth option is on for this orb (0 = the approved orb as is)
     // the demo's R (148) sits on the crystal shell's inner wall (0.885 of the glass radius)
     var k1=Rg*.885/R, pxDev=W*k1, px=Math.max(2,Math.ceil(W*(k1/dpr)*(400/340)));   // the demo's density: 400 canvas px shown at 340 CSS px
     P.sc=k1/dpr;   // on-screen CSS px per demo unit (the demo: 0.85)
@@ -1265,7 +1266,7 @@ function drawGlassShell(ctx, cx, cy, r, stateRGB, level, opt) {
     function energy(c){ if(P.carry>0){c.globalAlpha=P.carry;c.drawImage(P.Ep,ex0,ey0,pxDev,pxDev);} c.globalAlpha=P.gain;c.drawImage(P.E,ex0,ey0,pxDev,pxDev);c.globalAlpha=1; }
     // bloom outside the glass (the demo's outer glow), then the crystal shell with the energy inside its 0.885 clip
     var rgb=hex('#'+P.col.split(',').map(function(v){return ('0'+(+v).toString(16)).slice(-2);}).join(''));
-    if(D===1){ // depth option 1: contact shadow on the surface below, and the energy's light focused through the ball onto it
+    if(D===1||D===3){ // depth option 1 (also on your pick, 3): contact shadow on the surface below, and the energy's light focused through the ball onto it
       var gy=cy+Rg*1.14;
       x.save();x.translate(cx,gy);x.scale(1,.2);var sg=x.createRadialGradient(0,0,0,0,0,Rg*1.05);
       sg.addColorStop(0,'rgba(0,0,0,.62)');sg.addColorStop(.45,'rgba(0,0,0,.34)');sg.addColorStop(1,'rgba(0,0,0,0)');
