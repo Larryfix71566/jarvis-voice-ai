@@ -7,9 +7,14 @@ call ``compose`` at the moment they emit; ``delegate_start`` and
 and ``take_completion`` yields the ``complete: true`` re-send.
 
 Invariants (each pinned by ``tests/unit/test_compose.py``):
-- a sensitive turn, a protected or confidential payload, ``read_clipboard``,
-  a tool without a template, or any build or size failure sends the legacy
-  payload unchanged, with no ``layout`` and no ``answer_id``;
+- a sensitive turn, a protected or confidential payload, ``read_clipboard``
+  or a tool without a template sends the legacy payload unchanged, with no
+  ``layout``, ``answer_id`` or ``answer_revision``;
+- a layout build or size failure keeps identity (contract 1.5 rule 11): the
+  result joins its answer as a revision of whole-answer legacy fields with
+  ``answer_id`` and ``answer_revision`` and no ``layout``; only when that
+  fails too is it sent as a stand-alone answer (new id, revision 1), and the
+  held answer is left as it was;
 - a real result is never suppressed;
 - nothing here reads the environment except ``composed_answers_enabled``.
 """
@@ -25,6 +30,7 @@ from typing import Any
 
 from jarvis.bot import compose_templates as templates
 from jarvis.bot.compose_schema import (
+    MAX_DISPLAY_MESSAGE_BYTES,
     TRUNCATION_BLOCK_ID,
     compact_size,
     sanitize_layout_urls,
@@ -103,6 +109,7 @@ class AnswerComposer:
             layout = sanitize_layout_urls(layout)
             payload = templates.legacy_fields(parts, layout["title"], now=self._now())
             payload["answer_id"] = answer_id
+            payload["answer_revision"] = revision
             truncated = truncate_layout(layout, envelope_bytes=compact_size(payload))
             if truncated is None:
                 _logger.warning("compose_fallback tool=%s reason=size_or_invalid", tool)
@@ -123,6 +130,26 @@ class AnswerComposer:
             return payload
         except Exception as exc:  # noqa: BLE001 - a composer bug must never hide a result
             _logger.warning("compose_fallback tool=%s reason=error error_type=%s",
+                            tool, type(exc).__name__[:64])
+            return None
+
+    def _build_legacy(self, answer_id: str, parts: list[dict], revision: int) -> dict | None:
+        """Whole-answer legacy fields that keep identity, no ``layout`` (1.5 rule 11)."""
+        tool = "-"
+        try:
+            tool = str(parts[-1]["payload"].get("tool"))
+            payload = templates.legacy_fields(parts, templates.header_title(parts), now=self._now())
+            payload["answer_id"] = answer_id
+            payload["answer_revision"] = revision
+            if compact_size(payload) > MAX_DISPLAY_MESSAGE_BYTES:
+                _logger.warning("compose_fallback tool=%s reason=legacy_size", tool)
+                return None
+            if validate_envelope(payload):
+                _logger.warning("compose_fallback tool=%s reason=legacy_invalid", tool)
+                return None
+            return payload
+        except Exception as exc:  # noqa: BLE001 - a composer bug must never hide a result
+            _logger.warning("compose_fallback tool=%s reason=legacy_error error_type=%s",
                             tool, type(exc).__name__[:64])
             return None
 
@@ -154,47 +181,63 @@ class AnswerComposer:
 
     def compose(self, payload: dict, *, request_id: str | None) -> list[dict]:
         """Payloads to send, in order; the last one is the main payload."""
+        return [item for item, _origin in self.compose_items(payload, request_id=request_id)]
+
+    def compose_items(self, payload: dict, *, request_id: str | None) -> list[tuple[dict, str | None]]:
+        """Like ``compose`` but each payload comes with its explicit origin.
+
+        The origin is ``None`` when the message belongs to the current
+        request (the emit site's context supplies it).  It is the owning
+        request id for the closing revision of an answer pushed out by the
+        cap: that payload is composed during a different request, so the
+        context would stamp the wrong ``origin_request_id`` (1.5 rule 10).
+        """
         if not isinstance(payload, dict):
-            return [payload]
+            return [(payload, None)]
         hints = payload.pop("layout_hints", None)
         if self._passes_through(payload):
-            return [payload]
+            return [(payload, None)]
         part = templates.part_for(payload, hints)
         if part is None:
-            return [payload]
+            return [(payload, None)]
 
         if not request_id:  # stand-alone answer, never stored (rule 5)
-            built = self._build(self._new_id(), [part], 1, True)
-            return [built] if built is not None else [payload]
+            new_id = self._new_id()
+            built = self._build(new_id, [part], 1, True) or self._build_legacy(new_id, [part], 1)
+            return [(built if built is not None else payload, None)]
 
-        prefix: list[dict] = []
+        prefix: list[tuple[dict, str | None]] = []
         ans = self._answers.get(request_id)
         if ans is not None and len(ans.parts) >= MAX_RESULTS_PER_ANSWER:
             done = self._completion(ans)
             if done is not None:
-                prefix.append(done)
+                prefix.append((done, None))
             del self._answers[request_id]
             ans = None
         is_new = ans is None
         if is_new:
             ans = _Answer(self._new_id())
         complete = not self._open(request_id)
-        built = self._build(ans.answer_id, [*ans.parts, part], ans.revision + 1, complete)
-        if built is None:
-            return [*prefix, payload]
+        parts = [*ans.parts, part]
+        built = self._build(ans.answer_id, parts, ans.revision + 1, complete)
+        if built is None:  # keep identity: legacy fields for the whole answer, no layout
+            built = self._build_legacy(ans.answer_id, parts, ans.revision + 1)
+        if built is None:  # stand-alone; the held answer stays as it was
+            alone = self._build_legacy(self._new_id(), [part], 1)
+            return [*prefix, (alone if alone is not None else payload, None)]
         ans.parts.append(part)
         ans.revision += 1
         ans.last_complete = complete
         if is_new:
             while len(self._answers) >= MAX_ANSWERS:
-                _, oldest = self._answers.popitem(last=False)
+                owner, oldest = self._answers.popitem(last=False)
                 done = self._completion(oldest)
                 if done is not None:
-                    prefix.append(done)
+                    prefix.append((done, owner))
             self._answers[request_id] = ans
         else:
             self._answers.move_to_end(request_id)
-        return [*prefix, built]
+        return [*prefix, (built, None)]
 
     def take_completion(self, request_id: str | None) -> dict | None:
         """A ``complete: true`` re-send once nothing is in flight, else None."""

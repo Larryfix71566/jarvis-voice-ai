@@ -36,6 +36,7 @@ def test_two_results_one_answer_stable_block_ids():
     second = c.compose(search("B", url="https://b.example/"), request_id="q1")[-1]
     assert first["answer_id"] == second["answer_id"]
     assert (first["layout"]["revision"], second["layout"]["revision"]) == (1, 2)
+    assert (first["answer_revision"], second["answer_revision"]) == (1, 2)
     assert first["layout"]["template"] == "research" and second["layout"]["template"] == "joined"
     ids1 = [b["id"] for b in first["layout"]["blocks"]]
     ids2 = [b["id"] for b in second["layout"]["blocks"]]
@@ -172,13 +173,26 @@ def test_eighth_result_rolls_over_to_new_answer():
     assert eighth[1]["answer_id"] != outs[0]["answer_id"]
 
 
-def test_oversized_wrapper_falls_back_to_legacy():
+def test_oversized_layout_falls_back_to_legacy_fields_with_identity():
     c = make()
     huge = {"tool": "show_commands", "title": "Run", "surface": "window",
             "commands": ["x" * 90_000] * 8, "note": "n", "expect_output": False}
     out = c.compose(huge, request_id="q1")
+    assert len(out) == 1 and out[0] is not huge
+    assert "layout" not in out[0] and "layout" not in huge
+    assert out[0]["answer_id"] and out[0]["answer_revision"] == 1
+    assert out[0]["commands"] == huge["commands"]
+    assert validate_envelope(out[0]) == []
+    assert "q1" in c._answers  # the answer is held, so a later result joins it
+
+
+def test_over_the_display_ceiling_in_both_forms_is_sent_unchanged():
+    c = make()
+    huge = {"tool": "show_commands", "title": "Run", "surface": "window",
+            "commands": ["x" * 200_000] * 8, "note": "n", "expect_output": False}
+    out = c.compose(huge, request_id="q1")
     assert out == [huge] and out[0] is huge
-    assert "layout" not in huge and "answer_id" not in huge
+    assert "layout" not in huge and "answer_id" not in huge and "answer_revision" not in huge
     assert not c._answers
 
 
@@ -202,7 +216,8 @@ def test_one_result_is_input_plus_answer_id_and_layout():
     payload = search()
     original = copy.deepcopy(payload)
     out = c.compose(payload, request_id="q1")[-1]
-    assert {k: v for k, v in out.items() if k not in ("answer_id", "layout")} == original
+    assert {k: v for k, v in out.items() if k not in ("answer_id", "answer_revision", "layout")} == original
+    assert out["answer_revision"] == out["layout"]["revision"] == 1
     assert validate_envelope(out) == []
 
 
@@ -218,16 +233,74 @@ def test_joined_legacy_fields():
                             {"label": "B", "url": "https://b.example/"}]
 
 
-def test_build_failure_sends_legacy(monkeypatch):
-    c = make()
-
+def _break_layouts(monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("x")
 
     monkeypatch.setattr("jarvis.bot.compose.templates.build_layout", boom)
+
+
+def test_build_failure_keeps_identity_with_legacy_fields(monkeypatch):
+    c = make()
+    _break_layouts(monkeypatch)
     payload = search()
-    assert c.compose(payload, request_id="q1") == [payload]
-    assert "layout" not in payload and not c._answers
+    out = c.compose(payload, request_id="q1")
+    assert len(out) == 1
+    assert "layout" not in out[0] and "layout" not in payload
+    assert out[0]["answer_id"] and out[0]["answer_revision"] == 1
+    assert out[0]["title"] == "A" and out[0]["tool"] == "web_search"
+    assert validate_envelope(out[0]) == []
+    assert "q1" in c._answers
+
+
+def test_standalone_build_failure_gets_new_identity_and_is_not_stored(monkeypatch):
+    c = make()
+    _break_layouts(monkeypatch)
+    a = c.compose(search("A"), request_id=None)[-1]
+    b = c.compose(search("B"), request_id=None)[-1]
+    assert "layout" not in a and a["answer_revision"] == 1 and b["answer_revision"] == 1
+    assert a["answer_id"] != b["answer_id"]
+    assert not c._answers
+
+
+def test_layout_then_fallback_then_layout_keeps_one_answer(monkeypatch):
+    c = make()
+    c.delegation_started("q1", "r")
+    first = c.compose(search("A"), request_id="q1")[-1]
+    real = compose_mod.templates.build_layout
+    _break_layouts(monkeypatch)
+    second = c.compose(search("B", url="https://b.example/"), request_id="q1")[-1]
+    assert "layout" not in second
+    assert second["answer_id"] == first["answer_id"] and second["answer_revision"] == 2
+    assert "## A" in second["body"] and "## B" in second["body"]  # whole answer, both results
+    monkeypatch.setattr("jarvis.bot.compose.templates.build_layout", real)
+    third = c.compose(search("C", url="https://c.example/"), request_id="q1")[-1]
+    assert third["answer_id"] == first["answer_id"] and third["answer_revision"] == 3
+    assert third["layout"]["revision"] == 3
+    body = " ".join(b.get("text", "") for b in third["layout"]["blocks"])
+    assert "body A" in body and "body B" in body and "body C" in body
+    assert validate_envelope(third) == []
+
+
+def test_legacy_failing_too_sends_standalone_and_held_revision_does_not_move(monkeypatch):
+    c = make()
+    c.delegation_started("q1", "r")
+    first = c.compose(search("A"), request_id="q1")[-1]
+    assert first["answer_revision"] == 1
+    _break_layouts(monkeypatch)
+    real_legacy = compose_mod.templates.legacy_fields
+
+    def legacy(parts, title, now=None):
+        if len(parts) > 1:  # the whole-answer form fails; a single result still builds
+            raise RuntimeError("y")
+        return real_legacy(parts, title, now=now)
+
+    monkeypatch.setattr("jarvis.bot.compose.templates.legacy_fields", legacy)
+    alone = c.compose(search("B", url="https://b.example/"), request_id="q1")[-1]
+    assert "layout" not in alone and alone["answer_revision"] == 1
+    assert alone["answer_id"] != first["answer_id"]
+    held = c._answers["q1"]
+    assert held.answer_id == first["answer_id"] and held.revision == 1 and len(held.parts) == 1
 
 
 def test_flag_values(monkeypatch):
@@ -366,6 +439,93 @@ async def test_research_watcher_layout_hints_flag():
         watcher = ResearchWatcher(speak, push, lambda: True, fetch_job=fetch, layout_hints=flag)
         await watcher.tick_once()
     assert "layout_hints" in pushed[0] and "layout_hints" not in pushed[1]
+
+
+# ------------------------------------- origin end to end (contract 1.5 rule 10)
+
+class _Recorder:
+    """A transport whose output() records the frames the real sender writes."""
+
+    def __init__(self):
+        self.frames = []
+
+    def output(self):
+        return self
+
+    async def send_message(self, frame):
+        self.frames.append(frame.message)
+
+    def displays(self):
+        return [m["data"]["display"] for m in self.frames
+                if m.get("data", {}).get("type") == "display"]
+
+
+def _in_request(request_id, fn):
+    from types import SimpleNamespace
+
+    from jarvis.bot.pipeline import _foreground_request
+
+    token = _foreground_request.set(
+        SimpleNamespace(request_id=request_id, sequence=1) if request_id else None)
+    try:
+        fn()
+    finally:
+        _foreground_request.reset(token)
+
+
+def _check_origins(displays):
+    """Every display with an answer_id is stamped with the request that answer was created under."""
+    created = {}
+    for d in displays:
+        created.setdefault(d["answer_id"], d.get("origin_request_id"))
+    for d in displays:
+        assert d.get("origin_request_id") == created[d["answer_id"]], d
+    return created
+
+
+async def test_origin_of_every_display_is_the_request_its_answer_was_created_under():
+    transport = _Recorder()
+    handler = make_agent_event_handler(transport=transport, composer=make())
+    for rid in ("q1", "q2"):  # two foreground requests, interleaved delegations
+        _in_request(rid, lambda rid=rid: handler(lifecycle("delegate_start", f"run-{rid}")))
+    for rid in ("q2", "q1"):
+        _in_request(rid, lambda rid=rid: handler(web_event(f"run-{rid}")))
+    for rid in ("q1", "q2"):
+        _in_request(rid, lambda rid=rid: handler(lifecycle("delegate_done", f"run-{rid}")))
+    await flush()
+    displays = transport.displays()
+    assert len(displays) == 4  # two revisions each (incomplete, then complete)
+    created = _check_origins(displays)
+    assert sorted(created.values()) == ["q1", "q2"]
+
+
+async def test_evicted_answers_closing_revision_keeps_its_own_origin():
+    transport = _Recorder()
+    handler = make_agent_event_handler(transport=transport, composer=make())
+    for i in range(MAX_ANSWERS + 1):  # the ninth answer pushes the oldest out
+        rid = f"q{i}"
+        _in_request(rid, lambda rid=rid: handler(lifecycle("delegate_start", f"run-{rid}")))
+        _in_request(rid, lambda rid=rid: handler(web_event(f"run-{rid}")))
+        await flush()
+    displays = transport.displays()
+    created = _check_origins(displays)
+    assert len(created) == MAX_ANSWERS + 1
+    first_answer = displays[0]["answer_id"]
+    closing = [d for d in displays if d["answer_id"] == first_answer]
+    assert [d["answer_revision"] for d in closing] == [1, 2]
+    assert closing[1]["layout"]["complete"] is True
+    assert {d["origin_request_id"] for d in closing} == {"q0"}
+    # the closing revision was sent while q8 was the foreground request
+    assert displays[-1]["origin_request_id"] == "q8"
+
+
+async def test_standalone_answer_has_no_origin():
+    transport = _Recorder()
+    handler = make_agent_event_handler(transport=transport, composer=make())
+    _in_request(None, lambda: handler(web_event("run-x")))
+    await flush()
+    displays = transport.displays()
+    assert len(displays) == 1 and displays[0]["answer_id"] and "origin_request_id" not in displays[0]
 
 
 def test_compose_display_helper_off_and_on():
