@@ -51,7 +51,7 @@ The rewritten boxes reach ROADMAP.md through WS-34 item C8, reviewed by Codex.
 
 ## 4. Lanes
 
-Item ids are stable; sizes are estimates from line counts at `4e58eaa`, not measurements. Every item is a PR into `next` unless marked.
+Item ids are stable; sizes are estimates from line counts at `4e58eaa`, not measurements. Every item is a PR into `next` unless marked. **Every item includes its tests:** `macos/MortimerHost/Tests/**`, `macos/JarvisKit/Tests/**` or `tests/**` for the files it touches. The interface items (C*) were reviewed by a Fable 5.2 pass on 2026-11-11 (see the progress log); findings marked "direction 6" will be checked again when the orb and palette design is final.
 
 ### WS-34: Claude lane (Python, contracts, roadmap)
 
@@ -59,27 +59,31 @@ Item ids are stable; sizes are estimates from line counts at `4e58eaa`, not meas
 |---|---|---|---|---|
 | A1 | Add `next` to the CI triggers | Codex | `next` exists | `.github/workflows/validate.yml`, `sandbox.yml`, `knowledge-base.yml` (trigger lines only; lands before B1) |
 | A2 | Cut `next` from the freeze SHA | none | freeze SHA recorded | branch only |
-| C0 | Contracts: block-kit `layout` schema for one composed answer, a typed-request client message, an approve/decline action, colour and type tokens; design rule from box 828 | Codex and Kimi | A2 | `docs/contracts/**` (new), Python message types and their tests |
-| C3 | Python composer: one composed answer per request, built from the existing formatters | Kimi | C0 | `jarvis/bot/display.py`, `jarvis/bot/compose*.py` (new), their unit tests |
-| C7-py | Typed request and approve/decline handlers in the bot | Kimi | C0 | a new `jarvis/bot/typed_request.py`; registration lines in `jarvis/bot/pipeline.py` (shared with WS-17/WS-05, see §6) |
-| B2 | Host and Origin allow-list plus a required header on mutating routes (admin, bot, costs) | Codex | A2 | `jarvis/admin/**`, `jarvis/costs_api.py`, the bot runner's middleware; the app's header line is Kimi's (C7) |
+| C0 | Contracts: block-kit `layout` schema for one composed answer, a typed-request client message, an approve/decline action (and whether it is a console action or a client message); design rule from box 828 | Codex and Kimi | A2 | `docs/contracts/**` (new), Python message types and their tests; if approve/decline is a console action, `jarvis/bot/console_protocol.py` and `tests/fixtures/command_console/protocol.json` |
+| C0b | Colour and type tokens, including a new `approval` token (amber stays the general attention colour) | Codex and Kimi | decision 2, final direction 6 | `docs/contracts/**` |
+| C3 | Python composer: one composed answer per request, gathering every display emitter | Kimi | C0 | `jarvis/bot/display.py`, `jarvis/bot/compose*.py` (new), the display emit sites in `jarvis/bot/pipeline.py` (lines 1023 to 1077, 1120, 1323, 1374, 1560, 2545 at `b9024ed`), `handoff_tools.py`, `weather_tool.py`, `plan_watcher.py`, `research_watcher.py` |
+| C7-py | Typed request and approve/decline handlers in the bot | Kimi | C0 | a new `jarvis/bot/typed_request.py`; registration lines in `jarvis/bot/pipeline.py` |
+| C7b | Composer and ⌘K, and the typed-request send path in the app (moved from Kimi to balance days 7 to 11) | Kimi | C0, C1a, B1 green | `MortimerHostApp.swift` (`keyboardShortcut` and `CommandMenu` near line 276) or the key monitor in `ConsoleView.swift` (near line 225), `Console/AttachmentTrayView.swift`, `macos/JarvisKit/Sources/JarvisKit/ClientMessage.swift`, `JarvisClient.swift`, `ClientMessageTests` |
+| C1b | Delete `web/`, `macos/MortimerShell`, `macos/GlassSpike`, `macos/VPIOBench` and what depends on them | Codex | B1, decision 3 | those paths; `.github/workflows/validate.yml` web steps (setup-node through the frontend build, lines 104 to 111 at `b9024ed`); `tests/unit/test_agents_yaml_frontend_parity.py`, `tests/unit/test_web_freeze_preflight.py`; `scripts/run_web.sh`, `scripts/mortimer.sh`, `scripts/build_shell.sh`, `scripts/deploy_main.sh` (lines 244, 418), `Procfile`; `CLAUDE.md`, `docs/REPO_MAP.md`, `macos/README.md`. Human-only, as a patch for Larry: `sandbox/profiles.py` (the `web` check), `sandbox/guest/hydrate.py`, `jarvis/selfedit/service.py`, `config/self_edit_allowlist.json` |
+| B2 | Host and Origin allow-list plus a required header on mutating routes (admin, bot, costs) | Codex | A2 | `jarvis/admin/**`, `jarvis/costs_api.py`, the bot runner's middleware; the app's header line goes with C7b |
 | B3 | Security modules and `config/model_access.yaml` into the self-edit deny tier | Kimi | A2 | patch only: `config/self_edit_allowlist.json` is a human commit (docs/plans/ALLOWLIST_SEQUENCE.md) |
 | B4 | Off-disk backups: both databases, knowledge-base documents, vault-key export | Kimi | A2 | `scripts/backup_db.py`, a new restore check, docs |
 | B6 | Split `jarvis/admin/server.py` (5,575 lines, 88 routes) into routers | Codex | B2 | `jarvis/admin/**` |
-| C8 | Rewritten UI boxes into ROADMAP.md | Codex | rows approved | ROADMAP.md acceptance lists |
+| C8 | Rewritten UI boxes into ROADMAP.md; box 549 ("one carousel owner on each screen") is reworded to match decision 4 | Codex | rows approved, decision 4 | ROADMAP.md acceptance lists |
 
-Claude cannot run `swift test`; it writes no Swift until B1 shows the hosted runner builds the app.
+Claude cannot run `swift test`; it writes no Swift until B1 shows the hosted runner builds and tests the app, and its Swift PRs (C7b) rely on that CI job plus a reviewer's local run.
 
-### WS-35: Codex lane (CI, deletion, results, phone)
+### WS-35: Codex lane (CI, layouts, results, phone)
 
 | Id | Work | Reviewer | Depends on | Files |
 |---|---|---|---|---|
-| B1 | macOS Swift CI job: `swift test` for JarvisKit, MortimerHost and MortimerPhoneCore; extends WS-30's adopted `phone-core-swift` claim (ROADMAP.md line 1689) | Claude, Kimi | A1 | `.github/workflows/validate.yml` |
+| C10 | Performance baseline for box 810 on the freeze build, before C1a merges: Codex writes the steps, Larry runs them on the Mac | Kimi | freeze build deployed | `docs/acceptance/**` |
+| C1a | Delete layouts 0 and 1 in the app. Keep `OrbFieldView`'s compact mode, which layout 2 still embeds (`Console/AdaptiveStageView.swift` lines 115 and 130), until C6 replaces it | Kimi | A2, decision 3 | every file with `layoutVersion` (12 source and 13 test files at `b9024ed`: `grep -rl layoutVersion macos/MortimerHost`), including `App/InterfaceLayoutVersion.swift`, `MortimerHostApp.swift`, `ConsoleView.swift`, `App/AppMessageRouter.swift`, `App/SupportingDisplayCoordinator.swift`, `App/ConsoleActionCoordinator.swift`, `Display/DisplayWindowView.swift`, `WorkspaceView.swift`, `WorkspaceResultPane.swift`, `DisplayWindowStore.swift`, `Console/ConversationThreadView.swift`, `CommandConsoleView.swift`, `AdaptiveStageView.swift` |
+| B1 | macOS Swift CI job: `swift test` for JarvisKit, MortimerHost and MortimerPhoneCore; extends WS-30's adopted `phone-core-swift` claim (ROADMAP.md line 1689 at `4e58eaa`) | Claude, Kimi | A1 | `.github/workflows/validate.yml` |
 | B5 | Widen ruff from F821 to the pyflakes set; ship NLTK test data offline | Claude | B1 | `.github/workflows/validate.yml`, the lint fixes it forces |
-| C1 | Delete layouts 0 and 1 and the legacy stacks: `web/`, `macos/MortimerShell`, `macos/GlassSpike`, `macos/VPIOBench`, `OrbFieldView`, `AdaptiveStageView`'s layout branch | Kimi | A2, decision 3 | those paths; `App/InterfaceLayoutVersion.swift`, `MortimerHostApp.swift` layout storage, `ConsoleView.swift` layout branch; `scripts/deploy_main.sh` (lines 244, 418), `scripts/run_web.sh`, `validate.yml` lines 109 to 111 |
-| C4 | Swift block renderer that wraps the existing typed views | Kimi | C0, C1 | `macos/MortimerHost/Sources/MortimerHost/Display/**`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift` |
-| C5 | Result carousel A, with "show all results" as B; flat fallback for Reduce Transparency and Reduce Motion; the reuse repair for box 196 | Kimi | C1 | `Display/**`, `Stores/WorkspaceStore.swift`, `Stores/WorkspaceRecents.swift`, `Stores/DisplayResultStore.swift`, `Placement/**` |
-| C9 | Phone orb in the iPhone preview, synthetic levels until WS-30 phone voice exists | Kimi | C6, decision 5 | `ios/**` |
+| C4 | Swift block renderer that wraps the existing typed views | Kimi | C0, C1a | `Display/**`, `App/AppMessageRouter.swift`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `macos/JarvisKit/Tests/JarvisKitTests/Fixtures/` |
+| C5 | Result carousel A, with "show all results" as B; flat fallback for Reduce Transparency and Reduce Motion; the reuse repair for box 196. Takes the result card and arrival notice out of the thread (`ConversationThreadView.swift` near lines 402 and 669) and the `result_next`/`result_previous`/`result_mode` actions. Acceptance: VoiceOver labels, keyboard paging, nothing shown by colour alone | Kimi | C4 | `Display/**`, `Stores/WorkspaceStore.swift`, `Stores/WorkspaceRecents.swift`, `Stores/DisplayResultStore.swift`, `Placement/**`, `App/ResponseResultRouter.swift`, `App/AppMessageRouter.swift`, `App/SupportingDisplayCoordinator.swift`, the carousel slot in `Console/AdaptiveStageView.swift`, those parts of `ConversationThreadView.swift` and `App/ConsoleActionCoordinator.swift` |
+| C9 | Phone orb in the iPhone preview, synthetic levels until WS-30 phone voice exists. The orb renderer lives in the Mac app target and `ios/MortimerPhoneCore/Package.swift` has no dependencies, so C9 first moves `CometOrbRenderer` and `CrystalGlassRig` into a shared package both apps import (both are SwiftUI only) | Kimi | C6, decision 5 | `ios/**`, a new shared package and its `Package.swift`, the two renderer files (after C6 lands), `PhonePreviewUITests` |
 | F1 | Acceptance fix (on `main`, by name): `PhoneRemoteAuthorityProcessTests.testOrdinaryUnknownWaitRetainsActualSingletonAfterPartialEOF` fails at `4e58eaa` (Kimi's revalidation, #325) | Kimi | none | `macos/MortimerHost/Sources/PhoneRemoteAuthority*/**` and its tests |
 
 Interface-review findings whose files are in `Display/**` (the white-on-white export buttons, duplicated titles) ride with C4 or C5.
@@ -89,47 +93,51 @@ Interface-review findings whose files are in `Display/**` (the white-on-white ex
 | Id | Work | Reviewer | Depends on | Files |
 |---|---|---|---|---|
 | A3 | Combined-source review, production `b136a2a` to the freeze SHA (already claimed in WS-17); Kimi's own files go to Claude | Claude for the excluded files | freeze SHA | docs only |
-| C2 | Tokens and the interface-review findings in Kimi's files; approvals yellow `#FFD84A`, errors rose `#FF5C8A`, rust kept for Mortimer (decision 2) | Codex | C0, C1 | `App/AppTheme.swift`, `App/Glass.swift`, `App/AppTuning.swift`, `Console/TopBarView.swift`, `Console/ConsoleActionBar.swift` |
-| C6 | Glass energy orb on the Mac: voice levels, thinking swirl, pointer bend, tap ripple | Codex | C2 | `Console/CometOrbRenderer.swift`, `VoiceWaveView.swift`, `CrystalGlassRig.swift`, `MotionPreferences.swift`, `WaveTuningView.swift` |
-| C7 | Thread: activity row, inline approve/decline, composer and ⌘K; Space reaches focused controls | Codex | C0, C1 | `Console/ConversationThreadView.swift`, `AttachmentTrayView.swift`, `MicControlsView.swift`, `CommandConsoleView.swift`, `App/ConsoleActionCoordinator.swift`, `Stores/ConversationStore.swift`, `macos/JarvisKit/Sources/JarvisKit/ClientMessage.swift` |
+| C2 | Add the `approval` and error tokens (approvals yellow `#FFD84A`, errors rose `#FF5C8A`, rust kept for Mortimer; decision 2) without changing `amber`, which 25 files use for general warnings; check contrast of both on glass; fix the interface-review findings in these files. Moving call sites to the new tokens belongs to C5 (cards) and C7a (thread) | Codex | C0b | `App/AppTheme.swift`, `App/Glass.swift`, `App/AppTuning.swift`, `Console/TopBarView.swift`, `Console/ConsoleActionBar.swift` |
+| C6 | Glass energy orb on the Mac: voice levels, thinking swirl, pointer bend, tap ripple; replaces `OrbFieldView`'s compact satellites. States how an orb tap and Space push-to-talk (`MicControlsView.swift` near line 100) coexist, since the orb view is not hit-testable today (`VoiceWaveView.swift` line 63) | Codex | C2, C5 (shares `AdaptiveStageView.swift`) | `Console/CometOrbRenderer.swift`, `VoiceWaveView.swift`, `CrystalGlassRig.swift`, `MotionPreferences.swift`, `WaveTuningView.swift`, `App/VoicePresentationState.swift`, the orb slots in `Console/AdaptiveStageView.swift`, `OrbFieldView.swift` (removal), `OrbShellFrameTimeTests` |
+| C7a | Thread: activity row and inline approve/decline (reading the approval signal `hasPendingDraft` in `Stores/DisplayResultStore.swift`); Space reaches focused controls. Acceptance: VoiceOver, keyboard, nothing shown by colour alone | Codex | C0, C1a, C5 | `Console/ConversationThreadView.swift`, `MicControlsView.swift`, `CommandConsoleView.swift`, `App/ConsoleActionCoordinator.swift`, `Stores/ConversationStore.swift`; `ConsoleProtocol.swift` and `App/ConsoleActionRegistry.swift` if C0 makes approve/decline a console action |
 
 Paths without a prefix are under `macos/MortimerHost/Sources/MortimerHost/`.
 
-### Hand-off points (one file, two lanes)
+### Hand-off points (one file, two items)
 
-- `.github/workflows/validate.yml`: A1 (Claude) lands first, then B1 and B5 (Codex). C1's web build removal goes after B1.
-- `ConsoleView.swift`, `MortimerHostApp.swift`: C1 (Codex) lands first; C7 (Kimi) builds on it.
-- `macos/JarvisKit`: Codex edits `AppMessage.swift` (C4), Kimi edits `ClientMessage.swift` (C7). Neither edits the other's file without saying so in the PR.
-- `jarvis/bot/pipeline.py`: only C7-py's registration lines, which WS-17 and WS-05 also hold (§6).
+- `.github/workflows/validate.yml`: A1 (Claude) first, then B1 and B5 (Codex), then C1b's web removal (Claude).
+- `Console/AdaptiveStageView.swift`, the one place the thread, results and orb meet: C1a, then C5 (carousel slot), then C6 (orb slots) and C7a.
+- `Console/ConversationThreadView.swift`, `App/ConsoleActionCoordinator.swift`, `Stores/DisplayResultStore.swift`: C1a, then C5 takes the result card, arrival notice and result actions, then C7a.
+- `App/AppMessageRouter.swift`: C1a, then C4, then C5 (all Codex).
+- `ConsoleView.swift`, `MortimerHostApp.swift`: C1a first; C7b builds on it.
+- `macos/JarvisKit`: Codex edits `AppMessage.swift` (C4); Claude edits `ClientMessage.swift` and `JarvisClient.swift` (C7b).
+- `jarvis/bot/pipeline.py`: C3's display emit sites and C7-py's registration lines; WS-17 and WS-05 hold other parts (§6). C3 lands first.
+- `CometOrbRenderer.swift`, `CrystalGlassRig.swift`: C6, then C9 moves them into the shared package.
 
 ## 5. Sequence and estimates
 
 | Days (from the freeze) | Claude | Codex | Kimi |
 |---|---|---|---|
-| 1 to 2 | A1, A2, C0 | F1, B1, then C1 | A3 review |
-| 3 to 6 | B2, B3, B4, C3 | C1 finish, B5, C4 | A3 finish, C2 |
-| 7 to 11 | C7-py, B6 | C5 | C6, C7 |
-| 12 to 14 | C8, review | C9, review | C7 finish, review |
+| 1 to 2 | A1, A2, C0 | C10 steps, C1a, F1 | A3 review |
+| 3 to 6 | C0b, B2, B3, B4, C3, C1b (after B1) | B1, B5, C4 | A3 finish, C2 |
+| 7 to 11 | C7-py, C7b, B6 | C5 | C6 (after C5's stage slot), C7a |
+| 12 to 14 | C8, review | C9, review | C7a finish, review |
 
-Agent-days per item (estimates): C0 1, C3 2, C7-py 1 to 2, B2 to B4 about 2, B6 2 to 3, C8 1; B1 0.5 to 1, B5 0.5, C1 1 to 2, C4 2 to 3, C5 3 to 4, C9 1 to 2, F1 unknown; A3 2 to 3, C2 2, C6 2 to 3, C7 3 to 4. Speed basis: #171 (1,376 Swift lines, 1 day), #164 (769, 1 day), #216 (967, under a day), #198 (2,181, 3 days), #290 (7,272 Swift plus 25,040 Python, 8 days), from git merge history. Projected closure near 2026-12-09 if the freeze starts this week; a projection, not a measurement.
+Agent-days per item (estimates): C0 1, C0b 0.5, C3 2 to 3, C7-py 1 to 2, C7b 2, C1b 1, B2 to B4 about 2, B6 2 to 3, C8 1; C10 0.5, C1a 1 to 2, B1 0.5 to 1, B5 0.5, C4 2 to 3, C5 3 to 4, C9 2 to 3, F1 unknown; A3 2 to 3, C2 1 to 2, C6 2 to 3, C7a 2. Speed basis: #171 (1,376 Swift lines, 1 day), #164 (769, 1 day), #216 (967, under a day), #198 (2,181, 3 days), #290 (7,272 Swift plus 25,040 Python, 8 days), from git merge history. Projected closure near 2026-12-09 if the freeze starts this week; a projection, not a measurement. The critical path is C0, C1a, C4, C5, then C6 and C7a.
 
 The run-now acceptance batch (27 boxes) runs on the freeze build once A3 passes and Larry deploys; the final build adds the 19 rewritten UI boxes, the 11 final-build boxes and five days of use.
 
 ## 6. Scope overlaps to record in ROADMAP.md §4
 
-- `.github/workflows/validate.yml`: A1, B1, B5 and C1 here; WS-20 and WS-30 already claim parts.
-- `scripts/deploy_main.sh`: C1 edits two lines; the file sits in WS-17's bounded scope (Codex owns both).
-- `jarvis/bot/pipeline.py`: C7-py adds registration lines; WS-17 and WS-05 hold parts (CX-26, CX-27).
-
+- `.github/workflows/validate.yml`: A1, B1, B5 and C1b here; WS-20 and WS-30 already claim parts.
+- `scripts/deploy_main.sh`: C1b edits two lines; the file sits in WS-17's bounded scope (Codex).
+- `jarvis/bot/pipeline.py`: C3 changes the display emit sites and C7-py adds registration lines; WS-17 and WS-05 hold parts (CX-26, CX-27).
+- `sandbox/**`, `jarvis/selfedit/service.py`, `config/self_edit_allowlist.json`: C1b supplies patches; Larry commits them.
 ## 7. Decisions
 
 Decision 1 (freeze with `next`) is Larry's 01:58:16 answer. Decisions 2 to 7 stay as Claude's recommendations until Larry answers; the items that depend on them wait:
 
 | # | Decision | Recommendation | Waits on it |
 |---|---|---|---|
-| 2 | Approvals yellow `#FFD84A`, errors rose `#FF5C8A`, rust stays Mortimer's | both | C2 colours |
-| 3 | Delete layouts 0 and 1, `web/`, MortimerShell, GlassSpike, VPIOBench | delete all | C1 |
-| 4 | Second screen: carousel too, or keep its grid | keep the grid | C5 scope; the five WS-21 boxes |
+| 2 | Approvals yellow `#FFD84A`, errors rose `#FF5C8A`, rust stays Mortimer's | both | C0b, C2 |
+| 3 | Delete layouts 0 and 1, `web/`, MortimerShell, GlassSpike, VPIOBench | delete all | C1a, C1b |
+| 4 | Second screen: carousel too, or keep its grid | keep the grid | C5 scope; box 549's wording (C8); the five WS-21 boxes |
 | 5 | Phone orb now on synthetic levels, or wait for WS-30 phone voice | now | C9 |
 | 6 | Approve the WS-34 to WS-36 rows | approve | merge of this file |
 | 7 | Parked WS-23 to WS-26 | after closure | nothing here |
@@ -152,3 +160,4 @@ Decision 1 (freeze with `next`) is Larry's 01:58:16 answer. Decisions 2 to 7 sta
 ## Progress log
 
 - 2026-11-11: plan written and synced to the repo with the freeze docs PR (Claude). Freeze SHA not yet recorded: Larry is deciding whether the flaky `test_outer_task_deadline_covers_tool_execution` (seen in #324's CI) is fixed before the freeze.
+- 2026-11-11: Larry's rule (02:07:51 UTC, "at least the enhancement planning"): interface planning runs on Fable 5.2. A Fable 5.2 review of the interface items, checked against the tree at `b9024ed`, changed §4 to §6: C1 split into C1a (app layouts, Codex, day 1) and C1b (`web/` and the old packages with their Python, sandbox, CI and docs fallout, Claude); C0b split out for tokens; C2 adds an `approval` token instead of recolouring `amber`; C7 split, with the composer half (C7b) moved to Claude; C10 added for the box 810 baseline; file lists for C3 to C7 and C9 completed; `AdaptiveStageView.swift` and three thread/result files added to the hand-offs; C9 gets a shared orb package. Before this, the plan's text was written by Claude on Opus; the deep review, UI critique, design directions 1 to 4 and the carousel idea it draws on were Fable 5.2.
