@@ -143,6 +143,8 @@ jobs:
           test "$(xcodebuild -version | head -n 1)" = "Xcode 26.3"
           sw_vers
           xcodebuild -version
+          xcrun --version
+          xcrun --find xctest
           xcrun swift --version
           xcrun --sdk macosx --show-sdk-version
       # The existing Host process tests need the offline owner and Python.
