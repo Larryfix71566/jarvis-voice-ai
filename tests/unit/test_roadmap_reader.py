@@ -117,6 +117,46 @@ def test_roadmap_limit_is_separate_from_generic_file_limit(tmp_path, monkeypatch
     assert 'content' not in refused and 'roadmap' not in refused
 
 
+def _roadmap_text(size):
+    head = card('WS-01') + '\n'
+    # The card holds a non-ASCII dash; pad by encoded length so bytes == size.
+    return head + 'p' * (size - len(head.encode('utf-8')))
+
+
+def test_default_roadmap_limits():
+    assert logic.ROADMAP_READ_MAX_BYTES == 1024 * 1024
+    assert logic.REPO_READ_MAX_BYTES == 256_000
+    assert logic.ROADMAP_READ_MAX_BYTES <= logic.ROADMAP_SNAPSHOT_MAX_BYTES
+
+
+def test_default_limit_reads_roadmap_above_former_384_kib_cap(tmp_path, monkeypatch):
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    size = 600 * 1024
+    assert 384 * 1024 < size < logic.ROADMAP_READ_MAX_BYTES
+    text = _roadmap_text(size)
+    (tmp_path / 'ROADMAP.md').write_text(text)
+    (tmp_path / 'plain.md').write_text(text)
+
+    result = logic.repo_read_file('ROADMAP.md')
+    assert result['ok'] is True
+    assert len(text.encode('utf-8')) == size
+    assert result['bytes'] == size
+    assert result['content'] == text
+    assert len(logic.expand_roadmap_snapshot(result['content'], result['roadmap'])['cards']) == 1
+    ordinary = logic.repo_read_file('plain.md')
+    assert ordinary['ok'] is False
+    assert '256000 byte limit' in ordinary['error']
+
+
+def test_default_limit_refuses_roadmap_above_one_mib(tmp_path, monkeypatch):
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    (tmp_path / 'ROADMAP.md').write_text(_roadmap_text(logic.ROADMAP_READ_MAX_BYTES + 1))
+    refused = logic.repo_read_file('ROADMAP.md')
+    assert refused['ok'] is False
+    assert f'{logic.ROADMAP_READ_MAX_BYTES} byte limit' in refused['error']
+    assert 'content' not in refused and 'roadmap' not in refused
+
+
 def test_roadmap_second_read_enforces_dedicated_limit(tmp_path, monkeypatch):
     monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
     doc = tmp_path / 'ROADMAP.md'
@@ -143,7 +183,7 @@ def test_real_repo_has_complete_card_count_and_bounded_snapshot(monkeypatch):
     result = logic.repo_read_file('ROADMAP.md')
     assert result['ok'], result.get('error')
     expected = re.findall(r'<details id="(ws-\d+)">', result['content'])
-    snapshot = logic._roadmap_snapshot(root, result['content'])
+    snapshot = logic.expand_roadmap_snapshot(result['content'], logic._roadmap_snapshot(root, result['content']))
     assert {row['id'].lower() for row in snapshot['cards']} == set(expected)
     assert len(snapshot['cards']) == len(expected)
     assert len(json.dumps(snapshot).encode()) < logic.ROADMAP_SNAPSHOT_MAX_BYTES
@@ -207,14 +247,50 @@ def test_log_total_counts_actual_bytes_when_files_grow(tmp_path, monkeypatch):
 
 
 def test_roadmap_snapshot_bound_accepts_growth_but_never_truncates(tmp_path, monkeypatch):
-    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
-    monkeypatch.setattr(logic, '_roadmap_cards', lambda content: ([{'details': 'x' * 600000}], []))
-    snapshot = logic._roadmap_snapshot(tmp_path, '')
-    assert len(snapshot['cards'][0]['details']) == 600000
-    monkeypatch.setattr(logic, '_roadmap_cards', lambda content: ([{'details': 'x' * logic.ROADMAP_SNAPSHOT_MAX_BYTES}], []))
     import pytest
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    monkeypatch.setattr(logic, '_roadmap_logs', lambda root: ([{'path': 'x', 'blob': 'x' * 600000}], []))
+    snapshot = logic._roadmap_snapshot(tmp_path, '')
+    assert len(snapshot['logs'][0]['blob']) == 600000
+    assert 'cards' not in snapshot and snapshot['schema'] == 'mortimer.roadmap.source.v1'
+    monkeypatch.setattr(logic, '_roadmap_logs', lambda root: ([{'path': 'x', 'blob': 'x' * logic.ROADMAP_SNAPSHOT_MAX_BYTES}], []))
     with pytest.raises(logic.RepoPathError, match='no workstreams were silently truncated'):
         logic._roadmap_snapshot(tmp_path, '')
+
+
+def _compact(tmp_path, monkeypatch, text):
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(tmp_path))
+    (tmp_path / 'ROADMAP.md').write_text(text)
+    return logic.repo_read_file('ROADMAP.md')
+
+
+def test_expand_roadmap_snapshot_rejects_mismatch_schema_and_extra_keys(tmp_path, monkeypatch):
+    import copy
+    import pytest
+    result = _compact(tmp_path, monkeypatch, card('WS-01'))
+    source = result['roadmap']
+    frozen = copy.deepcopy(source)
+    full = logic.expand_roadmap_snapshot(result['content'], source)
+    assert source == frozen and full['schema'] == 'mortimer.roadmap.v1'
+    with pytest.raises(ValueError):
+        logic.expand_roadmap_snapshot(result['content'] + ' ', source)
+    for bad in ({**source, 'schema': 'mortimer.roadmap.v1'}, {**source, 'cards': []},
+                {k: v for k, v in source.items() if k != 'logs'}, [], None):
+        with pytest.raises(ValueError):
+            logic.expand_roadmap_snapshot(result['content'], bad)
+
+
+def test_real_repo_expanded_snapshot_equals_former_full_snapshot(monkeypatch):
+    root = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(root))
+    result = logic.repo_read_file('ROADMAP.md')
+    assert result['ok'], result.get('error')
+    compact = result['roadmap']
+    assert 'cards' not in compact
+    cards, card_issues = logic._roadmap_cards(result['content'])
+    expected = {'schema': 'mortimer.roadmap.v1', 'provenance': compact['provenance'], 'cards': cards,
+                'logs': compact['logs'], 'issues': card_issues + compact['issues']}
+    assert logic.expand_roadmap_snapshot(result['content'], compact) == expected
 
 
 def test_skipped_oversize_logs_still_count_toward_declared_total(tmp_path, monkeypatch):

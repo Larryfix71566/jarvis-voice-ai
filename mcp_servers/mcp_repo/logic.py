@@ -14,9 +14,15 @@ from pathlib import Path
 
 # ⚙ TUNING KNOB — largest ordinary file repo_read_file will return (D20).
 REPO_READ_MAX_BYTES = 256_000
-# The canonical roadmap also carries a complete bounded parsed snapshot. Its
-# source cap is separate so roadmap growth never raises other file limits.
-ROADMAP_READ_MAX_BYTES = 384 * 1024
+# The canonical ROADMAP.md source cap is separate from REPO_READ_MAX_BYTES so
+# roadmap growth never raises other file limits. It equals
+# ROADMAP_SNAPSHOT_MAX_BYTES (1 MiB). A roadmap read carries the text once plus
+# a compact source snapshot (provenance, logs, git/log issues); the cards are a
+# pure function of the text and are derived from the single verified copy
+# wherever the full snapshot is displayed (expand_roadmap_snapshot). Scoped
+# reads through the host are bounded by the 1,000,000-character tool-result cap
+# in jarvis/privacy_policy.py, which counts the content and snapshot together.
+ROADMAP_READ_MAX_BYTES = 1024 * 1024
 
 # ⚙ TUNING KNOB — cap on repo_list_files/repo_search result counts (D20).
 REPO_SEARCH_MAX_RESULTS = 50
@@ -172,6 +178,7 @@ def repo_read_file(path: str) -> dict:
 
 # A derived presentation of the canonical source, never another status store.
 ROADMAP_SNAPSHOT_MAX_BYTES = 1024 * 1024
+ROADMAP_SOURCE_SCHEMA = "mortimer.roadmap.source.v1"
 # Bound log discovery independently of the source envelope. The host verifies
 # every log and commits larger sets to one digest without raising its ref cap.
 ROADMAP_LOG_MAX_FILES = 1024
@@ -331,7 +338,7 @@ def _roadmap_snapshot(root: Path, content: str) -> dict:
     import hashlib
     import json
     import subprocess
-    cards, issues = _roadmap_cards(content)
+    issues: list[str] = []
     logs, log_issues = _roadmap_logs(root.resolve())
     revision, dirty = None, None
     # Local read only. Disable executable fsmonitor hooks; never fetch or pull.
@@ -343,14 +350,40 @@ def _roadmap_snapshot(root: Path, content: str) -> dict:
         dirty = bool(git("status", "--porcelain", "--untracked-files=all", "--", "ROADMAP.md", "docs/roadmap-log"))
     except (OSError, subprocess.SubprocessError):
         issues.append("Local Git provenance unavailable; no main/installed-revision claim")
-    snapshot = {"schema": "mortimer.roadmap.v1", "provenance": {
+    snapshot = {"schema": ROADMAP_SOURCE_SCHEMA, "provenance": {
         "path": "ROADMAP.md", "repository_id": hashlib.sha256(str(root.resolve()).encode("utf-8")).hexdigest(), "revision": revision, "sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
         "read_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "dirty": dirty, "source_kind": "local_checkout"},
-        "cards": cards, "logs": logs, "issues": issues + log_issues}
+        "logs": logs, "issues": issues + log_issues}
     if len(json.dumps(snapshot, ensure_ascii=False).encode("utf-8")) > ROADMAP_SNAPSHOT_MAX_BYTES:
         raise RepoPathError("Roadmap snapshot exceeds 1024 KiB; no workstreams were silently truncated")
     return snapshot
+
+
+def expand_roadmap_snapshot(content: str, source: dict) -> dict:
+    """Derive the full v1 snapshot from verified text and its compact source.
+
+    Pure: raises ValueError when `source` is malformed or was not produced from
+    exactly this `content`; never mutates `source`.
+    """
+    import hashlib
+    if not isinstance(source, dict) or source.get("schema") != ROADMAP_SOURCE_SCHEMA:
+        raise ValueError("roadmap source snapshot has the wrong schema")
+    if set(source) != {"schema", "provenance", "logs", "issues"}:
+        raise ValueError("roadmap source snapshot has unexpected keys")
+    provenance = source["provenance"]
+    if not isinstance(provenance, dict):
+        raise ValueError("roadmap source provenance is not an object")
+    if not isinstance(content, str):
+        raise ValueError("roadmap content is not text")
+    if provenance.get("sha256") != hashlib.sha256(content.encode("utf-8")).hexdigest():
+        raise ValueError("roadmap content does not match the snapshot sha256")
+    if not isinstance(source["logs"], list) or not isinstance(source["issues"], list):
+        raise ValueError("roadmap source logs/issues are malformed")
+    cards, card_issues = _roadmap_cards(content)
+    return {"schema": "mortimer.roadmap.v1", "provenance": provenance, "cards": cards,
+            "logs": source["logs"], "issues": card_issues + source["issues"]}
+
 
 def repo_list_files(subdir: str = "", pattern: str = "") -> dict:
     """List files under `subdir` (repo root if empty), optionally filtered

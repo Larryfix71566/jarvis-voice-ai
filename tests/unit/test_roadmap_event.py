@@ -42,6 +42,11 @@ def source(tmp_path, monkeypatch):
     return logic.repo_read_file('ROADMAP.md')
 
 
+def full(result):
+    """The full v1 snapshot derived from a compact read result's single text copy."""
+    return logic.expand_roadmap_snapshot(result['content'], result['roadmap'])
+
+
 def display(result):
     return build_display_payload('developer', 'Developer', 'repo_read_file',
                                  {'path': 'ROADMAP.md'}, result)
@@ -69,24 +74,28 @@ async def test_actual_agent_event_displays_final_card_and_preserves_history(sour
     event = next(e for e in events if e['type'] == 'agent_tool_result')
     assert len(event['result']) > TOOL_RESULT_EVENT_MAX
     delivered = next(m['display'] for m in sent if m['type'] == 'display')
-    assert delivered['roadmap'] == source['roadmap']
+    assert delivered['roadmap'] == full(source)
+    assert delivered['roadmap']['schema'] == 'mortimer.roadmap.v1'
     assert delivered['roadmap']['cards'][-1]['id'] == 'WS-17'
     assert 'data_policy' not in delivered  # Projection creates no source grant.
     history = next(m['content'] for m in provider.requests[-1]['messages'] if m['role'] == 'tool')
     assert json.loads(history) == source  # No truncation or projection for model history.
 
 
-@pytest.mark.parametrize('variant', ['missing', 'array', 'bad-card', 'bad-date', 'nonfinite', 'oversize', 'bad-utf8'])
+@pytest.mark.parametrize('variant', ['missing', 'array', 'bad-log', 'bad-date', 'nonfinite', 'oversize', 'bad-utf8', 'content-altered', 'no-content', 'full-schema'])
 def test_malformed_or_oversize_snapshot_has_explicit_content_free_failure(source, variant):
     data = copy.deepcopy(source)
     snapshot = data['roadmap']
     if variant == 'missing': del data['roadmap']
     elif variant == 'array': data['roadmap'] = []
-    elif variant == 'bad-card': snapshot['cards'][-1]['checklist'][0]['checked'] = 1
+    elif variant == 'bad-log': snapshot['logs'] = [{'path': 'ROADMAP.md', 'date': 'x', 'sha256': 'y', 'title': 't', 'rows': []}]
     elif variant == 'bad-date': snapshot['provenance']['read_at'] = 'not a timestamp'
     elif variant == 'nonfinite': snapshot['unexpected'] = float('nan')
-    elif variant == 'oversize': snapshot['cards'][0]['details'] = 'x' * (1024 * 1024)
-    elif variant == 'bad-utf8': snapshot['cards'][0]['details'] = '\ud800'
+    elif variant == 'oversize': snapshot['issues'] = ['x' * (1024 * 1024)]
+    elif variant == 'bad-utf8': snapshot['issues'] = ['\ud800']
+    elif variant == 'content-altered': data['content'] += ' altered after sealing'
+    elif variant == 'no-content': del data['content']
+    elif variant == 'full-schema': snapshot['schema'] = 'mortimer.roadmap.v1'
     observed = _tool_result_observation('repo_read_file', {'path': 'ROADMAP.md'}, json.dumps(data))
     assert json.loads(observed)['error'] == 'roadmap_display_unavailable'
     payload = display(observed)
@@ -114,7 +123,7 @@ def test_all_other_observations_keep_the_existing_cap(source, tool, args):
 
 
 async def test_tampered_classified_snapshot_cannot_publish_or_continue(source, tmp_path, sent):
-    source['roadmap']['cards'][-1]['details'] = 'FORGED_CARD_CANARY'
+    source['roadmap']['cards'] = [{'id': 'WS-17', 'details': 'FORGED_CARD_CANARY'}]
     registry = registry_for('repo_read_file', 'mcp-repo', Session(response(source)), pinned=True, root=tmp_path)
     agent, provider = routed(registry)
     agent.mcp_servers = ['mcp-repo']
@@ -143,14 +152,15 @@ def test_current_repository_complete_snapshot_survives_projection(monkeypatch):
     source = logic.repo_read_file('ROADMAP.md')
     assert source['ok']
     observed = _tool_result_observation('repo_read_file', {'path': 'ROADMAP.md'}, json.dumps(source))
-    assert display(observed)['roadmap'] == source['roadmap']
+    assert display(observed)['roadmap'] == full(source)
+    assert display(observed)['roadmap']['cards']
     assert len(observed.encode('utf-8')) <= 1200 * 1024
 
 
 def test_snapshot_above_old_size_limit_survives_event_projection(source):
     source['roadmap']['issues'] = ['x' * 550000]
     observed = _tool_result_observation('repo_read_file', {'path': 'ROADMAP.md'}, json.dumps(source))
-    assert display(observed)['roadmap'] == source['roadmap']
+    assert display(observed)['roadmap'] == full(source)
     assert len(observed.encode()) <= 1200 * 1024
 
 
@@ -169,4 +179,33 @@ async def test_current_repository_classified_source_reaches_complete_display(mon
     assert policy.level == 'approved_external'
     assert len(envelope.canonical_refs) <= 256
     observed = _tool_result_observation('repo_read_file', arguments, content)
-    assert display(observed)['roadmap'] == source['roadmap']
+    assert display(observed)['roadmap'] == full(source)
+
+
+def test_compact_read_result_projects_full_cards_and_drops_content(source):
+    assert 'cards' not in source['roadmap']
+    observed = _tool_result_observation('repo_read_file', {'path': 'ROADMAP.md'}, json.dumps(source))
+    projected = json.loads(observed)
+    assert projected['content'] == 'Read-only roadmap snapshot.'
+    assert projected['roadmap'] == full(source)
+    assert [c['id'] for c in projected['roadmap']['cards']] == ['WS-01', 'WS-17']
+    assert 'Large fixture' not in projected['content']
+
+
+def test_altered_content_after_sealing_yields_roadmap_display_unavailable(source):
+    source['content'] = source['content'].replace('landed', 'accepted')
+    observed = _tool_result_observation('repo_read_file', {'path': 'ROADMAP.md'}, json.dumps(source))
+    assert json.loads(observed) == {'ok': False, 'error': 'roadmap_display_unavailable', 'path': 'ROADMAP.md'}
+
+
+def test_display_payload_expands_compact_and_keeps_full_snapshot(source):
+    expanded = full(source)
+    assert display(json.dumps(source))['roadmap'] == expanded
+    already_full = {**source, 'roadmap': expanded}
+    assert display(json.dumps(already_full))['roadmap'] == expanded
+    tampered = {**source, 'content': source['content'] + 'x'}
+    payload = display(json.dumps(tampered))
+    assert 'roadmap' not in payload
+    oversize = copy.deepcopy(source)
+    oversize['roadmap']['issues'] = ['x' * (1024 * 1024)]
+    assert 'roadmap' not in display(json.dumps(oversize))

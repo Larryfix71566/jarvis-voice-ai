@@ -526,6 +526,42 @@ async def test_canonical_roadmap_between_generic_and_roadmap_limits_is_attested(
     assert envelope.canonical_refs[0] == str(project / 'ROADMAP.md')
 
 
+async def test_canonical_roadmap_above_former_cap_is_attested_with_default_limits(project):
+    (project / 'ROADMAP.md').write_bytes(_padded_roadmap(400 * 1024))
+    body = repo_logic.repo_read_file(path='ROADMAP.md')
+    assert body['ok'] is True and 'roadmap' in body
+    envelope, content = await _scoped_read(project, body, {'path': 'ROADMAP.md'})
+    assert json.loads(content) == body
+    assert envelope.canonical_refs[0] == str(project / 'ROADMAP.md')
+
+
+async def test_card_heavy_roadmap_below_host_result_cap_is_attested_with_default_limits(project):
+    # The read result carries the roadmap text once (cards are derived from it),
+    # so a card-heavy roadmap well above the former ~360 KB ceiling is attested.
+    (project / 'ROADMAP.md').write_bytes(_padded_roadmap(500 * 1024))
+    body = repo_logic.repo_read_file(path='ROADMAP.md')
+    assert body['ok'] is True and 'roadmap' in body and 'cards' not in body['roadmap']
+    envelope, content = await _scoped_read(project, body, {'path': 'ROADMAP.md'})
+    assert json.loads(content) == body
+    assert envelope.canonical_refs[0] == str(project / 'ROADMAP.md')
+
+
+async def test_roadmap_read_near_host_result_cap_is_attested_and_over_it_refused_whole(project):
+    # Measured: the sealed JSON is the text plus ~580 characters of envelope
+    # (ensure_ascii, sort_keys), so the 1,000,000-character host cap binds at
+    # roughly 999,400 bytes of ASCII roadmap. Refused whole, never truncated.
+    (project / 'ROADMAP.md').write_bytes(_padded_roadmap(975 * 1024))  # 998,400 bytes
+    body = repo_logic.repo_read_file(path='ROADMAP.md')
+    assert body['ok'] is True
+    envelope, content = await _scoped_read(project, body, {'path': 'ROADMAP.md'})
+    assert json.loads(content) == body and len(content) < 1_000_000
+    (project / 'ROADMAP.md').write_bytes(_padded_roadmap(980 * 1024))  # 1,003,520 bytes
+    body = repo_logic.repo_read_file(path='ROADMAP.md')
+    assert body['ok'] is True and len(json.dumps(body, sort_keys=True)) > 1_000_000
+    envelope, content = await _scoped_read(project, body, {'path': 'ROADMAP.md'})
+    assert json.loads(content) == {'ok': False, 'error': 'tool_reported_failure'}
+
+
 async def test_canonical_roadmap_above_roadmap_limit_is_refused(project, monkeypatch):
     monkeypatch.setattr(repo_logic, 'REPO_READ_MAX_BYTES', 1000)
     # Build a body that is consistent with the file on disk (bytes, content,
@@ -548,13 +584,13 @@ async def test_non_roadmap_file_keeps_generic_limit_at_host(project, monkeypatch
     assert json.loads(content) == {'ok': False, 'error': 'tool_source_scope_invalid'}
 
 
-@pytest.mark.parametrize('variant', ['card', 'omit-card', 'extra-field', 'provenance', 'hash', 'date', 'revision', 'dirty-type', 'repository-id', 'omit-log', 'log-hash', 'log-title', 'log-rows', 'log-path', 'disk-log', 'disk-card', 'old', 'future', 'naive', 'wrong-file', 'symlink'])
+@pytest.mark.parametrize('variant', ['inject-cards', 'inject-empty-cards', 'extra-field', 'provenance', 'hash', 'date', 'revision', 'dirty-type', 'repository-id', 'omit-log', 'log-hash', 'log-title', 'log-rows', 'log-path', 'disk-log', 'disk-card', 'old', 'future', 'naive', 'wrong-file', 'symlink'])
 async def test_roadmap_snapshot_cannot_self_attest_derived_or_changed_content(roadmap_project, variant):
     arguments = {'path': 'ROADMAP.md'}
     body = repo_logic.repo_read_file(**arguments)
     snapshot = body['roadmap']
-    if variant == 'card': snapshot['cards'][0]['status'] = 'accepted'
-    elif variant == 'omit-card': snapshot['cards'] = []
+    if variant == 'inject-cards': snapshot['cards'] = [{'id': 'WS-17', 'status': 'accepted'}]
+    elif variant == 'inject-empty-cards': snapshot['cards'] = []
     elif variant == 'extra-field': snapshot['not_source'] = CANARY
     elif variant == 'provenance': snapshot['provenance']['source_kind'] = 'github_main'
     elif variant == 'hash': snapshot['provenance']['sha256'] = '0' * 64

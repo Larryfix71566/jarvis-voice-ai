@@ -173,7 +173,15 @@ def _tool_result_observation(tool: str, arguments: dict, result: str) -> str:
         data = json.loads(result)
         if not isinstance(data, dict) or data.get("ok") is not True or data.get("path") != "ROADMAP.md":
             return failure
-        snapshot = data.get("roadmap")
+        if type(data.get("content")) is not str:
+            return failure
+        from mcp_servers.mcp_repo.logic import expand_roadmap_snapshot
+        try:
+            # The read result carries the text once plus a compact source
+            # snapshot; the cards are derived from the single verified copy.
+            snapshot = expand_roadmap_snapshot(data["content"], data.get("roadmap"))
+        except (ValueError, TypeError, KeyError):
+            return failure
         if not _roadmap_observation_shape(snapshot):
             return failure
         encoded = json.dumps(snapshot, ensure_ascii=False, allow_nan=False)

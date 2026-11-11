@@ -205,7 +205,18 @@ def build_display_payload(
                 payload["data_policy"] = "approved_external"
     if tool == "repo_read_file" and data.get("path") == "ROADMAP.md" and isinstance(data.get("roadmap"), dict):
         import os
-        payload["roadmap"] = data["roadmap"]
+        snapshot = data["roadmap"]
+        if snapshot.get("schema") == "mortimer.roadmap.source.v1":
+            # Compact sealed read result: derive cards from the verified text.
+            from mcp_servers.mcp_repo.logic import expand_roadmap_snapshot
+            try:
+                snapshot = expand_roadmap_snapshot(data.get("content"), snapshot)
+                if len(json.dumps(snapshot, ensure_ascii=False, allow_nan=False).encode("utf-8")) > 1024 * 1024:
+                    snapshot = None
+            except (ValueError, TypeError, KeyError):
+                snapshot = None
+        if snapshot is not None:
+            payload["roadmap"] = snapshot
         payload["roadmap_timezone"] = os.environ.get("JARVIS_TIMEZONE")
         payload["title"] = "Project roadmap"
         payload["body"] = "Read-only project roadmap from the local repository. Open the roadmap cards for complete details."
