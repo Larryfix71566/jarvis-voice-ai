@@ -3,7 +3,8 @@
 - **Status:** draft for review in a PR into `next` (closure plan items C0 and C0b). Codex and Kimi review. Larry answered §7 on 2026-11-11 at 03:52:52 UTC ("Go with your picks"); the answers are recorded in §7 and applied in the sections they change.
 - **Plan items:** C0 and C0b of `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` (rows at lines 64 and 65).
 - **Tree:** every `file:line` below was read at `c314fd4` on branch `claude/ws17-freeze-sha-20261111`. That is `5777e98` plus docs-only commits, so code lines match the freeze SHA.
-- **Who builds from this:** Sonnet writes the Python message types and tests. Kimi builds C3, C7-py, C7b, C4 and C5. Codex builds C2, C6 and C7a and reviews.
+- **Who builds from this** (lanes in the plan's §4): Claude builds the Python message types and tests (Sonnet implements), C3, C7-py and C7b; Codex builds C4 and C5; Kimi builds C2, C6 and C7a.
+- **Who reviews this:** Codex and Kimi, both on §0, §6 and §7. Codex leads on §1 (layout, which its C4 renderer and C5 carousel consume) and §4 (the box 828 rule). Kimi leads on §2 and §3 (typed request and approval, which its C7a thread work consumes and whose C3/C7-py it reviews) and §5 (tokens, which its C2 builds).
 - **Words:** "must" is a rule a reviewer can fail a PR on. "Untested" means nobody has run it; the test that would settle it is named beside it.
 
 ## 0. Findings that change the brief
