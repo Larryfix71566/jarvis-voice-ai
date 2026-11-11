@@ -1,0 +1,14 @@
+{
+  "type": "approval/pending",
+  "version": 1,
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "generation": "00000000-0000-4000-8000-000000000002",
+  "approval_id": "00000000-0000-4000-8000-000000000010",
+  "origin_request_id": "00000000-0000-4000-8000-000000000020",
+  "run_id": "4f1c0a2e9b7d",
+  "agent": "Developer",
+  "tool": "plan_start",
+  "summary": "Ready to draft a plan for the weather cache. Say yes to start.",
+  "ts": 1794366120.0,
+  "expires_at": 1794366720.0
+}

@@ -1,0 +1,9 @@
+{
+  "type": "turn/typed",
+  "version": 1,
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "generation": "00000000-0000-4000-8000-000000000002",
+  "request_id": "00000000-0000-4000-8000-000000000003",
+  "text": "What came in overnight, and will it rain tomorrow?",
+  "source": "composer"
+}
