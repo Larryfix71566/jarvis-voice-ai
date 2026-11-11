@@ -1,0 +1,28 @@
+# Weekly check that the unit tests still pass against the loose requirements.txt
+# (newest allowed versions), to surface upstream drift before the lock is
+# refreshed. Scheduled, not run on PRs, and non-blocking.
+name: dependency-drift
+
+on:
+  schedule:
+    - cron: "0 12 * * 1"   # Monday 12:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install loose requirements
+        run: pip install -r requirements.txt
+      - name: Unit tests
+        run: pytest tests/unit -q

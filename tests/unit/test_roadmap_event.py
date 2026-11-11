@@ -85,7 +85,7 @@ def test_malformed_or_oversize_snapshot_has_explicit_content_free_failure(source
     elif variant == 'bad-card': snapshot['cards'][-1]['checklist'][0]['checked'] = 1
     elif variant == 'bad-date': snapshot['provenance']['read_at'] = 'not a timestamp'
     elif variant == 'nonfinite': snapshot['unexpected'] = float('nan')
-    elif variant == 'oversize': snapshot['cards'][0]['details'] = 'x' * (512 * 1024)
+    elif variant == 'oversize': snapshot['cards'][0]['details'] = 'x' * (1024 * 1024)
     elif variant == 'bad-utf8': snapshot['cards'][0]['details'] = '\ud800'
     observed = _tool_result_observation('repo_read_file', {'path': 'ROADMAP.md'}, json.dumps(data))
     assert json.loads(observed)['error'] == 'roadmap_display_unavailable'
@@ -144,4 +144,29 @@ def test_current_repository_complete_snapshot_survives_projection(monkeypatch):
     assert source['ok']
     observed = _tool_result_observation('repo_read_file', {'path': 'ROADMAP.md'}, json.dumps(source))
     assert display(observed)['roadmap'] == source['roadmap']
-    assert len(observed.encode('utf-8')) <= 600 * 1024
+    assert len(observed.encode('utf-8')) <= 1200 * 1024
+
+
+def test_snapshot_above_old_size_limit_survives_event_projection(source):
+    source['roadmap']['issues'] = ['x' * 550000]
+    observed = _tool_result_observation('repo_read_file', {'path': 'ROADMAP.md'}, json.dumps(source))
+    assert display(observed)['roadmap'] == source['roadmap']
+    assert len(observed.encode()) <= 1200 * 1024
+
+
+async def test_current_repository_classified_source_reaches_complete_display(monkeypatch):
+    from jarvis.privacy_policy import validate_tool_result
+    from tests.unit.test_registry_source_policy import execution
+    root = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv('JARVIS_REPO_ROOT', str(root))
+    source = logic.repo_read_file('ROADMAP.md')
+    assert source['ok'], source.get('error')
+    arguments = {'path': 'ROADMAP.md'}
+    registry = registry_for('repo_read_file', 'mcp-repo', Session(response(source)), pinned=True, root=root)
+    scope = execution('repo_read_file', arguments)
+    envelope = await registry.call_classified('repo_read_file', arguments, execution_scope=scope)
+    policy, content = validate_tool_result(scope, envelope)
+    assert policy.level == 'approved_external'
+    assert len(envelope.canonical_refs) <= 256
+    observed = _tool_result_observation('repo_read_file', arguments, content)
+    assert display(observed)['roadmap'] == source['roadmap']

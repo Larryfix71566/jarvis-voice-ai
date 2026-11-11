@@ -3687,6 +3687,34 @@ This completes only the registered local combined-main validation. It is not the
 
 Larry merged #305 as `e782048965db98c397398077b9965bde5d6b7108` after all five GitHub checks passed. Post-merge inspection found main's tree hash exactly equal to reviewed PR head `887743fa6b3407490ac2e699ab0cef2128c07342` (`56fa7976fdb98f1f40384f8bb3c8bff0aa791d96`), with no additional source difference. The roadmap checker again reports zero errors and warnings. Kimi's validation and evidence-publication scope is complete; the independent combined-source review and every operational/live gate remain separate.
 
-### 2026-11-06 — Kimi revalidation target corrected after #290
 
-Claim #309 originally bound the rerun to `78a8834`. After that claim merged, #290 landed as `137c668` and changed another 59 non-documentation files (+32,511/-477). Kimi's first target guard therefore stopped before creating a validation worktree or running any check. At Larry's direction, the registered target is corrected to main after this documentation amendment lands, provided its non-documentation tree equals `adc2b92948d7302765fceb9d233b0f72dcdb986e`. The fourteen checks and all read-only/operational limits are unchanged. No validation result exists yet; any later code-changing merge requires another rebind.
+## 2026-11-06 — Bounded roadmap log/read/display repair
+
+Larry approved a branch-local registration exception for Codex's reader/tests,
+then explicitly included host attestation and roadmap-specific event/native
+paths and tests. Baseline `555fe86` has 266 logs and a 536,219-byte snapshot,
+exceeding the old 255-file and 512 KiB bounds. The isolated repair keeps all
+logs, caps enumeration at 1,024 files, preserves the 4 MiB declared/actual log
+budget and guarded per-file cap, and uses bounded reads. Host verification
+still rebuilds and compares every log. Above 255 valid logs, a SHA-256 manifest
+commitment replaces the individual envelope refs, bound to the existing
+repository scope and sealed result; the general 256-ref limit stays unchanged.
+Roadmap snapshots permit 1 MiB and roadmap display envelopes 1,200 KiB in all
+four delivery checks. Generic result size/privacy limits stay unchanged; a
+future oversized full tool result still fails closed rather than truncating.
+
+Implementation remains local on `codex/roadmap-log-limit-20261106`. Independent
+static review approved with no actionable defects. Backend unit/integration:
+7,997 passed, 145 skipped, 583 subtests passed, 18 warnings; final focused
+roadmap/attestation regressions: 156 passed. Full JarvisKit: 239 passed;
+MortimerHost roadmap controls: 10 passed. Policy: 9 passed; offline evaluations:
+13 passed. Latency budget, import smoke, frontend build and roadmap checker
+passed. Skips and warnings remain disclosed, not converted to acceptance. Existing live acceptance,
+publication, merge and deployment gates remain open. No controller model,
+credentials, service state or production checkout was changed.
+
+### 2026-11-10 — Kimi revalidation target corrected after #290, #312 and later merges
+
+Claim #309 originally bound the rerun to `78a8834`. After that claim merged, #290 landed as `137c668` and changed another 59 non-documentation files (+32,511/-477). Kimi's first target guard therefore stopped before creating a validation worktree or running any check. Initial correction PR #311 targeted `adc2b92`, but #312 then changed 12 more source/test files (+245/-23); the PR's pre-refresh `validate` job also failed the two current-repository roadmap-log-limit tests that #312 repairs. Before a refreshed correction was published, #315, #317, #320 and #323 changed seven additional non-documentation files (+274/-28) relative to `0a11a86`. Current main and its roadmap history archive are integrated while preserving the repair record above and this revalidation history.
+
+The corrected target is main after this registration lands, provided its non-documentation tree equals `a87256ad9e7966496542f2e7bf32582aa489cd10`. The original fourteen checks remain required, and #317's blocking Ruff F821 command is added as a fifteenth check; backend environment setup uses `requirements-lock.txt` to match current CI. The scheduled non-blocking dependency-drift workflow is not a publication gate. All read-only/operational limits are unchanged. No local validation result exists yet; any later code-changing merge requires another rebind.

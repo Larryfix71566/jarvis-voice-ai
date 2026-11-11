@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Instructions for **Codex** and any other non-Claude agent working in this repository. Two AI systems (Codex and Claude) and one human (Larry) work on this repo. The coordination rules below are binding. They exist because the systems have already collided: see `scripts/deploy_main.sh`, the note dated 24 Sep, and `docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md`.
+Instructions for **Codex** and any other non-Claude agent working in this repository. Three AI systems (Codex, Claude and Kimi) and one human (Larry) work on this repo. The coordination rules below are binding. They exist because the systems have already collided: see `scripts/deploy_main.sh`, the note dated 24 Sep, and `docs/reviews/CROSS_SYSTEM_PLAN_EVAL_2026-09-27.md`.
 
 ## At the start of every session
 
@@ -18,6 +18,7 @@ Resolve the open conflicts assigned to `codex` in `ROADMAP.md` §4 before starti
 - **Commit at the end of every slice** on your branch. Push when credentials exist; otherwise say in your summary that Larry needs to push. Do not keep uncommitted work across sessions.
 - **Never edit `~/jarvis-voice-ai-clean`.** It is production, and changes reach it only through `scripts/deploy_main.sh`.
 - **Stay out of Claude's work.** Do not read or write Claude's working folders or patches (`Claude outputs/`, `closure-checks/`, Cowork VM paths). The one exception is a read-only review Larry asks for. Work reaches you through `ROADMAP.md` and PRs only.
+- **Assignments prevent overlap; they are not exclusive, and a code-only freeze may apply.** Any system not currently engaged may pick up work another system is not engaged with, after updating the row's Owner and Where; no system reviews its own work. Once Larry records a freeze SHA in WS-17, no PR that changes files outside `docs/` and `ROADMAP.md` merges unless Larry approves it by name as an acceptance fix; docs-only PRs keep merging. See `ROADMAP.md` §0, rules 14 and 15.
 
 ## When you finish a slice or open a PR
 

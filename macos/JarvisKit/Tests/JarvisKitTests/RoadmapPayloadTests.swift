@@ -14,6 +14,13 @@ final class RoadmapPayloadTests: XCTestCase {
          "logs": [["path": "docs/roadmap-log/entry.md", "date": "2026-10-17", "rows": ["WS-17"],
                    "sha256": String(repeating: "c", count: 64), "title": "Evidence"]], "issues": []]
     }
+    func testRoadmapAboveOldHalfMiBCapRetainsAllContent() throws {
+        var value = snapshot()
+        let text = String(repeating: "x", count: 600000)
+        value["issues"] = [text]
+        XCTAssertEqual(try XCTUnwrap(decode(value).roadmap).issues, [text])
+    }
+
     private func decode(_ value: [String: Any]?) throws -> DisplayPayload {
         var body: [String: Any] = ["kind": "text", "title": "Roadmap", "body": "Fallback source"]
         if let value { body["roadmap"] = value }
@@ -30,7 +37,7 @@ final class RoadmapPayloadTests: XCTestCase {
     func testInvalidSnapshotDoesNotReplaceLegacyFallback() throws {
         var wrong = snapshot(); wrong["schema"] = "future"
         var duplicate = snapshot(); duplicate["cards"] = (duplicate["cards"] as! [[String: Any]]) + (duplicate["cards"] as! [[String: Any]])
-        var tooLarge = snapshot(); tooLarge["issues"] = [String(repeating: "x", count: 600000)]
+        var tooLarge = snapshot(); tooLarge["issues"] = [String(repeating: "x", count: 1100000)]
         for value in [wrong, duplicate, tooLarge] {
             let decoded = try decode(value)
             XCTAssertNil(decoded.roadmap)
