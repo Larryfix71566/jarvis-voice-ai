@@ -173,6 +173,76 @@ def test_eighth_result_rolls_over_to_new_answer():
     assert eighth[1]["answer_id"] != outs[0]["answer_id"]
 
 
+# ------------------------------------ completion and delayed results (1.5 rules 4, 5, 5a, 7)
+
+def test_two_direct_results_in_one_request_are_revisions_1_and_2_both_complete():
+    c = make()
+    one = c.compose(search("A"), request_id="q1")[-1]
+    two = c.compose(search("B", url="https://b.example/"), request_id="q1")[-1]
+    assert one["answer_id"] == two["answer_id"]
+    assert (one["answer_revision"], two["answer_revision"]) == (1, 2)
+    assert one["layout"]["complete"] is True and two["layout"]["complete"] is True
+    assert c.take_completion("q1") is None  # last revision already said complete
+
+
+def test_direct_result_then_delegation_then_one_completion():
+    c = make()
+    direct = c.compose(search("A"), request_id="q1")[-1]
+    assert direct["layout"]["complete"] is True
+    c.delegation_started("q1", "run1")  # sends nothing: no output API exists for it
+    delegated = c.compose(search("B", url="https://b.example/"), request_id="q1")[-1]
+    assert delegated["answer_revision"] == 2 and delegated["layout"]["complete"] is False
+    assert c.take_completion("q1") is None  # still in flight
+    c.delegation_finished("q1", "run1")
+    done = c.take_completion("q1")
+    assert done["answer_id"] == direct["answer_id"] and done["answer_revision"] == 3
+    assert done["layout"]["complete"] is True
+    assert c.take_completion("q1") is None  # exactly one completion
+
+
+def test_delegation_that_shows_nothing_sends_no_completion():
+    c = make()
+    c.delegation_started("q1", "run1")
+    c.delegation_finished("q1", "run1")
+    assert c.take_completion("q1") is None
+    first = c.compose(search("A"), request_id="q1")[-1]
+    c.delegation_started("q1", "run2")
+    c.delegation_finished("q1", "run2")
+    assert first["layout"]["complete"] is True and c.take_completion("q1") is None
+
+
+def test_watcher_results_are_standalone_complete_and_unstored():
+    c = make()
+    plan = {"surface": "window", "tool": "plan_ready", "title": "Plan", "body": "b", "images": [],
+            "links": [], "agent": "Developer", "run_id": None, "ts": 1.0, "kind": "markdown"}
+    research = {"surface": "window", "tool": "research_report", "title": "Report", "body": "b",
+                "images": [], "links": [], "agent": "Analyst", "run_id": None, "ts": 1.0, "kind": "markdown"}
+    outs = [c.compose(p, request_id=None)[-1] for p in (plan, research)]
+    assert len({o["answer_id"] for o in outs}) == 2
+    assert all(o["answer_revision"] == 1 and o["layout"]["complete"] is True for o in outs)
+    assert not c._answers
+
+
+def test_result_for_a_held_complete_answer_is_its_next_revision():
+    c = make()
+    c.delegation_started("q1", "run1")
+    first = c.compose(search("A"), request_id="q1")[-1]
+    c.delegation_finished("q1", "run1")
+    assert c.take_completion("q1")["answer_revision"] == 2
+    late = c.compose(search("B", url="https://b.example/"), request_id="q1")[-1]  # delayed result
+    assert late["answer_id"] == first["answer_id"] and late["answer_revision"] == 3
+
+
+def test_after_eviction_the_same_request_gets_a_new_answer_id():
+    c = make()
+    first = c.compose(search("0"), request_id="q0")[-1]
+    for i in range(1, MAX_ANSWERS + 1):
+        c.compose(search(str(i)), request_id=f"q{i}")
+    assert "q0" not in c._answers
+    again = c.compose(search("late", url="https://l.example/"), request_id="q0")[-1]
+    assert again["answer_id"] != first["answer_id"] and again["answer_revision"] == 1
+
+
 def test_oversized_layout_falls_back_to_legacy_fields_with_identity():
     c = make()
     huge = {"tool": "show_commands", "title": "Run", "surface": "window",
