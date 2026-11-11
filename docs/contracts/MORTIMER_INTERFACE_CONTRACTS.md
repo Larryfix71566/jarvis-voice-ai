@@ -75,6 +75,8 @@ All existing fields stay and keep their meaning. The composer must still fill `k
 }
 ```
 
+The example shows the full v1 schema. The v1 composer (C3) sends a narrower set: no `stats`, `chart` or `actions` blocks, and no `brief` block, because the brief is confidential (1.7, 1.9). The schema keeps those block types, so a later item can send them without raising `version`.
+
 The sample content follows the mockup at `mortimer-ui-directions.html:310-392`. The `weather` object above is abbreviated; it is the existing weather view.
 
 Layout fields:
@@ -137,7 +139,7 @@ Copy, Share and Export are not blocks. They sit behind the card's "…" menu (`m
 Rules for the composer (C3, `jarvis/bot/compose*.py`):
 
 1. One instance per connection, like `WeatherReportMerger` (`jarvis/bot/display.py:531-547`). State is keyed by `origin_request_id`.
-2. The first result for a request creates `answer_id` and sends revision 1 with `complete: false`.
+2. The first result for a request creates `answer_id` and sends revision 1. It is `complete: false` while a delegation for that request is in flight, and `complete: true` otherwise: a direct tool has no end-of-request signal, so its answer is complete as sent. A later delegation in the same request reopens it (`complete: false`, higher `revision`), so `complete` can go true, false, true. Clients key on `revision`, never on `complete` alone. (Amended 2026-11-11 from the C3 plan, open point O3.)
 3. Each later result for the same request is added to the same answer. The composer sends the whole layout again with `revision + 1`. It never sends a delta.
 4. The answer is `complete: true` when the request has no delegation in flight and no weather half pending. The existing flush point is `delegate_done` (`jarvis/bot/pipeline.py:1066-1079`).
 5. A result with no `origin_request_id` (a watcher's late plan or research report, a late delegation result) is its own answer with its own `answer_id`. It never joins another request's answer. This matches box 193: background arrivals join the carousel unread (`docs/acceptance/mac-acceptance-2026-11-11.md:84`).
@@ -152,7 +154,7 @@ Client rule (C4, C5): a payload whose `answer_id` matches a held card replaces t
 
 A model never chooses blocks. The mockup's risk note says model-chosen layouts wobble and to start with fixed templates per result kind (`mortimer-ui-directions.html:386`). This also matches the repo's rule that code assembles structure (`WeatherReportMerger`, `display.py:531-547`).
 
-v1 templates, one per row of the mapping in 1.7, plus `joined` for an answer with two or more results. `joined` is: one `header`, an optional `stats` row drawn from the results that offer stats, then each result's own blocks in arrival order, then one merged `sources` block, then one `actions` block.
+v1 templates, one per row of the mapping in 1.7, plus `joined` for an answer with two or more results. `joined` is: one `header`, an optional `stats` row drawn from the results that offer stats, then each result's own blocks in arrival order, then one merged `sources` block, then one `actions` block. v1 sends no `stats`, `chart` or `actions` blocks: no legacy payload offers stats, and actions need targets the bot does not know until C5 names them (C3 plan, O5). An answer's `surface` is `window` if any of its results is `window`, else `drawer` (O8).
 
 ### 1.7 Mapping from today's display payloads
 
@@ -175,7 +177,7 @@ Tools are from `DISPLAY_TOOLS` (`display.py:27-62`). Surfaces are from `DISPLAY_
 | `research_report` | `display.py:458-493` | window | `document` | header; text; list "Crawl issues" for failed sites |
 | `memory_graph_view`, `graph_view` | `display.py:496-507` | window | `graph` | header; graph (wrapper) |
 | `show_commands` | `jarvis/bot/handoff_tools.py:277-289` | window | `commands` | header; commands (wrapper) |
-| `daily_brief` (mail brief) | `jarvis/bot/brief_tool.py:199` | per that tool | `brief` | header; brief (wrapper) |
+| `daily_brief` (mail brief) | `jarvis/bot/brief_tool.py:199` | per that tool | not composed | The brief is `data_policy: "confidential"` (`jarvis/brief.py:231`), so 1.9 rule 2 applies: legacy payload, no `layout`. (Amended 2026-11-11, C3 plan O2.) |
 | `shared_content` analysis | `jarvis/bot/pipeline.py:2851-2858` | drawer | `analysis` | header; text. See the note below. |
 | `read_clipboard` | `jarvis/bot/handoff_tools.py:346-354` | window | not composed | Stays a legacy payload with no `layout` (1.9). |
 | `protected_result` | `jarvis/bot/pipeline.py:1118-1134` | window | not composed | Stays a legacy payload with no `layout` (1.9). |
