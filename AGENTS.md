@@ -34,3 +34,4 @@ Also read:
 - `docs/ARCHITECTURE.md`
 - `docs/REPO_MAP.md`
 - `docs/plans/ALLOWLIST_SEQUENCE.md`: the self-edit allow-list, where every change is a human commit
+- `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md`: the release closure plan. Which system leads each piece of remaining work, the files each piece touches, the `next` branch used during the freeze, and the review pairs. The lanes are a guide that keeps the systems from editing the same files, not an exclusive claim; read it before picking up work
