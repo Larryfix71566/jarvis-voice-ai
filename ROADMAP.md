@@ -113,6 +113,60 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
 
+<details id="ws-34">
+<summary>WS-34 — Release closure lane: Python, contracts, CI triggers, removals · Claude</summary>
+
+**Workstream:** Larry approved the three lane rows in his Claude Duet channel on 2026-11-11 at 02:35:41 UTC: "Take your picks", answering decisions 2 to 7 of `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §7 (decision 6: approve the WS-34 to WS-36 rows). His earlier direction for the split, 01:58:16 UTC: "first let's seperate this plan so that kimi and codex can help with development, the division should not be absolute but a guide to keep the models from stepping on each other, then we should freeze main and begin". Under §0 rule 14 a lane is a guide, not a lock: any system not engaged may pick up an item another system is not engaged with, by updating this block's Owner and Where first.
+
+- **Owner:** `claude`
+- **Status:** proposed; approved by Larry, starts when `next` exists (WS-34 item A2, after the freeze SHA is recorded in WS-17). Mark `claimed` when the first item starts.
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** Items A1 (add `next` to the CI triggers), A2 (cut `next`), C0 (contracts), C0b (tokens for the approved palette), C3 (Python composer), C7-py (typed request and approve/decline handlers), C7b (composer, ⌘K, typed-request send path, after B1), C1b (delete `web/` and the old macOS packages), B2, B3 (patch only), B4, B6 and C8 (rewritten UI boxes into this file). Each item in the plan's §4 table for this lane, as a PR into `next` with its tests, reviewed by the item's named reviewer (never its author). Interface items then pass the rewritten UI boxes in `docs/acceptance/mac-acceptance-2026-11-11.md` §4 on the final build; `next` merges into `main` at closure.
+- **Model version:** not recorded
+- **Where:** not started; items branch from `next` (F1 and other acceptance fixes branch from `main`)
+- **Plan:** `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §4 (WS-34) and §5; add only dated progress for this lane
+- **Scope:** The files named for those items in the plan's §4 WS-34 table: `.github/workflows/{validate,sandbox,knowledge-base}.yml` trigger lines (A1); `docs/contracts/**`; `jarvis/bot/display.py`, new `jarvis/bot/compose*.py` and `jarvis/bot/typed_request.py`, the named display emit sites and registration lines in `jarvis/bot/pipeline.py`; `jarvis/admin/**`, `jarvis/costs_api.py`; `scripts/backup_db.py`; `web/**`, `macos/MortimerShell/**`, `macos/GlassSpike/**`, `macos/VPIOBench/**` and their listed fallout; C7b's Swift files. `sandbox/**`, `jarvis/selfedit/service.py` and `config/self_edit_allowlist.json` are supplied as patches for Larry to commit. Hand-off order for shared files is the plan's §4 "Hand-off points"; overlaps with other rows are CX-29.
+- **Next step:** larry: record the freeze SHA in WS-17. claude: A2 (`next` at that SHA), then the A1 PR (`claude/ws34-a1-next-ci-triggers`, already pushed) into `next`, then C0.
+- **Updated:** 11-11
+
+</details>
+
+<details id="ws-35">
+<summary>WS-35 — Release closure lane: CI, layouts, results, phone · Codex</summary>
+
+**Workstream:** Larry approved the three lane rows in his Claude Duet channel on 2026-11-11 at 02:35:41 UTC: "Take your picks", answering decisions 2 to 7 of `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §7 (decision 6: approve the WS-34 to WS-36 rows). His earlier direction for the split, 01:58:16 UTC: "first let's seperate this plan so that kimi and codex can help with development, the division should not be absolute but a guide to keep the models from stepping on each other, then we should freeze main and begin". Under §0 rule 14 a lane is a guide, not a lock: any system not engaged may pick up an item another system is not engaged with, by updating this block's Owner and Where first.
+
+- **Owner:** `codex`
+- **Status:** proposed; approved by Larry, starts when `next` exists (WS-34 item A2, after the freeze SHA is recorded in WS-17). Mark `claimed` when the first item starts.
+- **Implemented by:** Codex
+- **Remaining work / acceptance:** Items C10 (box 810 performance baseline, before C1a), C1a (delete layouts 0 and 1), B1 (macOS Swift CI job), B5 (wider ruff, offline NLTK data), C4 (Swift block renderer), C5 (result carousel; the second screen keeps its grid, decision 4), C9 (phone orb on synthetic levels, decision 5, after moving the orb renderer to a shared package) and F1 (the `PhoneRemoteAuthorityProcessTests` failure, an acceptance fix on `main` approved by name). Each item in the plan's §4 table for this lane, as a PR into `next` with its tests, reviewed by the item's named reviewer (never its author). Interface items then pass the rewritten UI boxes in `docs/acceptance/mac-acceptance-2026-11-11.md` §4 on the final build; `next` merges into `main` at closure.
+- **Model version:** not recorded
+- **Where:** not started; items branch from `next` (F1 and other acceptance fixes branch from `main`)
+- **Plan:** `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §4 (WS-35) and §5; add only dated progress for this lane
+- **Scope:** The files named for those items in the plan's §4 WS-35 table: `docs/acceptance/**` (C10); every MortimerHost source and test file that reads `layoutVersion` (C1a); `.github/workflows/validate.yml` (B1, B5, after A1); `macos/MortimerHost/Sources/MortimerHost/Display/**`, `App/AppMessageRouter.swift`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift` (C4); the C5 result and carousel files; `ios/MortimerPhoneCore/**` and the shared orb package (C9). Hand-off order for shared files is the plan's §4 "Hand-off points"; overlaps with other rows are CX-29.
+- **Next step:** codex: once `next` exists, write the C10 steps for Larry, then C1a; F1 branches from `main`; once the freeze is in effect it merges only with Larry's approval by name (§0 rule 15).
+- **Updated:** 11-11
+
+</details>
+
+<details id="ws-36">
+<summary>WS-36 — Release closure lane: Review, design tokens, orb, thread · Kimi</summary>
+
+**Workstream:** Larry approved the three lane rows in his Claude Duet channel on 2026-11-11 at 02:35:41 UTC: "Take your picks", answering decisions 2 to 7 of `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §7 (decision 6: approve the WS-34 to WS-36 rows). His earlier direction for the split, 01:58:16 UTC: "first let's seperate this plan so that kimi and codex can help with development, the division should not be absolute but a guide to keep the models from stepping on each other, then we should freeze main and begin". Under §0 rule 14 a lane is a guide, not a lock: any system not engaged may pick up an item another system is not engaged with, by updating this block's Owner and Where first.
+
+- **Owner:** `kimi`
+- **Status:** proposed; approved by Larry, starts when `next` exists (WS-34 item A2, after the freeze SHA is recorded in WS-17). Mark `claimed` when the first item starts.
+- **Implemented by:** Kimi
+- **Remaining work / acceptance:** Items A3 (the WS-17 combined-source review, already claimed there), C2 (add the approved palette's tokens with `amber` unchanged; contrast on glass), C6 (glass energy orb on the Mac, replacing `OrbFieldView`'s compact satellites) and C7a (thread activity row and inline approve/decline). Each item in the plan's §4 table for this lane, as a PR into `next` with its tests, reviewed by the item's named reviewer (never its author). Interface items then pass the rewritten UI boxes in `docs/acceptance/mac-acceptance-2026-11-11.md` §4 on the final build; `next` merges into `main` at closure.
+- **Model version:** not recorded
+- **Where:** not started; items branch from `next` (F1 and other acceptance fixes branch from `main`)
+- **Plan:** `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §4 (WS-36) and §5; add only dated progress for this lane
+- **Scope:** The files named for those items in the plan's §4 WS-36 table: `App/AppTheme.swift`, `App/Glass.swift`, `App/AppTuning.swift`, `Console/TopBarView.swift`, `Console/ConsoleActionBar.swift` (C2); the orb files and the orb slots in `Console/AdaptiveStageView.swift`, `OrbFieldView.swift` removal (C6); `Console/ConversationThreadView.swift`, `MicControlsView.swift`, `CommandConsoleView.swift`, `App/ConsoleActionCoordinator.swift`, `Stores/ConversationStore.swift` (C7a). Paths are under `macos/MortimerHost/Sources/MortimerHost/`. A3 writes docs only. Hand-off order for shared files is the plan's §4 "Hand-off points"; overlaps with other rows are CX-29.
+- **Next step:** kimi: A3 once the freeze SHA is recorded in WS-17; C2 after WS-34's C0b.
+- **Updated:** 11-11
+
+</details>
+
 <details id="ws-33">
 <summary>WS-33 — Acceptance unblock: code freeze, roadmap archive, CI gates · Claude</summary>
 
@@ -1356,6 +1410,7 @@ Open means not yet resolved. Each entry names who resolves it.
 
 | ID | Conflict | Resolves | State |
 |---|---|---|---|
+| CX-29 | The release closure lanes (WS-34 to WS-36) touch files that other open rows also hold: `.github/workflows/validate.yml` (A1, B1, B5, C1b; WS-20 and WS-30 claim parts), `scripts/deploy_main.sh` (two lines in C1b; WS-17's bounded scope), `jarvis/bot/pipeline.py` (C3 emit sites and C7-py registration; WS-17 and WS-05 hold parts under CX-26 and CX-27), and the human-only `sandbox/**`, `jarvis/selfedit/service.py` and `config/self_edit_allowlist.json` (C1b, B3). | Larry approved the lanes 2026-11-11 02:35:41 UTC; the lane item's author coordinates with the other row before editing | Open. Lane work lands on `next`, so it does not collide with those rows on `main` until `next` merges at closure; conflicts at that merge are resolved by the lane item's author with the other row's owner and recorded here. Human-only files are patches Larry commits. |
 | CX-28 | Old #241 is unmerged and its branch/scope no longer represents current main; #257 registered only the repair, not the inherited #242 foundation. | Larry current-program direction; Codex registers exact integration; sole coordinator merges serially | This supplement registers only the canonical inventory of frozen foundation hunks plus the #257 repair on the same active branch. Preserve WS-03 implementation/compatibility tests except the two named package inventory expectations; provider and WS-17 installation scopes remain theirs. #241/#242/#253 stay immutable inputs. Claim landing precedes any new broader source edit; owner conflicts return for coordination. Exact combined source review/CI precede serial integration. No model change, live inference, installation or activation is authorized. |
 | CX-27 | WS-17 acceptance repair shares `pipeline.py` and potentially task cancellation/deduplication in `jarvis/agents/delegate.py` with active WS-05 subscription retirement. | Larry approved complete acceptance repair 2026-10-21; Codex sessions coordinate through parent | WS-05 retains all provider/runtime/authentication/model-access/billing changes. WS-17 may change only existing weather/request/console adapters and reporting; the committed WS-05 handoff in `504f911` permits acceptance delegate/Base/Registry edits, and `763bfe1` retains WS-05 provider-selection constructors. Reproduce before changing focus semantics. Parent reconciles final integration; do not deploy before migration readiness or concurrently with another release. No other ownership changes. Parent/acceptance confirmed the source-policy-only handoff on 2026-10-21: memory prompt assembly, accepted input/assistant appends, direct-tool result policy transport, clipboard/late/deferred injection and history rewriting; WS-05 may add per-run Base policy export and Delegate immediate/late policy transport while preserving stop-command parsing, pending-task controls/deduplication, terminal callbacks, weather-reuse checks, request identity and ContextVar restoration. Registry remains unchanged unless a new gap is reported. WS-17 source stays frozen; test a separate combined preview. No transfer of WS-17 weather/foreground/cancellation ownership. |
 | CX-26 | Larry requests retiring direct OpenAI/Anthropic APIs in favor of subscriptions; WS-05 prior claim preserves legacy routing and excludes model/endpoint pins, while voice construction shares `pipeline.py` with WS-17. | Larry dispatch 2026-10-20; Codex WS-05 registration | This claim permits the bounded model-access and LLM-construction changes in WS-05, preserving WS-17 weather/cache/console/result logic and all protected-source, sandbox and acceptance requirements. No other owner is reassigned. Claim must land before runtime code. |
