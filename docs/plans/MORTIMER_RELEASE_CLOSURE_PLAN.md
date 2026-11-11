@@ -1,6 +1,6 @@
 # Mortimer release closure plan: acceptance on main, new interface on `next`
 
-- **Status:** adopted when the PR that adds this file merges. The freeze is WS-33 and the WS-17 combined-source review claim. The three lanes are proposed rows WS-34 (Claude), WS-35 (Codex) and WS-36 (Kimi); they reach ROADMAP.md §2 in a follow-up docs PR once Larry approves them (decision 6), and no lane item starts before its row is on `main` (AGENTS.md: no row, no work).
+- **Status:** adopted when the PR that adds this file merges. The freeze is WS-33 and the WS-17 combined-source review claim. The three lanes are rows WS-34 (Claude), WS-35 (Codex) and WS-36 (Kimi), approved by Larry on 2026-11-11 (decision 6); they reach ROADMAP.md §2 in a separate docs PR, and no lane item starts before its row is on `main` (AGENTS.md: no row, no work).
 - **Source of truth:** this file. The Claude Doc "Mortimer combined implementation plan" in Larry's account mirrors it; when they differ, this file wins (ROADMAP.md §0 rule 11 still ranks ROADMAP.md above it).
 - **Built at:** `origin/main` `4e58eaa`; checked again at `b9024ed` (2026-11-11, after #322 and #324). Line numbers below are from those commits.
 - **Written by:** Claude (Opus), from Claude's 2026-11-10 deep review, the 2026-11-10 interface review and mockups, ROADMAP.md and AGENTS.md.
@@ -9,6 +9,7 @@
 
 All times UTC, in his Claude Duet channel:
 
+- 2026-11-11 02:35:41: "Take your picks", answering decisions 2 to 7 (§7). The orb design and its palette were approved before that in the same channel; this file records the palette as the coordinator relayed it.
 - 2026-11-11 01:35:04: "so let's combined your findings from both the review and the interface enhancements into a single implementation plan that all three models can run. Revise the acceptance list to be in-line with the new interface design so that we dont waste time validating that has been changed. since this app is not currently in prod we can work quickly without worry about the app being used. that should reduce the projected timelines. I want to work thru this as quickly as possible."
 - 2026-11-11 01:35:44, answering whether non-UI acceptance should run now: "Yes, run it now".
 - 2026-11-11 01:58:16, answering whether main should freeze with the new interface on a `next` branch: "first let's seperate this plan so that kimi and codex can help with development, the division should not be absolute but a guide to keep the models from stepping on each other, then we should freeze main and begin".
@@ -60,7 +61,7 @@ Item ids are stable; sizes are estimates from line counts at `4e58eaa`, not meas
 | A1 | Add `next` to the CI triggers | Codex | `next` exists | `.github/workflows/validate.yml`, `sandbox.yml`, `knowledge-base.yml` (trigger lines only; lands before B1) |
 | A2 | Cut `next` from the freeze SHA | none | freeze SHA recorded | branch only |
 | C0 | Contracts: block-kit `layout` schema for one composed answer, a typed-request client message, an approve/decline action (and whether it is a console action or a client message); design rule from box 828 | Codex and Kimi | A2 | `docs/contracts/**` (new), Python message types and their tests; if approve/decline is a console action, `jarvis/bot/console_protocol.py` and `tests/fixtures/command_console/protocol.json` |
-| C0b | Colour and type tokens, including a new `approval` token (amber stays the general attention colour) | Codex and Kimi | decision 2, final direction 6 | `docs/contracts/**` |
+| C0b | Colour and type tokens for the approved palette (decision 2): `listening` `#6673FF`, `user` teal `#2DD4BF`, `mortimer` rust `#E07020`, `ok` `#A6FFC1`, `approval` (the needs-you ring) `#FFD84A`, `error` `#FF598B`. All are new tokens; `amber`, `green` and `red` keep their values and meanings | Codex and Kimi | decision 2 (answered), final direction 6 | `docs/contracts/**` |
 | C3 | Python composer: one composed answer per request, gathering every display emitter | Kimi | C0 | `jarvis/bot/display.py`, `jarvis/bot/compose*.py` (new), the display emit sites in `jarvis/bot/pipeline.py` (lines 1023 to 1077, 1120, 1323, 1374, 1560, 2545 at `b9024ed`), `handoff_tools.py`, `weather_tool.py`, `plan_watcher.py`, `research_watcher.py` |
 | C7-py | Typed request and approve/decline handlers in the bot | Kimi | C0 | a new `jarvis/bot/typed_request.py`; registration lines in `jarvis/bot/pipeline.py` |
 | C7b | Composer and ⌘K, and the typed-request send path in the app (moved from Kimi to balance days 7 to 11) | Kimi | C0, C1a, B1 green | `MortimerHostApp.swift` (`keyboardShortcut` and `CommandMenu` near line 276) or the key monitor in `ConsoleView.swift` (near line 225), `Console/AttachmentTrayView.swift`, `macos/JarvisKit/Sources/JarvisKit/ClientMessage.swift`, `JarvisClient.swift`, `ClientMessageTests` |
@@ -93,7 +94,7 @@ Interface-review findings whose files are in `Display/**` (the white-on-white ex
 | Id | Work | Reviewer | Depends on | Files |
 |---|---|---|---|---|
 | A3 | Combined-source review, production `b136a2a` to the freeze SHA (already claimed in WS-17); Kimi's own files go to Claude | Claude for the excluded files | freeze SHA | docs only |
-| C2 | Add the `approval` and error tokens (approvals yellow `#FFD84A`, errors rose `#FF5C8A`, rust kept for Mortimer; decision 2) without changing `amber`, which 25 files use for general warnings; check contrast of both on glass; fix the interface-review findings in these files. Moving call sites to the new tokens belongs to C5 (cards) and C7a (thread) | Codex | C0b | `App/AppTheme.swift`, `App/Glass.swift`, `App/AppTuning.swift`, `Console/TopBarView.swift`, `Console/ConsoleActionBar.swift` |
+| C2 | Add C0b's six tokens to `AppTheme` without changing `amber` (25 files use it for general warnings), `green` or `red`. Teal and rust already exist as `AppTuning`'s `userRGB` and `assistantRGB` (lines 125 and 126 at `b9024ed`); the tokens reuse those values, and the stale `#FFB454` in the doc comment at line 122 is corrected to `#E07020`. Check contrast of every new token on glass; fix the interface-review findings in these files. Moving call sites to the new tokens belongs to C5 (cards) and C7a (thread) | Codex | C0b | `App/AppTheme.swift`, `App/Glass.swift`, `App/AppTuning.swift`, `Console/TopBarView.swift`, `Console/ConsoleActionBar.swift` |
 | C6 | Glass energy orb on the Mac: voice levels, thinking swirl, pointer bend, tap ripple; replaces `OrbFieldView`'s compact satellites. States how an orb tap and Space push-to-talk (`MicControlsView.swift` near line 100) coexist, since the orb view is not hit-testable today (`VoiceWaveView.swift` line 63) | Codex | C2, C5 (shares `AdaptiveStageView.swift`) | `Console/CometOrbRenderer.swift`, `VoiceWaveView.swift`, `CrystalGlassRig.swift`, `MotionPreferences.swift`, `WaveTuningView.swift`, `App/VoicePresentationState.swift`, the orb slots in `Console/AdaptiveStageView.swift`, `OrbFieldView.swift` (removal), `OrbShellFrameTimeTests` |
 | C7a | Thread: activity row and inline approve/decline (reading the approval signal `hasPendingDraft` in `Stores/DisplayResultStore.swift`); Space reaches focused controls. Acceptance: VoiceOver, keyboard, nothing shown by colour alone | Codex | C0, C1a, C5 | `Console/ConversationThreadView.swift`, `MicControlsView.swift`, `CommandConsoleView.swift`, `App/ConsoleActionCoordinator.swift`, `Stores/ConversationStore.swift`; `ConsoleProtocol.swift` and `App/ConsoleActionRegistry.swift` if C0 makes approve/decline a console action |
 
@@ -131,16 +132,16 @@ The run-now acceptance batch (27 boxes) runs on the freeze build once A3 passes 
 - `sandbox/**`, `jarvis/selfedit/service.py`, `config/self_edit_allowlist.json`: C1b supplies patches; Larry commits them.
 ## 7. Decisions
 
-Decision 1 (freeze with `next`) is Larry's 01:58:16 answer. Decisions 2 to 7 stay as Claude's recommendations until Larry answers; the items that depend on them wait:
+Decision 1 (freeze with `next`) is Larry's 01:58:16 answer. Larry answered decisions 2 to 7 at 02:35:41 ("Take your picks"):
 
-| # | Decision | Recommendation | Waits on it |
+| # | Decision | Answer | Affects |
 |---|---|---|---|
-| 2 | Approvals yellow `#FFD84A`, errors rose `#FF5C8A`, rust stays Mortimer's | both | C0b, C2 |
+| 2 | Palette | the approved orb palette: listening `#6673FF`, user teal `#2DD4BF`, Mortimer rust `#E07020`, OK `#A6FFC1`, needs-you ring `#FFD84A`, error `#FF598B`; all new tokens, `amber` unchanged | C0b, C2 |
 | 3 | Delete layouts 0 and 1, `web/`, MortimerShell, GlassSpike, VPIOBench | delete all | C1a, C1b |
-| 4 | Second screen: carousel too, or keep its grid | keep the grid | C5 scope; box 549's wording (C8); the five WS-21 boxes |
+| 4 | Second screen: carousel too, or keep its grid | keep the grid | C5 scope; box 549's wording (C8); the five WS-21 boxes stay in sitting 2 |
 | 5 | Phone orb now on synthetic levels, or wait for WS-30 phone voice | now | C9 |
-| 6 | Approve the WS-34 to WS-36 rows | approve | merge of this file |
-| 7 | Parked WS-23 to WS-26 | after closure | nothing here |
+| 6 | Approve the WS-34 to WS-36 rows | approved | rows added in a separate docs PR |
+| 7 | Parked WS-23 to WS-26 | parked until after closure | nothing here |
 
 ## 8. Review protocol
 
@@ -161,3 +162,4 @@ Decision 1 (freeze with `next`) is Larry's 01:58:16 answer. Decisions 2 to 7 sta
 
 - 2026-11-11: plan written and synced to the repo with the freeze docs PR (Claude). Freeze SHA not yet recorded: Larry is deciding whether the flaky `test_outer_task_deadline_covers_tool_execution` (seen in #324's CI) is fixed before the freeze.
 - 2026-11-11: Larry's rule (02:07:51 UTC, "at least the enhancement planning"): interface planning runs on Fable 5.2. A Fable 5.2 review of the interface items, checked against the tree at `b9024ed`, changed §4 to §6: C1 split into C1a (app layouts, Codex, day 1) and C1b (`web/` and the old packages with their Python, sandbox, CI and docs fallout, Claude); C0b split out for tokens; C2 adds an `approval` token instead of recolouring `amber`; C7 split, with the composer half (C7b) moved to Claude; C10 added for the box 810 baseline; file lists for C3 to C7 and C9 completed; `AdaptiveStageView.swift` and three thread/result files added to the hand-offs; C9 gets a shared orb package. Before this, the plan's text was written by Claude on Opus; the deep review, UI critique, design directions 1 to 4 and the carousel idea it draws on were Fable 5.2.
+- 2026-11-11: Larry answered decisions 2 to 7 (02:35:41, "Take your picks"). §7 records the answers; C0b and C2 carry the approved palette (errors are `#FF598B`, replacing the earlier proposed `#FF5C8A`); the three lane rows go to ROADMAP.md in their own docs PR. Four items still depend on the final orb design and are rechecked when the UI thread's Fable 5.2 pass lands: keeping `OrbFieldView`'s compact mode in C1a, the C0b/C2 tokens, C6's orb tap versus Space rule, and C9's shared package.

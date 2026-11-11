@@ -64,7 +64,7 @@ Kept boxes test views whose insides don't change in the new design, so a pass no
 
 ### Sitting 2: second screen, audio and recovery (about 45 to 60 minutes; needs the external monitor)
 
-These five WS-21 boxes stay here only if you keep the second screen's grid (decision 4). If you choose the carousel there too, they move to section 4.
+These five WS-21 boxes stay here because you kept the second screen's grid (decision 4).
 
 - [ ] **468 to 472, WS-21 transfer set.** Send the weather radar to the external screen by voice and pointer: it appears, and success is spoken only after confirmation. Ask again: "already showing", same result, no refetch. Monitor unplugged: says unavailable, opens nothing. Unplug mid-transfer: truthful failure, prior state restored, no leftover window. The inventory matches what's on the screen. Conversation stays on the main window throughout.
 - [ ] **883, WS-11 physical audio.** Built-in, headphones, AirPods: mute, push-to-talk, quiet, loud, noise, interruption, output switch, reconnect, sleep and wake, mic denial. No echo-only false turns or duplicate session.
@@ -76,7 +76,7 @@ These five WS-21 boxes stay here only if you keep the second screen's grid (deci
 
 ## 4. Rewritten UI boxes (run once, on the final build)
 
-These replace the old wording for the new design: Composed Answers, the result carousel (A in the open area, B as "show all results"), the glass orb, the thread's activity row, inline approvals, the composer and capsule controls. Colours assume decision 2 (approvals yellow `#FFD84A`, errors rose `#FF5C8A`, rust stays Mortimer's). They're drafts until your decisions land, and enter `ROADMAP.md` through C8 with Codex reviewing. Original pass conditions are kept wherever they still apply.
+These replace the old wording for the new design: Composed Answers, the result carousel (A in the open area, B as "show all results"), the glass orb, the thread's activity row, inline approvals, the composer and capsule controls. Colours follow decision 2, the approved orb palette: listening `#6673FF`, your teal `#2DD4BF`, Mortimer's rust `#E07020`, OK `#A6FFC1`, the needs-you ring `#FFD84A`, error `#FF598B`. They enter `ROADMAP.md` through C8 with Codex reviewing. Original pass conditions are kept wherever they still apply.
 
 ### Conversation and results (WS-17)
 
@@ -98,7 +98,7 @@ These replace the old wording for the new design: Composed Answers, the result c
 
 ### Console, voice, load (WS-09)
 
-- [ ] **803, console and accessibility.** The drawer's tabs, header scroll, font size, attention, an unsent composer draft, keyboard (⌘K focuses the composer; Space reaches the focused control and still works as push-to-talk elsewhere), VoiceOver, contrast and notices. Approvals appear inline in the thread in yellow with Approve and Decline; errors are rose; nothing important relies on colour alone. Live text stays in the thread; voice and mic controls remain.
+- [ ] **803, console and accessibility.** The drawer's tabs, header scroll, font size, attention, an unsent composer draft, keyboard (⌘K focuses the composer; Space reaches the focused control and still works as push-to-talk elsewhere), VoiceOver, contrast and notices. Approvals appear inline in the thread in the needs-you yellow (`#FFD84A`) with Approve and Decline; errors are pink-red (`#FF598B`); nothing important relies on colour alone. Live text stays in the thread; voice and mic controls remain.
 - [ ] **805, display governance.** One, two, three and mirrored screens, manual placement, return-all, card limit and pin overflow in the carousel and in "show all results". Stable identities, drafts, pins and selection survive; no duplicate renderer, subscription, fetch or window storm. Missing hardware is recorded as a limitation, never a pass.
 - [ ] **808, voice parity.** Every enabled action works by voice and by pointer or keyboard: carousel move, select, pin, close and "show all", sharing, inline approve and decline, composer send, graph focus, filter and path. Ambiguous or stale targets clarify or refuse; late or unavailable-display outcomes are truthful; mute, push-to-talk, wake and OS dialogs are untouched.
 - [ ] **810, load and glass.** Graph plus six carousel cards plus the largest accepted attachment load, during voice: audio holds and memory stays bounded. Selection p95 at most 16.7 ms, navigation acknowledgement p95 at most 200 ms, graph pan and zoom p95 at most 33.3 ms; more than 10% worse than baseline is a regression. The glass orb and carousel panels follow Liquid Glass on and off, and fall back to flat panels with Reduce Transparency and to still frames with Reduce Motion.
