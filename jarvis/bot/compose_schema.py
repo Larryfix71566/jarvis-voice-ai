@@ -418,28 +418,45 @@ def require_valid_layout(layout: Any) -> dict[str, Any]:
 
 
 def validate_envelope(payload: Any) -> list[str]:
-    """Check the envelope fields of a display payload (contract 1.2, 1.9).
+    """Check the envelope fields of a display payload (contract 1.2, 1.3, 1.5).
 
-    ``layout`` and ``answer_id`` travel together: both or neither.  A payload
-    that carries a layout must still carry the legacy ``kind``, ``title`` and
-    ``body`` strings (1.2, 1.8).
+    ``answer_id`` and ``answer_revision`` travel together: both or neither.
+    ``layout`` requires both, but ``answer_id`` does not require ``layout``
+    (a legacy-fields revision keeps its identity, 1.5 rule 11).  When a
+    layout is present, ``layout.revision`` equals ``answer_revision``.  A
+    payload that carries a layout must still carry the legacy ``kind``,
+    ``title`` and ``body`` strings (1.2, 1.8).
     """
     if not isinstance(payload, dict):
         return ["display: must be an object"]
-    has_layout, has_id = "layout" in payload, "answer_id" in payload
-    if not has_layout and not has_id:
+    has_layout = "layout" in payload
+    has_id = "answer_id" in payload
+    has_rev = "answer_revision" in payload
+    if not (has_layout or has_id or has_rev):
         return []
     errs: list[str] = []
-    if has_layout != has_id:
-        errs.append("display: layout and answer_id must be sent together")
+    if has_id != has_rev:
+        errs.append("display: answer_id and answer_revision must be sent together")
+    if has_layout and not (has_id and has_rev):
+        errs.append("display: layout requires answer_id and answer_revision")
     if has_id:
         aid = payload["answer_id"]
         try:
             uuid.UUID(aid if isinstance(aid, str) else "")
         except ValueError:
             errs.append("display.answer_id: must be a UUID")
+    rev_ok = False
+    if has_rev:
+        rev = payload["answer_revision"]
+        if type(rev) is not int or rev < 1:
+            errs.append("display.answer_revision: must be an integer >= 1")
+        else:
+            rev_ok = True
     if has_layout:
         errs.extend(validate_layout(payload["layout"]))
+        layout = payload["layout"]
+        if rev_ok and isinstance(layout, dict) and layout.get("revision") != payload["answer_revision"]:
+            errs.append("display.layout.revision: must equal answer_revision")
         for key in ("kind", "title", "body"):
             if not isinstance(payload.get(key), str):
                 errs.append(f"display.{key}: legacy field must be a string")
