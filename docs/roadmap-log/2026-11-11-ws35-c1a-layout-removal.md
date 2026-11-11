@@ -7,7 +7,7 @@ prs: [334, 335]
 
 # WS-35 C1a: retired native layouts
 
-- System: Codex. Session: WS-35 C1a continuation of Larry's 2026-11-11 roadmap-development request.
+- System: Codex. Session reference: `codex/ws35-c1a-layout-removal-20261111`, continuing Larry's 2026-11-11 roadmap-development request.
 - Source: `69f98054ef470ac5bda5738c5dd073059927a6d9`, branch `codex/ws35-c1a-layout-removal-20261111`.
 - Base: `origin/next` at `a1369e223e51cc499c8f942fae95133994a4facb`, with `origin/main` at `4a0dd9635227cce51b01fcfcd584b3850ae81042` merged before editing (merge `bbb3492`). Freeze remains `5777e98cf1cdbaa65eb13079044693794c071927`.
 - Documentation integration: parent C0-review/C10 branch `745b76b` merged as `86ebc73`; no runtime-source changes relative to `69f9805`.
@@ -41,4 +41,4 @@ The first Host run reproduced F1 and two assertions in the retired compact-capti
 
 Review C1a with Kimi. C10 instructions are published in [#335](https://github.com/Larryfix71566/jarvis-voice-ai/pull/335); Larry has not run the baseline and it remains required before C1a merges. [#334](https://github.com/Larryfix71566/jarvis-voice-ai/pull/334) requests C0/C0b contract clarification and does not block this bounded layout deletion. Native `appearance.set` retirement should be reflected in later contract/backend work rather than expanded into this slice.
 
-No physical acceptance boxes were checked. Automated rendering and performance-test output are not C10 baseline or live acceptance. No push, PR, merge or deploy performed for C1a.
+No physical acceptance boxes were checked. Automated rendering and performance-test output are not C10 baseline or live acceptance. Development handoff: source and verification recorded by this change. The coordinator publishes the draft PR and records its number; independent review and C10 baseline remain required before merge. No merge or deploy performed for C1a.
