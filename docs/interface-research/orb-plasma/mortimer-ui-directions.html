@@ -92,6 +92,12 @@ a{color:var(--accent)}
 .pg-controls button[aria-pressed="true"]{background:rgba(44,201,255,.18);border-color:#2CC9FF}
 .pg-rm{font-size:13px;display:flex;align-items:center;gap:8px;color:var(--m-text)}
 .pg-cap{font-size:14px;color:var(--m-text);min-height:3em}
+.depth-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:16px;margin:12px 0 8px}
+.depth-grid figure{margin:0;background:var(--m-bg);color:var(--m-text);border:1px solid #0b0e10;border-radius:14px;overflow:hidden;min-width:0}
+.depth-grid canvas{display:block;width:100%;aspect-ratio:1;cursor:pointer;touch-action:pan-y}
+.depth-grid figcaption{padding:12px 14px 14px;display:grid;gap:6px;font-size:13.5px;line-height:1.45}
+.depth-grid figcaption b{font-size:15px}
+.depth-grid .cost{color:var(--m-dim);font-size:12.5px}
 .playground .note{color:var(--m-dim)}
 .pal td{vertical-align:middle}
 .sw{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:6px;border:1px solid rgba(0,0,0,.25)}
@@ -522,6 +528,19 @@ a{color:var(--accent)}
     </div>
   </div>
 
+  <h3 id="orb-depth">Depth for the orb itself: three options to pick from</h3>
+  <p>Each is the approved orb, unchanged, with one depth treatment added, on the same sample rail so only the treatment differs. They follow the state buttons above. Untick "Depth on" to see the orb as approved. The crystal glass stays as it is in all three; none brings back a frosted rim.</p>
+  <div class="depth-grid">
+    <figure><canvas class="eorb" data-depth="1" aria-hidden="true"></canvas><figcaption><b>1 · Shadow and cast light</b><span>The orb floats above the rail: a soft shadow under it, and the energy's light focused through the ball into a coloured pool that brightens with the voice.</span><label class="pg-rm"><input type="checkbox" data-depth-toggle="1" checked> Depth on</label><span class="cost">Swift: two gradient fills outside the glass, cheap. Needs about a quarter of the orb's height free below it.</span></figcaption></figure>
+    <figure><canvas class="eorb" data-depth="2" aria-hidden="true"></canvas><figcaption><b>2 · Tilt parallax</b><span>The glass reflections slide one way and the core the other as you move, and the shaded side turns with you, like looking round a real ball. Here it follows your pointer or finger and sways slowly otherwise.</span><label class="pg-rm"><input type="checkbox" data-depth-toggle="2" checked> Depth on</label><span class="cost">Swift: offsets only, near free. Mac follows the pointer; the phone would follow its tilt. Off under Reduce Motion.</span></figcaption></figure>
+    <figure><canvas class="eorb" data-depth="3" aria-hidden="true"></canvas><figcaption><b>3 · Refraction</b><span>The rail behind the orb bends through it, magnified and upside down in the middle and squeezed at the rim as a solid glass ball would, with a faint upside-down echo of the arcs on the far wall.</span><label class="pg-rm"><input type="checkbox" data-depth-toggle="3" checked> Depth on</label><span class="cost">Swift: the costly one. It has to sample what's behind the orb every frame, likely a Metal shader, the app's first.</span></figcaption></figure>
+  </div>
+  <dl class="facts">
+    <div><dt>Speed (10% budget)</dt><dd>1: two extra fills a frame, outside the glass; expected to fit. 2: one gradient and two offsets a frame; expected to fit, plus motion readings on the phone. 3: re-draws or samples the backdrop across the whole orb every frame; the most likely to break the 10% budget over the crystal shell (box 810, <code>ROADMAP.md:810</code>). SwiftUI Canvas cannot see the views behind it, so 3 needs either the rail drawn again inside the orb or a <code>layerEffect</code> shader, and nothing in the app uses Metal today. None of this is measured; the arcs probe in <code>OrbShellFrameTimeTests</code> would settle it.</dd></div>
+    <div><dt>Flash safety</dt><dd>1: the cast light follows the orb's capped brightness, so it changes no faster than the orb. 2: changes position, not brightness. 3: the far-wall echo is a fixed share of the same capped frame, so it rides the same cap; the refracted rail is steady, but text scrolling behind the orb would move through it magnified, which may distract. Checked by reasoning on the code, not on pixels.</dd></div>
+    <div><dt>Combining</dt><dd>1 and 2 stack without conflict: shadow below, tilt inside. 3 can sit with either but costs the most. Reduce Motion stills 2; Reduce Transparency would turn 3 off.</dd></div>
+  </dl>
+
   <h3>Proposed colours, Mortimer's rust kept</h3>
   <div class="tablewrap"><table class="pal">
     <thead><tr><th>Role</th><th>Colour</th><th>Contrast on #15191D</th><th>Change</th><th>Closest call (ΔE, normal · deutan)</th></tr></thead>
@@ -594,6 +613,7 @@ a{color:var(--accent)}
     <li>Space under Full Keyboard Access, and how VoiceOver reads the glyph buttons.</li>
     <li>The drawer tabs, weather, radar, atlas, roadmap and workflow views were judged from code only; no screenshots of them are in the repo.</li>
     <li>The orb sketch: how the arcs look in SwiftUI Canvas, their frame time on the Mac and an iPhone, and how touch feels on the phone. Flash safety was checked on a brightness model, not on rendered pixels, and the sketch could not be rendered off-screen here to compare it frame by frame with the demo, and the browser port of the crystal glass was not compared with the app's renders on screen. The voice levels in the sketch are simulated.</li>
+    <li>The three depth options: how each looks in SwiftUI, its frame time against the 10% budget, and whether phone tilt feels right for option 2 (here it follows the pointer). Option 3's refraction is approximated with 18 rings of scaled backdrop, not true optics.</li>
     <li>The colour numbers are calculations against the app background; contrast on glass panels and real users with colour-vision differences are not tested.</li>
     <li>All mockup content is sample data, and the mockups are HTML approximations of SwiftUI, not renders of the app.</li>
   </ul>
@@ -858,6 +878,7 @@ function drawGlassShell(ctx, cx, cy, r, stateRGB, level, opt) {
   g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.2);              // 1. bloom just outside the glass
   g.addColorStop(0.80, rgba(stateRGB, 0)); g.addColorStop(0.86, rgba(stateRGB, 0.035 * s)); g.addColorStop(1, rgba(stateRGB, 0));
   disc(r * 1.2); ctx.fillStyle = g; ctx.fill();
+  if (opt.backdrop) { ctx.save(); disc(r); ctx.clip(); opt.backdrop(ctx); ctx.restore(); }   // depth option 3 only: what's behind, seen through the ball
   g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);                    // 3. dark, nearly clear body
   CG.BODY.forEach(function (b) { g.addColorStop(b[0], rgba(CG.INK, b[1])); }); disc(r); ctx.fillStyle = g; ctx.fill();
   if (opt.interior) { ctx.save(); disc(r * CG.CLIP); ctx.clip(); opt.interior(ctx); ctx.restore(); }   // 4. core + arcs
@@ -870,7 +891,9 @@ function drawGlassShell(ctx, cx, cy, r, stateRGB, level, opt) {
   disc(r * 0.903); ctx.strokeStyle = rgba(CG.ICE, 0.10); ctx.lineWidth = 0.6 * dpr; ctx.stroke();
   var cvs = ctx.canvas, doc = cvs && cvs.ownerDocument, env = cvs && cvs._crystalEnv;                                   // 7. reflections, screened
   if (doc && (!env || env.r !== r || env.dpr !== dpr)) env = cvs._crystalEnv = cgEnv(doc, r, dpr);
-  if (env) { ctx.globalCompositeOperation = 'screen'; ctx.drawImage(env.cv, cx - env.half, cy - env.half); }
+  if (env) { ctx.globalCompositeOperation = 'screen'; var edx = opt.envDx || 0, edy = opt.envDy || 0;   // envDx/Dy: depth option 2 only
+    if (edx || edy) { ctx.save(); disc(r); ctx.clip(); }
+    ctx.drawImage(env.cv, cx - env.half + edx, cy - env.half + edy); if (edx || edy) ctx.restore(); }
   ctx.restore();
 }
   // Scale each 1280x800 stage to its frame.
@@ -1195,8 +1218,10 @@ function drawGlassShell(ctx, cx, cy, r, stateRGB, level, opt) {
   var orbs=[],hold=null,held=false,prevPick='auto';
   function setPick(k){ORB.pick=k;document.querySelectorAll('.pg-controls button').forEach(function(b){b.setAttribute('aria-pressed',b.getAttribute('data-state')===k?'true':'false');});}
   document.querySelectorAll('canvas.eorb').forEach(function(cv){
-    var o={c:cv,x:cv.getContext('2d'),P:makePlasma(),ptr:null,vis:true,f:cv.classList.contains('big')?.42:.36};   // big playground orb: same size as the demo's (plasma radius 126 CSS px in 340)
-    function loc(e){var r=cv.getBoundingClientRect(),Rp=Math.min(r.width,r.height)*o.f;return {x:(e.clientX-r.left-r.width/2)/Rp,y:(e.clientY-r.top-r.height/2)/Rp};}
+    var dep=+(cv.getAttribute('data-depth')||0);
+    var o={c:cv,x:cv.getContext('2d'),P:makePlasma(),ptr:null,vis:true,f:cv.classList.contains('big')?.42:dep?.3:.36,
+      depth:dep,cyF:dep?.44:.5,tg:dep?document.querySelector('[data-depth-toggle="'+dep+'"]'):null,tl:{x:0,y:0},bd:null};   // big playground orb: same size as the demo's (plasma radius 126 CSS px in 340)
+    function loc(e){var r=cv.getBoundingClientRect(),Rp=Math.min(r.width,r.height)*o.f;return {x:(e.clientX-r.left-r.width/2)/Rp,y:(e.clientY-r.top-r.height*o.cyF)/Rp};}
     // the demo's pointer handling: hover moves the arcs, a tap mutes or unmutes, press and hold talks
     cv.addEventListener('pointermove',function(e){o.ptr=loc(e);});
     cv.addEventListener('pointerleave',function(){o.ptr=null;clearTimeout(hold);});
@@ -1206,23 +1231,65 @@ function drawGlassShell(ctx, cx, cy, r, stateRGB, level, opt) {
     if(window.IntersectionObserver){new IntersectionObserver(function(es){es.forEach(function(en){o.vis=en.isIntersecting;});}).observe(cv);}
     orbs.push(o);
   });
+  // the sample scene behind the depth options: the voice rail's panel with a faint grid and a few lines of conversation
+  function depthBackdrop(Wc,Hc,dpr){
+    var cv=document.createElement('canvas');cv.width=Wc;cv.height=Hc;var c=cv.getContext('2d');
+    c.fillStyle='#15191D';c.fillRect(0,0,Wc,Hc);c.strokeStyle='rgba(255,255,255,.05)';c.lineWidth=dpr;
+    for(var gx=12*dpr;gx<Wc;gx+=24*dpr){c.beginPath();c.moveTo(gx,0);c.lineTo(gx,Hc);c.stroke();}
+    for(var gy=12*dpr;gy<Hc;gy+=24*dpr){c.beginPath();c.moveTo(0,gy);c.lineTo(Wc,gy);c.stroke();}
+    var L=[["What's on today?",1],["Two meetings, the first at 10.",0],["Any rain this afternoon?",1],["Light rain after 3 PM.",0],["Move my 2 o'clock?",1],["Done, it's now at 4.",0],["Thanks, Mortimer.",1],["Anytime.",0]];
+    c.font=(13*dpr)+'px -apple-system, system-ui, sans-serif';c.textBaseline='middle';
+    for(var i=0,y=22*dpr;y<Hc;i++,y+=21*dpr){var l=L[i%L.length];c.fillStyle=l[1]?'rgba(45,212,191,.85)':'rgba(230,236,240,.72)';c.fillText(l[0],(l[1]?14:30)*dpr,y);}
+    return cv;
+  }
   function drawOrb(o,t,dt,st,now){
     var cv=o.c,r=cv.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
     var Wc=Math.max(1,Math.round(r.width*dpr)),Hc=Math.max(1,Math.round(r.height*dpr));
     if(cv.width!==Wc||cv.height!==Hc){cv.width=Wc;cv.height=Hc;}
-    var x=o.x,cx=Wc/2,cy=Hc/2,Rg=Math.min(Wc,Hc)*o.f,P=o.P,s=S[MAP[st]];
+    var x=o.x,cx=Wc/2,cy=Hc*o.cyF,Rg=Math.min(Wc,Hc)*o.f,P=o.P,s=S[MAP[st]];
+    var D=o.depth&&(!o.tg||o.tg.checked)?o.depth:0;   // which depth option is on for this orb (0 = the approved orb as is)
     // the demo's R (148) sits on the crystal shell's inner wall (0.885 of the glass radius)
     var k1=Rg*.885/R, pxDev=W*k1, px=Math.max(2,Math.ceil(W*(k1/dpr)*(400/340)));   // the demo's density: 400 canvas px shown at 340 CSS px
     P.sc=k1/dpr;   // on-screen CSS px per demo unit (the demo: 0.85)
     P.mx=o.ptr?C+o.ptr.x*R/.885:null; P.my=o.ptr?C+o.ptr.y*R/.885:null;
     var fresh=P.step(MAP[st],ORB.reduce,px); P.cap(now,fresh);
     x.setTransform(1,0,0,1,0,0); x.clearRect(0,0,Wc,Hc);
+    if(o.depth){ if(!o.bd||o.bd.width!==Wc||o.bd.height!==Hc) o.bd=depthBackdrop(Wc,Hc,dpr); x.drawImage(o.bd,0,0); }
     var ex0=cx-pxDev/2, ey0=cy-pxDev/2;
+    // depth option 2: a tilt that follows the pointer or finger (on a phone, the device's tilt); without one it sways slowly.
+    // Off under Reduce Motion.
+    var tl=o.tl, tx0=0, ty0=0;
+    if(D===2&&!ORB.reduce){ if(o.ptr){tx0=Math.max(-1,Math.min(1,o.ptr.x));ty0=Math.max(-1,Math.min(1,o.ptr.y));} else {tx0=.6*Math.sin(t*.7);ty0=.4*Math.sin(t*.5+1);} }
+    tl.x+=(tx0-tl.x)*.08; tl.y+=(ty0-tl.y)*.08;
+    var lum=P.Lref>0?Math.min(1,P.Ls/P.Lref):0;   // the orb's capped brightness, 0..1: anything lit by the energy follows this
     function energy(c){ if(P.carry>0){c.globalAlpha=P.carry;c.drawImage(P.Ep,ex0,ey0,pxDev,pxDev);} c.globalAlpha=P.gain;c.drawImage(P.E,ex0,ey0,pxDev,pxDev);c.globalAlpha=1; }
     // bloom outside the glass (the demo's outer glow), then the crystal shell with the energy inside its 0.885 clip
-    x.save();x.beginPath();x.arc(cx,cy,pxDev/2,0,6.283);x.arc(cx,cy,Rg,0,6.283,true);x.clip();energy(x);x.restore();
     var rgb=hex('#'+P.col.split(',').map(function(v){return ('0'+(+v).toString(16)).slice(-2);}).join(''));
-    drawGlassShell(x,cx,cy,Rg,rgb,P.lv,{dpr:dpr,interior:function(c){energy(c);}});
+    if(D===1){ // depth option 1: contact shadow on the surface below, and the energy's light focused through the ball onto it
+      var gy=cy+Rg*1.14;
+      x.save();x.translate(cx,gy);x.scale(1,.2);var sg=x.createRadialGradient(0,0,0,0,0,Rg*1.05);
+      sg.addColorStop(0,'rgba(0,0,0,.62)');sg.addColorStop(.45,'rgba(0,0,0,.34)');sg.addColorStop(1,'rgba(0,0,0,0)');
+      x.fillStyle=sg;x.beginPath();x.arc(0,0,Rg*1.05,0,6.283);x.fill();x.restore();
+      x.save();x.globalCompositeOperation='lighter';x.translate(cx,gy-Rg*.02);x.scale(1,.24);var kg=x.createRadialGradient(0,0,0,0,0,Rg*.62);
+      kg.addColorStop(0,'rgba(255,255,255,'+(.42*lum)+')');kg.addColorStop(.22,rgba(rgb,.5*lum));kg.addColorStop(1,rgba(rgb,0));
+      x.fillStyle=kg;x.beginPath();x.arc(0,0,Rg*.62,0,6.283);x.fill();x.restore();
+    }
+    x.save();x.beginPath();x.arc(cx,cy,pxDev/2,0,6.283);x.arc(cx,cy,Rg,0,6.283,true);x.clip();energy(x);x.restore();
+    var shellOpt={dpr:dpr,interior:function(c){
+      if(D===3){ // depth option 3: a faint, upside-down reflection of the arcs on the far wall, from the same capped frame
+        c.save();c.globalCompositeOperation='lighter';c.globalAlpha=.16*P.gain;c.translate(cx,cy);c.scale(-.8,-.8);c.drawImage(P.E,-pxDev/2,-pxDev/2,pxDev,pxDev);c.restore();}
+      if(D===2){c.save();c.translate(-tl.x*Rg*.06,-tl.y*Rg*.06);energy(c);c.restore();} else energy(c);}};
+    if(D===2){shellOpt.envDx=tl.x*Rg*.07;shellOpt.envDy=tl.y*Rg*.07;}
+    if(D===3){shellOpt.backdrop=function(c){ // depth option 3: the scene behind bends through the ball: magnified and upside down in the middle, squeezed at the rim
+      c.fillStyle='#0b0f13';c.fillRect(cx-Rg,cy-Rg,2*Rg,2*Rg);
+      for(var i=18;i>=1;i--){var rho=(i-.5)/18,sc=-(.42+1.25*(1-rho*rho));c.save();c.beginPath();c.arc(cx,cy,Rg*i/18,0,6.283);c.clip();
+        c.setTransform(sc,0,0,sc,cx-sc*cx,cy-sc*cy);c.drawImage(o.bd,0,0);c.restore();}
+      c.fillStyle='rgba(6,10,14,.3)';c.fillRect(cx-Rg,cy-Rg,2*Rg,2*Rg);};}
+    drawGlassShell(x,cx,cy,Rg,rgb,P.lv,shellOpt);
+    if(D===2){ // option 2: the shadowed side of the ball turns with the tilt, so it reads as round
+      x.save();x.beginPath();x.arc(cx,cy,Rg,0,6.283);x.clip();var lx=cx+(-.32-.22*tl.x)*Rg,ly=cy+(-.34-.22*tl.y)*Rg,vg=x.createRadialGradient(lx,ly,0,lx,ly,Rg*1.55);
+      vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(.55,'rgba(0,0,0,0)');vg.addColorStop(.85,'rgba(0,0,0,.22)');vg.addColorStop(1,'rgba(0,0,0,.42)');
+      x.fillStyle=vg;x.fillRect(cx-Rg,cy-Rg,2*Rg,2*Rg);x.restore();}
     // the demo's overlays, in its own units with its R on the glass radius
     var k2=Rg/R; x.save(); x.setTransform(k2,0,0,k2,cx-C*k2,cy-C*k2); x.lineCap='round';
     var mx=o.ptr?C+o.ptr.x*R:null,my=o.ptr?C+o.ptr.y*R:null;

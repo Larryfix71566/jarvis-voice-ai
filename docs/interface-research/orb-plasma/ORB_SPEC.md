@@ -23,20 +23,26 @@ Larry approved the orb on 2026-11-11 at 03:07 UTC ("Looks right"). The palette w
 
 ## Pending: depth of the orb itself
 
-On 2026-11-11 at 03:12 UTC, Larry asked whether the orb itself can have depth so it doesn't look flat on the screen. Options are being mocked up, so the depth treatment is **pending Larry's pick**. Items 1 (glass) and 3 (arc depth) below may change with that pick. Don't build the shell or shading part of C6 until this section records his answer.
+On 2026-11-11 at 03:12 UTC, Larry asked whether the orb itself can look less flat on the screen. The depth treatment is **pending Larry's pick**. Don't build any of the options below, or change the glass (item 1), until this section records his answer.
+
+The mockups page shows the three options side by side, each layered on the approved orb (section "Depth for the orb itself", line 531). None of them has been measured.
+
+1. **Shadow and cast light.** A soft contact shadow below the orb, plus a coloured pool of light whose strength follows the capped brightness. Cost: two gradient fills outside the glass.
+2. **Tilt parallax.** With tilt, reflections move by +0.07R, the interior moves by −0.06R, and the shaded side turns. The Mac follows the pointer; the phone follows device tilt. It is off under Reduce Motion. Nearly free.
+3. **Refraction.** The backdrop is drawn inverted and magnified through the ball, plus a 16% inverted echo of the arcs on the far wall. Canvas can't see the views behind it, so this needs either the rail redrawn inside the orb or a `layerEffect` shader (the app's first Metal). This option is the most likely to exceed the 10% performance budget.
 
 ## Sources
 
-- `mortimer-ui-directions.html` in this folder is a copy of the mockups page (version 9). The original is a private page in Larry's account. Line numbers below refer to this copy. It also contains the plasma demo's code (from line 1114).
+- `mortimer-ui-directions.html` in this folder is a copy of the mockups page (version 10). The original is a private page in Larry's account. Line numbers below refer to this copy. The direction 6 orb code starts at line 1137.
 
 ## What to build
 
-1. **Glass.** Use the existing crystal shell unchanged (`CrystalGlassRig.swift`; its values are frozen with Larry's approval). Pending the depth pick above.
+1. **Glass.** Use the existing crystal shell unchanged (`CrystalGlassRig.swift`; its values are frozen with Larry's approval). The depth pick above may add to it.
    - Replace only the `plasma()` call at `CometOrbRenderer.swift:300`, inside the 0.885 clip.
    - Drop the orbiting comets at `:286` and `:345`.
-2. **Energy.** Port the demo's `bolt()`, `arc()` and core code as written (page lines 1114 onward).
+2. **Energy.** Port the demo's `bolt()`, `arc()` and core code as written (page lines 1137 onward; `bolt()` and `arc()` are at 1159 and 1160).
    - Work in demo units: R = 148 sits on the shell's 0.885 inner wall.
-   - The state table S is at line 1117:
+   - The state table S is at line 1140:
 
      | State | Arcs | Colour / extra |
      |---|---|---|
@@ -49,23 +55,23 @@ On 2026-11-11 at 03:12 UTC, Larry asked whether the orb itself can have depth so
      | offline | none | |
      | you over Mortimer | rust arcs | plus one teal bolt |
 
-3. **Arc depth** (line 1154). Pending the depth pick above.
+3. **Arc depth** (line 1177). This is approved and separate from the pending depth of the orb itself.
    - Each arc end has a depth z. Each frame it moves by up to ±0.025, staying within [−0.9, 0.95]. It projects to r = R·√(1−z²).
    - Front arcs (z > 0) are 1 + 0.9z wider. When z > 0.15 they end in a contact spot of radius (6+8·level)(1+1.6z).
    - Back arcs are drawn at alpha 0.4 + 0.6(1+z). They are drawn before a dark occluder (radius 0.8·core) and before the core.
    - A touch or the pointer inside the glass pulls arc ends to that point on the front face.
-4. **Small sizes: arc-width floor** (line 1134). Let s be points per demo unit; the demo uses 0.85.
+4. **Small sizes: arc-width floor** (line 1152). Let s be points per demo unit; the demo uses 0.85.
    - At s ≥ 0.85, widths are unchanged.
    - Below that, let r = s/0.85. The bright line's on-screen width is 0.85·w·√r + max(0, 1.5·min(1, (1−r)/0.25) − 1.02·√r) pt.
    - The mid stroke is 2.5× that and the glow 6×.
    - Dots and contact spots scale by 1/√r. The branch count is unchanged.
-5. **Core** (line 1174). The gradient radius is 74.3 + 3 + 22·level + 3·sin(5t) units. Its half-strength edge (0.75 × that radius) is always at least 1/3 of the glass radius, in every state.
-6. **Flash cap** (line 1184). After drawing each frame:
+5. **Core** (line 1193). The gradient radius is 74.3 + 3 + 22·level + 3·sin(5t) units. Its half-strength edge (0.75 × that radius) is always at least 1/3 of the glass radius, in every state.
+6. **Flash cap** (line 1204). After drawing each frame:
    - Measure the frame's mean luminance L on a 24×24 downsample.
    - Show clamp(L, A ± 3% of Lref). The anchor A moves at most 4% of Lref per frame and reverses at most once per 220 ms. Lref = max(0.995·Lref, L).
    - Apply the gain evenly to the whole frame, or blend with the previous frame. Never clip individual passes.
    - In the model this gives at most 2.5 flashes a second; the uncapped demo gives about 14. This is a brightness model, not a measurement of rendered pixels.
-7. **Input** (line 1200). Larry decided this works from the first version, not hover alone.
+7. **Input** (line 1225). Larry decided this works from the first version, not hover alone.
    - Hover or touch pulls an arc to that point.
    - Tap or click toggles the mic, like `MicControlsView.swift:34`.
    - Press and hold for 350 ms is push-to-talk. It must share the `pttOwned` guard (`MicControlsView.swift:19`, `:105`, `:110`), because releasing Space always mutes (`:113`). It must restore the mic to its state before the hold.
