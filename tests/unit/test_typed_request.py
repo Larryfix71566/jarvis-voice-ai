@@ -9,9 +9,18 @@ import pytest
 
 import jarvis.bot.typed_request as tr
 from jarvis.bot.typed_request import (
-    TypedRequestError, build_approval_pending, build_approval_result, build_approval_settled,
-    build_turn_result, is_bare_yes, validate_approval_decide, validate_approval_pending,
-    validate_approval_result, validate_approval_settled, validate_turn_result, validate_turn_typed,
+    TypedRequestError,
+    build_approval_pending,
+    build_approval_result,
+    build_approval_settled,
+    build_turn_result,
+    is_bare_yes,
+    validate_approval_decide,
+    validate_approval_pending,
+    validate_approval_result,
+    validate_approval_settled,
+    validate_turn_result,
+    validate_turn_typed,
 )
 
 FIX = Path(__file__).resolve().parents[1] / "fixtures" / "typed_request"

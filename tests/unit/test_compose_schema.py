@@ -9,8 +9,15 @@ import pytest
 
 import jarvis.bot.compose_schema as cs
 from jarvis.bot.compose_schema import (
-    LayoutError, compact_size, layout_size, require_valid_layout, sanitize_layout_urls, sanitize_url,
-    truncate_layout, validate_envelope, validate_layout,
+    LayoutError,
+    compact_size,
+    layout_size,
+    require_valid_layout,
+    sanitize_layout_urls,
+    sanitize_url,
+    truncate_layout,
+    validate_envelope,
+    validate_layout,
 )
 
 ANSWER_ID = "00000000-0000-4000-8000-0000000000a1"
@@ -153,7 +160,7 @@ def test_text_block_limits():
 
 
 def test_media_limits_and_a11y_required():
-    ok = {"id": "m", "type": "media", "images": ["https://a.example/%d.png" % i for i in range(9)], "a11y": "Radar"}
+    ok = {"id": "m", "type": "media", "images": [f"https://a.example/{i}.png" for i in range(9)], "a11y": "Radar"}
     layout = sample()
     layout["blocks"].append(ok)
     assert validate_layout(layout) == []
