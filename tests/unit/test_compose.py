@@ -392,3 +392,51 @@ def test_direct_tool_payloads_compose_or_pass_through():
              "data_policy": "approved_external"}
     out = c.compose(local, request_id="q2")[-1]
     assert out["subject_key"] == "k" and out["data_policy"] == "approved_external" and out["kind"] == "weather"
+
+
+# --------------------------------------------------------------- golden (plan test 30)
+
+GOLDEN_DIR = __import__("pathlib").Path(__file__).resolve().parents[1] / "fixtures" / "compose"
+
+
+def _golden_cases():
+    samples = json.loads((GOLDEN_DIR / "legacy_display_samples.json").read_text())
+    golden = json.loads((GOLDEN_DIR / "legacy_display_golden.json").read_text())
+    assert len(samples) == len(golden)
+    return list(zip(samples, golden))
+
+
+@pytest.mark.parametrize("sample,expected", _golden_cases(),
+                         ids=lambda v: v.get("tool", "") if isinstance(v, dict) and "data" in v else "")
+def test_flag_off_payload_matches_pre_c3_golden(sample, expected):
+    """legacy_display_golden.json was produced by the pre-C3 display.py (the
+    C0 types branch, a6784c5) from legacy_display_samples.json. With no
+    composer, today's code must produce the same payload, key for key."""
+    payload = build_display_payload("analyst", "Analyst", sample["tool"], sample["arguments"],
+                                    json.dumps(sample["data"]), "run-golden")
+    if isinstance(payload, dict):
+        payload.pop("ts", None)
+        payload = json.loads(json.dumps(payload, sort_keys=True))
+    assert payload == expected
+
+
+@pytest.mark.parametrize("sample,expected", [c for c in _golden_cases() if c[1] is not None],
+                         ids=lambda v: v.get("tool", "") if isinstance(v, dict) and "data" in v else "")
+async def test_handler_without_composer_sends_golden_payload(sent, sample, expected):
+    handler = make_agent_event_handler(transport=object())
+    handler({"type": "agent_tool_result", "agent": "analyst", "display_name": "Analyst",
+             "run_id": "run-golden", "tool": sample["tool"], "ok": True, "latency_ms": 1,
+             "arguments": sample["arguments"], "result": json.dumps(sample["data"])})
+    await flush()
+    displays = [m["display"] for m in sent if m["type"] == "display"]
+    if sample["tool"] in ("get_weather", "get_weather_radar"):
+        # the weather merger holds a lone half until the run ends
+        handler(lifecycle("delegate_done", "run-golden"))
+        await flush()
+        displays = [m["display"] for m in sent if m["type"] == "display"]
+        assert displays and all("layout" not in d and "answer_id" not in d for d in displays)
+        return
+    assert len(displays) == 1
+    got = dict(displays[0])
+    got.pop("ts", None)
+    assert json.loads(json.dumps(got, sort_keys=True)) == expected
