@@ -283,13 +283,13 @@ land on main before code; no checkbox closes from this amendment. WS-28 remains 
 ### Kimi combined-source review claim — 2026-11-10
 
 - **Owner:** `codex` retains WS-17 and every release/operational step; `kimi` owns only this bounded, read-only review, assigned by Larry on 2026-11-10 at 14:16:37 UTC in his Claude Duet channel ("Kimi", answering who owns the combined-source review that lifts the WS-17 hold). Larry retains deployment, restart and live-acceptance decisions.
-- **Status:** claimed by this registration after it merges to main. Target: the freeze SHA Larry records in WS-17 under §0 rule 15; no target is recorded yet and there is no result.
+- **Status:** claimed (landed with #318). Target: the freeze SHA Larry records in WS-17 under §0 rule 15; no target is recorded yet and there is no result. Main is `b9024ed` after #322 and #324; Larry is deciding whether the flaky `test_outer_task_deadline_covers_tool_execution` is fixed before the freeze. After the freeze, non-fix code lands on a `next` branch cut from the freeze SHA ([release closure plan](docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md) §2), so this target does not move again unless Larry approves an acceptance fix by name.
 - **Implemented by:** Kimi reviews and has no authorship of the target except the files excluded below. Claude wrote this claim at Larry's request.
 - **Remaining work / acceptance:** Independent source review of the code delta from production `b136a2a66032b17082776a01353abe67e352c31e` to the freeze SHA, i.e. the tree outside `docs/` and `ROADMAP.md`, for release risk: correctness, security, data loss and operational recovery. Findings are reported as new fix PRs by the owning system. Kimi-authored code in that delta (WS-31 NR1 `jarvis/app_build_contract.py`, WS-32 reader repair #275) is excluded under §0 rule 14 and goes to a non-Kimi reviewer. A pass does not lift the operational hold by itself; Larry decides recovery and deployment.
 - **Where:** Kimi review on `kimi/ws17-combined-source-review-20261110`, created only after this claim lands; claim on `claude/ws33-roadmap-freeze-archive-20261110`; [claim log](docs/roadmap-log/2026-11-10-ws-33-acceptance-unblock.md).
 - **Scope:** Read-only. Kimi writes only this sub-section, dated WS-17 progress in `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` and WS-17 `docs/roadmap-log/` entries. No source, test, configuration or dependency edits; no deployment, service operation, app launch, live call, credential or checkbox.
-- **Next step:** larry: record the freeze SHA after #315 and the companion CI PR merge. kimi: review the frozen tree and publish a docs-only verdict PR; do not merge.
-- **Updated:** 11-10 (Claude registered the claim at Larry's request; no result, operational or acceptance change).
+- **Next step:** larry: decide on the flaky deadline test, then record the freeze SHA here (Claude can write it into this sub-section on his word). kimi: review the frozen tree and publish a docs-only verdict PR; do not merge.
+- **Updated:** 11-11 (Claude linked the release closure plan and the `next` branch; no target, result, operational or acceptance change). Previous: 11-10 (Claude registered the claim at Larry's request).
 
 
 
