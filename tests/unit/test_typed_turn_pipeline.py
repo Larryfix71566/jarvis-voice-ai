@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -48,7 +49,11 @@ from jarvis.bot.pipeline import (
     start_typed_turn,
     typed_request_flag_enabled,
 )
-from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn, is_sensitive
+from jarvis.bot.sensitive_turn import (
+    SensitiveTurn,
+    current_sensitive_turn,
+    is_sensitive,
+)
 from jarvis.bot.transcript_log import TranscriptLogger
 from jarvis.bot.typed_request import ApprovalBook
 from jarvis.voice_sources import VoiceSources
@@ -150,8 +155,8 @@ class Rig:
         await self.worker.cancel()
         try:
             await asyncio.wait_for(self._running, timeout=5)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            logging.getLogger(__name__).debug("worker did not stop cleanly", exc_info=True)
 
     async def typed(self, text, tag="typed:t1"):
         return await start_typed_turn(self.runtime, self.pusher, self.pair, text, tag)

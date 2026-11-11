@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn, is_sensitive
+from jarvis.bot.sensitive_turn import (
+    SensitiveTurn,
+    current_sensitive_turn,
+    is_sensitive,
+)
 from jarvis.bot.typed_request import (
     APPROVAL_TTL_S,
     ApprovalBook,
@@ -362,8 +366,9 @@ async def test_typed_bare_yes_with_two_open_asks_and_delivers_nothing(caplog):
     with caplog.at_level("INFO", logger="jarvis.bot.typed_request"):
         await rig.session.handle_turn(rig.typed("yes"))
     assert rig.started == []
-    assert rig.spoken == ["Two things are waiting for your approval: plan start from Developer and "
-                          "research compare start from Analyst. Which one do you mean?"]
+    assert rig.spoken == [(
+        "Two things are waiting for your approval: plan start from Developer and "
+        "research compare start from Analyst. Which one do you mean?")]
     assert rig.sent[0]["code"] == "accepted"
     assert len(rig.book.open_items()) == 2
     assert "approval_yes_ambiguous open=2 source=typed" in caplog.text

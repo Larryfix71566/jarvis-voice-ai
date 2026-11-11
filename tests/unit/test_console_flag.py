@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-import jarvis.bot.pipeline as pipeline
+from jarvis.bot import pipeline
 
 SOURCE = Path(pipeline.__file__).read_text(encoding="utf-8")
 VAR = "JARVIS_COMMAND_CONSOLE_ENABLED"

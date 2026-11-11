@@ -323,9 +323,9 @@ def test_validators_do_not_mutate_input():
 # ================================================================ C7-py
 # The pending list, duplicate replies and the bare-yes verdict (pure logic).
 
-import json as _json  # noqa: E402
+import json as _json
 
-from jarvis.bot.typed_request import (  # noqa: E402
+from jarvis.bot.typed_request import (
     APPROVAL_TTL_S,
     MAX_OPEN_APPROVALS,
     ApprovalBook,
@@ -397,7 +397,7 @@ def test_later_non_preview_from_same_agent_and_tool_resolves():
 
 
 def test_failed_or_other_tool_result_does_not_resolve():
-    book, out, _ = make_book()
+    book, _out, _ = make_book()
     feed(book, {"needs_confirmation": True})
     feed(book, "boom", ok=False)
     feed(book, {"ok": True}, tool="selfedit_status")
@@ -557,7 +557,7 @@ def _two_open(book):
 
 @pytest.mark.parametrize("text", ["yes", "Yes.", "go ahead", "okay!"])
 def test_yes_verdict_table(text):
-    book, out, _ = make_book()
+    book, _out, _ = make_book()
     kw = {"sensitive": False, "offer_pending": False, "source": "typed"}
     assert book.yes_verdict(text, **kw) is None            # zero open
     feed(book, {"needs_confirmation": True}, tool="plan_start")
@@ -571,7 +571,7 @@ def test_yes_verdict_table(text):
 
 
 def test_yes_verdict_passes_on_longer_text_sensitive_and_pending_offer():
-    book, out, _ = make_book()
+    book, _out, _ = make_book()
     _two_open(book)
     kw = {"source": "voice"}
     assert book.yes_verdict("yes, the plan one", sensitive=False, offer_pending=False, **kw) is None
@@ -581,7 +581,7 @@ def test_yes_verdict_passes_on_longer_text_sensitive_and_pending_offer():
 
 
 def test_yes_verdict_logs_content_free_line(caplog):
-    book, out, _ = make_book()
+    book, _out, _ = make_book()
     _two_open(book)
     with caplog.at_level("INFO", logger="jarvis.bot.typed_request"):
         book.yes_verdict("yes", sensitive=False, offer_pending=False, source="voice")
