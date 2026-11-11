@@ -90,7 +90,9 @@ review and human release workflow for changes; a status request is read-only.
   `subscription.py`, `anthropic_shim.py`, `effort.py`.
 - Privacy/session results: `jarvis/sensitive.py`, `jarvis/bot/sensitive_turn.py`,
   `jarvis/bot/late_result.py` (late-result wrapper handling).
-- Host operations: `scripts/backup_db.py` (SQLite snapshots) and
+- Host operations: `scripts/backup_db.py` (nightly backups: databases, KB, encrypted
+  vault; off-disk via `JARVIS_BACKUP_DEST`), `scripts/restore_check.py` (manual
+  read-only restore check; see `docs/BACKUP_AND_RESTORE.md`) and
   `scripts/launchd_gen.py` (service/job definitions).
 - Ownership: `jarvis/tenant.py` supplies the request-scoped user context.
 - Usage/cost: `usage_ledger.py`, `costs_api.py`, `bot/usage_watcher.py`,
