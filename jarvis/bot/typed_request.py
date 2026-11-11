@@ -20,6 +20,7 @@ message has no trustworthy identity and gets no reply (contract 2.2).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import math
@@ -34,8 +35,9 @@ from typing import Any
 
 from jarvis.prompts import (
     APPROVAL_WHICH_TEMPLATE,
+    APPROVE_TURN_REF_ONLY_TEMPLATE,
     APPROVE_TURN_TEMPLATE,
-    DECLINE_TURN_TEMPLATE,
+    DECLINE_NOTE_TEMPLATE,
 )
 
 _logger = logging.getLogger(__name__)
@@ -373,6 +375,8 @@ REF_KEYS = ("staging_id", "preview_id", "draft_id", "action_id")
 _REF_VALUE_RE = re.compile(r"[A-Za-z0-9_.:-]{1,120}")
 _NAME_RE = re.compile(r"[A-Za-z0-9 _.-]{1,80}")
 SETTLED_MEMORY = 256
+MAX_ARGS_CHARS = 1000
+_ARGS_DROPPED_KEYS = ("confirm", "run_id")
 _COUNT_WORDS = {2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six", 7: "Seven", 8: "Eight"}
 
 
@@ -410,6 +414,28 @@ def pick_ref(result: dict) -> dict[str, str] | None:
     return None
 
 
+def canonical_args(arguments: Any) -> str | None:
+    """Canonical JSON of a preview call's own arguments (contract 3.3).
+
+    A dict only; the keys ``confirm`` and ``run_id`` are removed; sorted keys,
+    compact separators, no ASCII escaping, no ``default=``.  None when the
+    value is not a dict, is not JSON-serialisable, or is over 1,000 characters.
+    """
+    if not isinstance(arguments, dict):
+        return None
+    kept = {k: v for k, v in arguments.items() if k not in _ARGS_DROPPED_KEYS}
+    try:
+        text = json.dumps(kept, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        text.encode("utf-8")
+    except (TypeError, ValueError, RecursionError):
+        return None
+    return text if len(text) <= MAX_ARGS_CHARS else None
+
+
+def hash_args(args: str | None) -> str | None:
+    return hashlib.sha256(args.encode("utf-8")).hexdigest() if args is not None else None
+
+
 @dataclass
 class Approval:
     approval_id: str
@@ -421,15 +447,39 @@ class Approval:
     ref: dict[str, str] | None
     ts: float
     expires_at: float
+    args: str | None = None
+    args_hash: str | None = None
+
+    @property
+    def identity(self) -> tuple:
+        """The operation this entry stands for (contract 3.3): the ref when
+        there is one, else the hash of the canonical arguments."""
+        if self.ref:
+            return (self.agent, self.tool, "ref", self.ref["kind"], self.ref["value"])
+        return (self.agent, self.tool, "args", self.args_hash)
 
 
-def approval_turn_text(entry: Approval, decision: str) -> str:
-    """The user-turn text for a decision: a pure function of what the bot
-    recorded.  No client string is an input."""
-    if decision == "approve":
-        ref = f" ({entry.ref['kind']} {entry.ref['value']})" if entry.ref else ""
-        return APPROVE_TURN_TEMPLATE.format(tool=entry.tool, agent=entry.agent, ref=ref)
-    return DECLINE_TURN_TEMPLATE.format(tool=entry.tool, agent=entry.agent)
+def _ref_note(entry: Approval) -> str:
+    return f" ({entry.ref['kind']} {entry.ref['value']})" if entry.ref else ""
+
+
+def approval_turn_text(entry: Approval) -> str:
+    """The approve turn: a pure function of what the bot recorded.  No client
+    string is an input.  The arguments are quoted JSON data (contract 3.8)."""
+    ref_note = _ref_note(entry)
+    if entry.args is None:
+        return APPROVE_TURN_REF_ONLY_TEMPLATE.format(
+            tool=entry.tool, agent=entry.agent, ref_note=ref_note)
+    ref_arg = f", {entry.ref['kind']} set to {entry.ref['value']}," if entry.ref else ""
+    return APPROVE_TURN_TEMPLATE.format(
+        tool=entry.tool, agent=entry.agent, ref_note=ref_note, ref_arg=ref_arg, args=entry.args)
+
+
+def decline_note_text(entry: Approval) -> str:
+    """The silent context note for a decline (contract 3.8)."""
+    args_note = f" with arguments {entry.args}" if entry.args is not None else ""
+    return DECLINE_NOTE_TEMPLATE.format(
+        tool=entry.tool, agent=entry.agent, ref_note=_ref_note(entry), args_note=args_note)
 
 
 def _join_items(items: list[str]) -> str:
@@ -509,6 +559,14 @@ class ApprovalBook:
         return [e.approval_id for e in due]
 
     @staticmethod
+    def _names_same_operation(entry: Approval, arguments: Any, call_hash: str | None) -> bool:
+        """With a ref: the call passes the ref back as ``arguments[kind]``.
+        Without: its canonical arguments hash to the entry's ``args_hash``."""
+        if entry.ref:
+            return isinstance(arguments, dict) and arguments.get(entry.ref["kind"]) == entry.ref["value"]
+        return call_hash is not None and call_hash == entry.args_hash
+
+    @staticmethod
     def _names(event: dict) -> tuple[str, str]:
         return (str(event.get("display_name") or event.get("agent") or ""),
                 str(event.get("tool") or ""))
@@ -524,11 +582,15 @@ class ApprovalBook:
             return  # a protected route carries no result: nothing to record
         agent, tool = self._names(event)
         parsed = _parse_json_object(raw)
+        call_args = event.get("arguments")
         if not is_preview(parsed):
             if event.get("ok", True):
-                # The tool ran (the user said yes by voice): settle its preview.
+                # The tool ran (the user said yes by voice): settle the preview
+                # that names the SAME operation, and no other (3.3).
+                call_hash = hash_args(canonical_args(call_args))
                 for entry in [e for e in self._open.values()
-                              if (e.agent, e.tool) == (agent, tool)]:
+                              if (e.agent, e.tool) == (agent, tool)
+                              and self._names_same_operation(e, call_args, call_hash)]:
                     self._settle(entry, "resolved")
             return
         if sensitive:
@@ -546,9 +608,14 @@ class ApprovalBook:
             origin = _uuid(origin_id, "origin") if origin_id is not None else None
         except TypedRequestError:
             origin = None
+        ref = pick_ref(parsed)
+        args = canonical_args(call_args)
+        if ref is None and args is None:
+            _logger.info("approval_not_recorded reason=args")
+            return  # nothing names this operation: the user confirms it by voice
         now = self._clock()
         entry = Approval(self._new_id(), agent, tool, run_id, origin, summary[:MAX_SUMMARY],
-                         pick_ref(parsed), now, now + APPROVAL_TTL_S)
+                         ref, now, now + APPROVAL_TTL_S, args, hash_args(args))
         try:
             pending = build_approval_pending(
                 session_id=self._sid, generation=self._gen, approval_id=entry.approval_id,
@@ -557,7 +624,7 @@ class ApprovalBook:
         except TypedRequestError:
             _logger.info("approval_not_recorded reason=shape")
             return
-        for old in [e for e in self._open.values() if (e.agent, e.tool) == (agent, tool)]:
+        for old in [e for e in self._open.values() if e.identity == entry.identity]:
             self._settle(old, "superseded")
         while len(self._open) >= MAX_OPEN_APPROVALS:
             self._settle(next(iter(self._open.values())), "superseded")
@@ -585,9 +652,9 @@ class ApprovalBook:
         self._expire_due()
         return list(self._open.values())
 
-    def decide(self, approval_id: str, decision: str) -> tuple[str, Approval | None]:
-        """Apply a decision.  Returns ``(code, entry)``; ``entry`` only on
-        ``accepted``.  Each id settles once; unknown, expired and settled ids
+    def peek(self, approval_id: str) -> tuple[str, Approval | None]:
+        """Look an approval up without settling it.  Returns ``(code, entry)``;
+        ``entry`` only on ``accepted``.  Unknown, expired and settled ids
         change nothing."""
         expired_now = self._expire_due()
         if approval_id in expired_now:
@@ -598,8 +665,16 @@ class ApprovalBook:
             if state is None:
                 return "unknown_approval", None
             return ("expired" if state == "expired" else "already_settled"), None
-        self._settle(entry, "approved" if decision == "approve" else "declined")
         return "accepted", entry
+
+    def settle(self, approval_id: str, state: str) -> bool:
+        """Settle an open entry once (``approved`` or ``declined``).  False when
+        it is not open any more."""
+        entry = self._open.get(approval_id)
+        if entry is None:
+            return False
+        self._settle(entry, state)
+        return True
 
     def yes_verdict(self, text: Any, *, sensitive: bool, offer_pending: bool,
                     source: str) -> str | None:
@@ -622,13 +697,16 @@ class TypedRequestSession:
 
     ``send`` delivers a reply message; ``start_turn(text, tag)`` makes the
     text the user's next turn and returns whether it did; ``speak`` says a
-    fixed sentence with no model call.  The handlers never call a tool.
+    fixed sentence with no model call; ``note(text)`` appends a fixed note to
+    the model's context silently (no context frame, no model run).  The
+    handlers never call a tool.
     """
 
     def __init__(self, *, session_id: str, generation: str,
                  send: Callable[[dict], Awaitable[None]],
                  start_turn: Callable[[str, str], Awaitable[bool]],
                  speak: Callable[[str], Awaitable[None]],
+                 note: Callable[[str], Awaitable[None]] | None = None,
                  is_alive: Callable[[], bool],
                  is_sensitive: Callable[[], bool],
                  book: ApprovalBook | None = None,
@@ -637,6 +715,7 @@ class TypedRequestSession:
                  clock: Callable[[], float] = time.monotonic) -> None:
         self._sid, self._gen = session_id, generation
         self._send, self._start_turn, self._speak = send, start_turn, speak
+        self._note = note
         self._alive, self._sensitive = is_alive, is_sensitive
         self._book, self._typed_enabled, self._offer_pending = book, typed_enabled, offer_pending
         self._turn_replies = ReplyCache(clock)
@@ -694,13 +773,17 @@ class TypedRequestSession:
                 return "accepted"
         return await self._deliver(text, f"typed:{rid}")
 
+    async def _start(self, text: str, tag: str) -> bool:
+        """Start the turn; the caller holds ``self._lock``."""
+        try:
+            return bool(await self._start_turn(text, tag))
+        except Exception:  # noqa: BLE001 - a failed start is never a crash
+            _logger.warning("typed_turn_start_failed")
+            return False
+
     async def _deliver(self, text: str, tag: str) -> str:
         async with self._lock:
-            try:
-                ok = await self._start_turn(text, tag)
-            except Exception:  # noqa: BLE001 - a failed start is never a crash
-                _logger.warning("typed_turn_start_failed")
-                ok = False
+            ok = await self._start(text, tag)
         return "accepted" if ok else "not_ready"
 
     # ----------------------------------------------------------- approvals
@@ -708,12 +791,18 @@ class TypedRequestSession:
         if not isinstance(message, dict) or message.get("type") != APPROVAL_DECIDE:
             return
         kw = {"session_id": self._sid, "generation": self._gen}
+        stale = False
         try:
             msg = validate_approval_decide(message, **kw)
-        except TypedRequestError:
-            _logger.info("approval_decide_dropped reason=identity")
-            return
-        rid, aid = msg["request_id"], msg["approval_id"]
+            rid, aid, decision = msg["request_id"], msg["approval_id"], msg["decision"]
+        except TypedRequestError as exc:
+            if exc.code != "stale_session":
+                _logger.info("approval_decide_dropped reason=identity")
+                return
+            # Both ids parsed before the session check (3.6): answer, do nothing else.
+            rid, aid, decision = (_uuid(message.get("request_id"), "request_id"),
+                                  _uuid(message.get("approval_id"), "approval_id"), None)
+            stale = True
         cached = self._decide_replies.get(rid)
         if cached is not None:
             await self._send(cached)
@@ -722,22 +811,48 @@ class TypedRequestSession:
             return
         self._inflight.add(rid)
         try:
-            if self._book is None:
-                code, entry = "disabled", None
-            elif not self._alive():
-                return  # the list died with the session; let the socket close
-            elif self._sensitive():
-                code, entry = "protected_turn", None
+            declined: Approval | None = None
+            if stale:
+                code = "stale_session"
             else:
-                code, entry = self._book.decide(aid, msg["decision"])
+                code, declined = await self._decide(aid, decision)
             reply = build_approval_result(code=code, request_id=rid, approval_id=aid, **kw)
             self._decide_replies.put(rid, reply)
             await self._send(reply)
-            if entry is not None:
-                outcome = await self._deliver(
-                    approval_turn_text(entry, msg["decision"]), f"approval:{aid}")
-                if outcome != "accepted":
-                    # Stays settled (one tap counts once); the user can ask again.
-                    _logger.info("approval_turn_not_delivered decision=%s", msg["decision"])
+            if declined is not None:
+                await self._note_decline(declined)
         finally:
             self._inflight.discard(rid)
+
+    async def _decide(self, aid: str, decision: str) -> tuple[str, Approval | None]:
+        """The reply code for a decision.  Decisions run one at a time and the
+        lock is held from lookup to settle, so two taps on one entry settle it
+        once.  An approve settles only after its turn is enqueued (3.8).
+        Returns the code and, for a taken decline, the entry to note."""
+        if self._book is None:
+            return "disabled", None
+        if not self._alive():
+            return "not_ready", None
+        if self._sensitive():
+            return "protected_turn", None
+        async with self._lock:
+            code, entry = self._book.peek(aid)
+            if code != "accepted" or entry is None:
+                return code, None
+            if decision == "approve":
+                if not await self._start(approval_turn_text(entry), f"approval:{aid}"):
+                    _logger.info("approval_turn_not_delivered")
+                    return "not_ready", None
+                self._book.settle(aid, "approved")
+                return "accepted", None
+            self._book.settle(aid, "declined")
+            return "accepted", entry
+
+    async def _note_decline(self, entry: Approval) -> None:
+        """A decline starts no model run: one silent note, nothing spoken."""
+        if self._note is None:
+            return
+        try:
+            await self._note(decline_note_text(entry))
+        except Exception:  # noqa: BLE001 - the decline stands either way
+            _logger.info("decline_note_not_appended")

@@ -209,6 +209,7 @@ async def test_results_for_a_typed_turn_carry_a_non_null_origin(holder):
                      "result": '{"results":[{"title":"T","url":"https://example.test","snippet":"s"}]}'})
             handler({"type": "agent_tool_result", "agent": "developer", "display_name": "Developer",
                      "run_id": "r2", "tool": "plan_start", "ok": True,
+                     "arguments": {"goal": "g"},
                      "result": json.dumps({"needs_confirmation": True, "summary": "Ready.",
                                            "staging_id": "stg_9"})})
         finally:
@@ -298,6 +299,160 @@ async def test_interruption_that_never_passes_means_not_ready_and_no_side_effect
         assert rig.owner.input_identity is None and rig.owner.parts == []
 
 
+def approval_session(rig, book, replies, emitted=None):
+    """A TypedRequestSession bound to the rig's REAL start_typed_turn and a
+    silent note on the rig's real user aggregator (as run_session wires it)."""
+    from jarvis.bot.typed_request import TypedRequestSession
+
+    async def send(m):
+        replies.append(m)
+
+    async def start(text, tag):
+        return await start_typed_turn(rig.runtime, rig.pusher, rig.pair, text, tag)
+
+    async def speak(text):
+        raise AssertionError("a decision never speaks")
+
+    async def note(text):
+        rig.runtime.voice_sources.append(rig.pair.user(), text)
+
+    return TypedRequestSession(
+        session_id=SID, generation=GEN, send=send, start_turn=start, speak=speak, note=note,
+        is_alive=lambda: rig.runtime.alive, is_sensitive=is_sensitive, book=book)
+
+
+def one_preview_book(emitted):
+    book = ApprovalBook(session_id=SID, generation=GEN, emit=emitted.append)
+    book.observe({"type": "agent_tool_result", "agent": "developer", "display_name": "Developer",
+                  "tool": "plan_start", "ok": True, "run_id": "r1", "arguments": {"goal": "g"},
+                  "result": json.dumps({"needs_confirmation": True, "staging_id": "stg_1"})},
+                 origin_id=None, sensitive=False)
+    return book, emitted[0]["approval_id"]
+
+
+def decide_message(aid, decision, rid="00000000-0000-4000-8000-000000000030"):
+    return {"type": "approval/decide", "version": 1, "session_id": SID, "generation": GEN,
+            "request_id": rid, "approval_id": aid, "decision": decision}
+
+
+async def test_approve_whose_interruption_never_passes_is_not_ready_with_no_side_effects(holder, monkeypatch):
+    monkeypatch.setattr(pipeline_module, "TYPED_INTERRUPT_WAIT_S", 0.2)
+    async with Rig() as rig:
+        rig.runtime.sensitive_turn = holder
+        rig.passed.source = object()  # the observer will never see "its" logger push it
+        emitted, replies = [], []
+        book, aid = one_preview_book(emitted)
+        session = approval_session(rig, book, replies)
+        await session.handle_decide(decide_message(aid, "approve"))
+        await asyncio.sleep(0.05)
+        assert [r["code"] for r in replies] == ["not_ready"]
+        assert [m for m in emitted if m["type"] == "approval/settled"] == []
+        assert [e.approval_id for e in book.open_items()] == [aid]
+        assert rig.context.get_messages() == [] and context_frames(rig.sink) == []
+        assert rows() == [] and rig.transport.messages == []
+        assert rig.owner.input_identity is None and rig.owner.parts == []
+
+
+async def test_approve_through_the_real_start_is_one_user_turn_then_settled(holder):
+    async with Rig() as rig:
+        rig.runtime.sensitive_turn = holder
+        emitted, replies = [], []
+        book, aid = one_preview_book(emitted)
+        session = approval_session(rig, book, replies)
+        await session.handle_decide(decide_message(aid, "approve"))
+        await rig.settle(lambda: len(context_frames(rig.sink)) == 1)
+        assert [r["code"] for r in replies] == ["accepted"]
+        assert emitted[-1]["state"] == "approved"
+        message = rig.context.get_messages()[-1]
+        assert message["role"] == "user" and message["content"].startswith("Confirmed. Go ahead with the pending plan_start")
+        started = [m for m in rig.transport.messages if m.get("type") == "console/turn"]
+        assert started[0]["input_user_id"] == f"approval:{aid}"
+
+
+async def test_decline_pushes_no_context_frame_and_starts_no_turn(holder):
+    async with Rig() as rig:
+        rig.runtime.sensitive_turn = holder
+        emitted, replies = [], []
+        book, aid = one_preview_book(emitted)
+        session = approval_session(rig, book, replies)
+        await session.handle_decide(decide_message(aid, "decline"))
+        await asyncio.sleep(0.2)
+        assert [r["code"] for r in replies] == ["accepted"] and emitted[-1]["state"] == "declined"
+        assert context_frames(rig.sink) == []                    # no LLMContextFrame: no model run
+        assert [m for m in rig.transport.messages if m.get("type") == "console/turn"] == []
+        assert not [f for f in rig.sink.frames if isinstance(f, InterruptionFrame)]
+        noted = [m for m in rig.context.get_messages() if "declined the pending plan_start" in str(m.get("content"))]
+        assert len(noted) == 1                                    # the silent note is in the context
+        assert rows() == []                                       # and never in the transcript
+
+
+# ----------------------------------------------- origin of an entry (3.3b, S1)
+
+def _preview_event(run_id, goal):
+    return {"type": "agent_tool_result", "agent": "developer", "display_name": "Developer",
+            "run_id": run_id, "tool": "plan_start", "ok": True, "arguments": {"goal": goal},
+            "result": json.dumps({"needs_confirmation": True, "summary": f"Ready {goal}."})}
+
+
+async def test_each_entry_carries_its_own_requests_id_with_interleaved_delegations(holder):
+    sent = []
+    book = ApprovalBook(session_id=SID, generation=GEN, emit=sent.append)
+    handler = make_agent_event_handler(Transport(), None, book)
+    req_a = SimpleNamespace(request_id="00000000-0000-4000-8000-0000000000a1", sequence=1)
+    req_b = SimpleNamespace(request_id="00000000-0000-4000-8000-0000000000b2", sequence=2)
+
+    async def run(event, delay):          # a delegation's detached run emits from its own task
+        await asyncio.sleep(delay)
+        handler(event)
+
+    tasks = []
+    for req, goal, delay in ((req_a, "a", 0.03), (req_b, "b", 0.0)):
+        token = _foreground_request.set(req)
+        try:
+            tasks.append(asyncio.create_task(run(_preview_event(f"run-{goal}", goal), delay)))
+        finally:
+            _foreground_request.reset(token)
+    await asyncio.gather(*tasks)          # b finishes first, a second: the runs interleave
+    origins = {m["run_id"]: m["origin_request_id"] for m in sent if m["type"] == "approval/pending"}
+    assert origins == {"run-a": req_a.request_id, "run-b": req_b.request_id}
+
+
+async def test_a_run_whose_handler_was_cancelled_keeps_its_requests_id(holder):
+    sent = []
+    book = ApprovalBook(session_id=SID, generation=GEN, emit=sent.append)
+    handler = make_agent_event_handler(Transport(), None, book)
+    req = SimpleNamespace(request_id="00000000-0000-4000-8000-0000000000a1", sequence=1)
+    detached = []
+
+    async def voice_turn():               # the handler: starts the detached run, then is cancelled
+        token = _foreground_request.set(req)
+        try:
+            async def run():
+                await asyncio.sleep(0.05)
+                handler(_preview_event("run-x", "x"))
+            detached.append(asyncio.create_task(run()))
+            await asyncio.sleep(10)
+        finally:
+            _foreground_request.reset(token)
+
+    turn = asyncio.create_task(voice_turn())
+    await asyncio.sleep(0.01)
+    turn.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await turn
+    await detached[0]
+    assert [m["origin_request_id"] for m in sent if m["type"] == "approval/pending"] == [req.request_id]
+
+
+async def test_no_foreground_request_gives_a_null_origin(holder):
+    sent = []
+    book = ApprovalBook(session_id=SID, generation=GEN, emit=sent.append)
+    handler = make_agent_event_handler(Transport(), None, book)
+    assert _foreground_request.get() is None
+    handler(_preview_event("run-n", "n"))
+    assert [m["origin_request_id"] for m in sent if m["type"] == "approval/pending"] == [None]
+
+
 async def test_not_alive_session_starts_nothing(holder):
     async with Rig() as rig:
         rig.runtime.sensitive_turn = holder
@@ -338,7 +493,7 @@ def open_n(n):
     book = ApprovalBook(session_id=SID, generation=GEN, emit=lambda m: None)
     for i in range(n):
         book.observe({"type": "agent_tool_result", "agent": f"a{i}", "display_name": f"Agent{i}",
-                      "tool": f"tool_{i}", "ok": True,
+                      "tool": f"tool_{i}", "ok": True, "arguments": {"goal": f"g{i}"},
                       "result": json.dumps({"needs_confirmation": True})},
                      origin_id=None, sensitive=False)
     return book

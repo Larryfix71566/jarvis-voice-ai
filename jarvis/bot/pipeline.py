@@ -2896,9 +2896,16 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
         async def _speak_fixed_line(text: str) -> None:
             await pusher.push(TTSSpeakFrame(text=text))
 
+        async def _note_decline_silently(text: str) -> None:
+            # The silent append the speaker gate's drop note uses: a plain
+            # context append, never push_context_frame, so a decline starts no
+            # model run and nothing is spoken (contract 3.8).
+            runtime.voice_sources.append(aggregators.user(), text)
+
         typed_session = TypedRequestSession(
             session_id=runtime.session_id, generation=runtime.console_generation,
             send=_send_typed_reply, start_turn=start_typed_turn_bound, speak=_speak_fixed_line,
+            note=_note_decline_silently,
             is_alive=lambda: runtime.alive, is_sensitive=_voice_is_sensitive,
             book=runtime.approvals, typed_enabled=typed_request_flag_enabled(),
             offer_pending=lambda: runtime.pending_content_offer is not None)
