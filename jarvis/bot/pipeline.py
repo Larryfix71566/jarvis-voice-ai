@@ -114,6 +114,7 @@ from jarvis.privacy_policy import DataPolicy, make_tool_execution_scope, validat
 from jarvis.voice_sources import VoiceSources, ClassifiedText, UNKNOWN, source_scope, text_policy, bound_context_type
 from jarvis.runlog.context import get_run_id
 from jarvis.bot.costs_tool import build_cost_summary_tool
+from jarvis.bot.compose import AnswerComposer, composed_answers_enabled
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.handoff_tools import (
     build_clear_clipboard_tool,
@@ -694,6 +695,8 @@ class Runtime:
     weather_context: Any = field(default_factory=WeatherContextMinimizer)
     voice_sources: Any = field(default_factory=VoiceSources)
     foreground_requests: Any = None
+    # C3: per-connection AnswerComposer, None when the kill switch is off.
+    display_composer: Any = None
     # Command Console state is created per pipeline in build_pipeline() and
     # read by run_session()'s message handlers. It lives here because the
     # two functions share no scope: #80 read these as build_pipeline locals
@@ -943,7 +946,16 @@ def _log_console_validation_failure(kind: str, _error: ValueError) -> None:
     _logger.warning(event)
 
 
-def make_agent_event_handler(transport: Any) -> Any:
+def _compose_display(composer: Any, payload: dict) -> list[dict]:
+    """Payloads to send for ``payload``: just it when no composer exists
+    (byte-identical to the legacy path), else the composer's output."""
+    if composer is None:
+        return [payload]
+    request = _foreground_request.get()
+    return composer.compose(payload, request_id=request.request_id if request else None)
+
+
+def make_agent_event_handler(transport: Any, composer: Any = None) -> Any:
     """Plan Phase 6 step 6.3: log agent events AND feed them to the UI.
 
     on_event callbacks are sync (agents/base.py EventCallback), so the async
@@ -966,6 +978,22 @@ def make_agent_event_handler(transport: Any) -> Any:
     # jarvis.bot.display.WeatherReportMerger's own docstring for the
     # merge semantics (never suppresses a lone result).
     weather_merger = WeatherReportMerger()
+
+    def _request_id() -> str | None:
+        request = _foreground_request.get()
+        return request.request_id if request else None
+
+    def _compose(payload: dict) -> list[dict]:
+        # Inlined (not _compose_display) so this closure stays self-contained.
+        if composer is None:
+            return [payload]
+        return composer.compose(payload, request_id=_request_id())
+
+    def _schedule(message: dict) -> None:
+        try:
+            asyncio.get_running_loop().create_task(send_app_message(transport, message))
+        except RuntimeError:
+            pass  # no running loop (tests calling the handler directly)
 
     def on_agent_event(event: dict) -> None:
         bot_event_log(event)
@@ -1037,6 +1065,7 @@ def make_agent_event_handler(transport: Any) -> Any:
                     if isinstance(event.get("arguments"), dict) else {},
                     result_str=str(event.get("result") or ""),
                     run_id=str(event.get("run_id") or "") or None,
+                    **({"layout_hints": True} if composer is not None else {}),
                 )
             if payload is None:
                 return  # voice-only tool result, or still awaiting the pair
@@ -1049,8 +1078,13 @@ def make_agent_event_handler(transport: Any) -> Any:
                 event.get("tool"), payload.get("surface"),
                 event.get("agent"), payload.get("kind"),
             )
-            message = {"type": "display", "display": payload}
+            outgoing = _compose(payload)
+            for extra in outgoing[:-1]:
+                _schedule({"type": "display", "display": extra})
+            message = {"type": "display", "display": outgoing[-1]}
         elif etype == "delegate_start":
+            if composer is not None:
+                composer.delegation_started(_request_id(), str(event.get("run_id") or ""))
             message = {
                 "type": "agent",
                 "name": event.get("agent"),
@@ -1070,13 +1104,15 @@ def make_agent_event_handler(transport: Any) -> Any:
             # (offer() only fires once both are accounted for). Flush it
             # now rather than losing it silently: the run is over, so
             # nothing more is coming.
+            if composer is not None:
+                composer.delegation_finished(_request_id(), str(event.get("run_id") or ""))
             for flushed in weather_merger.finalize_all(str(event.get("run_id") or "")):
-                try:
-                    asyncio.get_running_loop().create_task(
-                        send_app_message(
-                            transport, {"type": "display", "display": flushed}))
-                except RuntimeError:
-                    pass  # no running loop (tests calling the handler directly)
+                for item in _compose(flushed):
+                    _schedule({"type": "display", "display": item})
+            if composer is not None:
+                completion = composer.take_completion(_request_id())
+                if completion is not None:
+                    _schedule({"type": "display", "display": completion})
             message = {
                 "type": "agent",
                 "name": event.get("agent"),
@@ -1261,9 +1297,12 @@ def build_pipeline(
 
     sub_agents = load_sub_agents(settings, runtime.registry)
     runtime.sub_agents = sub_agents
+    # C3: read once; off means every display site sends today's exact payload.
+    display_composer = AnswerComposer() if composed_answers_enabled() else None
+    runtime.display_composer = display_composer
     delegate_schema, delegate_handler = build_delegate_tool(
         sub_agents,
-        on_event=make_agent_event_handler(transport),
+        on_event=make_agent_event_handler(transport, display_composer),
         max_parallel=settings.jarvis_max_parallel_delegations,
         session_id=runtime.session_id,
         # Barge-in survival: run_session fills runtime.late_delivery["fn"]
@@ -1320,7 +1359,8 @@ def build_pipeline(
         _mark_weather_context()
         _logger.info("display_payload tool=local_weather surface=%s agent=supervisor kind=%s",
                      payload.get("surface"), payload.get("kind"))
-        await send_app_message(transport, {"type": "display", "display": payload})
+        for item in _compose_display(display_composer, payload):
+            await send_app_message(transport, {"type": "display", "display": item})
 
     local_weather_on = True
     # W12 — both read their kill switch once, here, and pass it to the menu,
@@ -1556,8 +1596,9 @@ def build_pipeline(
         message shape the client already handles."""
         _logger.info("display_payload tool=%s surface=%s agent=%s kind=direct",
                      payload.get("tool"), payload.get("surface"), "supervisor")
-        asyncio.create_task(
-            send_app_message(transport, {"type": "display", "display": payload}))
+        for item in _compose_display(display_composer, payload):
+            asyncio.create_task(
+                send_app_message(transport, {"type": "display", "display": item}))
 
     # Late-bound: the context aggregators are created further down, after
     # tools are registered. The holder is populated there; a tool can only
@@ -2542,7 +2583,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await pusher.push(TTSSpeakFrame(text=text))
 
             async def _push_plan_display(payload: dict) -> None:
-                await send_app_message(transport, {"type": "display", "display": payload})
+                for item in _compose_display(runtime.display_composer, payload):
+                    await send_app_message(transport, {"type": "display", "display": item})
 
             plan_watcher = PlanWatcher(
                 speak=_speak_plan,
@@ -2565,12 +2607,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await pusher.push(TTSSpeakFrame(text=text))
 
             async def _push_research_display(payload: dict) -> None:
-                await send_app_message(transport, {"type": "display", "display": payload})
+                for item in _compose_display(runtime.display_composer, payload):
+                    await send_app_message(transport, {"type": "display", "display": item})
 
             research_watcher = ResearchWatcher(
                 speak=_speak_research,
                 push_display=_push_research_display,
                 is_connected=lambda: client_connected["value"],
+                layout_hints=runtime.display_composer is not None,
             )
             research_watcher.start()
 
@@ -2848,14 +2892,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 # written to the transcript or database here.
                 payload = result.get("data") if isinstance(result, dict) else None
                 if isinstance(payload, dict) and payload.get("ok"):
-                    await send_app_message(transport, {
-                        "type": "display", "display": {
-                            "surface": "drawer", "kind": "text",
-                            "title": "Shared content analysis",
-                            "text": str(payload.get("answer", ""))[:12000],
-                            "tool": "shared_content",
-                        },
-                    })
+                    shared_display = {
+                        "surface": "drawer", "kind": "text",
+                        "title": "Shared content analysis",
+                        "text": str(payload.get("answer", ""))[:12000],
+                        "tool": "shared_content",
+                    }
+                    for item in _compose_display(runtime.display_composer, shared_display):
+                        await send_app_message(transport, {"type": "display", "display": item})
             else:
                 result = shared_transfer.handle(msg)
                 if msg.get("type") == "input/cancel":
