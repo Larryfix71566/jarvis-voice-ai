@@ -3712,3 +3712,9 @@ MortimerHost roadmap controls: 10 passed. Policy: 9 passed; offline evaluations:
 passed. Skips and warnings remain disclosed, not converted to acceptance. Existing live acceptance,
 publication, merge and deployment gates remain open. No controller model,
 credentials, service state or production checkout was changed.
+
+### 2026-11-10 — Kimi revalidation target corrected after #290, #312 and later merges
+
+Claim #309 originally bound the rerun to `78a8834`. After that claim merged, #290 landed as `137c668` and changed another 59 non-documentation files (+32,511/-477). Kimi's first target guard therefore stopped before creating a validation worktree or running any check. Initial correction PR #311 targeted `adc2b92`, but #312 then changed 12 more source/test files (+245/-23); the PR's pre-refresh `validate` job also failed the two current-repository roadmap-log-limit tests that #312 repairs. Before a refreshed correction was published, #315, #317, #320 and #323 changed seven additional non-documentation files (+274/-28) relative to `0a11a86`. Current main and its roadmap history archive are integrated while preserving the repair record above and this revalidation history.
+
+The corrected target is main after this registration lands, provided its non-documentation tree equals `a87256ad9e7966496542f2e7bf32582aa489cd10`. The original fourteen checks remain required, and #317's blocking Ruff F821 command is added as a fifteenth check; backend environment setup uses `requirements-lock.txt` to match current CI. The scheduled non-blocking dependency-drift workflow is not a publication gate. All read-only/operational limits are unchanged. No local validation result exists yet; any later code-changing merge requires another rebind.
