@@ -1,0 +1,1316 @@
+<title>Mortimer Interface Directions</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a long review page; each direction is a captioned 1280x800 app frame scaled to the column, followed by its trade-offs. App frames always use Mortimer's own dark AppTheme tokens; page chrome follows the viewer's theme. */
+:root{
+  --bg:#f3f5f6; --surface:#ffffff; --ink:#14191d; --muted:#53626c; --line:#d8dfe3; --accent:#0a7fae; --accent-soft:#e1f2f9;
+  --hi:#b42318; --hi-soft:#fdecea; --med:#94590a; --med-soft:#fdf3e1; --low:#3b6e5a; --low-soft:#e5f3ec;
+  --f-display:"Manrope",system-ui,sans-serif; --f-body:"Inter",-apple-system,"Segoe UI",system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  /* Mortimer app tokens (macos/MortimerHost/Sources/MortimerHost/App/AppTheme.swift) */
+  --m-bg:#15191D; --m-panel:#11151A; --m-hair:#2A343D; --m-accent:#2CC9FF; --m-text:#E2F1F9; --m-dim:#8FA8B8; --m-amber:#FFB454; --m-green:#3DDC97; --m-red:#FF5F56;
+  --m-glass:rgba(43,50,58,.35); --m-glass-heavy:rgba(30,36,43,.58); --m-border:rgba(255,255,255,.14); --m-edge:rgba(255,255,255,.18);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1114; --surface:#161b20; --ink:#e3ecf1; --muted:#9aaab4; --line:#27313a; --accent:#56cdf5; --accent-soft:#12303d;
+  --hi:#ff8a80; --hi-soft:#3a1d1b; --med:#f2b866; --med-soft:#33280f; --low:#7fd1ad; --low-soft:#13291f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1114; --surface:#161b20; --ink:#e3ecf1; --muted:#9aaab4; --line:#27313a; --accent:#56cdf5; --accent-soft:#12303d;
+  --hi:#ff8a80; --hi-soft:#3a1d1b; --med:#f2b866; --med-soft:#33280f; --low:#7fd1ad; --low-soft:#13291f; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--f-body);margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-block:40px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;letter-spacing:-.01em}
+h1{font-size:clamp(28px,4.4vw,44px);font-weight:800;line-height:1.08}
+h2{font-size:clamp(22px,3vw,30px);font-weight:700;line-height:1.15}
+h3{font-size:17px;font-weight:700}
+p{margin:0;max-width:68ch}
+code{font-family:var(--f-mono);font-size:.86em;background:var(--accent-soft);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+.eyebrow{font:600 12px/1 var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.lead{font-size:17px;color:var(--muted);margin-top:14px}
+header.top{display:grid;gap:14px;padding-bottom:28px;border-bottom:1px solid var(--line)}
+.meta{display:flex;flex-wrap:wrap;gap:8px 18px;font:500 12.5px/1.4 var(--f-mono);color:var(--muted)}
+section{padding-block:44px;border-bottom:1px solid var(--line);display:grid;gap:22px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:22px}
+.grid2>*{min-width:0}
+figure{margin:0;display:grid;gap:8px;min-width:0}
+figure img{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--line)}
+figcaption{font-size:13px;color:var(--muted)}
+.findings{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.findings li{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.findings li>div{min-width:0}
+.sev{font:600 11px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;padding:5px 8px;border-radius:999px;white-space:nowrap}
+.sev.h{background:var(--hi-soft);color:var(--hi)} .sev.m{background:var(--med-soft);color:var(--med)} .sev.l{background:var(--low-soft);color:var(--low)}
+.findings b{font-weight:600}
+.findings .ev{display:block;font-size:12.5px;color:var(--muted);margin-top:3px}
+.tag{font:500 11px/1 var(--f-mono);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:3px 6px;margin-left:6px;white-space:nowrap}
+.dir-head{display:grid;gap:8px}
+.dir-head .num{font:700 13px/1 var(--f-mono);color:var(--accent);letter-spacing:.1em}
+.pick-badge{display:inline-block;font:600 11px/1 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;background:var(--accent);color:var(--bg);border-radius:999px;padding:5px 9px;vertical-align:middle;margin-left:8px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.facts>div{background:var(--surface);padding:14px 16px;display:grid;gap:4px;align-content:start;min-width:0}
+.facts dt{font:600 11px/1.2 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.facts dd{margin:0;font-size:14px}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:720px;font-size:14px}
+th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 11px/1.2 var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+.callout{background:var(--accent-soft);border-radius:12px;padding:20px 22px;display:grid;gap:10px}
+.callout ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.note{font-size:13px;color:var(--muted)}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- App frame (scaled 1280x800 stage) ---------- */
+.frame{position:relative;width:100%;aspect-ratio:1280/800;border-radius:14px;overflow:hidden;background:var(--m-bg);box-shadow:0 1px 0 var(--line),0 18px 50px rgba(0,0,0,.18);border:1px solid #0b0e10}
+.stage{position:absolute;left:0;top:0;width:1280px;height:800px;transform-origin:0 0;transform:scale(var(--k,.7));font-family:-apple-system,"SF Pro Text","Inter",system-ui,sans-serif;color:var(--m-text);background:var(--m-bg);overflow:hidden}
+.stage *{position:absolute}
+.stage .flow,.stage .flow *{position:static}
+.sample{position:absolute;right:10px;top:10px;z-index:5;font:600 10px/1 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--m-dim);background:rgba(0,0,0,.45);border:1px solid var(--m-hair);border-radius:4px;padding:4px 6px}
+.chip{display:flex;align-items:center;gap:8px;height:36px;padding:0 16px;border-radius:18px;background:var(--m-glass);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--m-border);font-size:13px;font-weight:500;white-space:nowrap}
+.chip *{position:static}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--m-dim);white-space:nowrap}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+.card{border-radius:12px;background:var(--m-glass-heavy);border:1px solid var(--m-border);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+.orb svg{position:static;display:block;width:100%;height:100%;overflow:visible}
+
+/* ---------- Direction 6: phone frame, orb playground, palette ---------- */
+.pframe{position:relative;width:100%;aspect-ratio:390/844;border-radius:38px;overflow:hidden;background:var(--m-bg);border:8px solid #0b0e10;box-shadow:0 18px 50px rgba(0,0,0,.2)}
+.pstage{position:absolute;left:0;top:0;width:390px;height:844px;transform-origin:0 0;transform:scale(var(--k,.9));font-family:-apple-system,"SF Pro Text","Inter",system-ui,sans-serif;color:var(--m-text);overflow:hidden}
+.pstage *{position:absolute}
+.pstage .flow,.pstage .flow *{position:static}
+.eorb{display:block}
+.playground{background:var(--m-bg);color:var(--m-text);border-radius:14px;border:1px solid #0b0e10;padding:20px;display:grid;gap:14px;min-width:0}
+.pg-canvas{width:min(100%,340px);aspect-ratio:1;justify-self:center}
+.pg-canvas canvas{width:100%;height:100%;cursor:pointer}
+.pg-controls{display:flex;flex-wrap:wrap;gap:8px}
+.pg-controls button{font:500 13px/1 var(--f-body);color:var(--m-text);background:rgba(43,50,58,.6);border:1px solid rgba(255,255,255,.16);border-radius:999px;padding:9px 13px;cursor:pointer;min-height:36px}
+.pg-controls button[aria-pressed="true"]{background:rgba(44,201,255,.18);border-color:#2CC9FF}
+.pg-rm{font-size:13px;display:flex;align-items:center;gap:8px;color:var(--m-text)}
+.pg-cap{font-size:14px;color:var(--m-text);min-height:3em}
+.depth-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:16px;margin:12px 0 8px}
+.depth-grid figure{margin:0;background:var(--m-bg);color:var(--m-text);border:1px solid #0b0e10;border-radius:14px;overflow:hidden;min-width:0}
+.depth-grid canvas{display:block;width:100%;aspect-ratio:1;cursor:pointer;touch-action:pan-y}
+.depth-grid figcaption{padding:12px 14px 14px;display:grid;gap:6px;font-size:13.5px;line-height:1.45}
+.depth-grid figcaption b{font-size:15px}
+.depth-grid .cost{color:var(--m-dim);font-size:12.5px}
+.playground .note{color:var(--m-dim)}
+.pal td{vertical-align:middle}
+.sw{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:6px;border:1px solid rgba(0,0,0,.25)}
+
+/* motion (all off under reduced motion) */
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes edge{0%,100%{opacity:.45}50%{opacity:1}}
+@keyframes shimmer{0%{background-position:-200px 0}100%{background-position:400px 0}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.orb .core{transform-box:fill-box;transform-origin:center;animation:breathe 2.4s ease-in-out infinite}
+.orb .trails{transform-box:view-box;transform-origin:150px 150px;animation:spin 22s linear infinite}
+.edgeglow{animation:edge 1.6s ease-in-out infinite}
+.running{background-image:linear-gradient(90deg,rgba(44,201,255,.10) 0,rgba(44,201,255,.32) 60px,rgba(44,201,255,.10) 120px)!important;background-size:400px 100%;animation:shimmer 1.8s linear infinite}
+.live{animation:pulse 1.4s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.orb .core,.orb .trails,.edgeglow,.running,.live{animation:none!important}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <span class="eyebrow">Mortimer · interface review</span>
+  <h1>Mortimer interface directions</h1>
+  <p class="lead">A critique of the native console as it is built today, and six post-acceptance directions drawn as screens so you can compare them before any code is written.</p>
+  <div class="meta"><span>Source: main c5e1550; orb, phone and colours checked at 4e58eaa</span><span>Reviewed Nov 10, 2026</span><span>Critique and directions: Fable 5.2</span><span>Code reading only; app not run</span></div>
+</header>
+
+<section id="today">
+  <span class="eyebrow">Today</span>
+  <h2>What an answer looks like now</h2>
+  <p>These are the app's own acceptance renders from September 18, with synthetic test content. They are the only screenshots of the native console in the repo, so treat them as fixtures, not as your live screen.</p>
+  <div class="grid2">
+    <figure><img src="img/today-main.jpg" alt="Main window result: a row of grey buttons, the title Mortimer response shown twice, and one line of text on a large empty dark area" width="1100" height="450"><figcaption>Main window, top of a 2200x1480 render. The title appears twice and the answer is one line; the rest of the window is empty.</figcaption></figure>
+    <figure><img src="img/today-grid.jpg" alt="Supporting display with four tiles; each repeats its title twice, and the Copy, Share and Export buttons are white with near-invisible text" width="1100" height="875"><figcaption>Supporting display, four tiles. Copy, Share and Export render as white pills with unreadable text, and every tile repeats its title.</figcaption></figure>
+  </div>
+  <h3>Findings, ranked by impact</h3>
+  <ol class="findings">
+    <li><span class="sev h">High</span><div><b>Copy, Share and Export are unreadable on the second screen.</b> They should be enabled (they disable only for protected results), and the app never pins dark appearance, so system buttons may be drawing in light mode. <span class="tag">screenshot</span><span class="tag">cause untested</span><span class="ev">WorkspaceResultPane.swift:129, :144 · no preferredColorScheme in app source</span></div></li>
+    <li><span class="sev h">High</span><div><b>The conversation never says what Mortimer is doing right now.</b> "Thinking" lives only in the orb label; the thread has no working, tool or agent row. <span class="tag">code</span><span class="ev">OrbFieldView.swift:364 · ConversationThreadView.swift</span></div></li>
+    <li><span class="sev h">High</span><div><b>Approvals are off-screen.</b> A pending confirmation shows as amber text "Confirmation needed in Output" and a dot on the Panels button; you must open the drawer to act. <span class="tag">code</span><span class="ev">OrbFieldView.swift:239 · TopBarView.swift:190</span></div></li>
+    <li><span class="sev h">High</span><div><b>There is no way to type a request.</b> The only text field addressed to Mortimer appears after you stage an attachment. <span class="tag">code</span><span class="ev">AttachmentTrayView.swift:63-65</span></div></li>
+    <li><span class="sev h">High</span><div><b>Titles repeat.</b> The tile draws the title, then the result pane draws it again; the display header says "Supporting display" and "SUPPORTING DISPLAY" on one line. <span class="tag">code + screenshot</span><span class="ev">DisplayWindowView.swift:172-176, :225 · WorkspaceResultPane.swift:33</span></div></li>
+    <li><span class="sev m">Medium</span><div><b>Results waste the screen and the controls crowd them.</b> Tiles are forced tall around one line of text, and each carries six text controls. <span class="tag">screenshot</span><span class="ev">DisplayWindowView.swift:260 · WorkspaceResultPane.swift:55-63</span></div></li>
+    <li><span class="sev m">Medium</span><div><b>State colours don't form one language.</b> The tokens say amber means attention, but the assistant's orb channel is orange #E07020 and "listening" is green in the label. <span class="tag">code</span><span class="ev">AppTheme.swift:23 · AppTuning.swift:126 · OrbFieldView.swift:366-367</span></div></li>
+    <li><span class="sev m">Medium</span><div><b>Keyboard and VoiceOver gaps.</b> Space is captured for push-to-talk, the app has one keyboard shortcut, and the top bar and mic controls carry no accessibility labels. <span class="tag">code</span><span class="tag">behaviour untested</span><span class="ev">MicControlsView.swift:100-108 · MortimerHostApp.swift:276</span></div></li>
+  </ol>
+  <p class="note">Five more lower-impact findings (empty state, raw error banner, 44 text sizes at 10 pt or smaller, token drift, discoverability) are in the deep review doc.</p>
+  <h3>Worth keeping</h3>
+  <div class="grid2">
+    <figure><img src="img/orb-sheet.jpg" alt="Contact sheet of the voice orb in five states, flat version on top and crystal glass version below" width="1200" height="360"><figcaption>The dual-channel orb (repo contact sheet). The crystal row is the most distinctive thing in the app, and every direction below builds on it.</figcaption></figure>
+    <div class="callout" style="align-content:start">
+      <h3>Strong already</h3>
+      <ol>
+        <li>One glass modifier with opaque fallbacks for Reduce Transparency and Increase Contrast (Glass.swift).</li>
+        <li>Measured voice levels; it says "Audio level unavailable" instead of faking motion.</li>
+        <li>Results land as quiet cards with an "N new" pill rather than stealing the stage.</li>
+        <li>Content is never sent without an explicit approval.</li>
+        <li>Voice and pointer share one action dispatcher.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= DIRECTION 1 ======================= -->
+<section id="presence">
+  <div class="dir-head"><span class="num">DIRECTION 1</span><h2>Presence</h2>
+  <p>Mortimer recedes to the orb, an edge glow and one live caption. Panels appear only when you summon them or an answer needs a surface.</p></div>
+  <div class="frame" role="img" aria-label="Mockup of the Presence direction: a dark window with a large glass orb in the centre, a glowing window edge, a live caption of the spoken answer and three summon chips">
+   <div class="stage">
+    <div class="sample">Sample content</div>
+    <div style="inset:0;background:radial-gradient(circle 480px at 640px 330px,rgba(44,201,255,.07),transparent 70%)"></div>
+    <div class="edgeglow" style="inset:0;box-shadow:inset 0 0 0 2px rgba(44,201,255,.35),inset 0 0 44px 4px rgba(44,201,255,.22)"></div>
+    <div class="orb" data-core="#2FD6C3" style="left:500px;top:190px;width:280px;height:280px"></div>
+    <div class="lbl" style="left:0;width:1280px;top:478px;text-align:center">Mortimer speaking</div>
+    <div style="left:0;width:1280px;top:508px;text-align:center;font-size:13px;color:var(--m-dim)">You: What's in my inbox this morning, and will it rain tomorrow?</div>
+    <div style="left:260px;width:760px;top:538px;text-align:center;font-size:22px;line-height:1.4;font-weight:400">Six new messages, two flagged. Tomorrow looks <span style="position:static;color:rgba(226,241,249,.42)">wet after two, about seventy percent.</span></div>
+    <div style="left:0;width:1280px;top:640px;display:flex;justify-content:center;gap:12px">
+      <span class="chip" style="position:static"><span class="dot" style="background:var(--m-amber)"></span>Inbox brief · 6</span>
+      <span class="chip" style="position:static">Weather · tomorrow</span>
+      <span class="chip" style="position:static;border-color:rgba(44,201,255,.45)">Show both</span>
+      <span class="chip" style="position:static;color:var(--m-dim)">⌘K  Type instead</span>
+    </div>
+    <div style="left:24px;top:752px;display:flex;align-items:center;gap:10px">
+      <span class="dot" style="position:static;background:rgba(143,168,184,.4)"></span><span class="dot" style="position:static;background:rgba(143,168,184,.4)"></span><span class="dot live" style="position:static;background:var(--m-accent);box-shadow:0 0 8px var(--m-accent)"></span><span class="dot" style="position:static;background:rgba(143,168,184,.4)"></span><span class="dot" style="position:static;background:rgba(143,168,184,.4)"></span><span class="dot" style="position:static;background:rgba(143,168,184,.4)"></span>
+      <span style="position:static;font-size:11px;color:var(--m-dim);margin-left:4px">Librarian · daily_brief</span>
+    </div>
+    <div class="mono" style="right:24px;top:750px;font-size:11px;color:var(--m-dim)">7:42 · Tue Nov 10</div>
+   </div>
+  </div>
+  <dl class="facts">
+    <div><dt>What changes</dt><dd>Adds a fourth layout mode beside conversation, rail and bottom in AdaptiveStageView. The action bar and attachment tray hide until hover, ⌘K or voice.</dd></div>
+    <div><dt>Reuses</dt><dd>VoicePresentationState levels, ConversationStore captions, <code>display</code> events for chips, <code>agentWorking</code> for the pips. Orb renderer unchanged.</dd></div>
+    <div><dt>Needs new</dt><dd>Word timing for the caption reveal; without it the caption appears a sentence at a time.</dd></div>
+    <div><dt>Effort · risk</dt><dd>M, 3 to 4 engineer-weeks. Hides controls again; the attachment tray was made always-visible because it had no discoverable entry point.</dd></div>
+    <div><dt>Accessibility</dt><dd>Reduce Motion: static orb, no edge pulse, whole caption. Caption is a VoiceOver live region. The 42% unspoken words need a contrast check.</dd></div>
+    <div><dt>Before acceptance</dt><dd>This mockup and a discoverability rule set only.</dd></div>
+  </dl>
+</section>
+
+<!-- ======================= DIRECTION 2 ======================= -->
+<section id="mission-control">
+  <div class="dir-head"><span class="num">DIRECTION 2</span><h2>Mission Control</h2>
+  <p>One live timeline shows what every agent and tool is doing right now, step by step, with timing and a stop control.</p></div>
+  <div class="frame" role="img" aria-label="Mockup of the Mission Control direction: six agent lanes on the left, a scrolling timeline of tool calls in the middle with one running block, and a detail panel with a Stop this run button on the right">
+   <div class="stage">
+    <div class="sample">Sample content</div>
+    <!-- header -->
+    <div style="left:0;top:0;width:1280px;height:56px;background:var(--m-panel);border-bottom:1px solid var(--m-hair)"></div>
+    <div class="orb" data-core="#2FD6C3" data-mini="1" style="left:22px;top:12px;width:32px;height:32px"></div>
+    <div style="left:64px;top:18px;font-size:15px;font-weight:600">Mission Control</div>
+    <div style="left:250px;top:20px;font-size:13px;color:var(--m-dim)">"What's in my inbox this morning, and will it rain tomorrow?"</div>
+    <div style="right:20px;top:14px;display:flex;gap:8px">
+      <span class="chip" style="position:static;height:28px;font-size:12px"><span class="dot live" style="background:var(--m-accent)"></span>1 running · 1 done</span>
+      <span class="chip" style="position:static;height:28px;font-size:12px"><span class="dot" style="background:var(--m-green)"></span>4 tools · 0 failed</span>
+    </div>
+    <!-- lanes -->
+    <div style="left:0;top:56px;width:200px;height:744px;background:var(--m-panel);border-right:1px solid var(--m-hair)"></div>
+    <div id="mc-lanes"></div>
+    <!-- timeline -->
+    <div id="mc-axis"></div>
+    <div style="left:760px;top:56px;width:1px;height:744px;background:var(--m-accent);box-shadow:0 0 6px var(--m-accent)"></div>
+    <div class="mono" style="left:766px;top:62px;font-size:10px;color:var(--m-accent)">now</div>
+    <div id="mc-blocks"></div>
+    <!-- detail -->
+    <div style="left:960px;top:56px;width:320px;height:744px;background:var(--m-glass-heavy);border-left:1px solid var(--m-hair)"></div>
+    <div style="left:984px;top:80px;font-size:14px;font-weight:600">Analyst · radar_frames</div>
+    <div style="left:984px;top:104px;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--m-accent)"><span class="dot live" style="position:static;background:var(--m-accent)"></span><span style="position:static">Running</span></div>
+    <div style="left:984px;top:136px;width:272px;display:grid;grid-template-columns:96px 1fr;row-gap:8px;font-size:12px">
+      <span style="position:static;color:var(--m-dim)">Started</span><span style="position:static" class="mono">7:42:06</span>
+      <span style="position:static;color:var(--m-dim)">Elapsed</span><span style="position:static" class="mono">1.4 s</span>
+      <span style="position:static;color:var(--m-dim)">Model</span><span style="position:static" class="mono">sonnet</span>
+      <span style="position:static;color:var(--m-dim)">Task</span><span style="position:static">Rain chance for tomorrow</span>
+    </div>
+    <div class="lbl" style="left:984px;top:262px;letter-spacing:.12em">Finished steps</div>
+    <div class="mono" style="left:984px;top:288px;width:272px;font-size:11px;line-height:1.9;color:var(--m-text)">✓ weather_forecast · 620 ms<br>✓ daily_brief · 410 ms<br>✓ memory_search · 180 ms</div>
+    <div style="left:984px;top:380px;width:272px;height:34px;border:1px solid var(--m-red);border-radius:8px;color:var(--m-red);font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center">Stop this run</div>
+    <div style="left:984px;top:426px;width:272px;font-size:11px;color:var(--m-dim)">Every line is a recorded tool call. Stop needs a new client message; see trade-offs.</div>
+    <div class="lbl" style="left:984px;top:488px;letter-spacing:.12em">Legend</div>
+    <div style="left:984px;top:514px;width:272px;display:grid;gap:10px;font-size:12px">
+      <div style="position:static;display:flex;align-items:center;gap:10px"><span style="position:static;width:34px;height:16px;border-radius:4px;background:rgba(44,201,255,.12);border:1px solid rgba(44,201,255,.35)"></span><span style="position:static">Finished ✓</span></div>
+      <div style="position:static;display:flex;align-items:center;gap:10px"><span class="running" style="position:static;width:34px;height:16px;border-radius:4px;border:1px solid var(--m-accent)"></span><span style="position:static">Running</span></div>
+      <div style="position:static;display:flex;align-items:center;gap:10px"><span style="position:static;width:34px;height:16px;border-radius:4px;background:rgba(255,95,86,.14);border:1px solid var(--m-red)"></span><span style="position:static">Failed ✕</span></div>
+    </div>
+   </div>
+  </div>
+  <dl class="facts">
+    <div><dt>What changes</dt><dd>Promotes the drawer's Agents and Runs tabs into a main view and replaces the hexagon satellites in OrbFieldView as the "who is working" display.</dd></div>
+    <div><dt>Reuses</dt><dd><code>agentWorking</code>, <code>agentTool</code>, <code>agentActivity</code>, <code>agentDone</code> through AgentRunStore; <code>/api/runs</code> for history.</dd></div>
+    <div><dt>Needs new</dt><dd>A tool-start time (today a running step's start is when the client heard it), per-run cost (RunSummary has none), and a cancel-run client message (only <code>inputCancel</code> exists).</dd></div>
+    <div><dt>Effort · risk</dt><dd>M read-only (3 to 4 weeks); L with Stop and cost (6 to 8 weeks, Swift and Python). Most voice turns finish in seconds, so the view is often empty; Stop touches run lifecycle.</dd></div>
+    <div><dt>Accessibility</dt><dd>✓ and ✕ glyphs so status isn't colour-only. Each lane reads as a list. Reduce Motion repositions instead of scrolling.</dd></div>
+    <div><dt>Before acceptance</dt><dd>This mockup and a written event contract for start time, cost and cancel.</dd></div>
+  </dl>
+</section>
+
+<!-- ======================= DIRECTION 3 ======================= -->
+<section id="depth">
+  <div class="dir-head"><span class="num">DIRECTION 3</span><h2>Depth</h2>
+  <p>Use the Liquid Glass layer that's already wired in to give the app three real planes, with focus, blur and light that follow the voice.</p></div>
+  <div class="frame" role="img" aria-label="Mockup of the Depth direction: the orb glows softly in the background, an inbox card sits blurred behind, a sharp weather card is in focus in front, and a floating glass capsule of controls sits at the bottom">
+   <div class="stage">
+    <div class="sample">Sample content</div>
+    <div style="inset:0;background:radial-gradient(circle 520px at 300px 420px,rgba(44,201,255,.10),transparent 70%)"></div>
+    <div class="orb" data-core="#2FD6C3" style="left:90px;top:210px;width:420px;height:420px;opacity:.6;filter:blur(5px)"></div>
+    <svg style="left:0;top:660px;width:1280px;height:80px" viewBox="0 0 1280 80" aria-hidden="true"><path d="M0 40 C 80 40, 100 18, 160 30 S 260 62, 330 40 S 420 10, 500 38 S 610 66, 690 40 S 800 20, 870 41 S 990 58, 1060 40 S 1200 30, 1280 40" fill="none" stroke="rgba(44,201,255,.4)" stroke-width="1.5"/></svg>
+    <!-- receded card -->
+    <div class="card" style="left:96px;top:140px;width:420px;height:470px;background:var(--m-glass);transform:scale(.96);filter:blur(1.6px);opacity:.6">
+      <div style="left:24px;top:22px;font-size:15px;font-weight:600">Inbox brief</div>
+      <div style="left:24px;top:48px;font-size:12px;color:var(--m-dim)">Since 6 PM yesterday</div>
+      <div style="left:24px;top:84px;width:372px;display:grid;gap:14px;font-size:13px">
+        <div style="position:static">Gmail · 4 new</div><div style="position:static">Work mail · 2 new</div>
+        <div style="position:static;color:var(--m-dim)">Team lead · Pipeline review moved to Thursday</div>
+        <div style="position:static;color:var(--m-dim)">Dentist office · Reminder for Thursday 9:00</div>
+        <div style="position:static;color:var(--m-dim)">Airline · Your receipt</div>
+      </div>
+    </div>
+    <!-- focused card -->
+    <div class="card" style="left:480px;top:92px;width:704px;height:560px;border-radius:20px;border-color:var(--m-edge);box-shadow:0 24px 60px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.28);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px)">
+      <div style="left:32px;top:28px;font-size:17px;font-weight:600">Tomorrow · Home</div>
+      <div style="left:32px;top:64px;font-size:64px;font-weight:200;line-height:1">64°</div>
+      <div style="left:150px;top:86px;font-size:15px;color:var(--m-dim)">Rain likely after 2 PM</div>
+      <div style="left:32px;top:150px;display:flex;gap:10px">
+        <span class="chip" style="position:static;height:32px;font-size:13px">High 64°</span>
+        <span class="chip" style="position:static;height:32px;font-size:13px">Low 51°</span>
+        <span class="chip" style="position:static;height:32px;font-size:13px;color:var(--m-amber);border-color:rgba(255,180,84,.45)">Rain 70%</span>
+      </div>
+      <div class="lbl" style="left:32px;top:220px;letter-spacing:.12em">Chance of rain by hour</div>
+      <div id="depth-bars" style="left:32px;top:248px;width:640px;height:220px"></div>
+      <div class="mono" style="left:32px;top:520px;font-size:11px;color:var(--m-dim)">weather.gov · read 7:42 AM</div>
+    </div>
+    <!-- capsule -->
+    <div style="left:340px;top:712px;width:600px;height:50px;border-radius:25px;background:var(--m-glass);border:1px solid var(--m-border);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 10px 30px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:space-around;font-size:13px;font-weight:500">
+      <span style="position:static;display:flex;align-items:center;gap:8px"><span class="dot live" style="position:static;background:var(--m-green);width:9px;height:9px"></span>Listening</span>
+      <span style="position:static">Results <span style="position:static;color:var(--m-accent)">2</span></span>
+      <span style="position:static;color:var(--m-dim)">Atlas</span><span style="position:static;color:var(--m-dim)">Memory</span><span style="position:static;color:var(--m-dim)">Display</span>
+      <span class="mono" style="position:static;color:var(--m-dim);font-size:12px;border:1px solid var(--m-hair);border-radius:6px;padding:2px 7px">⌘K</span>
+    </div>
+   </div>
+  </div>
+  <dl class="facts">
+    <div><dt>What changes</dt><dd>No new screens. Adds elevation levels to Glass.swift's roles, moves the orb behind the workspace, and turns the full-width control row into a floating capsule.</dd></div>
+    <div><dt>Reuses</dt><dd>Everything: voice levels, WorkspaceStore active and compared results, existing weather and brief payloads.</dd></div>
+    <div><dt>Needs new</dt><dd>No new data.</dd></div>
+    <div><dt>Effort · risk</dt><dd>M, 3 to 5 weeks, mostly tuning. Text over a moving orb must stay legible; the GPU cost of a live blurred orb behind glass is unmeasured. Doesn't fix empty results on its own.</dd></div>
+    <div><dt>Accessibility</dt><dd>Existing opaque fallbacks cover Reduce Transparency and Increase Contrast. Receded cards need a dim-only fallback. Reduce Motion uses cross-fades.</dd></div>
+    <div><dt>Before acceptance</dt><dd>An elevation and motion token sheet plus this mockup.</dd></div>
+  </dl>
+</section>
+
+<!-- ======================= DIRECTION 4 ======================= -->
+<section id="composed">
+  <div class="dir-head"><span class="num">DIRECTION 4</span><h2>Composed Answers</h2>
+  <p>Each answer arrives as a layout assembled from a small typed kit of blocks, so the screen shows the answer instead of a Summary and Sources toolbar over one line of text.</p></div>
+  <div class="frame" role="img" aria-label="Mockup of the Composed Answers direction: a narrow voice rail on the left, and a composed answer with a stat row, an inbox list, a rain-chance bar chart, a radar thumbnail and source and follow-up chips">
+   <div class="stage">
+    <div class="sample">Sample content</div>
+    <!-- rail -->
+    <div style="left:0;top:0;width:200px;height:800px;background:var(--m-panel);border-right:1px solid var(--m-hair)"></div>
+    <div class="orb" data-core="#2FD6C3" style="left:40px;top:56px;width:120px;height:120px"></div>
+    <div class="lbl" style="left:0;width:200px;top:196px;text-align:center">Listening</div>
+    <div style="left:18px;top:236px;width:164px;font-size:12px;line-height:1.5;display:grid;gap:14px">
+      <div style="position:static;color:var(--m-dim)">You<br><span style="position:static;color:var(--m-text)">What's in my inbox this morning, and will it rain tomorrow?</span></div>
+      <div style="position:static;color:var(--m-dim)">Mortimer<br><span style="position:static;color:var(--m-text)">Six new messages, two worth a look. Rain is likely tomorrow after 2 PM.</span></div>
+    </div>
+    <!-- header -->
+    <div style="left:224px;top:26px;font-size:22px;font-weight:600">This morning and tomorrow</div>
+    <div style="left:224px;top:60px;font-size:15px;color:var(--m-dim)">Six new messages, two worth a look. Rain is likely tomorrow after 2 PM.</div>
+    <div style="right:24px;top:30px;display:flex;gap:8px">
+      <span class="chip" style="position:static;height:26px;font-size:11px;padding:0 10px;color:var(--m-dim)">Librarian · 0.6 s</span>
+      <span class="chip" style="position:static;height:26px;font-size:11px;padding:0 10px;color:var(--m-dim)">Analyst · 2.4 s</span>
+    </div>
+    <!-- A stat row -->
+    <div class="card" style="left:224px;top:104px;width:1032px;height:88px;display:grid;grid-template-columns:repeat(4,1fr)">
+      <div style="position:relative;padding:14px 20px"><div style="position:static;font-size:28px;font-weight:300">6</div><div style="position:static;font-size:11px;color:var(--m-dim)">new messages</div></div>
+      <div style="position:relative;padding:14px 20px;border-left:1px solid var(--m-hair)"><div style="position:static;font-size:28px;font-weight:300;color:var(--m-amber)">2</div><div style="position:static;font-size:11px;color:var(--m-dim)">flagged</div></div>
+      <div style="position:relative;padding:14px 20px;border-left:1px solid var(--m-hair)"><div style="position:static;font-size:28px;font-weight:300">70%</div><div style="position:static;font-size:11px;color:var(--m-dim)">rain tomorrow, peak 2 PM</div></div>
+      <div style="position:relative;padding:14px 20px;border-left:1px solid var(--m-hair)"><div style="position:static;font-size:28px;font-weight:300">64° / 51°</div><div style="position:static;font-size:11px;color:var(--m-dim)">high / low</div></div>
+    </div>
+    <!-- B list -->
+    <div class="card" style="left:224px;top:208px;width:508px;height:368px">
+      <div style="left:18px;top:16px;font-size:13px;font-weight:600">Inbox · since 6 PM yesterday</div>
+      <div id="inbox" style="left:18px;top:46px;width:472px"></div>
+      <div style="left:18px;top:336px;font-size:12px;color:var(--m-accent)">1 more</div>
+    </div>
+    <!-- C chart -->
+    <div class="card" style="left:748px;top:208px;width:508px;height:176px">
+      <div style="left:18px;top:16px;font-size:13px;font-weight:600">Rain chance tomorrow</div>
+      <div id="comp-bars" style="left:18px;top:42px;width:472px;height:122px"></div>
+    </div>
+    <!-- D map -->
+    <div class="card" style="left:748px;top:400px;width:508px;height:176px;overflow:hidden">
+      <div style="left:1px;top:1px;width:320px;height:174px;border-radius:11px 0 0 11px;background:
+        radial-gradient(ellipse 70px 40px at 210px 70px,rgba(61,220,151,.55),transparent 70%),
+        radial-gradient(ellipse 40px 26px at 230px 64px,rgba(255,180,84,.55),transparent 70%),
+        radial-gradient(ellipse 90px 50px at 120px 120px,rgba(61,220,151,.30),transparent 70%),
+        linear-gradient(160deg,#1c242b,#151b20)"></div>
+      <svg style="left:1px;top:1px;width:320px;height:174px" viewBox="0 0 320 174" aria-hidden="true"><path d="M0 120 L80 96 L160 110 L240 80 L320 92 M60 0 L90 174 M200 0 L180 174" stroke="rgba(143,168,184,.18)" fill="none"/><circle cx="150" cy="96" r="5" fill="#E2F1F9"/><circle cx="150" cy="96" r="11" fill="none" stroke="#E2F1F9" stroke-opacity=".4"/></svg>
+      <div style="left:162px;top:82px;font-size:11px;font-weight:600">Home</div>
+      <div style="left:340px;top:18px;font-size:13px;font-weight:600">Radar</div>
+      <div style="left:340px;top:40px;width:150px;font-size:12px;color:var(--m-dim)">Showers moving in from the west. Frame 7:40 AM.</div>
+      <div style="left:340px;top:124px;height:32px;padding:0 14px;border-radius:8px;border:1px solid rgba(44,201,255,.45);color:var(--m-accent);font-size:12px;font-weight:500;display:flex;align-items:center">Open radar</div>
+    </div>
+    <!-- E sources and actions -->
+    <div class="card" style="left:224px;top:592px;width:1032px;height:56px;display:flex;align-items:center;gap:8px;padding:0 14px">
+      <span class="lbl" style="position:static;letter-spacing:.12em;margin-right:4px">Sources</span>
+      <span class="chip" style="position:static;height:28px;font-size:12px;padding:0 10px">Gmail</span>
+      <span class="chip" style="position:static;height:28px;font-size:12px;padding:0 10px">Work mail</span>
+      <span class="chip" style="position:static;height:28px;font-size:12px;padding:0 10px">weather.gov</span>
+      <span style="position:static;flex:1"></span>
+      <span class="chip" style="position:static;height:28px;font-size:12px;padding:0 12px;border-color:rgba(44,201,255,.45)">Read the flagged two</span>
+      <span class="chip" style="position:static;height:28px;font-size:12px;padding:0 12px;border-color:rgba(44,201,255,.45)">Hourly detail</span>
+      <span class="chip" style="position:static;height:28px;font-size:12px;padding:0 12px;border-color:rgba(44,201,255,.45)">Send to second screen</span>
+      <span class="chip" style="position:static;height:28px;width:34px;padding:0;justify-content:center;color:var(--m-dim)">…</span>
+    </div>
+    <!-- composer -->
+    <div style="left:224px;top:720px;width:1032px;height:48px;border-radius:24px;background:var(--m-glass);border:1px solid var(--m-border);display:flex;align-items:center;padding:0 20px;font-size:14px;color:var(--m-dim)">
+      <span style="position:static;flex:1">Ask, or drop a file</span>
+      <span class="mono" style="position:static;font-size:11px;border:1px solid var(--m-hair);border-radius:6px;padding:2px 7px;margin-right:12px">⌘K</span>
+      <span style="position:static;width:28px;height:28px;border-radius:50%;background:rgba(61,220,151,.18);border:1px solid var(--m-green);display:flex;align-items:center;justify-content:center"><svg style="position:static" width="12" height="14" viewBox="0 0 12 14" aria-hidden="true"><rect x="3.5" y="0.5" width="5" height="8" rx="2.5" fill="none" stroke="#3DDC97"/><path d="M1 6.5a5 5 0 0 0 10 0M6 11.5v2" fill="none" stroke="#3DDC97"/></svg></span>
+    </div>
+   </div>
+  </div>
+  <dl class="facts">
+    <div><dt>What changes</dt><dd>Replaces the fixed Summary, Sources and Connections modes (WorkspaceResultDetails.swift) with a block renderer. Weather, brief, radar and roadmap views become kit blocks. Copy, Share and Export move behind "…".</dd></div>
+    <div><dt>Reuses</dt><dd><code>DisplayPayload</code> weather, brief, roadmap, links and images; <code>runID</code> and <code>originRequestID</code> already group results by request.</dd></div>
+    <div><dt>Needs new</dt><dd>A versioned <code>layout</code> field on DisplayPayload, decoded leniently; a merge of two results from one request into one answer; a calendar tool if you want calendar answers (today it is a "missing tool", prompts.py:527).</dd></div>
+    <div><dt>Effort · risk</dt><dd>L, 8 to 12 weeks: about eight blocks, the Python emitter, lenient decoding, voice and pointer parity. Touches the result contract that acceptance tests; model-chosen layouts can wobble, so start with fixed templates per result kind.</dd></div>
+    <div><dt>Accessibility</dt><dd>Each block carries a VoiceOver summary ("rain chance peaks at 70% at 2 PM"). Charts carry labels, not only colour. Reduce Motion drops the stagger.</dd></div>
+    <div><dt>Before acceptance</dt><dd>The most freeze-proof design work: the block kit, the layout schema and static mockups of five or six real answer types can all be written as docs now.</dd></div>
+  </dl>
+</section>
+
+<!-- ======================= DIRECTION 5 ======================= -->
+<section id="carousel">
+  <div class="dir-head"><span class="num">DIRECTION 5 · YOUR SUGGESTION</span><h2>Result Carousel</h2>
+  <p>Results become glass panels on a carousel you turn through by swipe, arrow key or voice. Below are both placements you raised: in the open area beside the conversation, and as an overlay over the whole screen.</p></div>
+  <div class="grid2">
+    <figure>
+      <div class="frame" role="img" aria-label="Mockup A: the voice rail stays on the left; in the open area a sharp glass weather panel sits in front, with an inbox panel angled away on the left and a radar panel angled away on the right, a 2 of 5 indicator, an approval strip and a composer below">
+       <div class="stage">
+        <div class="sample">Sample content</div>
+        <div style="inset:0;background:radial-gradient(circle 480px at 740px 380px,rgba(44,201,255,.07),transparent 70%)"></div>
+        <div id="carA" style="left:200px;top:0;width:1080px;height:800px;overflow:hidden;perspective:1400px;perspective-origin:540px 350px"></div>
+        <div style="left:0;top:0;width:200px;height:800px;background:var(--m-panel);border-right:1px solid var(--m-hair)"></div>
+        <div class="orb" data-core="#2FD6C3" style="left:40px;top:60px;width:120px;height:120px"></div>
+        <div class="lbl" style="left:0;width:200px;top:200px;text-align:center">Listening</div>
+        <div style="left:18px;top:240px;width:164px;font-size:12px;line-height:1.5;display:grid;gap:14px">
+          <div style="position:static;color:var(--m-dim)">You<br><span style="position:static;color:var(--m-text)">Will it rain tomorrow?</span></div>
+          <div style="position:static;color:var(--m-dim)">Mortimer<br><span style="position:static;color:var(--m-text)">Likely after 2 PM, about 70 percent.</span></div>
+        </div>
+        <div style="left:480px;top:14px;width:520px;height:44px;border-radius:22px;background:var(--m-glass);border:1px solid var(--m-border);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:space-around;font-size:13px;font-weight:500">
+          <span style="position:static">Results <span style="position:static;color:var(--m-accent)">5</span></span><span style="position:static;color:var(--m-dim)">Atlas</span><span style="position:static;color:var(--m-dim)">Memory</span><span style="position:static;color:var(--m-dim)">Display</span>
+        </div>
+        <div class="cara" style="left:212px;top:332px"></div>
+        <div class="cara r" style="left:1226px;top:332px"></div>
+        <div class="indic" data-at="1" data-n="5" data-pin="0" style="left:640px;top:604px;width:200px"></div>
+        <div class="approve" style="left:430px;top:632px;width:620px"></div>
+        <div style="left:430px;top:704px;width:620px;height:44px;border-radius:22px;background:var(--m-glass);border:1px solid var(--m-border);display:flex;align-items:center;padding:0 18px;font-size:14px;color:var(--m-dim)"><span style="position:static;flex:1">Ask, or drop a file</span><span class="mono" style="position:static;font-size:11px;border:1px solid var(--m-hair);border-radius:6px;padding:2px 7px">⌘K</span></div>
+       </div>
+      </div>
+      <figcaption><b>A · In the open area.</b> The voice rail and orb stay visible; three panels show, the front one sharp.</figcaption>
+    </figure>
+    <figure>
+      <div class="frame" role="img" aria-label="Mockup B: the whole console is dimmed and blurred behind; a large weather panel is in front, an inbox panel angled on the left, radar and roadmap panels angled on the right, a Results header with 2 of 5 and a Done button, an approval strip, a small listening pill and keyboard hints">
+       <div class="stage">
+        <div class="sample">Sample content</div>
+        <!-- underlay: the console as it stands -->
+        <div style="left:0;top:0;width:200px;height:800px;background:var(--m-panel);border-right:1px solid var(--m-hair)"></div>
+        <div class="orb" data-core="#2FD6C3" style="left:40px;top:60px;width:120px;height:120px"></div>
+        <div style="left:224px;top:24px;display:flex;gap:10px"><span class="chip" style="position:static">Conversation</span><span class="chip" style="position:static">Results</span><span class="chip" style="position:static">Knowledge</span></div>
+        <div style="left:224px;top:96px;width:900px;display:grid;gap:18px;font-size:15px">
+          <div style="position:static;color:var(--m-dim)">You · Will it rain tomorrow?</div>
+          <div style="position:static">Mortimer · Likely after 2 PM, about 70 percent. I've put the hourly chance on a card.</div>
+          <div style="position:static;color:var(--m-dim)">You · And what came in overnight?</div>
+          <div style="position:static">Mortimer · Six new messages, two worth a look.</div>
+        </div>
+        <!-- scrim -->
+        <div style="inset:0;background:rgba(21,25,29,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)"></div>
+        <div id="carB" style="left:0;top:0;width:1280px;height:800px;overflow:hidden;perspective:1400px;perspective-origin:640px 376px"></div>
+        <div style="left:32px;top:16px;font-size:15px;font-weight:600">Results</div>
+        <div class="indic" data-at="1" data-n="5" data-pin="0" style="left:540px;top:20px;width:200px"></div>
+        <div style="left:1150px;top:12px;height:32px;padding:0 12px;border:1px solid var(--m-edge);border-radius:8px;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500">Done <span class="mono" style="position:static;font-size:10px;color:var(--m-dim)">esc</span></div>
+        <div class="approve" style="left:260px;top:670px;width:760px"></div>
+        <div style="left:32px;top:744px;width:200px;height:36px;border-radius:18px;background:var(--m-glass);border:1px solid var(--m-border);display:flex;align-items:center;gap:10px;padding:0 6px;font-size:12px"><span class="orb" data-core="#2FD6C3" data-mini="1" style="position:static;display:block;width:26px;height:26px"></span><span style="position:static">Listening</span></div>
+        <div class="mono" style="right:32px;top:756px;font-size:11px;color:var(--m-dim)">← → rotate · P pin · esc close</div>
+       </div>
+      </div>
+      <figcaption><b>B · Full-screen overlay.</b> The console dims behind a scrim; a voice pill keeps Mortimer's state visible.</figcaption>
+    </figure>
+  </div>
+  <dl class="facts">
+    <div><dt>How it turns</dt><dd>Two-finger swipe moves one panel; ← → rotate, P pins, Delete closes, Esc leaves B. Voice "next", "previous" and "show the weather one" already exist as actions (<code>result_next</code>, <code>result_previous</code>, ConsoleActionCoordinator.swift:432-435). Motion 360 ms; Reduce Motion cross-fades the front panel only.</dd></div>
+    <div><dt>How many stack</dt><dd>History keeps up to 20 results (AppTuning.swift:44). A carousel reads well at 3 to 7, so it should hold pinned plus the 10 recent the app already uses (WorkspaceRecents.swift:16), with older ones left in the Results menu.</dd></div>
+    <div><dt>Ends, not a loop</dt><dd>Next and previous stop at the ends today (WorkspaceStore.swift:509-516), so both mockups show nothing past result 1. Making it wrap is a change to accepted behaviour; your call.</dd></div>
+    <div><dt>Approvals and dismissal</dt><dd>Approvals never ride the carousel, where turning could hide them. They sit in a fixed amber strip, like today's attachment approval (AttachmentTrayView.swift:28-30). Close and pin live only on the front panel.</dd></div>
+    <div><dt>Readability · accessibility</dt><dd>Neighbour titles stay sharp; only their bodies blur. With Reduce Transparency or Increase Contrast, Glass.swift drops to opaque fills, so neighbours become flat dimmed slabs; that version needs drawing too. VoiceOver sees one list, "Results, 2 of 5, Weather tomorrow", with only the front panel exposed.</dd></div>
+    <div><dt>Effort · risk</dt><dd>A: M, 4 to 5 weeks. B: M, 5 to 6 weeks (modal layer, focus trap, voice pill). Untested: whether Liquid Glass renders correctly on a 3D-rotated layer, and whether B's 72% scrim keeps text legible over the live console. Both need a spike first.</dd></div>
+  </dl>
+  <div class="callout">
+    <h3>Placement pick: A, with B as "show all results"</h3>
+    <p>This is a voice-first app, and B covers the orb and conversation every time an answer lands; the current layout deliberately keeps voice state beside results. A's side panels also sit over a quiet background, which avoids the glass-over-busy-content problem B depends on a scrim to solve. B is the better way to review several results at once, so it earns a place as a summoned view ("show all my results"), not as where answers land.</p>
+    <p class="note">A costs width: its 620-pixel panel clears the app's 480-point minimum result width, but Composed Answers has to stack its blocks in one column there. Compare mode still needs two results side by side, so it stays its own view.</p>
+  </div>
+</section>
+
+<!-- ======================= DIRECTION 6 ======================= -->
+<section id="combined">
+  <div class="dir-head"><span class="num">DIRECTION 6 · YOUR PICK · 4 + 5</span><h2>Composed answers on the carousel, with a living glass orb <span class="pick-badge">Your pick · approved Nov 11</span></h2>
+  <p>Each composed answer is one glass panel on carousel A. The orb keeps the crystal glass you approved in September and gets a tesla-coil plasma inside it: a large white-hot core, never less than a third of the orb across, throws branching arcs to the glass, in your teal when you talk and Mortimer's rust when it does. Louder voice means more and thicker arcs, and thinking swirls them. The arcs move in depth: many fly toward you and strike the front of the glass with a bright contact spot, growing wider as they come, while the ones behind the core are dimmer and partly hidden. Touch the glass and an arc strikes that spot, like a plasma globe. The orb below is live: move over it, click it, and try the states under the frames.</p>
+  <p class="note"><b>Locked as the spec on Nov 11:</b> you approved this orb as drawn below (the demo's energy code, crystal glass, depth, thicker arcs on small orbs, a core at least a third of the orb, tap and hold). Designed on Opus, then reviewed by Fable 5.2 on Nov 11; its corrections and changes are folded in below (states, hover/tap/hold, the "Needs you" overlay, the colour set).</p></div>
+
+  <div class="frame" role="img" aria-label="Mockup on the Mac: a wide voice rail on the left holds a glass energy orb with its state in words and the conversation; in the open area a composed answer panel sits in front with a headline, three stats, two flagged emails, a rain chart and source chips, with two neighbour panels angled away; below are a 2 of 4 indicator, a yellow approval strip and the composer">
+   <div class="stage">
+    <div class="sample">Sample content · orb is live</div>
+    <div style="inset:0;background:radial-gradient(circle 520px at 770px 360px,rgba(44,201,255,.06),transparent 70%)"></div>
+    <div id="carC" style="left:260px;top:0;width:1020px;height:800px;overflow:hidden;perspective:1400px;perspective-origin:510px 340px"></div>
+    <div style="left:0;top:0;width:260px;height:800px;background:var(--m-panel);border-right:1px solid var(--m-hair)"></div>
+    <canvas class="eorb" aria-hidden="true" style="left:20px;top:28px;width:220px;height:220px;cursor:pointer;touch-action:pan-y"></canvas>
+    <div class="lbl" data-orb-label style="left:0;width:260px;top:256px;text-align:center;font-size:12px">Listening</div>
+    <div style="left:22px;top:300px;width:216px;font-size:12.5px;line-height:1.5;display:grid;gap:14px">
+      <div style="position:static;color:var(--m-dim)"><span style="position:static;color:#2DD4BF">●</span> You<br><span style="position:static;color:var(--m-text)">What came in overnight, and will it rain tomorrow?</span></div>
+      <div style="position:static;color:var(--m-dim)"><span style="position:static;color:#E07020">●</span> Mortimer<br><span style="position:static;color:var(--m-text)">Six new messages, two worth a look. Rain is likely after 2 PM.</span></div>
+    </div>
+    <div style="left:530px;top:14px;width:480px;height:44px;border-radius:22px;background:var(--m-glass);border:1px solid var(--m-border);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:space-around;font-size:13px;font-weight:500">
+      <span style="position:static">Answers <span style="position:static;color:var(--m-accent)">4</span></span><span style="position:static;color:var(--m-dim)">Atlas</span><span style="position:static;color:var(--m-dim)">Memory</span><span style="position:static;color:var(--m-dim)">Display</span>
+    </div>
+    <div class="cara" style="left:274px;top:334px"></div>
+    <div class="cara r" style="left:1230px;top:334px"></div>
+    <div class="indic" data-at="1" data-n="4" style="left:670px;top:614px;width:200px"></div>
+    <div class="approve2" style="left:450px;top:644px;width:640px"></div>
+    <div style="left:450px;top:712px;width:640px;height:44px;border-radius:22px;background:var(--m-glass);border:1px solid var(--m-border);display:flex;align-items:center;padding:0 18px;font-size:14px;color:var(--m-dim)"><span style="position:static;flex:1">Ask, or drop a file</span><span class="mono" style="position:static;font-size:11px;border:1px solid var(--m-hair);border-radius:6px;padding:2px 7px">⌘K</span></div>
+   </div>
+  </div>
+
+  <div class="grid2" style="align-items:start">
+    <figure style="justify-self:center;width:min(100%,360px)">
+      <div class="pframe" role="img" aria-label="Mockup on the phone: the same glass orb at the top with its state in words, one composed answer card with the next cards peeking at both edges, page dots, a yellow approval strip and a pill hint saying hold the orb to talk">
+       <div class="pstage">
+        <div style="left:0;top:0;width:390px;height:844px;background:var(--m-bg)"></div>
+        <div style="left:28px;top:16px;font-size:15px;font-weight:600">9:41</div>
+        <div style="left:0;width:390px;top:54px;text-align:center;font-size:17px;font-weight:600">Mortimer</div>
+        <canvas class="eorb" aria-hidden="true" style="left:95px;top:86px;width:200px;height:200px;touch-action:pan-y"></canvas>
+        <div class="lbl" data-orb-label style="left:0;width:390px;top:288px;text-align:center">Listening</div>
+        <div id="carP" style="left:0;top:318px;width:390px;height:340px;overflow:hidden"></div>
+        <div class="indic" data-at="1" data-n="4" style="left:95px;top:666px;width:200px"></div>
+        <div class="approve2 compact" style="left:16px;top:694px;width:358px"></div>
+        <div style="left:75px;top:772px;width:240px;height:40px;border-radius:20px;background:var(--m-glass);border:1px solid var(--m-border);display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--m-dim)">Hold the orb to talk · tap to mute</div>
+        <div style="left:128px;top:832px;width:134px;height:5px;border-radius:3px;background:rgba(226,241,249,.5)"></div>
+       </div>
+      </div>
+      <figcaption><b>Phone.</b> Swipe turns the cards; the orb takes your finger the same way it takes the pointer, and holding it is how you talk, so there is no separate talk button. Not built: today's phone app is a synthetic preview with no orb and no audio.</figcaption>
+    </figure>
+    <div class="playground">
+      <div class="pg-canvas"><canvas class="eorb big" aria-hidden="true" style="touch-action:pan-y"></canvas></div>
+      <div class="pg-controls" role="group" aria-label="Orb state">
+        <button type="button" data-state="auto" aria-pressed="true">Auto</button>
+        <button type="button" data-state="idle" aria-pressed="false">Listening</button>
+        <button type="button" data-state="user" aria-pressed="false">You speaking</button>
+        <button type="button" data-state="thinking" aria-pressed="false">Thinking</button>
+        <button type="button" data-state="mort" aria-pressed="false">Mortimer speaking</button>
+        <button type="button" data-state="barge" aria-pressed="false">You over Mortimer</button>
+        <button type="button" data-state="muted" aria-pressed="false">Muted</button>
+        <button type="button" data-state="connecting" aria-pressed="false">Connecting</button>
+        <button type="button" data-state="offline" aria-pressed="false">Offline</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:16px"><label class="pg-rm"><input type="checkbox" id="orb-need"> Needs you (overlay, any state)</label><label class="pg-rm"><input type="checkbox" id="orb-rm"> Reduce Motion</label></div>
+      <p class="pg-cap" id="orb-cap">Listening: four indigo arcs, ready for you.</p>
+      <p class="note">Move your pointer or finger over the orb and an arc strikes the front of the glass where you touch. Click or tap mutes and unmutes; press and hold shows “You” while held, as in the demo. In the app those would drive the real mic and push-to-talk. The voice levels here are simulated; in the app they come from the measured mic and speech-output levels. Browser sketch, not the Swift renderer.</p>
+    </div>
+  </div>
+
+  <h3 id="orb-depth">Depth for the orb itself: you picked 3, refraction, with the shadow from 1 (Nov 11)</h3>
+  <p>Each is the approved orb, unchanged, with one depth treatment added, on the same sample rail so only the treatment differs. They follow the state buttons above. Untick "Depth on" to see the orb as approved. The crystal glass stays as it is in all three; none brings back a frosted rim.</p>
+  <div class="depth-grid">
+    <figure><canvas class="eorb" data-depth="1" aria-hidden="true"></canvas><figcaption><b>1 · Shadow and cast light</b><span>The orb floats above the rail: a soft shadow under it, and the energy's light focused through the ball into a coloured pool that brightens with the voice.</span><label class="pg-rm"><input type="checkbox" data-depth-toggle="1" checked> Depth on</label><span class="cost">Swift: two gradient fills outside the glass, cheap. Needs about a quarter of the orb's height free below it.</span></figcaption></figure>
+    <figure><canvas class="eorb" data-depth="2" aria-hidden="true"></canvas><figcaption><b>2 · Tilt parallax</b><span>The glass reflections slide one way and the core the other as you move, and the shaded side turns with you, like looking round a real ball. Here it follows your pointer or finger and sways slowly otherwise.</span><label class="pg-rm"><input type="checkbox" data-depth-toggle="2" checked> Depth on</label><span class="cost">Swift: offsets only, near free. Mac follows the pointer; the phone would follow its tilt. Off under Reduce Motion.</span></figcaption></figure>
+    <figure><canvas class="eorb" data-depth="3" aria-hidden="true"></canvas><figcaption><b>3 · Refraction, with 1’s shadow <span class="pick-badge">Your pick</span></b><span>The rail behind the orb bends through it, magnified and upside down in the middle and squeezed at the rim as a solid glass ball would, with a faint upside-down echo of the arcs on the far wall. Option 1’s shadow and cast light sit under it.</span><label class="pg-rm"><input type="checkbox" data-depth-toggle="3" checked> Depth on</label><span class="cost">Swift: the costly one. It has to sample what's behind the orb every frame, likely a Metal shader, the app's first.</span></figcaption></figure>
+  </div>
+  <dl class="facts">
+    <div><dt>Speed (10% budget)</dt><dd>1: two extra fills a frame, outside the glass; expected to fit. 2: one gradient and two offsets a frame; expected to fit, plus motion readings on the phone. 3: re-draws or samples the backdrop across the whole orb every frame; the most likely to break the 10% budget over the crystal shell (box 810, <code>ROADMAP.md:810</code>). SwiftUI Canvas cannot see the views behind it, so 3 needs either the rail drawn again inside the orb or a <code>layerEffect</code> shader, and nothing in the app uses Metal today. None of this is measured; the arcs probe in <code>OrbShellFrameTimeTests</code> would settle it.</dd></div>
+    <div><dt>Flash safety</dt><dd>1: the cast light follows the orb's capped brightness, so it changes no faster than the orb. 2: changes position, not brightness. 3: the far-wall echo is a fixed share of the same capped frame, so it rides the same cap; the refracted rail is steady, but text scrolling behind the orb would move through it magnified, which may distract. Checked by reasoning on the code, not on pixels.</dd></div>
+    <div><dt>Your pick, and the fallback</dt><dd>Refraction with option 1's shadow and cast light is in the spec. It gets measured first, before the rest of the orb is built. If it costs more than the 10% budget, the proposed fallback is 1 and 2 together, and that switch needs your OK. Under Reduce Transparency it is off and the orb uses the existing opaque fallback.</dd></div>
+  </dl>
+
+  <h3>Proposed colours, Mortimer's rust kept</h3>
+  <div class="tablewrap"><table class="pal">
+    <thead><tr><th>Role</th><th>Colour</th><th>Contrast on #15191D</th><th>Change</th><th>Closest call (ΔE, normal · deutan)</th></tr></thead>
+    <tbody>
+      <tr><td>Mortimer</td><td><span class="sw" style="background:#E07020"></span><code>#E07020</code></td><td class="num">5.47:1</td><td>Kept, reserved for Mortimer</td><td>Error 32 · 17</td></tr>
+      <tr><td>You</td><td><span class="sw" style="background:#2DD4BF"></span><code>#2DD4BF</code></td><td class="num">9.49:1</td><td>Kept</td><td>OK 17 · 22</td></tr>
+      <tr><td>Listening</td><td><span class="sw" style="background:#6673FF"></span><code>#6673FF</code></td><td class="num">4.59:1</td><td>Was <code>#7C8CFF</code>; moved away from the cyan accent</td><td>Accent 30 · 18</td></tr>
+      <tr><td>Needs you (approvals, drafts)</td><td><span class="sw" style="background:#FFD84A"></span><code>#FFD84A</code></td><td class="num">12.76:1</td><td>Was amber <code>#FFB454</code> (ΔE to Mortimer 19 · 14)</td><td>OK 30 · 17</td></tr>
+      <tr><td>Error</td><td><span class="sw" style="background:#FF598B"></span><code>#FF598B</code></td><td class="num">5.93:1</td><td>Was <code>#FF5F56</code> (ΔE to Mortimer 18 · 6)</td><td>Mortimer 32 · 17</td></tr>
+      <tr><td>OK</td><td><span class="sw" style="background:#A6FFC1"></span><code>#A6FFC1</code></td><td class="num">14.89:1</td><td>Was <code>#3DDC97</code> (ΔE to your teal 12; to error 7.5 deutan)</td><td>You 17 · 22</td></tr>
+      <tr><td>Accent</td><td><span class="sw" style="background:#2CC9FF"></span><code>#2CC9FF</code></td><td class="num">9.17:1</td><td>Kept</td><td>You 24 · 18</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">Contrast is the WCAG ratio against the app background, computed from the hex values. ΔE is CIEDE2000; "deutan" is the same pair after a full-strength deuteranopia simulation (Machado 2009). Below about 10 two colours read as one at a glance. Listening at 4.59:1 is fine for the orb and icons but marginal for small text. Tritanopia stays weak for you against the accent (4.5) and Mortimer against error (5.9). These are calculations, not tests with people, and contrast on glass panels depends on what is behind them, so that part is untested.</p>
+
+  <dl class="facts">
+    <div><dt>Already built</dt><dd>The orb already follows your real voice and Mortimer's. <code>VoiceWaveView.swift:338-344</code> turns the measured mic and speech-output levels into two energies, and each channel brightens with its own level (<code>CometOrbRenderer.swift:152-156</code>) in teal and rust (<code>AppTuning.swift:125-126</code>; the comment at <code>:122</code> still says amber). A "Thinking" label and dot pulse exist (<code>OrbFieldView.swift:328, 378</code>), but the orb itself only changes tint (<code>CometOrbRenderer.swift:40</code>). Reduce Motion stills it (<code>VoiceWaveView.swift:340-341</code>).</dd></div>
+    <div><dt>Seven states, drawn</dt><dd>The app has seven: offline, connecting, listening, you, Mortimer, thinking, muted (<code>VoicePresentationState.swift:7</code>). Muted looks the same as listening on the orb today (<code>CometOrbRenderer.swift:34, 41</code>), and it is push-to-talk's resting state. Proposed: listening is three slow indigo arcs; muted dims the core, keeps one faint arc and shows a mic-slash, since one arc alone would read as listening; offline is dark glass with no arcs; connecting is a grey sweep on the rim. "You over Mortimer" keeps a teal bloom while rust stays at its measured level, since your voice takes priority (<code>VoicePresentationState.swift:67</code>).</dd></div>
+    <div><dt>Hover, tap, hold</dt><dd>Tap and hold ship from the first version, not hover alone (your call). Mac: hover pulls an arc to the pointer, click toggles the mic like the mic button (<code>MicControlsView.swift:34</code>), press and hold is push-to-talk. One trap to fix first: releasing Space always mutes (<code>MicControlsView.swift:113</code>), so a held orb must share the <code>pttOwned</code> guard (<code>MicControlsView.swift:19, 105-110</code>) and restore the mic to how it was. Phone: touching and dragging pulls the arcs, tap toggles, hold talks, so the orb replaces a separate talk button. A working orb needs a button role and label; today it ignores clicks (<code>VoiceWaveView.swift:63</code>, <code>OrbFieldView.swift:340</code>).</dd></div>
+    <div><dt>"Needs you" is an overlay</dt><dd>On the orb, attention means a pending draft (<code>OrbFieldView.swift:289</code>), and that is only <code>prepare_commit</code>, <code>prepare_push</code> or <code>repo_write_file</code> (<code>DisplayResultStore.swift:29-33</code>). It is independent of who is talking, so the yellow ring sits outside the glass in any state. A file-send approval is a separate path (<code>attachments.pendingOffer</code>) that should drive the same ring.</dd></div>
+    <div><dt>Phone today, and the order</dt><dd>A preview on synthetic data: it "does not authenticate, contact a service, access audio" (<code>PhonePreviewRootView.swift:159</code>), with results as title and body text (<code>:87-88</code>). Its protocol carries voice offer, update and end, result select, pin, unpin, close and reopen, and call state (<code>PhoneRemoteProtocolV1.swift:3-18</code>), with no voice state and no approvals. Order: swipeable cards with a state-only orb now; a live orb after WS-30 voice, plus thinking, speaking and muted states in the protocol; composed cards once a block schema exists; the approval strip once an approval command exists.</dd></div>
+    <div><dt>Colours</dt><dd>Amber is the app's one attention token (<code>AppTheme.swift:22-27</code>), used in 52 places, so the change is one value. Connecting also uses amber (<code>OrbFieldView.swift:368</code>) and goes neutral. The table above is the set after review: it also moves listening and OK, because error and OK green would collide under deuteranopia (ΔE 7.5) and your teal sits beside OK green on the rail (<code>OrbFieldView.swift:367</code>, <code>MicControlsView.swift:37</code>).</dd></div>
+    <div><dt>Glass and plasma in the app</dt><dd>The app's crystal shell already draws in the right order: glass body, then the interior clipped to 0.885 of the radius, then the wall glow, wall line and window reflections (<code>CometOrbRenderer.swift:290-335</code>). Only the <code>plasma()</code> call at <code>:300</code> changes; <code>CrystalGlassRig.swift</code>, whose values are frozen with your approval, stays as it is. SwiftUI Canvas is enough on the evidence so far: nothing in the app uses Metal, and <code>.glassEffect</code> is only used for rectangles (<code>Glass.swift:54</code>), so it cannot supply the sphere's reflections. Proposed: drop the orbiting comets (<code>:286, :345</code>), since the arcs carry the voice. The phone has no orb or Canvas yet; the same code should run there (untested).</dd></div>
+    <div><dt>Flash safety</dt><dd>The arcs are the demo's own code, unchanged, and re-strike every frame as they do there. What is limited is the orb's overall brightness: after each frame is drawn, its average light is measured and held inside a narrow band that drifts at most 4% a frame and turns round at most every 220 ms. When a frame would jump outside the band, all of it is dimmed evenly, or blended with the frame before, so the glow passes are never clipped. On a brightness model (not pixels), the demo as written gives about 14 flashes a second with 47% jumps, which fails the 3-a-second rule; with the cap it is at most 2.5 a second and a 10.6% largest step. About a third of frames get adjusted, by about 14% on average.</dd></div>
+    <div><dt>Small orbs and the core</dt><dd>Arc widths no longer shrink in step with the orb. At the demo's size (the big orb below) nothing changes. On smaller orbs widths shrink with the square root of the size, and the quietest arc's bright line never goes under 1.5 px, so its glow is at least 9 px. The contact spots follow the same rule. Quiet to loud, the bright line on the Mac rail orb goes from 0.5–1.2 px to 1.5–2.5 px, and on the phone orb from 0.5–1.1 px to 1.5–2.4 px; the demo's is 1.0–2.4 px. The core's visible edge, where its colour falls to half strength, is at least a third of the orb's width in every state, even silent: the quiet core grew from about a quarter to a third, and the voice still swells it by the demo's amount.</dd></div>
+    <div><dt>Accessibility</dt><dd>Reduce Motion: the arcs hold fixed shapes, brightness shows who is talking and changes over half a second or more, only the nearest arc moves to your pointer, and thinking gets a still concentric ring, since the swirl is the only thing telling it apart from Mortimer speaking. Reduce Transparency: the shell becomes an opaque disc through the existing <code>Glass.swift</code> fallbacks. The state stays in words beside the orb, so colour is never the only cue.</dd></div>
+    <div><dt>Effort · risk</dt><dd>Orb on the Mac: S to M, about 2 to 3 weeks, reusing the level plumbing. Composed answers need a <code>layout</code> field designed first: <code>DisplayPayload</code> has none (<code>JarvisKit/AppMessage.swift:244-269</code>). Performance gate: add an arcs probe to <code>OrbShellFrameTimeTests</code> (same 1440 × 220, 300 frames) and count arcs p50 or p95 more than 10% above the crystal shell's as a regression, as box 810 does (<code>ROADMAP.md:810</code>); the shell's p95 is 14.15 ms against a 16.7 ms frame. Caps: 14 arcs, 12 segments and 2 forks each, glow from wide faint strokes rather than blurs. The idle rate is 15 frames a second (<code>VoiceWaveView.swift:72</code>), slower than the arcs change. Test changes need your OK: the idle colour in code is still #7C8CFF and two tests expect a coloured nucleus, which is now white (<code>VoiceWaveRenderingTests.swift:297, 314</code>). Untested: the real frame time.</dd></div>
+  </dl>
+  <div class="callout">
+    <h3>Why this combination works</h3>
+    <p>Composed Answers fixes what an answer looks like, the carousel gives a stack of them a place to sit and turn, and the orb makes the voice side feel alive by showing real signals: who is talking, how loud, and when Mortimer is working. Today only a small label and a dot pulse show Mortimer is working; the thinking swirl puts that on the orb itself.</p>
+  </div>
+</section>
+
+<section id="compare">
+  <span class="eyebrow">Side by side</span>
+  <h2>How the six compare</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Direction</th><th>Fixes the empty answer</th><th>New backend data</th><th>Effort</th><th>Main risk</th></tr></thead>
+    <tbody>
+      <tr><td><b>1 Presence</b></td><td>No</td><td>Word timing (optional)</td><td class="num">M · 3–4 wk</td><td>Controls hidden again</td></tr>
+      <tr><td><b>2 Mission Control</b></td><td>No</td><td>Tool start time, run cost, cancel</td><td class="num">M–L · 3–8 wk</td><td>Often empty; Stop touches run lifecycle</td></tr>
+      <tr><td><b>3 Depth</b></td><td>No</td><td>None</td><td class="num">M · 3–5 wk</td><td>Legibility and GPU cost, unmeasured</td></tr>
+      <tr><td><b>4 Composed Answers</b></td><td>Yes</td><td>Layout field, result merge</td><td class="num">L · 8–12 wk</td><td>Changes an acceptance-tested contract</td></tr>
+      <tr><td><b>5 Result Carousel</b></td><td>No, it moves between answers</td><td>None (next and previous exist)</td><td class="num">M · 4–6 wk</td><td>Glass on rotated layers unproven; wrap changes behaviour</td></tr>
+      <tr><td><b>6 Your pick: 4 + 5 + glass orb</b></td><td>Yes</td><td>Layout field, result merge; none for the Mac orb</td><td class="num">L · 14–20 wk in sequence; orb 2–3 of those can run alongside</td><td>Contract change, plus unmeasured GPU cost of glass and a live orb</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout">
+    <h3>Your pick, which I agree with: Composed Answers on your carousel, in Depth glass, with the living orb</h3>
+    <p>The app's own render shows an answer filling one line of a 2200 by 1480 window. Composed Answers is the only direction that changes what an answer looks like; the others change the frame around it or how you move between answers. Your carousel fits as the way those composed answers are laid out and turned through; on its own it would rotate between panels that are still one line of text. The trade-off: it's the largest piece, it reopens a contract acceptance just tested, and it reads as a strong briefing screen before it reads as cinematic, until Depth is layered on.</p>
+    <ol>
+      <li>Now, docs only: write the block kit, the layout schema and the colour change; these mockups are the start.</li>
+      <li>First build after acceptance: fixed templates for weather, brief and plain text, styled with Depth's cards and capsule.</li>
+      <li>Next: carousel A as the way results sit and turn, after a spike on Liquid Glass over rotated layers; B as "show all results".</li>
+      <li>Alongside: the glass energy orb on the Mac, after a short GPU spike, with the attention colour moved from amber to yellow in one token; the phone orb follows WS-30 phone voice.</li>
+      <li>Then: the provenance chips grow into a read-only Mission Control strip; Stop and cost wait for the backend contract.</li>
+      <li>Presence becomes the idle state of the same shell, not a separate mode.</li>
+    </ol>
+    <p class="note">Separately, the unreadable Copy, Share and Export buttons and the repeated titles are small fixes you could approve by name as acceptance fixes under the freeze; everything else here is post-acceptance.</p>
+  </div>
+</section>
+
+<section id="limits" style="border-bottom:0">
+  <span class="eyebrow">What this rests on</span>
+  <h2>Untested until run on the Mac</h2>
+  <ul style="margin:0;padding-left:20px;display:grid;gap:6px;max-width:70ch">
+    <li>Why the second-screen buttons render white: check the supporting window in Dark and Light appearance, focused and unfocused.</li>
+    <li>Glass legibility over real wallpapers and the cost of a blurred live orb; only flat-background test renders exist.</li>
+    <li>Space under Full Keyboard Access, and how VoiceOver reads the glyph buttons.</li>
+    <li>The drawer tabs, weather, radar, atlas, roadmap and workflow views were judged from code only; no screenshots of them are in the repo.</li>
+    <li>The orb sketch: how the arcs look in SwiftUI Canvas, their frame time on the Mac and an iPhone, and how touch feels on the phone. Flash safety was checked on a brightness model, not on rendered pixels, and the sketch could not be rendered off-screen here to compare it frame by frame with the demo, and the browser port of the crystal glass was not compared with the app's renders on screen. The voice levels in the sketch are simulated.</li>
+    <li>The three depth options: how each looks in SwiftUI, its frame time against the 10% budget, and whether phone tilt feels right for option 2 (here it follows the pointer). Option 3's refraction is approximated with 18 rings of scaled backdrop, not true optics.</li>
+    <li>The colour numbers are calculations against the app background; contrast on glass panels and real users with colour-vision differences are not tested.</li>
+    <li>All mockup content is sample data, and the mockups are HTML approximations of SwiftUI, not renders of the app.</li>
+  </ul>
+</section>
+</div>
+
+<script>
+(function(){
+  // ---- Plasma arcs, large core and crystal glass shell (Fable 5.2 sketch, revised Nov 11: wandering, re-striking arcs with a light limiter) ----
+// Mortimer orb: tesla-coil arcs, large core and glass shell. Canvas-2D sketch, drop-in for
+// the particle part of drawOrb(o,t,dt,st,now). No globals: all state lives in the object
+// returned by arcState(). Use inside the existing clip to the glass:
+//   o.arc=o.arc||arcState(7);
+//   drawArcs(x,o.arc,{cx:cx,cy:cy,R:R,st:st,lu:o.lu,lm:o.lm,t:t,now:now,reduce:red,
+//     ptr:o.ptr&&{x:o.ptr.x,y:o.ptr.y,active:true},tap:o.rip.length?o.rip[o.rip.length-1].t:null});
+//   (or let the crystal shell own the order: see drawGlassShell's opt.interior, below)
+// Units: ptr is in orb radii from the centre (as o.ptr); t seconds (frozen under Reduce
+// Motion); now milliseconds (always running; used for easing only).
+// WALL = where arcs end: just inside the crystal shell's dark wall line (0.885 r).
+var LFULL = 0.45, ARC_N = 14, ARC_SEG = 16, FORK_SEG = 4, WALL = 0.86, HOLD_MS = 220, MAX_STEP = 0.045;
+var ARC_COL = { user: [45, 212, 191], mort: [224, 112, 32], idle: [102, 115, 255] };
+
+// Deterministic seeded RNG (mulberry32): returns a function giving floats in [0,1).
+function rng32(seed) {
+  var a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// Midpoint displacement over d[lo..hi]; ends stay fixed.
+function displace(d, lo, hi, amp, rnd) {
+  if (hi - lo < 2) return;
+  var m = (lo + hi) >> 1;
+  d[m] = (d[lo] + d[hi]) / 2 + (rnd() - 0.5) * amp;
+  displace(d, lo, m, amp * 0.55, rnd); displace(d, m, hi, amp * 0.55, rnd);
+}
+// One bolt shape: 13 lateral offsets (0 at both ends) + 2 forks x 4 offsets.
+function boltShape(rnd) {
+  var d = new Float32Array(ARC_SEG + 1 + 2 * FORK_SEG), i;
+  displace(d, 0, ARC_SEG, 1, rnd);
+  for (i = ARC_SEG + 1; i < d.length; i++) d[i] = rnd() - 0.5;
+  return d;
+}
+function arcState(seed) {
+  var rnd = rng32(seed || 7), arcs = [], i;
+  for (i = 0; i < ARC_N; i++) arcs.push({
+    a0: i * 2.39996 + (rnd() - 0.5) * 0.3, ang: i * 2.39996, v: (rnd() - 0.5) * 1.2, ph: rnd() * 6.2832, sway: 0.12 + rnd() * 0.2,
+    side: rnd() < 0.5 ? -1 : 1, fj: [3 + (rnd() * 3 | 0), 6 + (rnd() * 4 | 0)],
+    from: boltShape(rnd), to: boltShape(rnd), t0: 0, per: 0.2, mix: 0, rgb: ARC_COL.idle.slice(), q: 0
+  });
+  return { rnd: rnd, arcs: arcs, env: { u: 0, m: 0, i: 0, th: 0, pull: 0, pw: 0, lamp: 0 }, dir: {}, rev: {},
+    last: 0, spin: 0, px: 0, py: -WALL, tap: -1e9, tapSeen: null, pkU: 0, pkM: 0, rgb: ARC_COL.idle.slice(), bx: new Float32Array(ARC_SEG + 1), by: new Float32Array(ARC_SEG + 1) };
+}
+// Flash-safe envelope: slew-limited (<= MAX_STEP per frame, full swing takes up/down seconds).
+// The brightness envelopes (u, m, i, pw) share ONE direction: brightness as a whole may reverse
+// at most once per HOLD_MS, so one up+down pair needs >= 440 ms (< 3 per second). An envelope
+// that wants the other direction waits its turn. Changes under 2% pass straight through.
+function easeEnv(S, k, target, dt, now, up, down) {
+  var v = S.env[k], d = target - v, grp = (k === 'th' || k === 'pull') ? k : 'b';
+  if (Math.abs(d) < 0.02) return (S.env[k] = target);
+  var dir = d > 0 ? 1 : -1;
+  if (S.dir[grp] !== dir) {
+    if (now - (S.rev[grp] === undefined ? -1e9 : S.rev[grp]) < HOLD_MS) return v;
+    S.dir[grp] = dir; S.rev[grp] = now;
+  }
+  return (S.env[k] = v + dir * Math.min(Math.abs(d), MAX_STEP, dt / (dir > 0 ? up : down)));
+}
+function rgba(c, a) { return 'rgba(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ',' + Math.max(0, Math.min(1, a)).toFixed(3) + ')'; }
+
+// Draws the core and the arcs. Returns {arcs, segs, rgb, level} (counts for budget tests;
+// rgb/level are the blended state colour and energy, for drawGlassShell).
+function drawArcs(x, S, g) {
+  var COL = g.col || ARC_COL, R = g.R, cx = g.cx, cy = g.cy, st = g.st, red = !!g.reduce, now = g.now, t = g.t;
+  var dt = S.last ? Math.min(0.05, Math.max(0, (now - S.last) / 1000)) : 0; S.last = now;
+  var dark = st === 'offline' || st === 'connecting', slow = red ? 0.6 : 0;
+  var U = (st === 'user' || st === 'barge') ? g.lu : 0;
+  var M = (st === 'mort' || st === 'barge') ? g.lm : (st === 'thinking' ? 0.35 : 0);
+  // peak-hold (instant attack, 0.6 s release) so syllable-rate dips do not reach the brightness at all
+  U = S.pkU = Math.max(U, S.pkU - dt / 0.6); M = S.pkM = Math.max(M, S.pkM - dt / 0.6);
+  var eu = easeEnv(S, 'u', U, dt, now, slow || 0.2, slow || 0.45);
+  var em = easeEnv(S, 'm', M, dt, now, slow || 0.25, slow || 0.5);   // rust swings a little slower
+  var ei = easeEnv(S, 'i', st === 'idle' ? 1 : (st === 'muted' ? 0.25 : 0), dt, now, 0.5, 0.5);
+  var eth = easeEnv(S, 'th', st === 'thinking' ? 1 : 0, dt, now, 0.5, 0.5);
+  var pw = easeEnv(S, 'pw', dark ? 0 : (st === 'muted' ? 0.45 : 1), dt, now, 0.4, 0.4);
+  // pointer / finger: contact point clamped to the inner wall; eased in and out
+  var p = g.ptr, pd = (p && p.active !== false) ? Math.hypot(p.x, p.y) : 9, on = pd <= 1.2 && !dark;
+  if (on) { var s = WALL / (pd || 1); S.px = p.x * s; S.py = p.y * s; }   // contact point on the glass at the pointer's angle, as in the demo
+  var pull = easeEnv(S, 'pull', on ? 1 : 0, dt, now, 0.18, 0.3), pa = Math.atan2(S.py, S.px);
+  // tap: one sin^2 pulse of 450 ms; at most one pulse per 700 ms
+  if (g.tap != null && g.tap !== S.tapSeen) { S.tapSeen = g.tap; if (now >= S.tap + 700) S.tap = now; }
+  var age = (now - S.tap) / 450, tp = (age >= 0 && age < 1) ? Math.pow(Math.sin(Math.PI * age), 2) : 0;
+  if (!red) S.spin += dt * 0.9 * eth;
+  // state colour: channel blend, eased; holds its last value when everything is silent
+  var E = Math.max(eu, em), lv = Math.max(E, 0.2 * ei), wsum = eu + em + 0.4 * ei, kr = Math.min(1, dt * 5) * Math.min(1, wsum / 0.1), rgb = S.rgb;
+  for (var kk = 0; kk < 3; kk++) rgb[kk] += ((COL.user[kk] * eu + COL.mort[kk] * em + COL.idle[kk] * 0.4 * ei) / (wsum || 1) - rgb[kk]) * (wsum > 0 ? kr : 0);
+  x.save(); x.globalCompositeOperation = 'lighter'; x.lineCap = 'round'; x.lineJoin = 'round';
+  // large core: radius (58 + 22*level)/148 of R, white-hot centre into the state colour; one gradient fill
+  var rc = R * (58 + 22 * lv) / 148 + (red ? 0 : R * (3 / 148) * Math.sin(t * 5));
+  if (pw > 0.01) {
+    var cg = x.createRadialGradient(cx, cy, 0, cx, cy, rc);
+    cg.addColorStop(0, rgba([255, 255, 255], 0.95 * pw)); cg.addColorStop(0.25, rgba([255, 255, 255], (0.35 + 0.3 * lv) * pw));
+    cg.addColorStop(0.5, rgba(rgb, (0.45 + 0.4 * lv) * pw)); cg.addColorStop(1, rgba(rgb, 0));
+    x.fillStyle = cg; x.beginPath(); x.arc(cx, cy, rc, 0, 6.2832); x.fill();
+  }
+  // how many arcs per channel (fractional: the last one fades instead of popping)
+  var cu = 2 * Math.min(1, eu / 0.1) + 9 * eu, cm = 2 * Math.min(1, em / 0.1) + 9 * em, ci = 4 * ei, tot = cu + cm;
+  if (tot > ARC_N) { cu *= ARC_N / tot; cm *= ARC_N / tot; }
+  var r0 = 0.6 * rc / R, i, a, near = -1, best = 9, ang = [], al = [], lvl = [];
+  for (i = 0; i < ARC_N; i++) {
+    a = S.arcs[i]; var c, A = 0, L = 0.15;
+    if (i < cu) { A = Math.min(1, cu - i); c = COL.user; L = eu; }
+    else if (i < cu + cm) { A = Math.min(1, cu + cm - i); c = COL.mort; L = em; }
+    else if (i < cu + cm + ci) { A = Math.min(1, cu + cm + ci - i) * 0.6; c = COL.idle; }
+    else c = a.rgb;
+    var kc = (a.q > 0.01 && A > 0) ? Math.min(1, dt * 6) : 1;          // colour eases while visible
+    a.rgb[0] += (c[0] - a.rgb[0]) * kc; a.rgb[1] += (c[1] - a.rgb[1]) * kc; a.rgb[2] += (c[2] - a.rgb[2]) * kc;
+    a.q = A * pw; al.push(a.q); lvl.push(L);
+    if (!red) {                                                              // endpoints wander round the sphere (random walk, like the approved demo)
+      a.v += (S.rnd() - 0.5) * dt * 6; a.v = Math.max(-1.4, Math.min(1.4, a.v)); a.ang += dt * (a.v + 2.4 * eth);
+    }
+    ang.push(a.ang);
+    var da = Math.abs(Math.atan2(Math.sin(ang[i] - pa), Math.cos(ang[i] - pa)));
+    if (a.q > 0.01 && da < best) { best = da; near = i; }
+  }
+  var nArc = 0, nSeg = 0, j, k, vis = 0, Lraw = 0, NP = ARC_SEG + 1 + 2 * (FORK_SEG + 1);
+  for (i = 0; i < ARC_N; i++) if (al[i] > 0.01) vis++;
+  S.rank = 0; S.grab = Math.max(2, Math.ceil(vis * 0.6));
+  // pass 1: geometry and an estimate of the light each arc gives
+  for (i = 0; i < ARC_N; i++) {
+    a = S.arcs[i]; a.on = al[i] > 0.01; if (!a.on) continue;
+    if (!a.gx) { a.gx = new Float32Array(NP); a.gy = new Float32Array(NP); }
+    var bx = a.gx, by = a.gy; nArc++;
+    // re-strike: a new bolt every frame when loud, every 3 frames when quiet (the flash limiter below keeps this safe)
+    if (!red) {
+      if (t >= a.t0 + a.per || t < a.t0) { a.from = a.to; a.to = boltShape(S.rnd); a.t0 = t; a.per = (0.05 - 0.034 * lvl[i]) * (0.8 + 0.4 * S.rnd()); }
+      a.mix = (t - a.t0) / a.per;
+    }
+    var mx = a.mix * a.mix * (3 - 2 * a.mix);
+    // end point on the wall; 60% of the arcs snap to the contact point (Reduce Motion: nearest only)
+    var da2 = Math.atan2(Math.sin(ang[i] - pa), Math.cos(ang[i] - pa));
+    var w = i === near ? 1 : (red ? 0 : (S.rank < S.grab ? 1 : Math.exp(-da2 * da2 / 0.5))), q = pull * w; S.rank++;
+    var ex = Math.cos(ang[i]) * WALL, ey = Math.sin(ang[i]) * WALL;
+    var jx = (a.from[3] + (a.to[3] - a.from[3]) * mx) * 0.08, jy = (a.from[9] + (a.to[9] - a.from[9]) * mx) * 0.08;
+    ex += (S.px + jx - ex) * q; ey += (S.py + jy - ey) * q;
+    var el = Math.hypot(ex, ey) || 1, sx = ex / el * r0, sy = ey / el * r0;   // start on the core's edge
+    var dx = ex - sx, dy = ey - sy, len = Math.hypot(dx, dy) || 1, nx = -dy / len, ny = dx / len;
+    var amp = len * (0.34 + 0.24 * lvl[i]), bow = eth * 0.4 * len;             // jagged like the demo; thinking bends into a swirl
+    var pl = 0;
+    for (j = 0; j <= ARC_SEG; j++) {
+      var u = j / ARC_SEG, hump = Math.sin(Math.PI * u), off = (a.from[j] + (a.to[j] - a.from[j]) * mx) * amp + bow * hump;
+      bx[j] = cx + R * (sx + dx * u + nx * off); by[j] = cy + R * (sy + dy * u + ny * off);
+      if (j) pl += Math.hypot(bx[j] - bx[j - 1], by[j] - by[j - 1]);
+    }
+    nSeg += ARC_SEG; a.nf = lvl[i] > 0.3 ? 2 : 1;
+    var fl0 = 0;
+    for (k = 0; k < a.nf; k++) {                                               // forks: 1; a 2nd grows in when loud
+      var j0 = a.fj[k], fa = Math.atan2(dy, dx) + (k ? -a.side : a.side) * 0.55, fl = R * len * (1 - j0 / ARC_SEG) * 0.6 * (k ? Math.min(1, (lvl[i] - 0.3) / 0.25) : 1);
+      var fx = Math.cos(fa), fy = Math.sin(fa), o0 = ARC_SEG + 1 + k * FORK_SEG, b0 = ARC_SEG + 1 + k * (FORK_SEG + 1);
+      bx[b0] = bx[j0]; by[b0] = by[j0];
+      for (j = 1; j <= FORK_SEG; j++) {
+        var fo = (a.from[o0 + j - 1] + (a.to[o0 + j - 1] - a.from[o0 + j - 1]) * mx) * fl * 0.22, fu = j / FORK_SEG;
+        bx[b0 + j] = bx[j0] + fx * fl * fu - fy * fo; by[b0 + j] = by[j0] + fy * fl * fu + fx * fo;
+      }
+      fl0 += fl; nSeg += FORK_SEG;
+    }
+    a.Aa = al[i] * (0.75 + 0.25 * lvl[i]) * (1 + 0.2 * tp); a.w0 = R * (1.2 + 1.6 * lvl[i]) / 148;
+    a.hx = cx + R * ex; a.hy = cy + R * ey; a.hr = R * (0.07 + 0.06 * lvl[i]);
+    var lum = (0.2126 * a.rgb[0] + 0.7152 * a.rgb[1] + 0.0722 * a.rgb[2]) / 255;
+    a.L = a.Aa * ((pl + fl0) * a.w0 * (lum * (6 * 0.08 + 2.5 * 0.22) + 0.8 * 0.75) + a.hr * a.hr * 0.5 * (0.5 + lum * 0.45));
+    Lraw += a.L;
+  }
+  // flash limiter: the arcs' total light follows a slew-limited envelope that shares the brightness
+  // direction lock with the core (at most one reversal per HOLD_MS), so re-strikes can look free
+  // while the orb's overall brightness cannot flicker.
+  var Ln = Lraw / (R * R * LFULL), lamp = easeEnv(S, 'lamp', Ln, dt, now, 0.15, 0.3);
+  var gain = Ln > 1e-4 ? Math.max(0, Math.min(2.5, lamp / Ln)) : 0;
+  // pass 2: draw
+  for (i = 0; i < ARC_N; i++) {
+    a = S.arcs[i]; if (!a.on) continue;
+    var Ab = a.Aa * gain, gx = a.gx, gy = a.gy;
+    x.beginPath(); x.moveTo(gx[0], gy[0]);
+    for (j = 1; j <= ARC_SEG; j++) x.lineTo(gx[j], gy[j]);
+    for (k = 0; k < a.nf; k++) { var c0 = ARC_SEG + 1 + k * (FORK_SEG + 1); x.moveTo(gx[c0], gy[c0]); for (j = 1; j <= FORK_SEG; j++) x.lineTo(gx[c0 + j], gy[c0 + j]); }
+    // additive glow: wide faint, mid, then thin white-hot core; same path stroked three times
+    x.strokeStyle = rgba(a.rgb, Ab * 0.08); x.lineWidth = a.w0 * 6; x.stroke();
+    x.strokeStyle = rgba(a.rgb, Ab * 0.22); x.lineWidth = a.w0 * 2.5; x.stroke();
+    x.strokeStyle = rgba([255, 255, 255], Ab * 0.75); x.lineWidth = a.w0 * 0.8; x.stroke();
+    // soft hot spot where the arc meets the glass
+    var hg = x.createRadialGradient(a.hx, a.hy, 0, a.hx, a.hy, a.hr);
+    hg.addColorStop(0, rgba([255, 255, 255], Ab * 0.5)); hg.addColorStop(0.3, rgba(a.rgb, Ab * 0.45)); hg.addColorStop(1, rgba(a.rgb, 0));
+    x.fillStyle = hg; x.fillRect(a.hx - a.hr, a.hy - a.hr, 2 * a.hr, 2 * a.hr);
+  }
+  x.restore();
+  return { arcs: nArc, segs: nSeg, rgb: rgb.slice(), level: lv * pw };
+}
+
+// ---- Crystal glass shell: port of docs/interface-research/orb-crystal/glass-orb.html
+// (STYLE.crystal, drawGlass + buildEnv) = CrystalGlassRig.swift. Constants are the frozen ones.
+// drawGlassShell(ctx,cx,cy,r,stateRGB,level[,opt]): opt.interior(ctx) is called between the
+// glass body and the wall glow, already clipped to 0.885 r (draw the core and arcs there);
+// without it the shell is drawn over whatever is on the canvas. opt.dpr = device px per point.
+// level 0..1 (already eased) -> strength s; s only drives the halo and the wall glow (plan D7).
+// The room reflections never change, so they are built once per radius and kept on ctx.canvas
+// (needs ctx.canvas.ownerDocument; skipped where there is none). Blurs use ctx.filter.
+var CG = { INK: [6, 10, 14], SKY: [206, 228, 255], ICE: [188.7, 232.05, 255], W: [255, 255, 255], KEY_L: [-0.74, -0.70, -0.10],
+  BODY: [[0, 0.04], [0.7, 0.09], [0.88, 0.22], [0.965, 0.34], [1, 0.18]], CLIP: 0.885,
+  FRES: [0, 0.3, 0.5, 0.65, 0.75, 0.82, 0.87, 0.9, 0.93, 0.95, 0.965, 0.975, 0.985, 0.992, 0.997, 1] };
+function cgLight(L, w, h, p, u0) {           // reflection outline of a rounded-rectangle light
+  var nrm = function (v) { var l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; };
+  var crs = function (a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; };
+  L = nrm(L); var T1 = nrm(crs(L, [0, -1, 0])), T2 = crs(T1, L), pts = [], i;
+  var at = function (u, v) { var n = nrm([L[0] + u * T1[0] + v * T2[0], L[1] + u * T1[1] + v * T2[1], L[2] + u * T1[2] + v * T2[2]]);
+    n = nrm([n[0], n[1], n[2] + 1]); return [n[0], n[1]]; };
+  for (i = 0; i < 96; i++) { var t = i / 96 * 6.283185307, cu = Math.cos(t), su = Math.sin(t);
+    pts.push(at(u0 + w * Math.sign(cu) * Math.pow(Math.abs(cu), 2 / p), h * Math.sign(su) * Math.pow(Math.abs(su), 2 / p))); }
+  return { pts: pts, mid: at(u0, 0) };
+}
+function cgFillLight(c, x0, y0, r, sh, alpha) {
+  var m = sh.mid, len = Math.hypot(m[0], m[1]) || 1, ux = m[0] / len, uy = m[1] / len;
+  c.beginPath(); sh.pts.forEach(function (p, i) { if (i) c.lineTo(x0 + p[0] * r, y0 + p[1] * r); else c.moveTo(x0 + p[0] * r, y0 + p[1] * r); }); c.closePath();
+  var g = c.createLinearGradient(x0 + ux * r, y0 + uy * r, x0 + ux * r * 0.35, y0 + uy * r * 0.35);
+  g.addColorStop(0, rgba(CG.W, alpha)); g.addColorStop(1, rgba(CG.W, alpha * 0.55)); c.fillStyle = g; c.fill();
+}
+function cgRimArc(c, x0, y0, rr, peak, width, col) {   // dispersion: 48 faded segments, -175deg..-95deg
+  var a0 = -175 * Math.PI / 180, a1 = -95 * Math.PI / 180, i; c.lineCap = 'round'; c.lineWidth = width;
+  for (i = 0; i < 48; i++) { var b0 = a0 + (a1 - a0) * i / 48, b1 = a0 + (a1 - a0) * (i + 1) / 48;
+    c.beginPath(); c.moveTo(x0 + Math.cos(b0) * rr, y0 + Math.sin(b0) * rr); c.lineTo(x0 + Math.cos(b1) * rr, y0 + Math.sin(b1) * rr);
+    c.strokeStyle = rgba(col, peak * Math.pow(Math.sin(Math.PI * (i + 0.5) / 48), 1.6)); c.stroke(); }
+}
+function cgEnv(doc, r, dpr) {                 // room reflections (buildEnv steps 1,3,5,7,8), one bitmap
+  var half = Math.ceil(r * 1.03) + 2, cv = doc.createElement('canvas'), tmp = doc.createElement('canvas'), g;
+  cv.width = cv.height = tmp.width = tmp.height = 2 * half;
+  var e = cv.getContext('2d'), t = tmp.getContext('2d'), c = half, disc = function (k, rad) { k.beginPath(); k.arc(c, c, rad, 0, 6.283185307); };
+  var key = [cgLight(CG.KEY_L, 0.12, 0.21, 6, -0.14), cgLight(CG.KEY_L, 0.12, 0.21, 6, 0.14)], strip = cgLight([0.80, 0.50, -0.30], 0.10, 0.55, 6, 0);
+  g = t.createLinearGradient(c, c - r, c, c + r);                        // 1. sky, masked by Fresnel, at 0.62
+  [[0, 1], [0.45, 0.55], [0.6, 0.22], [1, 0.10]].forEach(function (s) { g.addColorStop(s[0], rgba(CG.SKY, s[1])); });
+  disc(t, r); t.fillStyle = g; t.fill(); t.globalCompositeOperation = 'destination-in';
+  g = t.createRadialGradient(c, c, 0, c, c, r);
+  CG.FRES.forEach(function (p) { g.addColorStop(p, rgba(CG.W, 0.04 + 0.96 * Math.pow(1 - Math.sqrt(Math.max(0, 1 - p * p)), 5))); });
+  disc(t, r); t.fillStyle = g; t.fill(); e.globalAlpha = 0.62; e.drawImage(tmp, 0, 0); e.globalAlpha = 1;
+  e.save(); disc(e, r * 0.985); e.clip(); e.filter = 'blur(' + r * 0.05 + 'px)';     // 3. caustic, lower right
+  var px = c + r * 0.50, py = c + r * 0.58; g = e.createRadialGradient(px, py, 0, px, py, r * 0.26);
+  g.addColorStop(0, rgba(CG.W, 0.24)); g.addColorStop(0.5, rgba(CG.ICE, 0.096)); g.addColorStop(1, rgba(CG.ICE, 0));
+  e.fillStyle = g; e.beginPath(); e.arc(px, py, r * 0.26, 0, 6.283185307); e.fill(); e.restore();
+  e.filter = 'blur(' + Math.max(0.35 * dpr, r * 0.010) + 'px)';                     // 5. two-pane window + strip
+  key.forEach(function (k) { cgFillLight(e, c, c, r, k, 0.95); }); cgFillLight(e, c, c, r, strip, 0.45);
+  e.save(); e.filter = 'blur(' + r * 0.03 + 'px)'; e.translate(c, c); e.rotate(Math.PI); e.scale(0.74, 0.74); e.translate(-c, -c);
+  key.forEach(function (k) { cgFillLight(e, c, c, r, k, 0.22); }); e.restore();     //    window again, far wall
+  e.filter = 'blur(' + 0.3 * dpr + 'px)';                                           // 7. dispersion on the lit rim
+  cgRimArc(e, c, c, r, 0.34, 0.9 * dpr, [110, 215, 255]); cgRimArc(e, c, c, r * 0.982, 0.24, 0.9 * dpr, [255, 165, 110]);
+  e.filter = 'none'; disc(e, r * 0.996); e.strokeStyle = rgba(CG.W, 0.20); e.lineWidth = 0.7 * dpr; e.stroke();   // 8. hairline
+  return { cv: cv, half: half, r: r, dpr: dpr };
+}
+function drawGlassShell(ctx, cx, cy, r, stateRGB, level, opt) {
+  opt = opt || {}; var dpr = opt.dpr || 1, lv = Math.max(0, Math.min(1, level || 0)), g;
+  var s = 0.16 + 0.36 * Math.min(1, lv * 8) + 0.48 * lv;   // Swift: ready ? 0.52 + 0.48*energy : 0.16, made continuous
+  var disc = function (rad) { ctx.beginPath(); ctx.arc(cx, cy, rad, 0, 6.283185307); };
+  ctx.save(); ctx.globalCompositeOperation = 'source-over';
+  g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.2);              // 1. bloom just outside the glass
+  g.addColorStop(0.80, rgba(stateRGB, 0)); g.addColorStop(0.86, rgba(stateRGB, 0.035 * s)); g.addColorStop(1, rgba(stateRGB, 0));
+  disc(r * 1.2); ctx.fillStyle = g; ctx.fill();
+  if (opt.backdrop) { ctx.save(); disc(r); ctx.clip(); opt.backdrop(ctx); ctx.restore(); }   // depth option 3 only: what's behind, seen through the ball
+  g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);                    // 3. dark, nearly clear body
+  CG.BODY.forEach(function (b) { g.addColorStop(b[0], rgba(CG.INK, b[1])); }); disc(r); ctx.fillStyle = g; ctx.fill();
+  if (opt.interior) { ctx.save(); disc(r * CG.CLIP); ctx.clip(); opt.interior(ctx); ctx.restore(); }   // 4. core + arcs
+  ctx.save(); disc(r); ctx.clip(); ctx.globalCompositeOperation = 'lighter'; ctx.filter = 'blur(' + r * 0.035 + 'px)';   // 5. wall glow
+  g = ctx.createLinearGradient(cx - r * 0.2, cy - r * 0.2, cx + r * 0.75, cy + r * 0.75);
+  g.addColorStop(0, rgba(stateRGB, 0)); g.addColorStop(1, rgba(stateRGB, 0.46 * s));
+  ctx.beginPath(); ctx.arc(cx, cy, r * 1.02, 0, 6.283185307); ctx.moveTo(cx + r * 0.84, cy); ctx.arc(cx, cy, r * 0.84, 0, 6.283185307);
+  ctx.fillStyle = g; ctx.fill('evenodd'); ctx.restore();
+  disc(r * 0.885); ctx.strokeStyle = 'rgba(0,0,0,0.38)'; ctx.lineWidth = Math.max(0.8 * dpr, r * 0.022); ctx.stroke();   // 6. wall line
+  disc(r * 0.903); ctx.strokeStyle = rgba(CG.ICE, 0.10); ctx.lineWidth = 0.6 * dpr; ctx.stroke();
+  var cvs = ctx.canvas, doc = cvs && cvs.ownerDocument, env = cvs && cvs._crystalEnv;                                   // 7. reflections, screened
+  if (doc && (!env || env.r !== r || env.dpr !== dpr)) env = cvs._crystalEnv = cgEnv(doc, r, dpr);
+  if (env) { ctx.globalCompositeOperation = 'screen'; var edx = opt.envDx || 0, edy = opt.envDy || 0;   // envDx/Dy: depth option 2 only
+    if (edx || edy) { ctx.save(); disc(r); ctx.clip(); }
+    ctx.drawImage(env.cv, cx - env.half + edx, cy - env.half + edy); if (edx || edy) ctx.restore(); }
+  ctx.restore();
+}
+  // Scale each 1280x800 stage to its frame.
+  function fit(){document.querySelectorAll('.frame').forEach(function(f){var s=f.querySelector('.stage');if(s)s.style.setProperty('--k',(f.clientWidth/1280).toFixed(4));});}
+  fit(); if(window.ResizeObserver){var ro=new ResizeObserver(fit);document.querySelectorAll('.frame').forEach(function(f){ro.observe(f);});} else window.addEventListener('resize',fit);
+
+  // Crystal orb with dual-channel comet trails (teal user, warm assistant), after docs/interface-research/orb-crystal.
+  var n=0;
+  document.querySelectorAll('.orb').forEach(function(el){
+    var c=el.getAttribute('data-core')||'#2FD6C3', mini=el.hasAttribute('data-mini'), i=n++;
+    var trails = mini ? '' :
+      '<g class="trails"><path d="M58 70 A120 120 0 0 1 200 34" fill="none" stroke="url(#tc'+i+')" stroke-width="2.4" stroke-linecap="round"/><circle cx="200" cy="34" r="4.5" fill="#7FE6FF"/>'+
+      '<path d="M246 214 A120 120 0 0 1 104 266" fill="none" stroke="url(#ta'+i+')" stroke-width="2.4" stroke-linecap="round"/><circle cx="104" cy="266" r="4.5" fill="#FFC27A"/>'+
+      '<path d="M40 190 A120 120 0 0 1 36 120" fill="none" stroke="rgba(255,180,84,.45)" stroke-width="1.5" stroke-dasharray="1 4" stroke-linecap="round"/>'+
+      '<path d="M262 106 A120 120 0 0 1 268 176" fill="none" stroke="rgba(44,201,255,.45)" stroke-width="1.5" stroke-dasharray="1 4" stroke-linecap="round"/></g>';
+    el.innerHTML='<svg viewBox="0 0 300 300" aria-hidden="true"><defs>'+
+      '<radialGradient id="sh'+i+'" cx="42%" cy="38%" r="70%"><stop offset="0" stop-color="#2a3640" stop-opacity=".55"/><stop offset=".7" stop-color="#11181e" stop-opacity=".75"/><stop offset="1" stop-color="#0b1014" stop-opacity=".9"/></radialGradient>'+
+      '<radialGradient id="co'+i+'"><stop offset="0" stop-color="#ffffff" stop-opacity=".95"/><stop offset=".12" stop-color="'+c+'" stop-opacity=".95"/><stop offset=".55" stop-color="'+c+'" stop-opacity=".28"/><stop offset="1" stop-color="'+c+'" stop-opacity="0"/></radialGradient>'+
+      '<linearGradient id="tc'+i+'" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#2CC9FF" stop-opacity="0"/><stop offset="1" stop-color="#2CC9FF"/></linearGradient>'+
+      '<linearGradient id="ta'+i+'" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFB454" stop-opacity="0"/><stop offset="1" stop-color="#FFB454"/></linearGradient>'+
+      '</defs>'+trails+
+      '<circle cx="150" cy="150" r="96" fill="url(#sh'+i+')" stroke="'+c+'" stroke-opacity=".45" stroke-width="2"/>'+
+      '<g class="core"><circle cx="150" cy="150" r="74" fill="url(#co'+i+')"/>'+
+      '<ellipse cx="150" cy="150" rx="46" ry="20" fill="none" stroke="'+c+'" stroke-opacity=".55" transform="rotate(28 150 150)"/>'+
+      '<ellipse cx="150" cy="150" rx="46" ry="20" fill="none" stroke="'+c+'" stroke-opacity=".45" transform="rotate(-36 150 150)"/>'+
+      '<ellipse cx="150" cy="150" rx="40" ry="14" fill="none" stroke="'+c+'" stroke-opacity=".35" transform="rotate(90 150 150)"/></g>'+
+      '<path d="M88 104 A70 70 0 0 1 124 74" fill="none" stroke="#fff" stroke-opacity=".75" stroke-width="5" stroke-linecap="round"/>'+
+      '<path d="M96 116 A60 60 0 0 1 112 96" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="3" stroke-linecap="round"/>'+
+      '<path d="M206 196 A70 70 0 0 1 186 214" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="3" stroke-linecap="round"/>'+
+      '</svg>';
+  });
+
+  // Mission Control lanes and blocks. Scale: x = 220 + 200 px per second; "now" = 2.7 s at x=760.
+  var agents=[['Developer','idle'],['Analyst','sonnet','run'],['Systems','idle'],['App Builder','idle'],['Librarian','haiku','done'],['Scheduler','idle']];
+  var L=document.getElementById('mc-lanes'), B=document.getElementById('mc-blocks'), A=document.getElementById('mc-axis');
+  if(L){
+    var h='';
+    agents.forEach(function(a,k){
+      var y=80+k*112, active=a[2]==='run', done=a[2]==='done', op=(active||done)?1:.45;
+      h+='<div style="left:0;top:'+(y-24)+'px;width:200px;height:112px;border-bottom:1px solid #1f272e"></div>';
+      if(active) h+='<div style="left:0;top:'+(y-24)+'px;width:2px;height:112px;background:#2CC9FF"></div>';
+      h+='<div style="left:22px;top:'+(y+8)+'px;font-size:13px;font-weight:600;opacity:'+op+'">'+a[0]+'</div>';
+      h+='<div class="mono" style="left:22px;top:'+(y+30)+'px;font-size:11px;color:#8FA8B8;opacity:'+op+'">'+(a[1]==='idle'?'idle':a[1]+(done?' · done 0.7 s':' · working'))+'</div>';
+      h+='<div style="left:200px;top:'+(y-24)+'px;width:760px;height:112px;border-bottom:1px solid #1a2128"></div>';
+    });
+    L.outerHTML=h;
+    var ax='';
+    for(var t=0;t<=2.5;t+=0.5){var x=220+t*200;ax+='<div style="left:'+x+'px;top:56px;width:1px;height:744px;background:rgba(143,168,184,.08)"></div><div class="mono" style="left:'+(x+4)+'px;top:62px;font-size:10px;color:#8FA8B8">'+t.toFixed(1)+'s</div>';}
+    A.outerHTML=ax;
+    function blk(lane,t0,t1,name,lat,state,row){
+      var x=220+t0*200, w=(t1-t0)*200, y=80+lane*112+8;
+      var bg=state==='run'?'':'background:rgba(44,201,255,.12);', bd=state==='run'?'#2CC9FF':'rgba(44,201,255,.35)';
+      var s='<div class="'+(state==='run'?'running':'')+'" style="left:'+x+'px;top:'+y+'px;width:'+w+'px;height:28px;border-radius:6px;'+bg+'border:1px solid '+bd+'"></div>';
+      var inside=w>110;
+      if(inside) s+='<div class="mono" style="left:'+(x+8)+'px;top:'+(y+7)+'px;font-size:11px;color:#E2F1F9;white-space:nowrap">'+name+(lat?' · '+lat:'')+'</div>';
+      else s+='<div class="mono" style="left:'+x+'px;top:'+(y+34+row*16)+'px;font-size:11px;color:#8FA8B8;white-space:nowrap">'+name+' · '+lat+'</div>';
+      return s;
+    }
+    var b='';
+    b+=blk(4,0.05,0.46,'daily_brief','410 ms ✓','done',0);
+    b+=blk(4,0.50,0.68,'memory_search','180 ms ✓','done',1);
+    b+=blk(1,0.62,1.24,'weather_forecast','620 ms ✓','done',0);
+    b+=blk(1,1.30,2.70,'radar_frames','1.4 s','run',0);
+    b+='<div style="left:220px;top:'+(80+1*112+46)+'px;font-size:11px;color:#8FA8B8">Rain chance for tomorrow</div>';
+    b+='<div style="left:220px;top:'+(80+4*112+70)+'px;font-size:11px;color:#8FA8B8">Summarise this morning’s mail</div>';
+    B.outerHTML=b;
+  }
+
+  // Hourly rain bars (6 AM to 5 PM), shared sample series.
+  var rain=[10,10,15,20,20,30,40,55,70,70,65,50], hrs=['6a','7','8','9','10','11','12p','1','2','3','4','5'];
+  function barsSVG(w,h,showLine){
+    var n=rain.length, gap=8, bw=(w-gap*(n-1))/n, top=6, base=h-20, s='';
+    s+='<svg style="position:static" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'" aria-hidden="true">';
+    [0,50,100].forEach(function(v){var y=base-(base-top)*v/100;s+='<line x1="0" x2="'+w+'" y1="'+y+'" y2="'+y+'" stroke="rgba(143,168,184,'+(v===50?0:.12)+')"/>';});
+    rain.forEach(function(v,k){var x=k*(bw+gap), bh=(base-top)*v/100, hot=v>=50;
+      s+='<rect x="'+x.toFixed(1)+'" y="'+(base-bh).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+bh.toFixed(1)+'" rx="3" fill="#2CC9FF" fill-opacity="'+(hot?.8:.28)+'"/>';
+      s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(h-4)+'" text-anchor="middle" font-size="10" fill="#8FA8B8" font-family="Inter,system-ui">'+hrs[k]+'</text>';
+      if(v===70&&k===8) s+='<text x="'+(x+bw/2).toFixed(1)+'" y="'+(base-bh-6).toFixed(1)+'" text-anchor="middle" font-size="11" font-weight="600" fill="#E2F1F9" font-family="Inter,system-ui">70%</text>';
+    });
+    if(showLine){var y5=base-(base-top)*.5;s+='<line x1="0" x2="'+w+'" y1="'+y5+'" y2="'+y5+'" stroke="#FFB454" stroke-dasharray="4 4"/><text x="'+(w-2)+'" y="'+(y5-5)+'" text-anchor="end" font-size="10" fill="#FFB454" font-family="Inter,system-ui">likely</text>';}
+    s+='</svg>'; return s;
+  }
+  function bars(id,w,h,l){var el=document.getElementById(id); if(el) el.innerHTML=barsSVG(w,h,l);}
+  bars('depth-bars',640,220,true); bars('comp-bars',472,122,true);
+
+  // ---------- Direction 5: carousel panels ----------
+  var IC={pin:'<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 1h4l-.6 4 2 2H2.6l2-2zM6 7v4" fill="none" stroke="#E2F1F9" stroke-width="1.1"/></svg>',
+          more:'<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="2" cy="6" r="1.1" fill="#E2F1F9"/><circle cx="6" cy="6" r="1.1" fill="#E2F1F9"/><circle cx="10" cy="6" r="1.1" fill="#E2F1F9"/></svg>',
+          x:'<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="#E2F1F9" stroke-width="1.2"/></svg>'};
+  function iconBtn(svg){return '<span style="position:static;width:28px;height:28px;border-radius:14px;border:1px solid rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center">'+svg+'</span>';}
+  function stat(v,l,c){return '<div style="position:static;padding:10px 16px;border-left:1px solid #2A343D"><div style="position:static;font-size:28px;font-weight:300;line-height:1.1'+(c?';color:'+c:'')+'">'+v+'</div><div style="position:static;font-size:11px;color:#8FA8B8;margin-top:4px">'+l+'</div></div>';}
+  function weatherFront(w,h){
+    var s='<div style="left:28px;top:22px;font-size:17px;font-weight:600">Tomorrow · Home</div>'+
+      '<div style="left:28px;top:48px;font-size:13px;color:#8FA8B8">Rain likely after 2 PM</div>'+
+      '<div style="right:20px;top:20px;display:flex;gap:8px">'+iconBtn(IC.pin)+iconBtn(IC.more)+iconBtn(IC.x)+'</div>'+
+      '<div style="left:28px;top:82px;width:'+(w-56)+'px;height:76px;border:1px solid #2A343D;border-radius:12px;display:grid;grid-template-columns:repeat(3,1fr);overflow:hidden">'+
+        stat('64° / 51°','high / low').replace('border-left:1px solid #2A343D','')+stat('70%','rain, peak 2 PM','#FFB454')+stat('8 mph','wind')+'</div>'+
+      '<div class="lbl" style="left:28px;top:180px;letter-spacing:.12em">Rain chance tomorrow</div>'+
+      '<div style="left:28px;top:204px;width:'+(w-56)+'px;height:'+(h-204-52)+'px">'+barsSVG(w-56,h-204-52,true)+'</div>'+
+      '<div class="mono" style="left:28px;top:'+(h-34)+'px;font-size:11px;color:#8FA8B8">weather.gov · read 7:42 AM</div>';
+    return s;
+  }
+  function ghostRows(n,w){var s='';for(var k=0;k<n;k++){s+='<div style="position:static;height:12px;width:'+(w*(0.55+0.4*((k*37)%10)/10))+'px;border-radius:6px;background:rgba(226,241,249,.22);margin-bottom:22px"></div>';}return s;}
+  function neighbour(kind,w,h){
+    var t={inbox:'Inbox brief · 6 new',radar:'Radar · Home',roadmap:'Roadmap status',memory:'Memory · weekend plans'}[kind];
+    var body='';
+    if(kind==='radar') body='<div style="position:static;width:'+(w-48)+'px;height:'+(h-90)+'px;border-radius:12px;background:radial-gradient(ellipse 120px 70px at 60% 40%,rgba(61,220,151,.55),transparent 70%),radial-gradient(ellipse 60px 40px at 64% 36%,rgba(255,180,84,.5),transparent 70%),linear-gradient(160deg,#1c242b,#151b20)"></div>';
+    else if(kind==='roadmap') body='<div style="position:static;display:grid;gap:16px">'+[0.72,0.55,0.4,0.85].map(function(f){return '<div style="position:static;height:10px;border-radius:5px;background:rgba(143,168,184,.18)"><div style="position:static;height:10px;width:'+(f*100)+'%;border-radius:5px;background:rgba(44,201,255,.6)"></div></div>';}).join('')+'</div>';
+    else body=ghostRows(7,w-48);
+    return '<div style="left:24px;top:22px;font-size:15px;font-weight:600">'+t+'</div>'+
+           '<div style="left:24px;top:62px;width:'+(w-48)+'px;filter:blur(3px)"><div class="flow">'+body+'</div></div>';
+  }
+  function panel(html,o){
+    var front=o.front;
+    var st='left:'+o.left+'px;top:'+o.top+'px;width:'+o.w+'px;height:'+o.h+'px;border-radius:20px;'+
+      (front?'background:rgba(30,36,43,.58);border:1px solid rgba(255,255,255,.18);box-shadow:0 24px 60px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.28);backdrop-filter:blur(40px);-webkit-backdrop-filter:blur(40px);z-index:3;'
+             :'background:rgba(43,50,58,.35);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);z-index:'+(o.z||1)+';opacity:'+o.op+';transform:rotateY('+o.rot+'deg) scale('+o.sc+');')+
+      'overflow:hidden';
+    return '<div style="'+st+'">'+html+'</div>';
+  }
+  var cA=document.getElementById('carA');
+  if(cA){ // container x offset 200; front at (430,110) 620x480 absolute
+    cA.innerHTML=
+      panel(neighbour('inbox',620,480),{left:110-310,top:110,w:620,h:480,rot:28,sc:.82,op:.55,z:2})+
+      panel(neighbour('radar',620,480),{left:970-310,top:110,w:620,h:480,rot:-28,sc:.82,op:.55,z:2})+
+      panel(weatherFront(620,480),{left:230,top:110,w:620,h:480,front:true});
+  }
+  var cB=document.getElementById('carB');
+  if(cB){ // front at (260,96) 760x560
+    cB.innerHTML=
+      panel(neighbour('roadmap',760,560),{left:1240-380,top:96,w:760,h:560,rot:-44,sc:.62,op:.22,z:1})+
+      panel(neighbour('inbox',760,560),{left:150-380,top:96,w:760,h:560,rot:32,sc:.80,op:.5,z:2})+
+      panel(neighbour('radar',760,560),{left:1130-380,top:96,w:760,h:560,rot:-32,sc:.80,op:.5,z:2})+
+      panel(weatherFront(760,560),{left:260,top:96,w:760,h:560,front:true});
+  }
+  document.querySelectorAll('.cara').forEach(function(el){
+    var r=el.classList.contains('r');
+    el.style.cssText+=';width:36px;height:36px;border-radius:18px;background:rgba(43,50,58,.55);border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;z-index:4';
+    el.innerHTML='<svg style="position:static" width="10" height="14" viewBox="0 0 10 14" aria-hidden="true"><path d="'+(r?'M3 2l5 5-5 5':'M7 2L2 7l5 5')+'" fill="none" stroke="#E2F1F9" stroke-width="1.6"/></svg>';
+  });
+  document.querySelectorAll('.indic').forEach(function(el){
+    var at=+el.getAttribute('data-at'), n=+el.getAttribute('data-n'), s='';
+    for(var k=0;k<n;k++) s+= k===at?'<span style="position:static;width:20px;height:6px;border-radius:3px;background:#2CC9FF"></span>':'<span style="position:static;width:6px;height:6px;border-radius:3px;background:rgba(143,168,184,.4)"></span>';
+    el.style.cssText+=';display:flex;align-items:center;justify-content:center;gap:8px;z-index:4';
+    el.innerHTML=s+'<span style="position:static;margin-left:6px;font-size:12px;font-weight:500;color:#8FA8B8">'+(at+1)+' of '+n+'</span>';
+  });
+  document.querySelectorAll('.approve').forEach(function(el){
+    el.style.cssText+=';height:48px;border-radius:12px;background:rgba(255,180,84,.12);border:1px solid #FFB454;display:flex;align-items:center;gap:10px;padding:0 10px 0 16px;font-size:13px;z-index:4';
+    el.innerHTML='<span style="position:static;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Approval needed: send 1 file to Mortimer, “meeting-notes.pdf”</span>'+
+      '<span style="position:static;height:30px;padding:0 14px;border-radius:8px;background:#2CC9FF;color:#15191D;font-weight:600;display:flex;align-items:center">Approve</span>'+
+      '<span style="position:static;height:30px;padding:0 14px;border-radius:8px;border:1px solid rgba(255,255,255,.3);display:flex;align-items:center">Decline</span>';
+  });
+
+  // Inbox list sample rows.
+  var mail=[['Team lead','Pipeline review moved to Thursday','6:31 AM',1],['Dentist office','Reminder: cleaning Thursday 9:00','6:58 AM',1],['Airline','Your receipt','5:12 AM',0],['GitHub','CI passed on main','2:40 AM',0],['Utility','Your bill is ready','1:05 AM',0]];
+  var ib=document.getElementById('inbox');
+  if(ib){var s='';mail.forEach(function(m,k){var y=k*56;
+    s+='<div style="left:0;top:'+y+'px;width:472px;height:56px;border-bottom:1px solid '+(k<4?'#232c34':'transparent')+'"></div>';
+    if(m[3]) s+='<div style="left:0;top:'+(y+16)+'px;width:6px;height:6px;border-radius:50%;background:#FFB454"></div>';
+    s+='<div style="left:14px;top:'+(y+9)+'px;font-size:13px;font-weight:600">'+m[0]+'</div>';
+    s+='<div style="left:14px;top:'+(y+29)+'px;font-size:13px;color:#8FA8B8;white-space:nowrap">'+m[1]+'</div>';
+    s+='<div class="mono" style="right:0;top:'+(y+11)+'px;font-size:11px;color:#8FA8B8">'+m[2]+'</div>';});
+    ib.innerHTML=s;}
+
+  // ---------- Direction 6: composed panels on the carousel ----------
+  function fitP(){document.querySelectorAll('.pframe').forEach(function(f){var s=f.querySelector('.pstage');if(s)s.style.setProperty('--k',(f.clientWidth/390).toFixed(4));});}
+  fitP(); if(window.ResizeObserver){var rp=new ResizeObserver(fitP);document.querySelectorAll('.pframe').forEach(function(f){rp.observe(f);});} else window.addEventListener('resize',fitP);
+
+  function mini(v,l){return '<div style="position:static;padding:8px 12px;border-left:1px solid #2A343D"><div style="position:static;font-size:22px;font-weight:300;line-height:1.1">'+v+'</div><div style="position:static;font-size:10.5px;color:#8FA8B8;margin-top:3px">'+l+'</div></div>';}
+  function srcChip(t,f){return '<span style="position:static;height:24px;padding:0 9px;border-radius:12px;font-size:11px;display:flex;align-items:center;border:1px solid '+(f?'rgba(44,201,255,.5)':'rgba(255,255,255,.14)')+';white-space:nowrap">'+t+'</span>';}
+  function composed(w,h,c){ // c = compact (phone)
+    var p=c?18:28, iw=w-2*p, y=c?16:22, s='';
+    s+='<div style="left:'+p+'px;top:'+y+'px;font-size:'+(c?13:14)+'px;font-weight:600;color:#8FA8B8;letter-spacing:.02em">This morning</div>';
+    if(!c) s+='<div style="right:20px;top:18px;display:flex;gap:8px">'+iconBtn(IC.pin)+iconBtn(IC.more)+iconBtn(IC.x)+'</div>';
+    y+=c?24:32;
+    s+='<div style="left:'+p+'px;top:'+y+'px;width:'+iw+'px;font-size:'+(c?16:20)+'px;font-weight:500;line-height:1.3">Six new messages, two worth a look. Rain is likely tomorrow after 2 PM.</div>';
+    y+=c?50:62;
+    s+='<div style="left:'+p+'px;top:'+y+'px;width:'+iw+'px;height:'+(c?56:62)+'px;border:1px solid #2A343D;border-radius:12px;display:grid;grid-template-columns:repeat(3,1fr);overflow:hidden">'+
+       mini('6','new').replace('border-left:1px solid #2A343D','')+mini('2','flagged')+mini('70%','rain, 2 PM')+'</div>';
+    y+=c?68:80;
+    [['Team lead','Review moved to Thursday','6:31 AM'],['Dentist office','Reminder for Thursday','6:58 AM']].forEach(function(m){
+      s+='<div style="left:'+p+'px;top:'+(y+7)+'px;width:6px;height:6px;border-radius:3px;background:#FFD84A"></div>';
+      s+='<div style="left:'+(p+14)+'px;top:'+y+'px;font-size:'+(c?12.5:13)+'px;font-weight:600">'+m[0]+' <span style="position:static;font-weight:400;color:#8FA8B8">· '+m[1]+'</span></div>';
+      if(!c) s+='<div class="mono" style="right:'+p+'px;top:'+(y+1)+'px;font-size:11px;color:#8FA8B8">'+m[2]+'</div>';
+      y+=c?24:28;});
+    y+=c?6:10;
+    var bh=c?(h-y-46):(h-y-58);
+    s+='<div style="left:'+p+'px;top:'+y+'px;width:'+iw+'px;height:'+bh+'px">'+barsSVG(iw,bh,false)+'</div>';
+    s+='<div style="left:'+p+'px;top:'+(h-(c?36:44))+'px;width:'+iw+'px;display:flex;gap:6px;overflow:hidden">'+srcChip('Gmail')+srcChip('Work mail')+srcChip('weather.gov')+(c?'':'<span style="position:static;flex:1"></span>'+srcChip('Read the flagged two',1))+'</div>';
+    return s;
+  }
+  var cC=document.getElementById('carC');
+  if(cC){ // container x offset 260; front at abs (450,84) 640x520
+    cC.innerHTML=
+      panel(neighbour('roadmap',640,520),{left:120-320,top:84,w:640,h:520,rot:28,sc:.82,op:.55,z:2})+
+      panel(neighbour('memory',640,520),{left:920-320,top:84,w:640,h:520,rot:-28,sc:.82,op:.55,z:2})+
+      panel(composed(640,520,false),{left:190,top:84,w:640,h:520,front:true});
+  }
+  var cP=document.getElementById('carP');
+  if(cP){ // phone: front 342 wide, neighbours peek 12px at each edge
+    cP.innerHTML=
+      panel(neighbour('roadmap',342,330),{left:-330,top:6,w:342,h:330,rot:0,sc:.92,op:.6,z:1})+
+      panel(neighbour('memory',342,330),{left:378,top:6,w:342,h:330,rot:0,sc:.92,op:.6,z:1})+
+      panel(composed(342,330,true),{left:24,top:6,w:342,h:330,front:true});
+  }
+  document.querySelectorAll('.approve2').forEach(function(el){
+    var c=el.classList.contains('compact');
+    el.style.cssText+=';height:'+(c?56:48)+'px;border-radius:12px;background:rgba(255,216,74,.10);border:1px solid #FFD84A;display:flex;align-items:center;gap:10px;padding:0 10px 0 14px;font-size:13px;z-index:4';
+    el.innerHTML='<svg style="position:static;flex:none" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="#FFD84A" stroke-width="1.4"/><path d="M8 4.2v4.6M8 11.2v.6" stroke="#FFD84A" stroke-width="1.6" stroke-linecap="round"/></svg>'+
+      '<span style="position:static;flex:1;min-width:0;line-height:1.3;'+(c?'':'white-space:nowrap;overflow:hidden;text-overflow:ellipsis')+'">'+(c?'A prepared commit is waiting for your OK':'Needs you: a prepared commit is waiting for your OK before it is pushed')+'</span>'+
+      '<span style="position:static;height:30px;padding:0 12px;border-radius:8px;background:#FFD84A;color:#15191D;font-weight:600;display:flex;align-items:center">Approve</span>'+
+      '<span style="position:static;height:30px;padding:0 12px;border-radius:8px;border:1px solid rgba(255,255,255,.3);display:flex;align-items:center">Decline</span>';
+  });
+
+  // ---------- Direction 6: the living glass orb (browser sketch) ----------
+  var COL={user:[45,212,191],mort:[224,112,32],idle:[102,115,255],need:[255,216,74]};
+  var LABEL={idle:'Listening',user:'You',thinking:'Thinking',mort:'Mortimer',barge:'You \u00b7 Mortimer still speaking',muted:'Muted',connecting:'Connecting',offline:'Offline'};
+  var CAP={idle:'Listening: four indigo arcs, ready for you.',
+    user:'You speaking: your mic level sets how many teal arcs fly and how thick they are.',
+    thinking:'Thinking: rust arcs bend and swirl slowly round the core, so you can see it working.',
+    mort:'Mortimer speaking: its speech level drives rust arcs out to the glass.',
+    barge:'You over Mortimer: rust arcs keep going and one teal bolt breaks through, so your voice shows on top.',
+    muted:'Muted: the core dims to one faint grey arc and a mic-slash sits on the glass, so muted no longer looks like listening.',
+    connecting:'Connecting: two faint grey arcs, and a grey sweep runs round the rim.',
+    offline:'Offline: dark glass, no arcs.'};
+  var AUTO=[['idle',3.5],['user',4],['thinking',3.5],['mort',4.5],['barge',3],['muted',2.5]];
+  var mq=window.matchMedia?matchMedia('(prefers-reduced-motion: reduce)'):null;
+  var ORB={pick:'auto',reduce:!!(mq&&mq.matches),last:'',need:false};
+  var needBox=document.getElementById('orb-need'); if(needBox){needBox.addEventListener('change',function(){ORB.need=needBox.checked;});}
+  var rmBox=document.getElementById('orb-rm'); if(rmBox){rmBox.checked=ORB.reduce; rmBox.addEventListener('change',function(){ORB.reduce=rmBox.checked;});}
+  document.querySelectorAll('.pg-controls button').forEach(function(b){b.addEventListener('click',function(){
+    ORB.pick=b.getAttribute('data-state');
+    document.querySelectorAll('.pg-controls button').forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false');});});});
+  function stateAt(t){ if(ORB.pick!=='auto') return ORB.pick; var tot=0,k; for(k=0;k<AUTO.length;k++) tot+=AUTO[k][1];
+    var x=t%tot; for(k=0;k<AUTO.length;k++){ if(x<AUTO[k][1]) return AUTO[k][0]; x-=AUTO[k][1]; } return 'idle'; }
+  function speech(t,s){var a=.5+.5*Math.sin(t*6.3+s),b=.5+.5*Math.sin(t*1.7+s*2),c=.5+.5*Math.sin(t*11.1+s*3);return Math.min(1,.12+.95*a*(.35+.65*b)*(.55+.45*c));}
+  function sprite(rgb){var c=document.createElement('canvas');c.width=c.height=48;var x=c.getContext('2d'),g=x.createRadialGradient(24,24,0,24,24,24);
+    g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.18,'rgba('+rgb+',1)');g.addColorStop(.5,'rgba('+rgb+',.35)');g.addColorStop(1,'rgba('+rgb+',0)');x.fillStyle=g;x.fillRect(0,0,48,48);return c;}
+  var SPR={user:sprite(COL.user),mort:sprite(COL.mort),idle:sprite(COL.idle)};
+  var seed=7; function rnd(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646;}
+  // ---- Direction 6 orb: the approved plasma demo's energy code, copied verbatim (Mortimer Plasma Orb page),
+  //      run per orb in the demo's own 400-unit space. Two changes only: the glass is the app's crystal shell,
+  //      and a brightness-rate cap is applied to each drawn energy frame before it is composited.
+  var S={listening:{n:'Listening',c:'#6673FF',k:4,e:.35},you:{n:'You',c:'#2DD4BF',k:9,e:1,v:1},mortimer:{n:'Mortimer',c:'#E07020',k:9,e:1,v:1},thinking:{n:'Thinking',c:'#E07020',k:5,e:.55,spin:1},muted:{n:'Muted',c:'#5A6478',k:1,e:.12,mute:1},connecting:{n:'Connecting',c:'#7A8794',k:2,e:.3,sweep:1},offline:{n:'Offline',c:'#2E3740',k:0,e:0},bargein:{n:'You over Mortimer',c:'#E07020',k:9,e:1,v:1,bloom:1}};
+  var MAP={idle:'listening',user:'you',mort:'mortimer',thinking:'thinking',barge:'bargein',muted:'muted',connecting:'connecting',offline:'offline'};
+  var hex=function(h){return [1,3,5].map(function(i){return parseInt(h.substr(i,2),16);});};
+  var C=200,R=148,W=400;
+  function makePlasma(){
+    // state kept per orb, as the demo keeps it per page
+    var P={t:0,frame:0,lv:0,cur:[102,115,255],mx:null,my:null,col:'102,115,255',
+      T:Array.apply(null,Array(10)).map(function(_,i){return {a:i*.63,da:(Math.random()-.5)*.02,z:Math.random()*1.5-.6};}),
+      E:document.createElement('canvas'),Ep:document.createElement('canvas'),M:document.createElement('canvas'),
+      Ls:0,Lp:0,Lref:0,A:0,dir:0,rev:-1e9,gain:1,carry:0};
+    P.M.width=P.M.height=24;
+    var x=null; // the demo's context variable: the energy canvas while drawing
+    // Small-orb widths (added for Larry, Nov 11: arcs got too thin on the smaller orbs). P.sc is the on-screen CSS px per
+    // demo unit; the demo itself shows 0.85. At or above that size nothing changes. Below it, widths shrink with the square
+    // root of the size instead of linearly, and the quietest core line is held at 1.5 px or more (its glow pass is 6x that,
+    // so at least 9 px); the floor fades in between 100% and 75% of the demo's size so there is no jump.
+    P.sc=.85;
+    P.ws=function(w){var r=P.sc/.85;if(r>=1)return w;var sr=Math.sqrt(r),fl=1.5*Math.min(1,(1-r)/.25),add=Math.max(0,fl-1.02*sr);return (w*.85*sr+add)/P.sc;};
+    P.wr=function(rad){var r=P.sc/.85;return r>=1?rad:rad/Math.sqrt(r);};   // dots and contact spots: same square-root rule
+    function bolt(x0,y0,x1,y1,j,d){if(d===0){x.lineTo(x1,y1);return}var a=(x0+x1)/2+(Math.random()-.5)*j,b=(y0+y1)/2+(Math.random()-.5)*j;bolt(x0,y0,a,b,j/2,d-1);bolt(a,b,x1,y1,j/2,d-1)}
+    function arc(x1,y1,col,w,j){x.beginPath();x.moveTo(C,C);bolt(C,C,x1,y1,j,5);[[w*6,.06],[w*2.5,.18],[w,.9]].forEach(function(p,i){var lw=p[0],a=p[1];x.strokeStyle=i===2?'rgba(255,255,255,'+(a*.8)+')':'rgba('+col+','+a+')';x.lineWidth=lw;x.stroke()});if(Math.random()<.3){var f=.4+Math.random()*.4,bx=C+(x1-C)*f,by=C+(y1-C)*f;x.beginPath();x.moveTo(bx,by);bolt(bx,by,bx+(Math.random()-.5)*70,by+(Math.random()-.5)*70,24,3);x.strokeStyle='rgba('+col+',.5)';x.lineWidth=w*.8;x.stroke()}}  // (w arrives already widened by P.ws for small orbs)
+    // the demo's draw(), energy part only (its glass body, edge shade, rim and specular arcs are replaced by the crystal shell)
+    P.step=function(st,reduce,px){
+      P.t+=.016;P.frame++;
+      var s=S[st],tc=hex(s.c);P.cur=P.cur.map(function(v,i){return v+(tc[i]-v)*.08;});var col=P.col=P.cur.map(Math.round).join(',');
+      var target=s.v?(.4+.6*Math.abs(Math.sin(P.t*3.1)*Math.sin(P.t*1.7+1))):s.e*.4;P.lv+=(target-P.lv)*.2;var lv=P.lv,t=P.t;
+      if(reduce&&P.frame%6!==0)return false;
+      var E=P.E;if(E.width!==px||E.height!==px){E.width=E.height=P.Ep.width=P.Ep.height=px;}
+      var pc=P.Ep.getContext('2d');pc.setTransform(1,0,0,1,0,0);pc.clearRect(0,0,px,px);pc.drawImage(E,0,0);P.Lp=P.Lnew||0;
+      x=E.getContext('2d');x.setTransform(px/W,0,0,px/W,0,0);var mx=P.mx,my=P.my;
+      x.clearRect(0,0,W,W);
+      var gb=x.createRadialGradient(C,C,R*.8,C,C,R*1.35);gb.addColorStop(0,'rgba('+col+','+(.22*lv)+')');gb.addColorStop(1,'rgba('+col+',0)');x.fillStyle=gb;x.beginPath();x.arc(C,C,R*1.35,0,6.283);x.fill();
+      x.save();x.beginPath();x.arc(C,C,R,0,6.283);x.clip();
+      var hz=x.createRadialGradient(C,C,0,C,C,R);hz.addColorStop(0,'rgba('+col+','+(.08+.12*lv)+')');hz.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=hz;x.fillRect(0,0,W,W);
+      x.globalCompositeOperation='lighter';
+      var n=Math.round(s.k*(s.v?(.6+.6*lv):1));
+      var touch=mx!==null&&s.e>0&&Math.hypot(mx-C,my-C)<R+30;
+      // DEPTH (added for Larry, Nov 11): the demo's arcs end on the rim (z = 0). Here each end point also has a depth z
+      // on the sphere (+1 = the glass facing you), projected into the disc. Back arcs (z < 0) are drawn first, dimmer,
+      // and the core covers them; front arcs are drawn after the core, wider and brighter as z comes toward you, and
+      // end in a bright contact spot on the front glass. The pointer or finger pulls ends to that point on the front face.
+      var ends=[];
+      for(var i=0;i<Math.min(n,P.T.length);i++){var tr=P.T[i];tr.a+=tr.da+(s.spin?.04:0)+(Math.random()-.5)*.03;
+        if(!reduce){tr.z+=(Math.random()-.5)*.05;if(tr.z>.95)tr.z=1.9-tr.z;if(tr.z<-.9)tr.z=-1.8-tr.z;}
+        var rr=Math.sqrt(Math.max(0,1-tr.z*tr.z)),ex=C+Math.cos(tr.a)*R*rr,ey=C+Math.sin(tr.a)*R*rr,ez=tr.z;
+        if(touch&&i<Math.max(2,Math.ceil(n*.6))){var dd=Math.hypot(mx-C,my-C);if(dd<R){ex=mx+(Math.random()-.5)*8;ey=my+(Math.random()-.5)*8;ez=Math.sqrt(Math.max(0,1-dd*dd/(R*R)));}else{var ang=Math.atan2(my-C,mx-C);ex=C+Math.cos(ang)*R+(Math.random()-.5)*8;ey=C+Math.sin(ang)*R+(Math.random()-.5)*8;ez=0;}}
+        ends.push([ex,ey,ez]);}
+      function strike(e){var ex=e[0],ey=e[1],z=e[2],f=z>0?1+.9*z:1,dim=z<0?.4+.6*(1+z):1;
+        x.globalAlpha=dim;if(Math.random()<.9)arc(ex,ey,col,P.ws((1.2+lv*1.6)*f),50+lv*36);x.fillStyle='rgba('+col+',.35)';x.beginPath();x.arc(ex,ey,P.wr((5+lv*5)*f),0,6.283);x.fill();
+        if(z>.15){var sr=P.wr((6+lv*8)*(1+1.6*z)),sg=x.createRadialGradient(ex,ey,0,ex,ey,sr);sg.addColorStop(0,'rgba(255,255,255,'+(.75*z)+')');sg.addColorStop(.35,'rgba('+col+','+(.5*z)+')');sg.addColorStop(1,'rgba('+col+',0)');x.fillStyle=sg;x.beginPath();x.arc(ex,ey,sr,0,6.283);x.fill();}
+        x.globalAlpha=1;}
+      ends.forEach(function(e){if(e[2]<0)strike(e);});
+      if(s.bloom){x.beginPath();x.moveTo(C,C);var a=Math.PI/2+(Math.random()-.5);bolt(C,C,C+Math.cos(a)*R,C+Math.sin(a)*R,70,5);x.strokeStyle='rgba(45,212,191,.9)';x.lineWidth=P.ws(3);x.stroke()}
+      // Core floor (added for Larry, Nov 11: "inner energy area should be 1/3 of the orb size as a minimum"). The core's
+      // visible edge is taken where its colour falls to half strength, 0.75 of the gradient radius cr. That edge must be at
+      // least 1/3 of the glass radius (the demo's R of 148 is the glass's 0.885 inner wall), in every state, at voice level 0
+      // and at the bottom of the pulse. The demo's 58 + 22 x level pulse +-3 is kept and lifted onto that floor.
+      var CMIN=(R/.885/3)/.75, cr=CMIN+3+lv*22+3*Math.sin(t*5);
+      if(s.e){x.globalCompositeOperation='source-over';var oc=x.createRadialGradient(C,C,0,C,C,cr*.8);oc.addColorStop(0,'rgba(8,11,15,.7)');oc.addColorStop(1,'rgba(8,11,15,0)');x.fillStyle=oc;x.beginPath();x.arc(C,C,cr*.8,0,6.283);x.fill();x.globalCompositeOperation='lighter';}
+      var cg=x.createRadialGradient(C,C,0,C,C,cr);cg.addColorStop(0,s.e?'rgba(255,255,255,.95)':'rgba(120,130,140,.3)');cg.addColorStop(.25,s.e?'rgba(255,255,255,'+(.35+.3*lv)+')':'rgba(120,130,140,.15)');cg.addColorStop(.5,'rgba('+col+','+(.45+.4*s.e)+')');cg.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=cg;x.beginPath();x.arc(C,C,cr,0,6.283);x.fill();
+      ends.forEach(function(e){if(e[2]>=0)strike(e);});
+      x.globalCompositeOperation='source-over';x.restore();
+      return true;
+    };
+    // brightness-rate cap (post-pass): measure the new energy frame's light. It may vary freely within +-3% of an anchor;
+    // the anchor moves at most 4% of the recent maximum per frame and reverses at most once per 220 ms (<= 3 flashes a second).
+    // Too bright: the new frame is drawn dimmer. Too dark: the previous frame is blended in to make up the rest.
+    P.cap=function(now,fresh){
+      if(fresh){var m=P.M.getContext('2d',{willReadFrequently:true});m.clearRect(0,0,24,24);m.drawImage(P.E,0,0,24,24);
+        var d=m.getImageData(0,0,24,24).data,L=0;for(var q=0;q<d.length;q+=4)L+=(0.2126*d[q]+0.7152*d[q+1]+0.0722*d[q+2])/255*d[q+3]/255;P.Lnew=L/576;}
+      var L=P.Lnew||0;P.Lref=Math.max(P.Lref*0.995,L,1e-6);var stepMax=0.04*P.Lref,diff=L-P.A;
+      if(Math.abs(diff)>stepMax*.5){var dir=diff>0?1:-1;if(P.dir!==dir){if(now-P.rev>=220){P.dir=dir;P.rev=now;P.A+=dir*Math.min(Math.abs(diff),stepMax);}}else P.A+=dir*Math.min(Math.abs(diff),stepMax);}
+      var half=0.03*P.Lref;P.Ls=Math.max(P.A-half,Math.min(P.A+half,L));
+      P.gain=L>1e-6?Math.min(1,P.Ls/L):0;
+      P.carry=(P.Ls>L&&P.Lp>1e-6)?Math.min(1,(P.Ls-L)/P.Lp):0;
+    };
+    return P;
+  }
+  var orbs=[],hold=null,held=false,prevPick='auto';
+  function setPick(k){ORB.pick=k;document.querySelectorAll('.pg-controls button').forEach(function(b){b.setAttribute('aria-pressed',b.getAttribute('data-state')===k?'true':'false');});}
+  document.querySelectorAll('canvas.eorb').forEach(function(cv){
+    var dep=+(cv.getAttribute('data-depth')||0);
+    var o={c:cv,x:cv.getContext('2d'),P:makePlasma(),ptr:null,vis:true,f:cv.classList.contains('big')?.42:dep?.3:.36,
+      depth:dep,cyF:dep?.44:.5,tg:dep?document.querySelector('[data-depth-toggle="'+dep+'"]'):null,tl:{x:0,y:0},bd:null};   // big playground orb: same size as the demo's (plasma radius 126 CSS px in 340)
+    function loc(e){var r=cv.getBoundingClientRect(),Rp=Math.min(r.width,r.height)*o.f;return {x:(e.clientX-r.left-r.width/2)/Rp,y:(e.clientY-r.top-r.height*o.cyF)/Rp};}
+    // the demo's pointer handling: hover moves the arcs, a tap mutes or unmutes, press and hold talks
+    cv.addEventListener('pointermove',function(e){o.ptr=loc(e);});
+    cv.addEventListener('pointerleave',function(){o.ptr=null;clearTimeout(hold);});
+    cv.addEventListener('pointercancel',function(){o.ptr=null;clearTimeout(hold);});
+    cv.addEventListener('pointerdown',function(e){o.ptr=loc(e);held=false;hold=setTimeout(function(){held=true;prevPick=ORB.pick;setPick('user');},350);});
+    cv.addEventListener('pointerup',function(){clearTimeout(hold);var cur=ORB.last||'idle';if(held)setPick(prevPick==='user'?'idle':prevPick);else setPick(cur==='muted'?'idle':'muted');});
+    if(window.IntersectionObserver){new IntersectionObserver(function(es){es.forEach(function(en){o.vis=en.isIntersecting;});}).observe(cv);}
+    orbs.push(o);
+  });
+  // the sample scene behind the depth options: the voice rail's panel with a faint grid and a few lines of conversation
+  function depthBackdrop(Wc,Hc,dpr){
+    var cv=document.createElement('canvas');cv.width=Wc;cv.height=Hc;var c=cv.getContext('2d');
+    c.fillStyle='#15191D';c.fillRect(0,0,Wc,Hc);c.strokeStyle='rgba(255,255,255,.05)';c.lineWidth=dpr;
+    for(var gx=12*dpr;gx<Wc;gx+=24*dpr){c.beginPath();c.moveTo(gx,0);c.lineTo(gx,Hc);c.stroke();}
+    for(var gy=12*dpr;gy<Hc;gy+=24*dpr){c.beginPath();c.moveTo(0,gy);c.lineTo(Wc,gy);c.stroke();}
+    var L=[["What's on today?",1],["Two meetings, the first at 10.",0],["Any rain this afternoon?",1],["Light rain after 3 PM.",0],["Move my 2 o'clock?",1],["Done, it's now at 4.",0],["Thanks, Mortimer.",1],["Anytime.",0]];
+    c.font=(13*dpr)+'px -apple-system, system-ui, sans-serif';c.textBaseline='middle';
+    for(var i=0,y=22*dpr;y<Hc;i++,y+=21*dpr){var l=L[i%L.length];c.fillStyle=l[1]?'rgba(45,212,191,.85)':'rgba(230,236,240,.72)';c.fillText(l[0],(l[1]?14:30)*dpr,y);}
+    return cv;
+  }
+  function drawOrb(o,t,dt,st,now){
+    var cv=o.c,r=cv.getBoundingClientRect(),dpr=Math.min(2,window.devicePixelRatio||1);
+    var Wc=Math.max(1,Math.round(r.width*dpr)),Hc=Math.max(1,Math.round(r.height*dpr));
+    if(cv.width!==Wc||cv.height!==Hc){cv.width=Wc;cv.height=Hc;}
+    var x=o.x,cx=Wc/2,cy=Hc*o.cyF,Rg=Math.min(Wc,Hc)*o.f,P=o.P,s=S[MAP[st]];
+    var D=o.depth&&(!o.tg||o.tg.checked)?o.depth:0;
+    if(o.depth===3) o.cyF=.44;   // which depth option is on for this orb (0 = the approved orb as is)
+    // the demo's R (148) sits on the crystal shell's inner wall (0.885 of the glass radius)
+    var k1=Rg*.885/R, pxDev=W*k1, px=Math.max(2,Math.ceil(W*(k1/dpr)*(400/340)));   // the demo's density: 400 canvas px shown at 340 CSS px
+    P.sc=k1/dpr;   // on-screen CSS px per demo unit (the demo: 0.85)
+    P.mx=o.ptr?C+o.ptr.x*R/.885:null; P.my=o.ptr?C+o.ptr.y*R/.885:null;
+    var fresh=P.step(MAP[st],ORB.reduce,px); P.cap(now,fresh);
+    x.setTransform(1,0,0,1,0,0); x.clearRect(0,0,Wc,Hc);
+    if(o.depth){ if(!o.bd||o.bd.width!==Wc||o.bd.height!==Hc) o.bd=depthBackdrop(Wc,Hc,dpr); x.drawImage(o.bd,0,0); }
+    var ex0=cx-pxDev/2, ey0=cy-pxDev/2;
+    // depth option 2: a tilt that follows the pointer or finger (on a phone, the device's tilt); without one it sways slowly.
+    // Off under Reduce Motion.
+    var tl=o.tl, tx0=0, ty0=0;
+    if(D===2&&!ORB.reduce){ if(o.ptr){tx0=Math.max(-1,Math.min(1,o.ptr.x));ty0=Math.max(-1,Math.min(1,o.ptr.y));} else {tx0=.6*Math.sin(t*.7);ty0=.4*Math.sin(t*.5+1);} }
+    tl.x+=(tx0-tl.x)*.08; tl.y+=(ty0-tl.y)*.08;
+    var lum=P.Lref>0?Math.min(1,P.Ls/P.Lref):0;   // the orb's capped brightness, 0..1: anything lit by the energy follows this
+    function energy(c){ if(P.carry>0){c.globalAlpha=P.carry;c.drawImage(P.Ep,ex0,ey0,pxDev,pxDev);} c.globalAlpha=P.gain;c.drawImage(P.E,ex0,ey0,pxDev,pxDev);c.globalAlpha=1; }
+    // bloom outside the glass (the demo's outer glow), then the crystal shell with the energy inside its 0.885 clip
+    var rgb=hex('#'+P.col.split(',').map(function(v){return ('0'+(+v).toString(16)).slice(-2);}).join(''));
+    if(D===1||D===3){ // depth option 1 (also on your pick, 3): contact shadow on the surface below, and the energy's light focused through the ball onto it
+      var gy=cy+Rg*1.14;
+      x.save();x.translate(cx,gy);x.scale(1,.2);var sg=x.createRadialGradient(0,0,0,0,0,Rg*1.05);
+      sg.addColorStop(0,'rgba(0,0,0,.62)');sg.addColorStop(.45,'rgba(0,0,0,.34)');sg.addColorStop(1,'rgba(0,0,0,0)');
+      x.fillStyle=sg;x.beginPath();x.arc(0,0,Rg*1.05,0,6.283);x.fill();x.restore();
+      x.save();x.globalCompositeOperation='lighter';x.translate(cx,gy-Rg*.02);x.scale(1,.24);var kg=x.createRadialGradient(0,0,0,0,0,Rg*.62);
+      kg.addColorStop(0,'rgba(255,255,255,'+(.42*lum)+')');kg.addColorStop(.22,rgba(rgb,.5*lum));kg.addColorStop(1,rgba(rgb,0));
+      x.fillStyle=kg;x.beginPath();x.arc(0,0,Rg*.62,0,6.283);x.fill();x.restore();
+    }
+    x.save();x.beginPath();x.arc(cx,cy,pxDev/2,0,6.283);x.arc(cx,cy,Rg,0,6.283,true);x.clip();energy(x);x.restore();
+    var shellOpt={dpr:dpr,interior:function(c){
+      if(D===3){ // depth option 3: a faint, upside-down reflection of the arcs on the far wall, from the same capped frame
+        c.save();c.globalCompositeOperation='lighter';c.globalAlpha=.16*P.gain;c.translate(cx,cy);c.scale(-.8,-.8);c.drawImage(P.E,-pxDev/2,-pxDev/2,pxDev,pxDev);c.restore();}
+      if(D===2){c.save();c.translate(-tl.x*Rg*.06,-tl.y*Rg*.06);energy(c);c.restore();} else energy(c);}};
+    if(D===2){shellOpt.envDx=tl.x*Rg*.07;shellOpt.envDy=tl.y*Rg*.07;}
+    if(D===3){shellOpt.backdrop=function(c){ // depth option 3: the scene behind bends through the ball: magnified and upside down in the middle, squeezed at the rim
+      c.fillStyle='#0b0f13';c.fillRect(cx-Rg,cy-Rg,2*Rg,2*Rg);
+      for(var i=18;i>=1;i--){var rho=(i-.5)/18,sc=-(.42+1.25*(1-rho*rho));c.save();c.beginPath();c.arc(cx,cy,Rg*i/18,0,6.283);c.clip();
+        c.setTransform(sc,0,0,sc,cx-sc*cx,cy-sc*cy);c.drawImage(o.bd,0,0);c.restore();}
+      c.fillStyle='rgba(6,10,14,.3)';c.fillRect(cx-Rg,cy-Rg,2*Rg,2*Rg);};}
+    drawGlassShell(x,cx,cy,Rg,rgb,P.lv,shellOpt);
+    if(D===2){ // option 2: the shadowed side of the ball turns with the tilt, so it reads as round
+      x.save();x.beginPath();x.arc(cx,cy,Rg,0,6.283);x.clip();var lx=cx+(-.32-.22*tl.x)*Rg,ly=cy+(-.34-.22*tl.y)*Rg,vg=x.createRadialGradient(lx,ly,0,lx,ly,Rg*1.55);
+      vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(.55,'rgba(0,0,0,0)');vg.addColorStop(.85,'rgba(0,0,0,.22)');vg.addColorStop(1,'rgba(0,0,0,.42)');
+      x.fillStyle=vg;x.fillRect(cx-Rg,cy-Rg,2*Rg,2*Rg);x.restore();}
+    // the demo's overlays, in its own units with its R on the glass radius
+    var k2=Rg/R; x.save(); x.setTransform(k2,0,0,k2,cx-C*k2,cy-C*k2); x.lineCap='round';
+    var mx=o.ptr?C+o.ptr.x*R:null,my=o.ptr?C+o.ptr.y*R:null;
+    if(mx!==null){var ang=Math.atan2(my-C,mx-C),near=Math.exp(-Math.max(0,Math.hypot(mx-C,my-C)/R-1)*2.5);x.beginPath();x.arc(C,C,R,ang-.35,ang+.35);x.strokeStyle='rgba(226,241,249,'+(.55*near)+')';x.lineWidth=R*.03;x.stroke()}
+    if(s.sweep){x.strokeStyle='#A7B3BE';x.lineWidth=4;x.beginPath();x.arc(C,C,R+10,P.t*3,P.t*3+1.2);x.stroke()}
+    if(s.mute){x.strokeStyle='#C9D3DC';x.lineWidth=3;x.beginPath();x.arc(C,C+54,12,0,3.1416);x.stroke();x.strokeRect(C-7,C+30,14,24);x.beginPath();x.moveTo(C-24,C+26);x.lineTo(C+24,C+80);x.stroke()}
+    if(ORB.need){x.strokeStyle='rgba(255,216,74,'+(.6+.4*Math.sin(P.t*4))+')';x.lineWidth=6;x.beginPath();x.arc(C,C,R+20,0,6.283);x.stroke()}
+    x.restore();
+  }
+  var lastNow=performance.now(), clock=0;
+  function frame(now){
+    var dt=Math.min(.05,(now-lastNow)/1000); lastNow=now;
+    if(!ORB.reduce) clock+=dt;
+    var st=stateAt(ORB.reduce?now/1000:clock);
+    orbs.forEach(function(o){ if(o.vis) drawOrb(o,clock,ORB.reduce?0:dt,st,now); });
+    if(st!==ORB.last){ORB.last=st;
+      document.querySelectorAll('[data-orb-label]').forEach(function(l){l.textContent=LABEL[st];l.style.color=(st==='user'||st==='barge')?'#2DD4BF':(st==='mort'||st==='thinking')?'#E07020':'';});
+      var cap=document.getElementById('orb-cap'); if(cap) cap.textContent=CAP[st];}
+    requestAnimationFrame(frame);
+  }
+  if(orbs.length) requestAnimationFrame(frame);
+})();
+</script>
