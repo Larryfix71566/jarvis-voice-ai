@@ -109,3 +109,41 @@ jobs:
           cd web
           npm ci
           npm run build
+
+  # WS-35 B1 also implements WS-30's previously unshipped phone-core gate.
+  # JarvisKit and MortimerHost require macOS 26 at runtime, not just its SDK.
+  # Runner/Xcode inventory checked 2026-11-11:
+  # https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md
+  swift-tests:
+    name: Swift (${{ matrix.package }})
+    runs-on: macos-26-intel
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      # A failure in one package must not cancel evidence from the others.
+      fail-fast: false
+      matrix:
+        package:
+          - macos/JarvisKit
+          - macos/MortimerHost
+          - ios/MortimerPhoneCore
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Verify hosted Swift toolchain
+        shell: bash
+        run: |
+          test -d "$DEVELOPER_DIR"
+          test "$(sw_vers -productVersion | cut -d. -f1)" -ge 26
+          test "$(uname -m)" = x86_64
+          test "$(xcodebuild -version | head -n 1)" = "Xcode 26.3"
+          sw_vers
+          xcodebuild -version
+          xcrun swift --version
+          xcrun --sdk macosx --show-sdk-version
+      - name: Run full package test suite
+        run: swift test --package-path "${{ matrix.package }}"
