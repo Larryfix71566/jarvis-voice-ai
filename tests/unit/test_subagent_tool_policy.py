@@ -1,6 +1,7 @@
 """Host source labels govern the real SubAgent loop, before every sink."""
 import asyncio
 import json
+import time
 from dataclasses import replace
 
 import pytest
@@ -121,12 +122,21 @@ async def test_custom_host_executor_can_issue_exact_scoped_result():
 async def test_outer_task_deadline_covers_tool_execution(monkeypatch, tmp_path):
     from jarvis import usage_ledger
     monkeypatch.setattr(usage_ledger, "DB_PATH", tmp_path / "deadline.db")
+    tool_started = asyncio.Event()
     class SlowTool(FakeRegistry):
         async def call_classified(self, *_args, execution_scope):
-            await asyncio.sleep(1)
+            tool_started.set()
+            await asyncio.sleep(30)
             pytest.fail("cancelled tool must not finish")
-    subject, provider = routed(SlowTool(), limits=WorkloadLimits(deadline_seconds=.15))
+    # The task deadline also covers budget setup before the first model
+    # request, which took up to about 200 ms on a loaded runner, so 0.15 s
+    # could expire before the tool was reached. The tool sleeps far past the
+    # deadline, so the deadline must still cancel it mid-call.
+    subject, provider = routed(SlowTool(), limits=WorkloadLimits(deadline_seconds=1.0))
+    started = time.monotonic()
     assert await subject.run("public fixture") == TIMEOUT_MESSAGE
+    assert time.monotonic() - started < 10
+    assert tool_started.is_set()
     assert len(provider.requests) == 1
 
 
