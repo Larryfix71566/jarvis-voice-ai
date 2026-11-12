@@ -137,18 +137,20 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 **Workstream:** Larry approved the three lane rows in his Claude Duet channel on 2026-11-11 at 02:35:41 UTC: "Take your picks", answering decisions 2 to 7 of `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §7 (decision 6: approve the WS-34 to WS-36 rows). His earlier direction for the split, 01:58:16 UTC: "first let's seperate this plan so that kimi and codex can help with development, the division should not be absolute but a guide to keep the models from stepping on each other, then we should freeze main and begin". Under §0 rule 14 a lane is a guide, not a lock: any system not engaged may pick up an item another system is not engaged with, by updating this block's Owner and Where first.
 
 - **Owner:** `codex`
-- **Status:** claimed for the bounded, independently assigned B2 review of #342; release-closure implementation and acceptance remain open.
+- **Status:** landed B2 independent review evidence via this docs-only PR: CHANGES REQUESTED at #342 head `5d714af` against the native-header and missing-Origin acceptance criteria. Release-closure implementation and live acceptance remain open.
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Items C10 (box 810 performance baseline, before C1a), C1a (delete layouts 0 and 1), B1 (macOS Swift CI job), B5 (wider ruff, offline NLTK data), C4 (Swift block renderer), C5 (result carousel; the second screen keeps its grid, decision 4), C9 (phone orb on synthetic levels, decision 5, after moving the orb renderer to a shared package) and F1 (the `PhoneRemoteAuthorityProcessTests` failure, an acceptance fix on `main` approved by name). Each item in the plan's §4 table for this lane, as a PR into `next` with its tests, reviewed by the item's named reviewer (never its author). Interface items then pass the rewritten UI boxes in `docs/acceptance/mac-acceptance-2026-11-11.md` §4 on the final build; `next` merges into `main` at closure.
 - **Model version:** not recorded
 - **Where:** `codex/ws35-pr342-review-20261112` (B2 docs-only review record on main). Other independent work remains in #350 (C0 re-review), #335 (C10), #337 (C1a), #338 (B1), and #339 (F1); those branches are not modified here.
 - **Plan:** `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §4 (WS-35) and §5; add only dated progress for this lane
 - **Scope:** The files named for those items in the plan's §4 WS-35 table: `docs/acceptance/**` (C10); every MortimerHost source and test file that reads `layoutVersion` (C1a); `.github/workflows/validate.yml` (B1, B5, after A1); `macos/MortimerHost/Sources/MortimerHost/Display/**`, `App/AppMessageRouter.swift`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift` (C4); the C5 result and carousel files; `ios/MortimerPhoneCore/**` and the shared orb package (C9). Hand-off order for shared files is the plan's §4 "Hand-off points"; overlaps with other rows are CX-29.
-- **Next step:** codex: once `next` exists, write the C10 steps for Larry, then C1a; F1 branches from `main`; once the freeze is in effect it merges only with Larry's approval by name (§0 rule 15).
+- **Next step:** claude: reconcile #342 native-header/Origin requirements with C7b and fix malformed-port refusal; codex: re-review the revised exact head, then continue the existing queue (#338 B1 repair). Separate C0 re-review remains in #350; C4 waits for C0/C1a. Larry retains all merge/deploy decisions.
 - **Updated:** 11-12
 
 
 **Bounded review claim (2026-11-12):** Larry directed Codex to independently review Claude B2 #342 into `next`, run its tests, check native header coverage and missing/foreign Origin refusal, then publish a separate docs-only verdict. This slice changes only this WS-35 block, dated progress in the existing closure plan, and `docs/roadmap-log/2026-11-12-ws-35-b2-request-guard-review.md`. Author source and all other row ownership stay unchanged.
+
+- **Log:** 2026-11-12: [B2 independent review](docs/roadmap-log/2026-11-12-ws-35-b2-request-guard-review.md): #342 at `5d714af`; 81 focused tests passed, 16 additional behavior assertions, four malformed-port defect reproductions, F821 clean. Native header and unconditional missing-Origin refusal are not implemented; no live acceptance.
 
 </details>
 
