@@ -7,7 +7,7 @@ prs: [335]
 
 # WS-36 C6 orb frame-time comparison: same-session crystal control, Larry's decision, 2026-11-12
 
-System: Claude (Claude Code cloud session, Larry's Claude Duet channel). This entry records a decision by Larry. It changes the C6 comparison rule in `docs/interface-research/orb-plasma/ORB_SPEC.md` and adds a dated line to the closure plan's progress log. No code or test changed.
+System: Claude (Claude Code cloud session, Larry's Claude Duet channel). This entry records a decision by Larry. It changes the C6 comparison rule in `docs/interface-research/orb-plasma/ORB_SPEC.md`. Under Larry's batch rule (2026-11-12 16:41 UTC, "Adopt the batch rule"), this entry is the status record; the daily batch PR folds it into the closure plan's progress log. No code or test changed.
 
 ## Decision
 
@@ -35,7 +35,7 @@ In Larry's C10 baseline on the frozen build `5777e98`, crystal p50 was 5.428, 7.
 | Document | Branch | Change |
 | --- | --- | --- |
 | `docs/interface-research/orb-plasma/ORB_SPEC.md`, Gates (Performance) and Measure first | `main`, this change | Updated: compare against same-session crystal runs; new step 3 gives the method; steps renumbered 4 to 6 |
-| `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` | `main`, this change | The C6 row never stated the 10% rule, so the row is unchanged; a dated progress line records the decision |
+| `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` | `main`, daily batch PR | The C6 row never stated the 10% rule, so the row is unchanged. This PR does not edit the plan; the daily batch PR adds the progress line from this entry |
 | `docs/acceptance/ws35-c10-freeze-performance-baseline.md` section 4, third bullet ("Each p50 and p95 must be ≤1.10× the crystal baseline") | #335 into `next`, Codex's, already approved | **Not edited here.** Follow-up for Codex after #335 merges: replace "≤1.10× the crystal baseline" with "≤1.10× the median of five crystal runs measured back to back in the same session as five arcs runs (Larry, 2026-11-12)" |
 
 ## Unchanged
