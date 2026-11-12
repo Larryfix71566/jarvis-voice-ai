@@ -20,6 +20,7 @@ public enum AppMessage: Sendable, Equatable {
     case consoleHello(ConsoleHello)
     case consoleRequest(ConsoleRequest)
     case consoleResult(ConsoleResult)
+    case turnResult(TurnResult)
     case inputAccept(InputAccept)
     case inputAck(InputAck)
     case inputReady(InputReady)
@@ -50,6 +51,7 @@ extension AppMessage: CustomDebugStringConvertible {
         case .consoleRequest(let request): return "consoleRequest(\(request.action.rawValue))"
         case .consoleHello(let hello): return "consoleHello(\(hello.actions.count) actions)"
         case .consoleResult(let result): return "consoleResult(\(result.status), code: \(result.code))"
+        case .turnResult(let result): return "turnResult(\(result.status), code: \(result.code))"
         case .inputAccept(let accept): return "inputAccept(\(accept.transferID.uuidString))"
         case .inputAck(let ack): return "inputAck(\(ack.attachmentID.uuidString), sequence: \(ack.sequence))"
         case .inputReady(let ready): return "inputReady(\(ready.batchID.uuidString))"
@@ -561,6 +563,8 @@ public extension AppMessage {
             return .consoleHello(try dec.decode(ConsoleHello.self, from: payload))
         case "console/result":
             return .consoleResult(try dec.decode(ConsoleResult.self, from: payload))
+        case "turn/result":
+            return .turnResult(try dec.decode(TurnResult.self, from: payload))
         case "input/accept":
             return .inputAccept(try dec.decode(InputAccept.self, from: payload))
         case "input/ack":

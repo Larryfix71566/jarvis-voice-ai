@@ -411,4 +411,51 @@ final class AppMessageTests: XCTestCase {
         XCTAssertEqual(entry.role, "assistant")
         XCTAssertEqual(entry.text, "hello there")
     }
+
+    // MARK: - C7b turn/result (contract 2.3)
+
+    func testDecodeTurnResultAcceptedFromRTVIEnvelope() throws {
+        let json = """
+        {"id":"m","label":"rtvi-ai","type":"server-message","data":
+          {"type":"turn/result","version":1,"session_id":"00000000-0000-4000-8000-000000000001","generation":"00000000-0000-4000-8000-000000000002","request_id":"00000000-0000-4000-8000-000000000003","status":"accepted","code":"accepted"}}
+        """
+        let message = try XCTUnwrap(try AppMessage.decode(frame: Data(json.utf8)))
+        guard case .turnResult(let result) = message else { return XCTFail("expected .turnResult") }
+        XCTAssertTrue(result.isAccepted)
+        XCTAssertEqual(result.requestID, UUID(uuidString: "00000000-0000-4000-8000-000000000003"))
+        XCTAssertEqual(result.sessionID, UUID(uuidString: "00000000-0000-4000-8000-000000000001"))
+        XCTAssertEqual(result.generation, UUID(uuidString: "00000000-0000-4000-8000-000000000002"))
+    }
+
+    func testDecodeTurnResultBarePayloadRejected() throws {
+        let json = """
+        {"type":"turn/result","version":1,"session_id":"00000000-0000-4000-8000-000000000001","generation":"00000000-0000-4000-8000-000000000002","request_id":"00000000-0000-4000-8000-000000000003","status":"rejected","code":"stale_session"}
+        """
+        let message = try XCTUnwrap(try AppMessage.decode(frame: Data(json.utf8)))
+        guard case .turnResult(let result) = message else { return XCTFail("expected .turnResult") }
+        XCTAssertFalse(result.isAccepted)
+        XCTAssertEqual(result.code, "stale_session")
+    }
+
+    func testTurnResultMissingFieldDoesNotDecode() {
+        let json = """
+        {"type":"turn/result","version":1,"session_id":"00000000-0000-4000-8000-000000000001","generation":"00000000-0000-4000-8000-000000000002","request_id":"00000000-0000-4000-8000-000000000003","status":"accepted"}
+        """
+        XCTAssertThrowsError(try AppMessage.decode(frame: Data(json.utf8)))
+    }
+
+    func testTurnResultMismatchedPairIsNotAccepted() {
+        let result = TurnResult(sessionID: UUID(), generation: UUID(), requestID: UUID(),
+                                status: "accepted", code: "not_ready")
+        XCTAssertFalse(result.isAccepted)
+    }
+
+    func testTurnResultDebugDescription() {
+        let result = TurnResult(sessionID: UUID(), generation: UUID(), requestID: UUID(),
+                                status: "rejected", code: "not_ready")
+        let line = AppMessage.turnResult(result).debugDescription
+        XCTAssertTrue(line.contains("turnResult("))
+        XCTAssertTrue(line.contains("not_ready"))
+        XCTAssertFalse(line.contains("text"))
+    }
 }
