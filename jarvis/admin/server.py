@@ -4846,111 +4846,6 @@ def status_github(kind: str = "prs", state: str = "open", limit: int = 10,
         kind, state=state, limit=limit, number=number))
 
 
-# -------------------------------------------------------------- council
-# MORTIMER_LLM_COUNCIL_PLAN.md D10. Thin pass-throughs over
-# jarvis.council.council, same convention as runs/memory/git above — no
-# council logic is duplicated here.
-
-
-@app.post("/api/council/convene")
-def council_convene(body: ConveneIn) -> dict:
-    """MORTIMER_LLM_COUNCIL_V2_PLAN.md V5 — manual convene (the plan's
-    §5.3 override — "I suspect this is hard," independent of any
-    observed failure), now non-blocking: validates as before, then fires
-    the round in the background and returns immediately. Poll
-    GET /api/council/job for the result. D14: only `placement="planner"`
-    is implemented — D6.1's prompts are the only ones this plan defines;
-    a reviewer-placement prompt was never specified, so that placement
-    is refused rather than improvised."""
-    advisory_started_at = time.time()
-    run_migrations()
-    if body.placement != "planner":
-        return {
-            "ok": False,
-            "error": f"placement={body.placement!r} is not implemented — "
-                     "only 'planner' has a defined council prompt (D6.1)",
-        }
-    goal = (body.goal or _selfedit_service.goal or "").strip()
-    if not goal:
-        return {"ok": False, "error": "a goal is required (no active session to fall back on)"}
-    with _council_lock:
-        if _council_job["state"] == "running":
-            return {
-                "ok": False,
-                "error": "a council round is already in progress",
-                "job": dict(_council_job),
-            }
-        context: dict[str, Any] = {"diff": _selfedit_service.proposals, "checks": None}
-        if body.members:
-            context["members"] = body.members
-        _council_job.update(
-            state="running", trigger="manual", goal=goal, round_id=None,
-            winner=None, winner_mean=None, select_reason=None, error=None,
-            started_at=time.time(), finished_at=None,
-        )
-    _start_advisory_thread(
-        _run_council_job,
-        kwargs={"trigger": "manual", "goal": goal, "context": context},
-        started_at=advisory_started_at,
-    )
-    return {"ok": True, "started": True}
-
-
-@app.get("/api/council/job")
-def council_job_status() -> dict:
-    """MORTIMER_LLM_COUNCIL_V2_PLAN.md V5 — the polling target for both
-    a manual convene and the E3 half of a reject, mirroring
-    GET /api/selfedit/run."""
-    with _council_lock:
-        job = dict(_council_job)
-    return {"ok": True, "job": job}
-
-
-@app.get("/api/council/round/{round_id}")
-def council_round_detail(round_id: str) -> dict:
-    run_migrations()
-    detail = council_mod.get_round(round_id)
-    if detail is None:
-        return {"ok": False, "error": "not found"}
-    return {"ok": True, **detail}
-
-
-@app.get("/api/council/rounds")
-def council_rounds_list(
-    workflow: str = "", status: str = "", since: str = "", limit: int = 50,
-) -> dict:
-    run_migrations()
-    clamped_limit = max(1, min(200, limit))
-    return {
-        "ok": True,
-        "rounds": council_mod.list_rounds(
-            workflow=workflow or None, status=status or None,
-            since=parse_since(since or None), limit=clamped_limit,
-        ),
-    }
-
-
-@app.get("/api/council/roster")
-def council_roster(
-    workflow: str = "", status: str = "", since: str = "", limit: int = 20,
-) -> dict:
-    """MORTIMER_OPTIMIZATION_PLAN.md's Interface Task — the Agents
-    surface's read. Same filters as /api/council/rounds, but each round
-    arrives assembled (proposers with means, judges with their abstain
-    reasons, a degradation verdict) so the view renders rather than
-    computes. A lower default and a tighter clamp than the rounds list:
-    this one is polled and each entry is much larger."""
-    run_migrations()
-    clamped_limit = max(1, min(50, limit))
-    return {
-        "ok": True,
-        "rounds": council_mod.list_round_rosters(
-            workflow=workflow or None, status=status or None,
-            since=parse_since(since or None), limit=clamped_limit,
-        ),
-    }
-
-
 # ------------------------------------------------------- planning pathway
 # MORTIMER_PLANNING_PATHWAY_PLAN.md P7. Thin pass-throughs over
 # jarvis.council.council (draft_candidates/record_user_choice) and
@@ -5272,6 +5167,13 @@ from jarvis.admin.routes.ambient import (  # noqa: E402,F401
     set_location,
     clipboard_clear,
     clipboard_read,
+)
+from jarvis.admin.routes.council import (  # noqa: E402,F401
+    council_convene,
+    council_job_status,
+    council_round_detail,
+    council_rounds_list,
+    council_roster,
 )
 
 
