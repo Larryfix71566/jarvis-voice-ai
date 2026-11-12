@@ -97,8 +97,8 @@ not inferred from UI visibility or a caller-supplied tenant/run identifier.
 
 ## Native interface and deployment boundary
 
-`CommandConsoleView` (layout 2) is the default. Layouts 0/1 and
-`scripts/run_web.sh` remain rollback paths until the Command Console physical
+`CommandConsoleView` (layout 2) is the default. Layouts 0/1
+remain rollback paths until the Command Console physical
 and daily-driver acceptance gates close. A sandbox test or passing source test
 does not prove which build is running on the Mac. Deployment identity,
 rollback target and physical monitor/accessibility evidence belong in the

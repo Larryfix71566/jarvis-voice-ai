@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One command to start (or restart) the whole Mortimer stack: vault, bot,
-# the Phase 2 memory-extraction worker, admin, web, and the costs API.
+# the Phase 2 memory-extraction worker, admin, and the costs API.
 #
 # Usage:
 #   ./scripts/mortimer.sh         start or restart everything
@@ -32,7 +32,6 @@ cd "$(dirname "$0")/.."
 
 BOT_PORT="${JARVIS_BOT_PORT:-7860}"
 VAULT_PORT=8484
-WEB_PORT=5173
 COSTS_PORT=8487
 LOG_GENERATIONS=5
 
@@ -43,7 +42,6 @@ stop_all() {
   pkill -f "jarvis.bot.bot"                  2>/dev/null
   pkill -f "jarvis.memory_extraction_worker" 2>/dev/null
   pkill -f "jarvis.admin.server"             2>/dev/null
-  pkill -f "vite"                            2>/dev/null
   pkill -f "jarvis.costs_api"                2>/dev/null
   sleep 1
   return 0
@@ -120,7 +118,7 @@ case "$cmd" in
     # writing to. Tail whatever exists, from both sets.
     files=()
     for f in logs/vault.log logs/bot.log logs/extractor.log logs/admin.log \
-             logs/web.log logs/costs.log \
+             logs/costs.log \
              logs/vault.launchd.log logs/bot.launchd.log \
              logs/extractor.launchd.log logs/admin.launchd.log \
              logs/costs.launchd.log; do
@@ -225,7 +223,7 @@ check_admin
 check costs     "$COSTS_PID"     "http://localhost:$COSTS_PORT"
 
 echo
-echo "Open MortimerHost (macos/MortimerHost, swift run or Xcode). Web console fallback: ./scripts/run_web.sh"
+echo "Open MortimerHost (macos/MortimerHost, swift run or Xcode)."
 echo "Logs:  ./scripts/mortimer.sh logs   (or: tail -f logs/bot.log)"
 echo "       previous sessions: logs/<name>.log.1 .. .${LOG_GENERATIONS}"
 echo "Stop:  ./scripts/mortimer.sh stop"

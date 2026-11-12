@@ -4,7 +4,7 @@
 # mcp-kb's tools and jarvis/kb_digest.py both call this service over HTTP —
 # they do not import the mortimer-vault package. This script exists only
 # to keep the vault service's own venv separate from Mortimer's, mirroring
-# how run_admin.sh / run_web.sh each start their own process.
+# how run_admin.sh starts its own process.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
