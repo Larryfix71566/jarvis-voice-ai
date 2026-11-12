@@ -1,0 +1,21 @@
+Building for debugging...
+[1 / 4]
+Build complete! (0.37 sec)
+Test Suite 'Selected tests' started at 2026-11-12 11:04:31.340.
+Test Suite 'PhoneRemoteAuthorityTests.xctest' started at 2026-11-12 11:04:31.341.
+Test Suite 'PhoneRemoteAuthorityTests.xctest' passed at 2026-11-12 11:04:31.341.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 11:04:31.341.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' started at 2026-11-12 11:04:31.391.
+Test Suite 'MortimerHostTests.xctest' started at 2026-11-12 11:04:31.392.
+Test Suite 'SkillsRenderedNavigationBenchmarkTests' started at 2026-11-12 11:04:31.392.
+Test Case '-[MortimerHostTests.SkillsRenderedNavigationBenchmarkTests testRenderedCatalogSelectionAndCachedNavigationP95AtWideAndCompactSizes]' started.
+Test Case '-[MortimerHostTests.SkillsRenderedNavigationBenchmarkTests testRenderedCatalogSelectionAndCachedNavigationP95AtWideAndCompactSizes]' passed (11.409 seconds).
+Test Suite 'SkillsRenderedNavigationBenchmarkTests' passed at 2026-11-12 11:04:42.801.
+	 Executed 1 test, with 0 failures (0 unexpected) in 11.409 (11.409) seconds
+Test Suite 'MortimerHostTests.xctest' passed at 2026-11-12 11:04:42.801.
+	 Executed 1 test, with 0 failures (0 unexpected) in 11.409 (11.409) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 11:04:42.801.
+	 Executed 1 test, with 0 failures (0 unexpected) in 11.409 (11.410) seconds
+SKILLS_RENDERED_NAVIGATION_JSON={"benchmark":"skills_rendered_navigation","percentile":"nearest-rank p95","results":[{"cached_details":32,"cached_navigation_render_p95_ms":42.950875000000003,"catalog_skills":100,"detail_requests_during_measurement":0,"distinct_rendered_frames":64,"height_points":800,"includes_swiftui_layout_and_nsview_bitmap_display":true,"layout":"wide","samples":100,"selection_bitmap_p95_ms":16.608875000000001,"selection_render_p95_ms":28.6555,"selection_to_layout_p95_ms":12.072749999999999,"timing_budget_enforced":true,"virtualized_guest":false,"width_points":1280},{"cached_details":32,"cached_navigation_render_p95_ms":26.799582999999998,"catalog_skills":100,"detail_requests_during_measurement":0,"distinct_rendered_frames":64,"height_points":800,"includes_swiftui_layout_and_nsview_bitmap_display":true,"layout":"compact","samples":100,"selection_bitmap_p95_ms":7.7204170000000003,"selection_render_p95_ms":14.648458,"selection_to_layout_p95_ms":7.1175420000000003,"timing_budget_enforced":true,"virtualized_guest":false,"width_points":720}],"samples_per_case":100,"schema_version":1}

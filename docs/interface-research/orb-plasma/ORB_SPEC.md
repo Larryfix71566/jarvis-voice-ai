@@ -73,7 +73,7 @@ Line references are checked against `origin/main` at `5777e98`.
 
 ## Gates and open items
 
-- **Performance:** add an arcs probe to `OrbShellFrameTimeTests` (1440×220, 300 frames). A p50 or p95 more than 10% above the crystal shell's counts as a regression (box 810; plan item C10 records its baseline).
+- **Performance:** add an arcs probe to `OrbShellFrameTimeTests` (1440×220, 300 frames). A p50 or p95 more than 10% above the crystal shell's counts as a regression (box 810). The crystal figures to compare against come from the same session as the arcs runs, not from a stored baseline (Larry, 2026-11-12; see Measure first).
 - **Tests that need Larry's OK:**
   - The idle colour in code is still `#7C8CFF` (`AppTuning.swift:127`).
   - Two tests expect a coloured nucleus, which is now white (`VoiceWaveRenderingTests.swift:297`, `:314`).
@@ -109,9 +109,10 @@ Shown on the mockups page (version 12, line 531, section "Depth for the orb itse
 
 **Flash safety.** The echo is a fixed share of the capped frame, and the cast light follows the capped brightness, so both ride the same cap. The refracted backdrop is steady, apart from content scrolling behind the orb, which moves through it magnified and inverted. Watch for that being distracting in the rail; it is not a flash risk on the brightness model.
 
-**Measure first (box 810: more than 10% over baseline counts as a regression; plan item C10 records the baseline).**
-1. Before building the rest of the orb, add two probes to `OrbShellFrameTimeTests`, using the same 1440×220 size and 300 frames: arcs only, and arcs plus refraction. Compare both with the crystal shell probe (receipt 2026-09-29: p50 4.933 ms, p95 14.150 ms).
-2. Include the shadow and cast light in the arcs plus refraction probe. Pass: p50 and p95 each at most 1.10× the crystal shell, and p95 under 16.7 ms.
-3. If the test harness can't render a `layerEffect` off-screen, measure the same scene on screen with Instruments on the Mac and record the method.
-4. The phone has no frame-time probe yet; one is needed before the phone orb ships.
-5. If arcs plus refraction fails while arcs alone passes, the proposed fallback is options 1 and 2 together: keep the contact shadow with cast light, and replace refraction with tilt parallax. Switching needs Larry's OK. Both options are in the mockup and cost two gradient fills and some offsets.
+**Measure first (box 810: more than 10% over the crystal shell counts as a regression).**
+1. Before building the rest of the orb, add two probes to `OrbShellFrameTimeTests`, using the same 1440×220 size and 300 frames: arcs only, and arcs plus refraction. Compare each with the crystal shell probe measured in the same session.
+2. Include the shadow and cast light in the arcs plus refraction probe.
+3. **How to compare (Larry, 2026-11-12, "Use your pick for C6").** On the Mac, in one session, run the crystal probe and the arcs probe back to back, five runs of each. Take the median p50 and the median p95 of each side's five runs. Pass: the arcs median p50 is at most 1.10× the crystal median p50 from that session, the arcs median p95 is at most 1.10× the crystal median p95 from that session, and p95 is under 16.7 ms. Do the same for the arcs plus refraction probe. The reason: in the C10 freeze baseline, crystal p50 on one build ranged from 5.428 to 7.576 ms over three runs, 23% above the median at worst, so a stored p50 would let ordinary run-to-run variation fail the 10% rule. The C10 receipt (`docs/roadmap-log/2026-11-12-ws-35-c10-component-baseline-receipt.md`) and the 2026-09-29 receipt (p50 4.933 ms, p95 14.150 ms) stay as records, not as C6's comparison point.
+4. If the test harness can't render a `layerEffect` off-screen, measure the same scene on screen with Instruments on the Mac and record the method.
+5. The phone has no frame-time probe yet; one is needed before the phone orb ships.
+6. If arcs plus refraction fails while arcs alone passes, the proposed fallback is options 1 and 2 together: keep the contact shadow with cast light, and replace refraction with tilt parallax. Switching needs Larry's OK. Both options are in the mockup and cost two gradient fills and some offsets.

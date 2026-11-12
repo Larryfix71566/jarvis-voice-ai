@@ -1,0 +1,24 @@
+Building for debugging...
+Build complete! (0.28 sec)
+Test Suite 'Selected tests' started at 2026-11-12 11:04:13.434.
+Test Suite 'PhoneRemoteAuthorityTests.xctest' started at 2026-11-12 11:04:13.435.
+Test Suite 'PhoneRemoteAuthorityTests.xctest' passed at 2026-11-12 11:04:13.435.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 11:04:13.435.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' started at 2026-11-12 11:04:13.485.
+Test Suite 'MortimerHostTests.xctest' started at 2026-11-12 11:04:13.486.
+Test Suite 'MemoryGraphFrameTimeTests' started at 2026-11-12 11:04:13.486.
+Test Case '-[MortimerHostTests.MemoryGraphFrameTimeTests testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate]' started.
+Test Case '-[MortimerHostTests.MemoryGraphFrameTimeTests testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate]' passed (16.667 seconds).
+Test Suite 'MemoryGraphFrameTimeTests' passed at 2026-11-12 11:04:30.153.
+	 Executed 1 test, with 0 failures (0 unexpected) in 16.667 (16.667) seconds
+Test Suite 'MortimerHostTests.xctest' passed at 2026-11-12 11:04:30.153.
+	 Executed 1 test, with 0 failures (0 unexpected) in 16.667 (16.667) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 11:04:30.153.
+	 Executed 1 test, with 0 failures (0 unexpected) in 16.667 (16.668) seconds
+P4 frame time: p50 8.042125031352043 ms, p95 10.689333314076066 ms, max 11.216708458960056 ms; control p50 4.031166667118669 ms; main thread p95 10.684875072911382 ms; test rasterize p50 800.1278333831578 ms → /Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/.build/interface-fixtures/P4-frame-time.json
+P4 layer: NSViewBackingLayer async=false needsDisplay=false bounds=1440x900
+P4 layer:  CALayer async=false needsDisplay=false bounds=1440x900
+P4 layer:  RBDrawingLayer async=false needsDisplay=false bounds=592x580
+P4 layer:   RBImageQueueLayer async=false needsDisplay=false bounds=0x0
