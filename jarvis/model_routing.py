@@ -470,9 +470,9 @@ def _route_for_profile(profile: dict[str, Any], route_name: str,
     if not isinstance(raw, dict) or set(raw) - _ROUTE_CONFIG_KEYS:
         raise ModelRouteError(f"route {route_name!r} contains unsupported configuration fields")
     adapter, billing, privacy = _ROUTE_CONTRACTS[route_name]
-    for field, expected in (("adapter", adapter), ("billing", billing), ("privacy", privacy)):
-        if field in raw and raw[field] != expected:
-            raise ModelRouteError(f"route {route_name!r} cannot override its protected {field} contract")
+    for contract_field, expected in (("adapter", adapter), ("billing", billing), ("privacy", privacy)):
+        if contract_field in raw and raw[contract_field] != expected:
+            raise ModelRouteError(f"route {route_name!r} cannot override its protected {contract_field} contract")
     subscription_provider = {
         "subscription": "anthropic", "codex_subscription": "openai",
     }.get(route_name)

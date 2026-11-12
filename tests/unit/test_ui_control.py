@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from jarvis.bot.ui_control import (
     UI_ACTIONS,

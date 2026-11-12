@@ -8,7 +8,6 @@ that a naive str.startswith containment check would let through.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest

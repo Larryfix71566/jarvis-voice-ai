@@ -32,7 +32,6 @@ from jarvis.db import get_conn  # noqa: E402
 from jarvis.model_catalog import render_model_catalog
 from jarvis.prompts import (  # noqa: E402
     build_supervisor_prompt,
-    VOICE_ADDENDUM,
     render_agent_catalog,
 )
 

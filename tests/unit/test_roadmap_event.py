@@ -9,7 +9,7 @@ from jarvis.agents.base import _tool_result_observation, TOOL_RESULT_EVENT_MAX
 from jarvis.bot.display import build_display_payload
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from mcp_servers.mcp_repo import logic
-from tests.unit.test_agent_events import flush, sent
+from tests.unit.test_agent_events import flush, sent as sent
 from tests.unit.test_registry_source_policy import registry_for, Session, response
 from tests.unit.test_subagent import make_agent
 from tests.unit.test_subagent_tool_policy import routed

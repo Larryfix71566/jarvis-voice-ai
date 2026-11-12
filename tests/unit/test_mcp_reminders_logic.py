@@ -1,6 +1,5 @@
 """Unit tests for mcp_servers/mcp_reminders/logic.py (plan Phase 1 Tests)."""
 
-import sqlite3
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 

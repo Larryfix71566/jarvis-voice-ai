@@ -1,0 +1,115 @@
+--- a/sandbox/files.py
++++ b/sandbox/files.py
+@@ -7,7 +7,6 @@
+ from contextlib import contextmanager
+ from contextvars import ContextVar
+ from dataclasses import dataclass, field
+-from pathlib import Path
+ from typing import Callable
+ 
+ from sandbox.artifacts import Candidate, File, SandboxError, source_path_allowed
+--- a/sandbox/guest/hydrate.py
++++ b/sandbox/guest/hydrate.py
+@@ -7,7 +7,6 @@
+ from pathlib import Path
+ import pwd
+ import shutil
+-import stat
+ import subprocess
+ import sys
+ 
+@@ -37,7 +36,7 @@
+     checks = root / "verification"
+     checks.mkdir()
+     before = {file.path: file for file in baseline.files}
+-    after = {file.path: file for file in candidate.files}
++    _after = {file.path: file for file in candidate.files}
+     names = set(before)
+     check_paths(names)
+     for name in sorted(names):
+--- a/sandbox/guest/rpc.py
++++ b/sandbox/guest/rpc.py
+@@ -2,7 +2,6 @@
+ """File operations inside the VM; invoked from the read-only host input share."""
+ from __future__ import annotations
+ 
+-import base64
+ import json
+ import os
+ from pathlib import Path
+--- a/sandbox/images.py
++++ b/sandbox/images.py
+@@ -6,7 +6,6 @@
+ import json
+ from pathlib import Path
+ import re
+-import shutil
+ import uuid
+ 
+ from sandbox.artifacts import Candidate, SandboxError
+--- a/sandbox/publish.py
++++ b/sandbox/publish.py
+@@ -10,7 +10,6 @@
+ import fcntl
+ import hashlib
+ import json
+-from pathlib import Path
+ import re
+ from urllib import error, parse, request
+ 
+--- a/sandbox/tests/test_artifacts.py
++++ b/sandbox/tests/test_artifacts.py
+@@ -1,7 +1,4 @@
+-import base64
+ import hashlib
+-import io
+-import json
+ from pathlib import Path
+ import tarfile
+ import tempfile
+--- a/sandbox/tests/test_files.py
++++ b/sandbox/tests/test_files.py
+@@ -1,7 +1,6 @@
+ import hashlib
+ import importlib.util
+ import io
+-import json
+ import os
+ from pathlib import Path
+ import sys
+--- a/sandbox/tests/test_runtime.py
++++ b/sandbox/tests/test_runtime.py
+@@ -5,7 +5,6 @@
+ from sandbox.artifacts import SandboxError
+ from sandbox.control import Controller
+ from sandbox.durable import atomic_json
+-from sandbox.profiles import MORTIMER
+ from sandbox.runtime import Runtime
+ 
+ class RuntimeTests(unittest.TestCase):
+--- a/sandbox/tests/test_session.py
++++ b/sandbox/tests/test_session.py
+@@ -2,14 +2,13 @@
+ import hashlib
+ import io
+ import json
+-import subprocess
+ import tarfile
+ import tempfile
+ from threading import Event, Thread
+ import unittest
+ from unittest.mock import patch
+ 
+-from sandbox.artifacts import Candidate, File, SandboxError
++from sandbox.artifacts import SandboxError
+ from sandbox.control import Controller
+ from sandbox.profiles import Profile
+ from sandbox.session import Session
+--- a/sandbox/tests/test_source.py
++++ b/sandbox/tests/test_source.py
+@@ -1,5 +1,3 @@
+-import base64
+-import json
+ from pathlib import Path
+ import subprocess
+ import tempfile

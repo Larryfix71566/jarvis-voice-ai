@@ -2,7 +2,6 @@
 from contextlib import AsyncExitStack, asynccontextmanager
 import copy
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import anyio

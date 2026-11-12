@@ -1,5 +1,4 @@
 """Ordinary MCP hidden receipts over real inert host workspace records."""
-import asyncio
 import json
 import os
 from types import SimpleNamespace
@@ -22,7 +21,7 @@ from jarvis.runlog.store import RunLogger, get_run
 from jarvis.skill_runtime import update_runtime_inventory
 from jarvis.skills.registry import _ToolSourceContract
 from jarvis.tenant import user_id_scope
-from tests.unit.test_development_sources import workspace
+from tests.unit.test_development_sources import workspace as workspace
 from tests.unit.test_registry_source_policy import registry_for
 
 CANARY = 'SYNTHETIC_PRIVATE_ORDINARY_SOURCE_93745'
@@ -350,7 +349,6 @@ async def test_actual_local_only_floor_precedes_lost_ack_write_and_later_read(br
 @pytest.mark.parametrize('path,level', [('docs/REPO_MAP.md', 'approved_external'),
                                        ('docs/private-plan.txt', 'confidential')])
 async def test_seeded_start_threads_actual_host_plan_policy_without_provider(bridge, monkeypatch, path, level):
-    from mcp_servers.mcp_repo import logic as repo_logic
     root = bridge.w.service.repo_root
     (root / 'docs').mkdir()
     (root / path).write_text('public plan fixture' if level == 'approved_external' else CANARY)

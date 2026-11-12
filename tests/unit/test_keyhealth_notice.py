@@ -4,7 +4,7 @@ sleeps) with fake agents carrying name/model_unusable/model_unusable_detail
 -- the same shape as jarvis.agents.base.SubAgent's properties."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import pytest
 

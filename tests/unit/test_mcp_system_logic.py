@@ -1,7 +1,6 @@
 """Unit tests for mcp_servers/mcp_system/logic.py (plan Phase 1 Tests)."""
 
 import psutil
-import pytest
 
 from mcp_servers.mcp_system import logic
 

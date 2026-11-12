@@ -1,9 +1,6 @@
 """Actual protected deployer payload, synthetic HOME/processes only; no live ops."""
 from __future__ import annotations
-import hashlib
 import io
-import json
-import os
 from pathlib import Path
 import plistlib
 import shutil

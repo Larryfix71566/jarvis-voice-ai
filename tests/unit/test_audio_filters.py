@@ -7,7 +7,6 @@ No torch/deepfilternet needed: the engine is injected via a fake.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from pipecat.frames.frames import FilterEnableFrame, FilterUpdateSettingsFrame
 

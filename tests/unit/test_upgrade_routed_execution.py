@@ -18,7 +18,10 @@ from jarvis.model_preferences import stage_preference, confirm_preference
 from jarvis.model_budget import ModelBudgetUnavailable, begin_model_task_budget
 from jarvis.model_routing import AccessRoute, ResolvedModelRoute, WorkloadLimits, ModelRouteError
 from jarvis.privacy_policy import DataPolicy, issue_tool_result, make_tool_execution_scope
-from tests.unit.test_development_sources import workspace as host_workspace
+from tests.unit.test_development_sources import workspace as _host_workspace_fixture
+
+# Register the imported fixture under its local pytest name.
+host_workspace = _host_workspace_fixture
 
 
 CANARY = "PRIVATE_DEVELOPMENT_SOURCE_44b8"

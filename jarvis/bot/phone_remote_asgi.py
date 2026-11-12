@@ -315,7 +315,7 @@ class PhoneRemoteConnectionASGI(PhoneRemoteASGI):
     async def __call__(self, scope, receive, send):
         from dataclasses import asdict
         from jarvis.bot.phone_remote_connection import (
-            CONNECTION_PROTOCOL, ConnectionFailure, ConnectionLease, ConnectionReply,
+            ConnectionFailure, ConnectionLease, ConnectionReply,
             HandshakeError, parse_handshake, decode_proof, handshake_response, is_handshake_attempt,
         )
         if type(scope) is not dict:

@@ -24,7 +24,7 @@ from pipecat.frames.frames import (
     LLMTextFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.processors.frameworks.rtvi import RTVIObserver, RTVIObserverParams
 from pipecat.tests.utils import run_test
 

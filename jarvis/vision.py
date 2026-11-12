@@ -1,11 +1,11 @@
 """Shared vision-profile resolution for screen and shared-content analysis."""
 from __future__ import annotations
 
-import os
+import os as os
 from typing import Any
 
 from mcp_servers.mcp_screen.logic import (
-    NoVisionProfileError,
+    NoVisionProfileError as NoVisionProfileError,
     _default_vision_client,
     _resolve_vision_profile,
 )

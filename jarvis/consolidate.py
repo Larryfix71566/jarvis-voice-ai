@@ -241,7 +241,6 @@ def format_report(proposals: list[MergeProposal]) -> str:
 import argparse
 import sys
 
-from jarvis.consolidate import format_report, propose_merges
 from jarvis.db import get_conn
 from jarvis.memory import delete_fact
 

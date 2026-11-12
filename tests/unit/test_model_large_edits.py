@@ -12,7 +12,7 @@ import pytest
 from jarvis import model_execution as E, subscription_tools as T
 from jarvis.privacy_policy import (DataPolicy, issue_tool_result, make_tool_execution_scope,
                                   tool_argument_limit, tool_result_limit, validate_tool_result)
-from tests.unit.test_development_sources import workspace
+from tests.unit.test_development_sources import workspace as workspace
 from tests.unit.test_development_sources import dispatch
 from tests.unit.test_model_execution import FakeClient, FakeStreamingClient, resolved_route
 

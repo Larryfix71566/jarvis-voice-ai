@@ -45,6 +45,12 @@ if os.environ.get("RUN_LIVE") != "1":
     os.environ["JARVIS_COSTS_DB"] = os.path.join(
         tempfile.mkdtemp(prefix="mortimer-test-"), "costs.db")
 
+# Select verified bundled tokenizer bytes before any Pipecat imports can
+# invoke its network downloader. Live runs keep their explicit resource setup.
+if os.environ.get("RUN_LIVE") != "1":
+    from scripts.check_test_nltk_data import verify as verify_test_nltk_data
+    os.environ["NLTK_DATA"] = str(verify_test_nltk_data())
+
 from jarvis.db import run_migrations
 
 

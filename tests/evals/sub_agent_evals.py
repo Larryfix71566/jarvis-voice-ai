@@ -220,7 +220,7 @@ class TestScheduler:
             ["mcp-time", "mcp-reminders"], script, registry
         )
 
-        response = await agent.run("what reminders do I have?")
+        _response = await agent.run("what reminders do I have?")
 
         tool_names = [c["tool"] for c in reg.calls]
         assert "list_reminders" in tool_names, f"expected list_reminders, got {tool_names}"
@@ -259,7 +259,7 @@ class TestLibrarian:
             ["mcp-notes"], script, registry
         )
 
-        response = await agent.run("show me my notes")
+        _response = await agent.run("show me my notes")
 
         tool_names = [c["tool"] for c in reg.calls]
         assert "list_notes" in tool_names, f"expected list_notes, got {tool_names}"
@@ -276,7 +276,7 @@ class TestLibrarian:
             ["mcp-notes"], script, registry
         )
 
-        response = await agent.run("find notes about coffee")
+        _response = await agent.run("find notes about coffee")
 
         tool_names = [c["tool"] for c in reg.calls]
         # May call search_notes or list_notes
@@ -317,7 +317,7 @@ class TestAnalyst:
             ["mcp-web"], script, registry
         )
 
-        response = await agent.run("what's the weather in New York?")
+        _response = await agent.run("what's the weather in New York?")
 
         tool_names = [c["tool"] for c in reg.calls]
         # Should call web_search and/or get_weather
@@ -359,7 +359,7 @@ class TestSystems:
             ["mcp-system"], script, registry
         )
 
-        response = await agent.run("what's using the most CPU?")
+        _response = await agent.run("what's using the most CPU?")
 
         tool_names = [c["tool"] for c in reg.calls]
         assert "get_top_processes" in tool_names, \
@@ -381,7 +381,7 @@ class TestDeveloper:
             ["mcp-git", "mcp-apps", "mcp-selfedit"], script, registry
         )
 
-        response = await agent.run("what's the git status?")
+        _response = await agent.run("what's the git status?")
 
         tool_names = [c["tool"] for c in reg.calls]
         assert "git_status" in tool_names, f"expected git_status, got {tool_names}"
@@ -398,7 +398,7 @@ class TestDeveloper:
             ["mcp-git", "mcp-apps", "mcp-selfedit"], script, registry
         )
 
-        response = await agent.run("show me the last few commits")
+        _response = await agent.run("show me the last few commits")
 
         tool_names = [c["tool"] for c in reg.calls]
         assert "git_log" in tool_names, f"expected git_log, got {tool_names}"
@@ -415,7 +415,7 @@ class TestDeveloper:
             ["mcp-git", "mcp-apps", "mcp-selfedit"], script, registry
         )
 
-        response = await agent.run("what are the recent changes?")
+        _response = await agent.run("what are the recent changes?")
 
         tool_names = [c["tool"] for c in reg.calls]
         # Should NOT initiate write operations

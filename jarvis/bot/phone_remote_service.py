@@ -827,7 +827,6 @@ class PhoneRemoteService:
             if (binding.owner_id, binding.device_id, binding.login_incarnation) != (
                     context.owner_id, context.device_id, context.login_incarnation):
                 return response(rid, "denied", "not_authorized")
-            ended = None
             with self.owner_available.commit_guard(context.owner_id) as (owner_ready, _):
                 with self.clock.commit_guard() as (now, _):
                     with self._service_commit():
@@ -847,7 +846,6 @@ class PhoneRemoteService:
                                 return response(rid, "denied", "not_authorized")
                             if current is not None:
                                 self._peers.pop(peer_id, None)
-                                ended = current
                                 if self._owner_lease.get(binding.owner_id, (None,))[0] == peer_id:
                                     self._owner_lease.pop(binding.owner_id, None)
                                 self._clear_lease_locked(binding.owner_id, peer_id, current["resource"])

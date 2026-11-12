@@ -16,11 +16,10 @@ from jarvis.model_budget import (
     ModelBudgetUnavailable, TaskBudget, begin_model_child_budget,
     begin_model_task_budget, bind_model_task_budget_for_transport,
     recover_model_task_budget_for_transport, remaining_child_seconds,
-    resolve_model_child_budget,
 )
 from jarvis.model_routing import WorkloadLimits
 from jarvis.tenant import user_id_scope
-from tests.unit.test_model_budget import isolated_budget
+from tests.unit.test_model_budget import isolated_budget as isolated_budget
 
 
 def bind(limits=WorkloadLimits(), child_limits=WorkloadLimits(), *, parent="transport-parent"):

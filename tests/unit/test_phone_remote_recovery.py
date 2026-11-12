@@ -84,7 +84,7 @@ class RecoveryJournalCodecTests(unittest.TestCase):
         checkpoint.chmod(0o600)
         writer = RecoveryJournal(recovery_root, operation_id=operation_id,
                                  manifest_sha256="a" * 64)
-        state = writer.create(files={"database": RecoveryJournalCodecTests.record(live),
+        _state = writer.create(files={"database": RecoveryJournalCodecTests.record(live),
             "wal": RecoveryJournalCodecTests.record(wal),
             "shm": RecoveryJournalCodecTests.record(shm)},
             checkpoint_sha256=RecoveryJournalCodecTests.record(checkpoint).sha256)
@@ -261,7 +261,7 @@ class RecoveryJournalCodecTests(unittest.TestCase):
     def test_resume_inspection_distinguishes_exact_base_pending_and_committed(self):
         db = self.create_application_db(with_phone=True)
         anchor = FakeProtectedAnchor("host-test")
-        store = PhoneAdmissionStore(db, anchor)
+        _store = PhoneAdmissionStore(db, anchor)
         authority_hash = authority_projection_sha256(db)
         operation_id = str(uuid.uuid4())
         manifest_hash, checkpoint_hash, base_hash = "a" * 64, "b" * 64, "c" * 64
@@ -456,7 +456,7 @@ class RecoveryJournalCodecTests(unittest.TestCase):
             root = Path(directory)
             op = str(uuid.uuid4())
             writer = RecoveryJournal(root, operation_id=op, manifest_sha256="a" * 64)
-            files = {
+            _files = {
                 "database": FileRecord(True, 3, hashlib.sha256(b"db\n").hexdigest()),
                 "wal": FileRecord(False, 0, None),
                 "shm": FileRecord(False, 0, None),
@@ -1599,7 +1599,7 @@ class RecoveryActualProcessTests(unittest.TestCase):
 def _recovery_child_entrypoint(database):
     import socket
     from jarvis.bot.phone_remote_authority_channel import (
-        NativeProtectedAnchorV4, RecoveryChildChannel, open_store)
+        RecoveryChildChannel)
     from jarvis.bot.phone_remote_recovery import RecoveryDiskExecutor
     config = json.loads(os.environ["PHONE_REMOTE_AUTHORITY_RECOVERY_CONFIG"])
     assert os.environ["PHONE_REMOTE_AUTHORITY_LOCK_FD"] == "4"
