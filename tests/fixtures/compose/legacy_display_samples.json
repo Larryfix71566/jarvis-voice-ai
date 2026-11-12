@@ -1,0 +1,21 @@
+[
+ {"tool": "web_search", "arguments": {"query": "q"}, "data": {"answer": "A", "results": [{"url": "https://a.example/x", "title": "T", "content": "c"}, {"url": "https://b.example", "title": "U"}]}},
+ {"tool": "get_weather", "arguments": {"location": "Alpharetta"}, "data": {"location": "Alpharetta", "temperature_f": 81, "temperature_c": 27, "summary": "Clear", "units": "imperial", "source": "weather.gov"}},
+ {"tool": "get_weather_radar", "arguments": {}, "data": {"tiles": ["https://t.example/1.png"], "basemap_tiles": ["https://m.example/1.png"], "ts": 1}},
+ {"tool": "app_create", "arguments": {"name": "demo"}, "data": {"name": "demo", "summary": "Scaffolded demo", "files": ["README.md", "src/app.py"], "url": "https://github.com/o/demo"}},
+ {"tool": "app_write_file", "arguments": {"path": "src/app.py", "content": "print(1)"}, "data": {"ok": true, "path": "src/app.py"}},
+ {"tool": "git_diff_summary", "arguments": {}, "data": {"summary": "2 files changed", "diff": "--- a\n+++ b\n"}},
+ {"tool": "prepare_commit", "arguments": {"message": "m"}, "data": {"pending": true, "action_id": "a1", "summary": "Commit 2 files", "files": ["a", "b"]}},
+ {"tool": "commit", "arguments": {}, "data": {"ok": true, "sha": "abc1234", "message": "m"}},
+ {"tool": "prepare_push", "arguments": {}, "data": {"pending": true, "action_id": "a2", "summary": "Push branch"}},
+ {"tool": "push", "arguments": {}, "data": {"ok": true, "branch": "b"}},
+ {"tool": "repo_write_file", "arguments": {"path": "docs/x.md", "content": "# X\nbody"}, "data": {"pending": true, "action_id": "a3", "path": "docs/x.md"}},
+ {"tool": "repo_read_file", "arguments": {"path": "docs/x.md"}, "data": {"path": "docs/x.md", "content": "# X\nbody"}},
+ {"tool": "plan_ready", "arguments": {}, "data": {"title": "Plan", "text": "# Plan\nsteps", "mode": "single", "profile": "claude-opus"}},
+ {"tool": "weather_report", "arguments": {}, "data": {"weather": {"location": "Alpharetta", "temperature_f": 81, "summary": "Clear"}, "radar": {"tiles": ["https://t.example/1.png"]}}},
+ {"tool": "research_report", "arguments": {}, "data": {"comparison": "### a\nx\n### b\ny", "sites": [{"url": "https://a.example", "ok": true, "pages": 3}, {"url": "https://b.example", "ok": false, "error": "timeout", "error_kind": "unreachable"}], "credits_used": 4, "saved_path": "docs/research/x.md"}},
+ {"tool": "memory_graph_view", "arguments": {}, "data": {"ok": true, "image_url": "http://127.0.0.1:7861/api/graph/x.png", "summary": "One graph."}},
+ {"tool": "graph_view", "arguments": {"graph": "capability"}, "data": {"ok": true, "image_url": "http://127.0.0.1:7861/api/graph/y.png", "summary": "Another graph."}},
+ {"tool": "web_search", "arguments": {}, "data": {"error": "boom"}},
+ {"tool": "not_a_display_tool", "arguments": {}, "data": {"x": 1}}
+]
