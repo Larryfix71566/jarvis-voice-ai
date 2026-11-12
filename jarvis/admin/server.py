@@ -3238,27 +3238,6 @@ def research_cancel() -> dict:
     return {"ok": True}
 
 
-# --------------------------------------------------------------- memory
-# Plan Phase 5e: visibility/correction surface. Thin pass-throughs over
-# jarvis.memory — matching the git panel's convention above (logic lives in
-# the shared module; the sidecar only adapts it to HTTP). run_migrations()
-# is idempotent and mirrors mcp_git.logic._db()'s own pattern of ensuring
-# the schema exists before every call, since this endpoint can be hit
-# before any voice session has run migrations itself.
-
-
-@app.get("/api/memory")
-def memory_overview() -> dict:
-    run_migrations()
-    return {
-        "ok": True,
-        "facts": memory_module.list_facts(),
-        "summary": memory_module.get_summary_text(),
-        "observations": memory_module.list_observation_groups(),
-        "usage": memory_module.memory_usage(),
-    }
-
-
 _WORKSPACE_SOURCE_TOOLS = frozenset({
     'selfedit_start', 'selfedit_status', 'selfedit_read', 'selfedit_write', 'selfedit_finish',
     'app_build_start', 'app_build_status', 'app_build_submit',
@@ -4688,26 +4667,6 @@ def skill_example_preview(skill_id: str, example_id: str) -> dict:
         raise HTTPException(status_code=409, detail="reviewed example preview is unavailable") from None
 
 
-@app.get("/api/knowledge")
-def knowledge_overview() -> dict:
-    """K5 (MORTIMER_KNOWLEDGE_FRAMEWORK_PLAN.md) — the four layers, with
-    counts, in one read-only call. The body lives in
-    jarvis/status/overview.py (status spec T2.3) so this endpoint and
-    system_overview() share one implementation (R8); response unchanged."""
-    from jarvis.status.overview import knowledge_overview as _knowledge
-
-    return _knowledge()
-
-
-@app.get("/api/workflows")
-def workflows_detail() -> dict:
-    """MORTIMER_WORKFLOW_VIEWER_PLAN.md piece 1 — every workflow in full for
-    the read-only viewer. Body in jarvis/status/overview.py, beside the
-    knowledge overview."""
-    from jarvis.status.overview import workflows_detail as _workflows
-    return _workflows()
-
-
 # Machine vitals for the console's bottom-right readout (Larry
 # 2026-08-18). Served from the SAME mcp_system.logic the systems agent
 # uses — one implementation, so the chip and the spoken answer can never
@@ -4887,90 +4846,6 @@ def status_github(kind: str = "prs", state: str = "open", limit: int = 10,
         kind, state=state, limit=limit, number=number))
 
 
-@app.delete("/api/memory/fact/{key}")
-def memory_delete_fact(key: str) -> dict:
-    run_migrations()
-    with get_conn() as conn:
-        deleted = memory_module.delete_fact(conn, key)
-    if not deleted:
-        return {"ok": False, "error": f"No fact with key '{key}'."}
-    return {"ok": True, "key": key}
-
-
-# MORTIMER_MEMORY_AUTOCONSOLIDATION_PLAN.md A3 — thin wrappers over
-# jarvis.memory_sweep, same convention as the memory endpoints above:
-# the sidecar owns nothing new, it just exposes the review queue the
-# startup sweep (A1/A2/A4/A5) populates.
-
-
-@app.get("/api/memory/reviews")
-def memory_reviews_list() -> dict:
-    run_migrations()
-    from jarvis import memory_sweep
-
-    try:
-        return {"ok": True, "reviews": memory_sweep.list_open_reviews()}
-    except Exception as exc:  # noqa: BLE001 — a panel must never break the sidecar
-        logger.warning("memory_reviews_list_failed error_type=%s",
-                       type(exc).__name__)
-        return {"ok": False, "error": "could not read the review queue"}
-
-
-@app.post("/api/memory/reviews/{review_id}/resolve")
-def memory_reviews_resolve(review_id: int, body: MemoryReviewResolveIn) -> dict:
-    run_migrations()
-    from jarvis import memory_sweep
-
-    try:
-        with get_conn() as conn:
-            result = memory_sweep.resolve_review(
-                conn, review_id, body.action, body.rewrite_content,
-            )
-            conn.commit()
-        return {"ok": True, **result}
-    except ValueError as exc:
-        return {"ok": False, "error": str(exc)}
-    except Exception as exc:  # noqa: BLE001 — a panel must never break the sidecar
-        logger.warning("memory_reviews_resolve_failed error_type=%s",
-                       type(exc).__name__)
-        return {"ok": False, "error": "could not resolve that review"}
-
-
-# ----------------------------------------------------------------- runs
-# Run-logging plan §5.11: thin pass-throughs over jarvis.runlog, same
-# convention as memory/git above. Query normalization (since -> ISO, the
-# D9 orphan-status rule) lives in jarvis.runlog.store and must not be
-# reimplemented here — both endpoints call parse_since() before calling
-# list_runs()/get_run() so the CLI and the console panel can never
-# disagree about what "2d" means.
-
-
-@app.get("/api/runs")
-def runs_list(
-    agent: str = "", status: str = "", since: str = "", limit: int = 50,
-) -> dict:
-    run_migrations()
-    clamped_limit = max(1, min(200, limit))
-    return {
-        "ok": True,
-        "runs": list_runs(
-            agent=agent or None,
-            status=status or None,
-            since=parse_since(since or None),
-            limit=clamped_limit,
-        ),
-    }
-
-
-@app.get("/api/runs/{run_id}")
-def runs_detail(run_id: str) -> dict:
-    run_migrations()
-    detail = get_run(run_id)
-    if detail is None:
-        return {"ok": False, "error": "not found"}
-    return {"ok": True, **detail}
-
-
 # -------------------------------------------------------------- council
 # MORTIMER_LLM_COUNCIL_PLAN.md D10. Thin pass-throughs over
 # jarvis.council.council, same convention as runs/memory/git above — no
@@ -5053,41 +4928,6 @@ def council_rounds_list(
             since=parse_since(since or None), limit=clamped_limit,
         ),
     }
-
-
-# ---- MORTIMER_GRAPH_LAYER_PLAN.md GL11 — read-only graph views. Every edge is
-# derived in jarvis/graphs; these endpoints only call build() and render.
-@app.get("/api/graph/{name}")
-def graph_json(name: str, focus: str = "", depth: int | None = None,
-               edge_types: str = "", since: str = "") -> dict:
-    run_migrations()
-    with closing(get_conn()) as conn:
-        return graphs.build(name, conn, focus=focus, depth=depth,
-                            edge_types=edge_types, since=since or None)
-
-
-@app.get("/api/graph/{name}/image.{fmt}")
-def graph_image(name: str, fmt: str, focus: str = "", depth: int | None = None,
-                edge_types: str = "", since: str = "", w: int = 0, h: int = 0):
-    if fmt not in ("png", "svg"):
-        return Response(status_code=404)
-    width = gcfg.GRAPH_IMAGE_W if w <= 0 else max(gcfg.GRAPH_IMAGE_MIN_PX, min(gcfg.GRAPH_IMAGE_MAX_PX, w))
-    height = gcfg.GRAPH_IMAGE_H if h <= 0 else max(gcfg.GRAPH_IMAGE_MIN_PX, min(gcfg.GRAPH_IMAGE_MAX_PX, h))
-    run_migrations()
-    with closing(get_conn()) as conn:
-        result = graphs.build(name, conn, focus=focus, depth=depth, edge_types=edge_types,
-                              since=since or None)
-    media = "image/png" if fmt == "png" else "image/svg+xml"
-    if not result.get("ok"):
-        # GL11: never a 4xx for a graph error — an <img>/AsyncImage shows nothing for one.
-        body = (render.error_image_png(result["error"], width, height) if fmt == "png"
-                else render.error_image_svg(result["error"], width, height))
-        return Response(content=body, media_type=media)
-    graph = graphs.from_json(result)
-    pos = render.layout(graph, result["focus"], width, height)
-    body = (render.to_png(graph, pos, width, height, focus=result["focus"]) if fmt == "png"
-            else render.to_svg(graph, pos, width, height, focus=result["focus"]))
-    return Response(content=body, media_type=media)
 
 
 @app.get("/api/council/roster")
@@ -5414,6 +5254,18 @@ from jarvis.admin.routes.core import (  # noqa: E402,F401
     commit,
     prepare_push,
     push,
+)
+from jarvis.admin.routes.knowledge import (  # noqa: E402,F401
+    memory_overview,
+    knowledge_overview,
+    workflows_detail,
+    memory_delete_fact,
+    memory_reviews_list,
+    memory_reviews_resolve,
+    runs_list,
+    runs_detail,
+    graph_json,
+    graph_image,
 )
 from jarvis.admin.routes.ambient import (  # noqa: E402,F401
     ambient,
