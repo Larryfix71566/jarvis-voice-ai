@@ -34,6 +34,8 @@ from pathlib import Path
 
 from fastapi import APIRouter, FastAPI
 
+from jarvis.request_guard import RequestGuardMiddleware
+
 # Same root-anchored default as jarvis/usage_ledger.py (this service is
 # started from its own Procfile line, so CWD must not decide the path).
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -164,3 +166,5 @@ def get_months() -> dict:
 
 app = FastAPI(title="mortimer-costs")
 app.include_router(router)
+# WS-34 B2: Host/Origin allow-list (DNS-rebinding defence); see request_guard.py.
+app.add_middleware(RequestGuardMiddleware)
