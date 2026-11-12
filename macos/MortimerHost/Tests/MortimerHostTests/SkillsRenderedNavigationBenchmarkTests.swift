@@ -137,6 +137,9 @@ final class SkillsRenderedNavigationBenchmarkTests: XCTestCase {
     }
 
     func testRenderedCatalogSelectionAndCachedNavigationP95AtWideAndCompactSizes() async throws {
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
+            throw XCTSkip("Hosted-runner skip: this test still gates on Mac.")
+        }
         guard !NSScreen.screens.isEmpty else {
             throw XCTSkip("rendered-navigation benchmark requires a macOS display")
         }

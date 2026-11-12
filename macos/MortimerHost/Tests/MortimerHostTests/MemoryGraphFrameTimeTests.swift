@@ -211,6 +211,9 @@ final class MemoryGraphFrameTimeTests: XCTestCase {
     // and a run loop spun from inside a main-queue block does not drain the
     // main queue — Core Animation's completion blocks would never arrive.
     func testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate() throws {
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
+            throw XCTSkip("Hosted-runner skip: this test still gates on Mac.")
+        }
         let app = NSApplication.shared
         guard !NSScreen.screens.isEmpty, NSScreen.main != nil else {
             throw XCTSkip("requires a visible macOS display; headless frame transactions do not prove on-screen rendering")

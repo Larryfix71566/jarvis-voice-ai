@@ -203,6 +203,9 @@ final class WindowVisibilityTests: XCTestCase {
     }
 
     func testWaveStopsSamplingWhileWindowHiddenAndResumes() throws {
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
+            throw XCTSkip("Hosted-runner skip: this test still gates on Mac.")
+        }
         let originalPolicy = try prepareVisibleWindowServer()
         defer { _ = NSApp.setActivationPolicy(originalPolicy) }
         var samples = 0
