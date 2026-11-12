@@ -2,7 +2,7 @@
 date: 2026-11-12
 system: codex
 rows: [WS-35]
-prs: []
+prs: [367]
 ---
 # B5: full pyflakes gate and pinned offline English tokenizer
 
@@ -35,7 +35,8 @@ this new log, per the daily batch rule; no ROADMAP or closure-plan edits.
 
 ## Local verification
 
-- Non-protected production/script/service/test paths pass full pyflakes.
+- Before frozen-fixture restoration, non-protected production/script/service/test
+  paths passed full pyflakes. The final lint status is recorded below.
 - Targeted fixture/import regression: 511 passed, 19 subtests passed.
 - Offline data regressions: 8 passed.
 - Vault: 17 passed, 5 existing deprecation warnings. The test environment needed
@@ -50,8 +51,8 @@ offline-data regressions successfully. Claude review remains pending.
 
 ## Human-only boundary
 
-Full repository lint currently has 16 remaining findings in the protected
-sandbox paths. The implementation has not edited them. A lint-only patch for
+Full repository lint has 16 findings in the protected sandbox paths, plus
+one frozen-fixture finding described below. The implementation has not edited them. A lint-only patch for
 Larry removes unused imports and renames the unused hydration result binding,
 preserving its evaluation. The unapplied patch is
 [`docs/plans/ws35-b5-sandbox-pyflakes.patch`](../plans/ws35-b5-sandbox-pyflakes.patch);
@@ -83,3 +84,21 @@ approval is only `tests/unit/test_status_providers.py:F401`, with this exact
 fixture hash retained and independently checked; all other rules/files remain
 enforced. Altering the approved fixture hash is not proposed. Required Claude
 review and Larry's protected-patch/exception decisions remain open.
+
+## Hosted verification on `48dc5359`
+
+[Validation run 43310778076](https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/43310778076)
+completed on exact PR head `48dc53590c3e297e08e2d9bbd2073d46a6ca9e3a`.
+The bundled offline tokenizer verification and backend import smoke passed.
+Ruff failed with exactly the 17 disclosed findings: 16 protected sandbox findings
+and the frozen provider fixture's unused `pytest` import (F401). Backend unit
+and integration tests, sub-agent evaluations, latency enforcement and frontend
+build were skipped after lint failure; they are not hosted passes.
+Allowlist/roadmap, policy, JarvisKit and MortimerPhoneCore passed. MortimerHost
+was cancelled during its test suite, not passed. Separate exact-head knowledge
+base run `43310776924` and controller run `43310776626` passed.
+
+This evidence-only update does not apply the sandbox patch, add the proposed
+F401 exception, change fixture pins, or resolve required Claude review. Those
+prerequisites remain open. The results above belong to the named tested head;
+any checks triggered by this documentation update are separate evidence.
