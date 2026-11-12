@@ -119,7 +119,7 @@ enum AppTuning {
 }
 
 /// Interface plan §7 audio-presentation values, one place (closure C2.4).
-/// Colors are teal #2DD4BF (user) and warm orange #FFB454 (Mortimer);
+/// Colors are teal #2DD4BF (user) and warm orange #E07020 (Mortimer);
 /// contrast verification against the actual theme is a C8 row.
 enum AudioPresentationTuning {
     static let userRGB: (Double, Double, Double) = (45, 212, 191)        // #2DD4BF
