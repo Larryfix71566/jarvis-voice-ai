@@ -137,15 +137,18 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 **Workstream:** Larry approved the three lane rows in his Claude Duet channel on 2026-11-11 at 02:35:41 UTC: "Take your picks", answering decisions 2 to 7 of `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §7 (decision 6: approve the WS-34 to WS-36 rows). His earlier direction for the split, 01:58:16 UTC: "first let's seperate this plan so that kimi and codex can help with development, the division should not be absolute but a guide to keep the models from stepping on each other, then we should freeze main and begin". Under §0 rule 14 a lane is a guide, not a lock: any system not engaged may pick up an item another system is not engaged with, by updating this block's Owner and Where first.
 
 - **Owner:** `codex`
-- **Status:** proposed; approved by Larry, starts when `next` exists (WS-34 item A2, after the freeze SHA is recorded in WS-17). Mark `claimed` when the first item starts.
+- **Status:** claimed for the bounded independent C8 documentation review of #348; implementation and live acceptance remain open.
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Items C10 (box 810 performance baseline, before C1a), C1a (delete layouts 0 and 1), B1 (macOS Swift CI job), B5 (wider ruff, offline NLTK data), C4 (Swift block renderer), C5 (result carousel; the second screen keeps its grid, decision 4), C9 (phone orb on synthetic levels, decision 5, after moving the orb renderer to a shared package) and F1 (the `PhoneRemoteAuthorityProcessTests` failure, an acceptance fix on `main` approved by name). Each item in the plan's §4 table for this lane, as a PR into `next` with its tests, reviewed by the item's named reviewer (never its author). Interface items then pass the rewritten UI boxes in `docs/acceptance/mac-acceptance-2026-11-11.md` §4 on the final build; `next` merges into `main` at closure.
 - **Model version:** not recorded
-- **Where:** not started; items branch from `next` (F1 and other acceptance fixes branch from `main`)
+- **Where:** `codex/ws35-c8-review-20261112` (separate C8 docs-only review). Preserve separate C0 review #350, B2 review #351, and implementation/baseline branches #335/#337/#338/#339.
 - **Plan:** `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §4 (WS-35) and §5; add only dated progress for this lane
 - **Scope:** The files named for those items in the plan's §4 WS-35 table: `docs/acceptance/**` (C10); every MortimerHost source and test file that reads `layoutVersion` (C1a); `.github/workflows/validate.yml` (B1, B5, after A1); `macos/MortimerHost/Sources/MortimerHost/Display/**`, `App/AppMessageRouter.swift`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift` (C4); the C5 result and carousel files; `ios/MortimerPhoneCore/**` and the shared orb package (C9). Hand-off order for shared files is the plan's §4 "Hand-off points"; overlaps with other rows are CX-29.
 - **Next step:** codex: once `next` exists, write the C10 steps for Larry, then C1a; F1 branches from `main`; once the freeze is in effect it merges only with Larry's approval by name (§0 rule 15).
-- **Updated:** 11-11
+- **Updated:** 11-12
+
+
+**Bounded C8 review claim, 2026-11-12:** Larry's proceed direction dispatches Codex as the closure-plan §4 C8 reviewer of Claude #348. Scope is only this WS-35 block, status/dated progress in the existing closure plan, and `docs/roadmap-log/2026-11-12-ws-35-c8-review.md`. No author-branch edit, other owner reassignment, source edit, merge or deployment.
 
 </details>
 
