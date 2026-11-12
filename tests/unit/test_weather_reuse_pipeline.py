@@ -18,6 +18,7 @@ import pytest
 from jarvis.bot.console_actions import _disclosed_inventory, build_console_action_tool
 from jarvis.bot.console_protocol import ALLOWED_ACTIONS, MAX_MESSAGE, validate_inventory, validate_request
 from jarvis.bot.console_session import ConsoleSession
+from jarvis.bot.pipeline import command_console_flag_enabled
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.pipeline import _mark_weather_context, _foreground_request, ForegroundRequest
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn, is_sensitive
@@ -98,7 +99,8 @@ class Harness:
             ALLOWED_ACTIONS=ALLOWED_ACTIONS, _foreground_request=_foreground_request,
             WeatherReuseBridge=WeatherReuseBridge, WeatherReportMerger=WeatherReportMerger,
             build_display_payload=build_display_payload, current_weather_reuse=current_weather_reuse,
-            weather_reuse_scope=weather_reuse_scope)
+            weather_reuse_scope=weather_reuse_scope,
+            command_console_flag_enabled=command_console_flag_enabled)
         exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), "exec"), self.ns)
         self.ns["send_app_message"] = self.send
 

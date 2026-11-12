@@ -119,7 +119,7 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 **Workstream:** Larry approved the three lane rows in his Claude Duet channel on 2026-11-11 at 02:35:41 UTC: "Take your picks", answering decisions 2 to 7 of `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §7 (decision 6: approve the WS-34 to WS-36 rows). His earlier direction for the split, 01:58:16 UTC: "first let's seperate this plan so that kimi and codex can help with development, the division should not be absolute but a guide to keep the models from stepping on each other, then we should freeze main and begin". Under §0 rule 14 a lane is a guide, not a lock: any system not engaged may pick up an item another system is not engaged with, by updating this block's Owner and Where first.
 
 - **Owner:** `claude`
-- **Status:** proposed; approved by Larry, starts when `next` exists (WS-34 item A2, after the freeze SHA is recorded in WS-17). Mark `claimed` when the first item starts. B6 (admin route split into `jarvis/admin/routes/`) is in #353 into `next`.
+- **Status:** proposed; approved by Larry, starts when `next` exists (WS-34 item A2, after the freeze SHA is recorded in WS-17). Mark `claimed` when the first item starts.
 - **Implemented by:** Claude
 - **Remaining work / acceptance:** Items A1 (add `next` to the CI triggers), A2 (cut `next`), C0 (contracts), C0b (tokens for the approved palette), C3 (Python composer), C7-py (typed request and approve/decline handlers), C7b (composer, ⌘K, typed-request send path, after B1), C1b (delete `web/` and the old macOS packages), B2, B3 (patch only), B4, B6 and C8 (rewritten UI boxes into this file). Each item in the plan's §4 table for this lane, as a PR into `next` with its tests, reviewed by the item's named reviewer (never its author). Interface items then pass the rewritten UI boxes in `docs/acceptance/mac-acceptance-2026-11-11.md` §4 on the final build; `next` merges into `main` at closure.
 - **Model version:** not recorded
@@ -127,7 +127,7 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 - **Plan:** `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §4 (WS-34) and §5; add only dated progress for this lane
 - **Scope:** The files named for those items in the plan's §4 WS-34 table: `.github/workflows/{validate,sandbox,knowledge-base}.yml` trigger lines (A1); `docs/contracts/**`; `jarvis/bot/display.py`, new `jarvis/bot/compose*.py` and `jarvis/bot/typed_request.py`, the named display emit sites and registration lines in `jarvis/bot/pipeline.py`; `jarvis/admin/**`, `jarvis/costs_api.py`; `scripts/backup_db.py`; `web/**`, `macos/MortimerShell/**`, `macos/GlassSpike/**`, `macos/VPIOBench/**` and their listed fallout; C7b's Swift files. `sandbox/**`, `jarvis/selfedit/service.py` and `config/self_edit_allowlist.json` are supplied as patches for Larry to commit. Hand-off order for shared files is the plan's §4 "Hand-off points"; overlaps with other rows are CX-29.
 - **Next step:** claude: A1 PR (`claude/ws34-a1-next-ci-triggers`) into `next`, which was cut from the freeze SHA `5777e98` (A2), then C0.
-- **Updated:** 11-12
+- **Updated:** 11-11
 
 </details>
 

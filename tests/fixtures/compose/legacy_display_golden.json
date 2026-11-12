@@ -1,0 +1,218 @@
+[
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "A\n\n**1. T**\n\n**2. U**",
+  "images": [],
+  "kind": "markdown",
+  "links": [
+   {
+    "label": "T",
+    "url": "https://a.example/x"
+   },
+   {
+    "label": "U",
+    "url": "https://b.example"
+   }
+  ],
+  "run_id": "run-golden",
+  "surface": "window",
+  "title": "Research \u2014 q",
+  "tool": "web_search"
+ },
+ null,
+ {
+  "agent": "Analyst",
+  "basemap_images": [
+   "https://m.example/1.png"
+  ],
+  "body": "Latest precipitation radar (00:00 UTC) centered on .",
+  "images": [
+   "https://t.example/1.png"
+  ],
+  "kind": "image",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "window",
+  "title": "Radar \u2014 ",
+  "tool": "get_weather_radar"
+ },
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "Scaffolded demo\n\n**Files**\n- `README.md`\n- `src/app.py`",
+  "images": [],
+  "kind": "markdown",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "drawer",
+  "title": "Project created \u2014 demo",
+  "tool": "app_create"
+ },
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "",
+  "images": [],
+  "kind": "markdown",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "drawer",
+  "title": "Code \u2014 /src/app.py",
+  "tool": "app_write_file"
+ },
+ null,
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "Commit 2 files",
+  "images": [],
+  "kind": "markdown",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "drawer",
+  "title": "Git \u2014 draft commit",
+  "tool": "prepare_commit"
+ },
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "Changes committed.",
+  "images": [],
+  "kind": "markdown",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "drawer",
+  "title": "Git \u2014 committed",
+  "tool": "commit"
+ },
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "Push branch",
+  "images": [],
+  "kind": "markdown",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "drawer",
+  "title": "Git \u2014 draft push",
+  "tool": "prepare_push"
+ },
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "Changes pushed.",
+  "images": [],
+  "kind": "markdown",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "drawer",
+  "title": "Git \u2014 pushed",
+  "tool": "push"
+ },
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "# X\nbody",
+  "images": [],
+  "kind": "markdown",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "drawer",
+  "title": "Repo \u2014 draft write docs/x.md",
+  "tool": "repo_write_file"
+ },
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "# X\nbody",
+  "images": [],
+  "kind": "markdown",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "window",
+  "title": "Repo \u2014 docs/x.md",
+  "tool": "repo_read_file"
+ },
+ null,
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "Latest precipitation radar (time unknown).",
+  "images": [
+   "https://t.example/1.png"
+  ],
+  "kind": "weather",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "window",
+  "title": "Weather",
+  "tool": "weather_report",
+  "weather": {
+   "alerts": [],
+   "attribution": "Forecast: National Weather Service",
+   "days": [],
+   "hourly": [],
+   "now": {
+    "condition": "",
+    "humidity": null,
+    "symbol": "cloud.sun.fill",
+    "temp": null,
+    "wind": null
+   },
+   "place": {
+    "approximate": false,
+    "label": "",
+    "lat": null,
+    "lon": null,
+    "source": "named"
+   },
+   "radar": null,
+   "schema": 1,
+   "summary": "",
+   "units": "imperial"
+  }
+ },
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "### a\nx\n### b\ny\n\n**Crawl issues**\n- https://b.example: timeout (unreachable)\n\n_4 credits used \u00b7 saved to docs/research/x.md_",
+  "images": [],
+  "kind": "markdown",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "window",
+  "title": "Site Comparison",
+  "tool": "research_report"
+ },
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "One graph.",
+  "images": [
+   "http://127.0.0.1:7861/api/graph/x.png"
+  ],
+  "kind": "image",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "window",
+  "title": "Graph graph \u2014 whole graph",
+  "tool": "memory_graph_view"
+ },
+ {
+  "agent": "Analyst",
+  "basemap_images": [],
+  "body": "Another graph.",
+  "images": [
+   "http://127.0.0.1:7861/api/graph/y.png"
+  ],
+  "kind": "image",
+  "links": [],
+  "run_id": "run-golden",
+  "surface": "window",
+  "title": "Graph graph \u2014 whole graph",
+  "tool": "graph_view"
+ },
+ null,
+ null
+]
