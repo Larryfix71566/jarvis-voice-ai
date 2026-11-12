@@ -376,7 +376,9 @@ struct SkillsWorkspaceView: View {
         .onChange(of: catalogRevision) { _, _ in presentPendingVoiceDraftIfReady() }
     }
 
-    private func workspaceContent(width: CGFloat) -> some View {
+    // Separate opaque return types keep Swift 6.2 from type-checking every
+    // workspace observer in one expression. Preserve the modifier order.
+    private func workspaceSelectionContent(width: CGFloat) -> some View {
         workspacePresentation(width: width)
             .background(AppTheme.bg)
             .task { await refresh() }
@@ -407,6 +409,10 @@ struct SkillsWorkspaceView: View {
             .onChange(of: selectedStepID) { _, stepID in
                 announceProcessStepSelection(stepID)
             }
+    }
+
+    private func workspaceLifecycleContent(width: CGFloat) -> some View {
+        workspaceSelectionContent(width: width)
             .onChange(of: width) { oldWidth, newWidth in
                 if SkillsWorkspacePresentationPolicy.usesSplitLayout(
                     width: oldWidth, dynamicTypeSize: dynamicTypeSize
@@ -418,10 +424,18 @@ struct SkillsWorkspaceView: View {
             }
             .onAppear(perform: prepareSkillsWorkspace)
             .onDisappear(perform: unregisterSkillsWorkspaceActions)
+    }
+
+    private func workspaceActionContent(width: CGFloat) -> some View {
+        workspaceLifecycleContent(width: width)
             .onChange(of: refreshActionSignal) { _, _ in Task { await refresh() } }
             .onChange(of: backActionSignal) { _, _ in compactShowsDetail = false }
             .onChange(of: retryActionSignal) { _, _ in retryActivity() }
             .onChange(of: loadMoreActionSignal) { _, _ in Task { await loadMoreActivity() } }
+    }
+
+    private func workspaceContent(width: CGFloat) -> some View {
+        workspaceActionContent(width: width)
             .onChange(of: search) { _, value in
                 if let coordinator {
                     _ = coordinator.executePointer(.skillsSearch, args: ["query": .string(value)])

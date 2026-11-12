@@ -109,3 +109,68 @@ jobs:
           cd web
           npm ci
           npm run build
+
+  # WS-35 B1 also implements WS-30's previously unshipped phone-core gate.
+  # JarvisKit and MortimerHost require macOS 26 at runtime, not just its SDK.
+  # Runner/Xcode inventory checked 2026-11-11:
+  # https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md
+  swift-tests:
+    name: Swift (${{ matrix.package }})
+    runs-on: macos-26-intel
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      # A failure in one package must not cancel evidence from the others.
+      fail-fast: false
+      matrix:
+        package:
+          - macos/JarvisKit
+          - macos/MortimerHost
+          - ios/MortimerPhoneCore
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Verify hosted Swift toolchain
+        shell: bash
+        run: |
+          test -d "$DEVELOPER_DIR"
+          test "$(sw_vers -productVersion | cut -d. -f1)" -ge 26
+          test "$(uname -m)" = x86_64
+          test "$(xcodebuild -version | head -n 1)" = "Xcode 26.3"
+          sw_vers
+          xcodebuild -version
+          xcrun --version
+          xcrun --find xctest
+          xcrun swift --version
+          xcrun --sdk macosx --show-sdk-version
+      # The existing Host process tests need the offline owner and Python.
+      # Use only the hosted image's installed Python; never fetch a toolchain.
+      - name: Prepare offline authority process fixtures
+        if: matrix.package == 'macos/MortimerHost'
+        shell: bash
+        run: |
+          python_bin="$(command -v python3.12 || true)"
+          if [ ! -x "$python_bin" ]; then
+            for candidate in "$RUNNER_TOOL_CACHE"/Python/3.12.*/x64/bin/python3.12; do
+              if [ -x "$candidate" ]; then
+                python_bin="$candidate"
+                break
+              fi
+            done
+          fi
+          test -x "$python_bin"
+          "$python_bin" -c 'import sys; assert sys.version_info[:2] == (3, 12); from jarvis.bot import phone_admission_store, phone_remote_authority_channel'
+          swift build --package-path macos/MortimerHost --product PhoneRemoteAuthorityOwner
+          owner_bin="$(swift build --package-path macos/MortimerHost --show-bin-path)/PhoneRemoteAuthorityOwner"
+          test -x "$owner_bin"
+          {
+            echo "PHONE_REMOTE_AUTHORITY_OWNER_BIN=$owner_bin"
+            echo "PHONE_REMOTE_AUTHORITY_PYTHON=$python_bin"
+            echo "PHONE_REMOTE_AUTHORITY_TEST_ROOT=$GITHUB_WORKSPACE"
+          } >> "$GITHUB_ENV"
+      - name: Run full package test suite
+        run: swift test --package-path "${{ matrix.package }}"

@@ -107,6 +107,9 @@ final class OrbShellFrameTimeTests: XCTestCase {
     // Synchronous on purpose, as in MemoryGraphFrameTimeTests: Core
     // Animation completion blocks must drain on the main run loop.
     func testCrystalShellStaysWithinTheFrameBudget() throws {
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
+            throw XCTSkip("Hosted-runner skip: this test still gates on Mac.")
+        }
         _ = NSApplication.shared
         func measure(_ probe: Probe) -> (frames: [Double], completions: Int) {
             let harness = Harness(probe: probe)

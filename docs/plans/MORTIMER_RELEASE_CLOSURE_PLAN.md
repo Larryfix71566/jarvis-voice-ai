@@ -153,7 +153,7 @@ Decision 1 (freeze with `next`) is Larry's 01:58:16 answer. Larry answered decis
 
 ## 9. Not tested
 
-- That GitHub's hosted `macos-15-intel` runner with Xcode 26.3 builds and tests MortimerHost (B1's first run settles it).
+- That GitHub's hosted `macos-26-intel` runner with Xcode 26.3 builds and tests all three B1 packages (B1's first run settles it). The original `macos-15-intel` proposal cannot run JarvisKit or MortimerHost, whose manifests require macOS 26; an SDK alone does not satisfy the test executables' deployment target.
 - That Liquid Glass stays readable on carousel panels at an acceptable GPU cost (a half-day spike in C5, then Instruments on Larry's Mac).
 - That a typed request can reuse the bot's context-injection path (`jarvis/bot/late_result.py`, `pipeline.py` line 1581) as a real user turn with transcript and sensitive-turn handling intact (a C7-py unit test).
 - Every size and day count in §5.

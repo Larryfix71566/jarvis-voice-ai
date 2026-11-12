@@ -46,6 +46,9 @@ private func renderedText(in view: NSView) throws -> String {
 @MainActor
 final class CompactConversationTests: XCTestCase {
     func testV2CompactOrbOmitsTranscriptButKeepsConversationAndNotices() throws {
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
+            throw XCTSkip("Hosted-runner skip: this test still gates on Mac.")
+        }
         _ = NSApplication.shared
         let suite = "compact-transcript-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -122,6 +125,9 @@ final class CompactConversationTests: XCTestCase {
     }
 
     func testRetiredLayoutPreferenceCannotRestoreOrbTranscriptCaptions() throws {
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
+            throw XCTSkip("Hosted-runner skip: this test still gates on Mac.")
+        }
         _ = NSApplication.shared
         let suite = "legacy-compact-transcript-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
