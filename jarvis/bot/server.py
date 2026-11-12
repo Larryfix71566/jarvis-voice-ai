@@ -16,6 +16,7 @@ from jarvis.auth import auth_enabled, service_headers
 from jarvis.authmw import BearerAuthMiddleware
 from jarvis.bind import BindRefused, resolve_bind_host, resolve_port
 from jarvis.bot.bot import _runner_main_preserving_env
+from jarvis.request_guard import RequestGuardMiddleware
 from jarvis.vault import inject_env
 
 # Vault credentials must be available before startup checks and child client
@@ -305,9 +306,11 @@ def install_creator_routes() -> None:
 
 
 def install_auth() -> None:
-    """Install auth once before Pipecat configures its CORS middleware."""
+    """Install auth and the request guard once, before Pipecat configures its CORS middleware."""
     if not any(middleware.cls is BearerAuthMiddleware for middleware in runner_app.user_middleware):
         runner_app.add_middleware(BearerAuthMiddleware)
+    if not any(middleware.cls is RequestGuardMiddleware for middleware in runner_app.user_middleware):
+        runner_app.add_middleware(RequestGuardMiddleware)
     install_creator_routes()
 
 
