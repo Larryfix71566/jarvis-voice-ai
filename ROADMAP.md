@@ -126,7 +126,7 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 - **Where:** not started; items branch from `next` (F1 and other acceptance fixes branch from `main`)
 - **Plan:** `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §4 (WS-34) and §5; add only dated progress for this lane
 - **Scope:** The files named for those items in the plan's §4 WS-34 table: `.github/workflows/{validate,sandbox,knowledge-base}.yml` trigger lines (A1); `docs/contracts/**`; `jarvis/bot/display.py`, new `jarvis/bot/compose*.py` and `jarvis/bot/typed_request.py`, the named display emit sites and registration lines in `jarvis/bot/pipeline.py`; `jarvis/admin/**`, `jarvis/costs_api.py`; `scripts/backup_db.py`; `web/**`, `macos/MortimerShell/**`, `macos/GlassSpike/**`, `macos/VPIOBench/**` and their listed fallout; C7b's Swift files. `sandbox/**`, `jarvis/selfedit/service.py` and `config/self_edit_allowlist.json` are supplied as patches for Larry to commit. Hand-off order for shared files is the plan's §4 "Hand-off points"; overlaps with other rows are CX-29.
-- **Next step:** larry: record the freeze SHA in WS-17. claude: A2 (`next` at that SHA), then the A1 PR (`claude/ws34-a1-next-ci-triggers`, already pushed) into `next`, then C0.
+- **Next step:** claude: A1 PR (`claude/ws34-a1-next-ci-triggers`) into `next`, which was cut from the freeze SHA `5777e98` (A2), then C0.
 - **Updated:** 11-11
 
 </details>
@@ -137,14 +137,14 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 **Workstream:** Larry approved the three lane rows in his Claude Duet channel on 2026-11-11 at 02:35:41 UTC: "Take your picks", answering decisions 2 to 7 of `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §7 (decision 6: approve the WS-34 to WS-36 rows). His earlier direction for the split, 01:58:16 UTC: "first let's seperate this plan so that kimi and codex can help with development, the division should not be absolute but a guide to keep the models from stepping on each other, then we should freeze main and begin". Under §0 rule 14 a lane is a guide, not a lock: any system not engaged may pick up an item another system is not engaged with, by updating this block's Owner and Where first.
 
 - **Owner:** `codex`
-- **Status:** proposed; approved by Larry, starts when `next` exists (WS-34 item A2, after the freeze SHA is recorded in WS-17). Mark `claimed` when the first item starts.
+- **Status:** claimed; C0/C0b independent review recorded by this PR; C10 instructions next, then C1a. Larry approved following the starter prompt including its claim exception on 2026-11-11.
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Items C10 (box 810 performance baseline, before C1a), C1a (delete layouts 0 and 1), B1 (macOS Swift CI job), B5 (wider ruff, offline NLTK data), C4 (Swift block renderer), C5 (result carousel; the second screen keeps its grid, decision 4), C9 (phone orb on synthetic levels, decision 5, after moving the orb renderer to a shared package) and F1 (the `PhoneRemoteAuthorityProcessTests` failure, an acceptance fix on `main` approved by name). Each item in the plan's §4 table for this lane, as a PR into `next` with its tests, reviewed by the item's named reviewer (never its author). Interface items then pass the rewritten UI boxes in `docs/acceptance/mac-acceptance-2026-11-11.md` §4 on the final build; `next` merges into `main` at closure.
 - **Model version:** not recorded
-- **Where:** not started; items branch from `next` (F1 and other acceptance fixes branch from `main`)
+- **Where:** `codex/ws35-contract-review-20261111` into `next` (contract review); subsequent items branch from `next`, except F1 from `main`.
 - **Plan:** `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §4 (WS-35) and §5; add only dated progress for this lane
 - **Scope:** The files named for those items in the plan's §4 WS-35 table: `docs/acceptance/**` (C10); every MortimerHost source and test file that reads `layoutVersion` (C1a); `.github/workflows/validate.yml` (B1, B5, after A1); `macos/MortimerHost/Sources/MortimerHost/Display/**`, `App/AppMessageRouter.swift`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift` (C4); the C5 result and carousel files; `ios/MortimerPhoneCore/**` and the shared orb package (C9). Hand-off order for shared files is the plan's §4 "Hand-off points"; overlaps with other rows are CX-29.
-- **Next step:** codex: once `next` exists, write the C10 steps for Larry, then C1a; F1 branches from `main`; once the freeze is in effect it merges only with Larry's approval by name (§0 rule 15).
+- **Next step:** claude: address the three findings in `docs/roadmap-log/2026-11-11-ws35-c0-contract-review.md` for #332; kimi: independent contract review; codex: C10 baseline instructions, then C1a on `next`. F1 needs Larry’s named acceptance-fix approval before merge.
 - **Updated:** 11-11
 
 </details>
@@ -180,8 +180,8 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 - **Where:** this branch (`claude/ws33-roadmap-freeze-archive-20261110`) and `claude/ws33-ci-lock-push-20261110` (#317); [log](docs/roadmap-log/2026-11-10-ws-33-acceptance-unblock.md); [history archive](docs/roadmap-log/archive/2026-11-10-roadmap-history.md).
 - **Plan:** Claude's 2026-11-10 deep review (Claude Doc in Larry's account), Improvement options 1, 2 and 4; no repo plan file
 - **Scope:** The sections moved out of `ROADMAP.md` (the aggregate drafts, source reconciliations and intake summaries before §0, the §1 historical snapshot, four Status-line history tails and the resolved §4 rows), §0 rules 14–15, `AGENTS.md`, the WS-17 lines named in the claim above, this block, the archive and log files. CI part: `.github/workflows/validate.yml`, new `.github/workflows/dependency-drift.yml`.
-- **Next step:** larry: merge this PR and #317; then record the freeze SHA in WS-17 under rule 15. kimi: WS-17 combined-source review once the SHA is recorded.
-- **Updated:** 11-10
+- **Next step:** none for this row: the freeze SHA `5777e98` is recorded in WS-17 (11-11); the lanes continue under the release closure plan. kimi: WS-17 combined-source review.
+- **Updated:** 11-11
 
 </details>
 
@@ -337,13 +337,13 @@ land on main before code; no checkbox closes from this amendment. WS-28 remains 
 ### Kimi combined-source review claim — 2026-11-10
 
 - **Owner:** `codex` retains WS-17 and every release/operational step; `kimi` owns only this bounded, read-only review, assigned by Larry on 2026-11-10 at 14:16:37 UTC in his Claude Duet channel ("Kimi", answering who owns the combined-source review that lifts the WS-17 hold). Larry retains deployment, restart and live-acceptance decisions.
-- **Status:** claimed (landed with #318). Target: the freeze SHA Larry records in WS-17 under §0 rule 15; no target is recorded yet and there is no result. Main is `b9024ed` after #322 and #324; Larry is deciding whether the flaky `test_outer_task_deadline_covers_tool_execution` is fixed before the freeze. After the freeze, non-fix code lands on a `next` branch cut from the freeze SHA ([release closure plan](docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md) §2), so this target does not move again unless Larry approves an acceptance fix by name.
+- **Status:** claimed (landed with #318). Target: freeze SHA `5777e98cf1cdbaa65eb13079044693794c071927` (`origin/main` after #328, which gave the flaky `test_outer_task_deadline_covers_tool_execution` headroom, and the docs merges #325 to #327 and #329; its tree outside `docs/`, `ROADMAP.md` and `AGENTS.md` equals `b2fbb2d`), recorded here by Claude on Larry's word (2026-11-11 01:58:16 UTC: "...then we should freeze main and begin"); no result yet. Non-fix code now lands on the `next` branch cut from this SHA ([release closure plan](docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md) §2), so this target does not move again unless Larry approves an acceptance fix by name.
 - **Implemented by:** Kimi reviews and has no authorship of the target except the files excluded below. Claude wrote this claim at Larry's request.
 - **Remaining work / acceptance:** Independent source review of the code delta from production `b136a2a66032b17082776a01353abe67e352c31e` to the freeze SHA, i.e. the tree outside `docs/` and `ROADMAP.md`, for release risk: correctness, security, data loss and operational recovery. Findings are reported as new fix PRs by the owning system. Kimi-authored code in that delta (WS-31 NR1 `jarvis/app_build_contract.py`, WS-32 reader repair #275) is excluded under §0 rule 14 and goes to a non-Kimi reviewer. A pass does not lift the operational hold by itself; Larry decides recovery and deployment.
 - **Where:** Kimi review on `kimi/ws17-combined-source-review-20261110`, created only after this claim lands; claim on `claude/ws33-roadmap-freeze-archive-20261110`; [claim log](docs/roadmap-log/2026-11-10-ws-33-acceptance-unblock.md).
 - **Scope:** Read-only. Kimi writes only this sub-section, dated WS-17 progress in `docs/plans/MORTIMER_COMMAND_CONSOLE_ATLAS_PLAN.md` and WS-17 `docs/roadmap-log/` entries. No source, test, configuration or dependency edits; no deployment, service operation, app launch, live call, credential or checkbox.
-- **Next step:** larry: decide on the flaky deadline test, then record the freeze SHA here (Claude can write it into this sub-section on his word). kimi: review the frozen tree and publish a docs-only verdict PR; do not merge.
-- **Updated:** 11-11 (Claude linked the release closure plan and the `next` branch; no target, result, operational or acceptance change). Previous: 11-10 (Claude registered the claim at Larry's request).
+- **Next step:** kimi: review the frozen tree at the freeze SHA and publish a docs-only verdict PR; do not merge.
+- **Updated:** 11-11 (Claude recorded the freeze SHA and linked the release closure plan and the `next` branch; no result, operational or acceptance change). Previous: 11-10 (Claude registered the claim at Larry's request).
 
 
 
