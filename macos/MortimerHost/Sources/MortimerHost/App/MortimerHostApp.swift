@@ -115,6 +115,7 @@ struct MortimerHostApp: App {
                 .environment(drawerModels)
                 .environment(overlay)
                 .environment(notices)
+                .environment(composer)
                 .background(WindowIdentifierSetter(identifier: "display", registry: contentWindows))
                 // The native form of the web's hasLivePopup poll: scene
                 // content on screen = window open. Drives the topbar's
@@ -135,6 +136,7 @@ struct MortimerHostApp: App {
                 .environment(displayWindow)
                 .environment(overlay)
                 .environment(notices)
+                .environment(composer)
                 .environment(agentRuns)
                 .environment(displayResults)
                 .environment(workspace)
@@ -172,6 +174,7 @@ struct MortimerHostApp: App {
                     .environment(skills)
                     .environment(overlay)
                     .environment(notices)
+                    .environment(composer)
                     .environment(agentRuns)
                     .environment(displayResults)
                     .environment(workspace)
@@ -204,6 +207,7 @@ struct MortimerHostApp: App {
                     .environment(skills)
                     .environment(overlay)
                     .environment(notices)
+                    .environment(composer)
                     .environment(agentRuns)
                     .environment(displayResults)
                     .environment(workspace)
