@@ -64,3 +64,22 @@ The full gate intentionally remains red until the protected patch is applied
 by Larry or he explicitly authorizes this exact exception. No suppression masks
 that prerequisite. No production, credential, controller-model, merge or
 deployment action is part of B5.
+
+
+## Frozen-fixture correction after draft publication
+
+Draft #367 at `279019b7` exposed two controller failures: removing an unused
+`json` import from `tests/unit/test_status_providers.py` changed a security-reviewed
+whole-file hash. The fixture is restored exactly to its approved bytes,
+SHA-256 `68eb01078156221de31ea83ea8b3588bfbc634a9fa78ca4ff04c47b08daa3caf`.
+No security pin, scanner rule or protected source was changed. All ten frozen
+fixture hashes are checked by the 164-test controller suite. Future lint work
+must inventory these pins before touching fixture imports.
+
+The restored immutable fixture retains one F401 (`json` imported but unused),
+so full lint now has 17 known findings: that one plus the 16 protected sandbox
+findings. No exception has been added. The proposed exception for Larry's
+approval is only `tests/unit/test_status_providers.py:F401`, with this exact
+fixture hash retained and independently checked; all other rules/files remain
+enforced. Altering the approved fixture hash is not proposed. Required Claude
+review and Larry's protected-patch/exception decisions remain open.

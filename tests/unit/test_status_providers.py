@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import urllib.request
 
+import pytest
 
 from jarvis.status import providers as P
 from jarvis.status.providers import ADAPTERS, coverage_gaps, discover_providers
