@@ -137,15 +137,16 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 **Workstream:** Larry approved the three lane rows in his Claude Duet channel on 2026-11-11 at 02:35:41 UTC: "Take your picks", answering decisions 2 to 7 of `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §7 (decision 6: approve the WS-34 to WS-36 rows). His earlier direction for the split, 01:58:16 UTC: "first let's seperate this plan so that kimi and codex can help with development, the division should not be absolute but a guide to keep the models from stepping on each other, then we should freeze main and begin". Under §0 rule 14 a lane is a guide, not a lock: any system not engaged may pick up an item another system is not engaged with, by updating this block's Owner and Where first.
 
 - **Owner:** `codex`
-- **Status:** in-progress; F1 test-prerequisite repair and exact-source evidence delivered by this PR (`3e04808`); production source unchanged. Other lane slices remain separately in review (#334, #335, #337, #338). Larry approved the starter-prompt claim exception on 2026-11-11.
+- **Status:** in-progress; F1 prerequisite repair and exact-source evidence delivered by #339 at `3e04808`; production source unchanged. Review handoff recorded 2026-11-12; no merge or acceptance approval implied.
 - **Implemented by:** Codex
 - **Remaining work / acceptance:** Items C10 (box 810 performance baseline, before C1a), C1a (delete layouts 0 and 1), B1 (macOS Swift CI job), B5 (wider ruff, offline NLTK data), C4 (Swift block renderer), C5 (result carousel; the second screen keeps its grid, decision 4), C9 (phone orb on synthetic levels, decision 5, after moving the orb renderer to a shared package) and F1 (the `PhoneRemoteAuthorityProcessTests` failure, an acceptance fix on `main` approved by name). Each item in the plan's §4 table for this lane, as a PR into `next` with its tests, reviewed by the item's named reviewer (never its author). Interface items then pass the rewritten UI boxes in `docs/acceptance/mac-acceptance-2026-11-11.md` §4 on the final build; `next` merges into `main` at closure.
 - **Model version:** not recorded
-- **Where:** `codex/ws35-f1-phone-authority-20261111` from `main` (F1, this PR); #334 contract review, #335 C10 baseline instructions, #337 C1a and #338 B1 target `next`.
+- **Where:** `codex/ws35-f1-phone-authority-20261111` from `main` (F1, #339); #334 contract review, #335 C10 baseline instructions, #337 C1a and #338 B1 target `next`.
 - **Plan:** `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §4 (WS-35) and §5; add only dated progress for this lane
 - **Scope:** The files named for those items in the plan's §4 WS-35 table: `docs/acceptance/**` (C10); every MortimerHost source and test file that reads `layoutVersion` (C1a); `.github/workflows/validate.yml` (B1, B5, after A1); `macos/MortimerHost/Sources/MortimerHost/Display/**`, `App/AppMessageRouter.swift`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift` (C4); the C5 result and carousel files; `ios/MortimerPhoneCore/**` and the shared orb package (C9). Hand-off order for shared files is the plan's §4 "Hand-off points"; overlaps with other rows are CX-29.
-- **Next step:** kimi: review F1 evidence in `docs/roadmap-log/2026-11-11-ws35-f1-process-prerequisites.md`; larry: approve the F1 PR by name before merging to frozen `main`; codex: merge main forward into next only after that authorized merge. C10 capture still gates C1a; B1 hosted results and C0/C0b clarifications remain pending.
-- **Updated:** 11-11
+- **Next step:** kimi: review #339. Kimi independently reviews F1 and its test evidence; Larry must approve #339 by name before frozen-main merge. Only after an authorized merge may main be merged forward into next. Other lane items retain their existing dependencies.
+- **Updated:** 11-12
+
 
 </details>
 
