@@ -1,0 +1,25 @@
+Building for debugging...
+[1 / 4]
+Build complete! (0.37 sec)
+Test Suite 'Selected tests' started at 2026-11-12 11:04:48.725.
+Test Suite 'PhoneRemoteAuthorityTests.xctest' started at 2026-11-12 11:04:48.725.
+Test Suite 'PhoneRemoteAuthorityTests.xctest' passed at 2026-11-12 11:04:48.725.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 11:04:48.725.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' started at 2026-11-12 11:04:48.775.
+Test Suite 'MortimerHostTests.xctest' started at 2026-11-12 11:04:48.776.
+Test Suite 'MemoryGraphFrameTimeTests' started at 2026-11-12 11:04:48.776.
+Test Case '-[MortimerHostTests.MemoryGraphFrameTimeTests testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate]' started.
+Test Case '-[MortimerHostTests.MemoryGraphFrameTimeTests testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate]' passed (16.599 seconds).
+Test Suite 'MemoryGraphFrameTimeTests' passed at 2026-11-12 11:05:05.375.
+	 Executed 1 test, with 0 failures (0 unexpected) in 16.599 (16.599) seconds
+Test Suite 'MortimerHostTests.xctest' passed at 2026-11-12 11:05:05.375.
+	 Executed 1 test, with 0 failures (0 unexpected) in 16.599 (16.599) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 11:05:05.375.
+	 Executed 1 test, with 0 failures (0 unexpected) in 16.599 (16.600) seconds
+P4 frame time: p50 7.997208274900913 ms, p95 9.656333364546299 ms, max 11.417083209380507 ms; control p50 3.9039584808051586 ms; main thread p95 9.652124950662255 ms; test rasterize p50 796.7836251482368 ms → /Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/.build/interface-fixtures/P4-frame-time.json
+P4 layer: NSViewBackingLayer async=false needsDisplay=false bounds=1440x900
+P4 layer:  CALayer async=false needsDisplay=false bounds=1440x900
+P4 layer:  RBDrawingLayer async=false needsDisplay=false bounds=592x580
+P4 layer:   RBImageQueueLayer async=false needsDisplay=false bounds=0x0

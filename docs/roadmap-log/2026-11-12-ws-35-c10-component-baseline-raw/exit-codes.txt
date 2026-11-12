@@ -1,0 +1,9 @@
+run1 OrbShellFrameTimeTests exit=0
+run1 MemoryGraphFrameTimeTests exit=0
+run1 SkillsRenderedNavigationBenchmarkTests exit=0
+run2 OrbShellFrameTimeTests exit=0
+run2 MemoryGraphFrameTimeTests exit=0
+run2 SkillsRenderedNavigationBenchmarkTests exit=0
+run3 OrbShellFrameTimeTests exit=0
+run3 MemoryGraphFrameTimeTests exit=0
+run3 SkillsRenderedNavigationBenchmarkTests exit=0
