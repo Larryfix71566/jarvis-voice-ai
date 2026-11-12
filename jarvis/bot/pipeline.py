@@ -43,7 +43,8 @@ from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import (OutputTransportMessageUrgentFrame, LLMContextFrame,
     LLMFullResponseStartFrame, LLMFullResponseEndFrame, InterruptionFrame,
     TranscriptionFrame, UserStartedSpeakingFrame, BotStoppedSpeakingFrame,
-    FunctionCallInProgressFrame, FunctionCallResultFrame, FunctionCallCancelFrame)
+    FunctionCallInProgressFrame, FunctionCallResultFrame, FunctionCallCancelFrame,
+    TTSSpeakFrame)
 from pipecat.observers.base_observer import BaseObserver
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.pipeline.pipeline import Pipeline
@@ -114,6 +115,7 @@ from jarvis.privacy_policy import DataPolicy, make_tool_execution_scope, validat
 from jarvis.voice_sources import VoiceSources, ClassifiedText, UNKNOWN, source_scope, text_policy, bound_context_type
 from jarvis.runlog.context import get_run_id
 from jarvis.bot.costs_tool import build_cost_summary_tool
+from jarvis.bot.compose import AnswerComposer, composed_answers_enabled
 from jarvis.bot.display import WeatherReportMerger, build_display_payload
 from jarvis.bot.handoff_tools import (
     build_clear_clipboard_tool,
@@ -135,7 +137,7 @@ from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.research_watcher import ResearchWatcher
 from jarvis.bot.screen_tool import build_list_screens_tool, build_view_screen_tool
-from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
+from jarvis.bot.sensitive_turn import SensitiveTurn, arm_from_text, current_sensitive_turn
 from jarvis.bot.shared_content import (
     SharedContentService,
     analyze_shared_content_via_boundary,
@@ -151,7 +153,18 @@ from jarvis.bot.speaker_gate import (
     TranscriptGate,
 )
 from jarvis.bot.tool_schemas import supervisor_tool_schemas
-from jarvis.bot.transcript_log import TranscriptLogger, TranscriptObserver
+from jarvis.bot.transcript_log import (
+    TranscriptLogger,
+    TranscriptObserver,
+    _log_transcript,
+    _persist,
+)
+from jarvis.bot.typed_request import (
+    ApprovalBook,
+    TypedRequestSession,
+    APPROVAL_DECIDE,
+    TURN_TYPED,
+)
 from jarvis.bot.ui_control import build_ui_control_tool
 from jarvis.bot.ui_control import ui_control_enabled as ui_control_flag_enabled
 from jarvis.bot.usage_watcher import UsageMetricsObserver
@@ -326,6 +339,21 @@ class ForegroundRequests:
                 self.current = None
             await self.announce(request, "cancelled")
 
+    async def accept_typed(self, text: str, timestamp: str, user_id: str) -> None:
+        """Leave exactly the state a finalized transcript leaves (C7-py).
+
+        A typed turn has no TranscriptionFrame, so without this ``before_push``
+        would mint no request for it and its display payloads would carry a
+        null origin. ``user_id`` is ``typed:<request_id>`` or
+        ``approval:<approval_id>``, which is how the app matches the
+        ``console/turn`` it receives to the message it sent.
+        """
+        await self.cancel(self.current)
+        self.parts = [text.strip()]
+        self.input_chars = len(self.parts[0])
+        self.input_overflow = False
+        self.input_identity = (timestamp, user_id)
+
     async def before_push(self, source, frame) -> None:
         if isinstance(frame, UserStartedSpeakingFrame):
             if source is self.user_aggregator:
@@ -424,6 +452,140 @@ class ForegroundRequests:
             self.calls.pop(next(iter(self.calls)))
         while len(self.continuation_calls) > 256:
             self.continuation_calls.pop(next(iter(self.continuation_calls)))
+
+
+def command_console_flag_enabled() -> bool:
+    """The one read of ``JARVIS_COMMAND_CONSOLE_ENABLED`` (C7-py, contract 2.5).
+
+    On unless the variable is explicitly ``false``, ``0`` or ``no``; a blank or
+    unset value is on.
+    """
+    return os.environ.get("JARVIS_COMMAND_CONSOLE_ENABLED", "").strip().lower() not in (
+        "false", "0", "no")
+
+
+def approvals_flag_enabled() -> bool:
+    """``JARVIS_APPROVALS_ENABLED`` (default on): the approval list and the
+    spoken bare-yes check. Off leaves the voice path exactly as it was."""
+    return os.environ.get("JARVIS_APPROVALS_ENABLED", "").strip().lower() not in (
+        "false", "0", "no")
+
+
+def typed_request_flag_enabled() -> bool:
+    """``JARVIS_TYPED_REQUEST_ENABLED`` (default on, contract 2.4 rule 10)."""
+    return os.environ.get("JARVIS_TYPED_REQUEST_ENABLED", "").strip().lower() not in (
+        "false", "0", "no")
+
+
+#: How long a typed turn waits for its own interruption to pass TranscriptLogger.
+TYPED_INTERRUPT_WAIT_S = 1.0
+
+
+class InterruptionPassed(BaseObserver):
+    """Resolves a waiter once a given InterruptionFrame has left TranscriptLogger.
+
+    TranscriptLogger clears the sensitive flag whenever an InterruptionFrame
+    passes it. A typed turn interrupts and arms at the same moment, so arming
+    before that frame arrives would let it clear the flag just set. The typed
+    start therefore queues its own InterruptionFrame, waits here for that exact
+    frame (by id) to pass, and only then clears and arms.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.source: Any = None
+        self._waiting: dict[int, asyncio.Future] = {}
+
+    def watch(self, frame_id: int) -> asyncio.Future:
+        future = asyncio.get_running_loop().create_future()
+        self._waiting[frame_id] = future
+        return future
+
+    def forget(self, frame_id: int) -> None:
+        self._waiting.pop(frame_id, None)
+
+    async def on_push_frame(self, data) -> None:
+        frame = data.frame
+        if (isinstance(frame, InterruptionFrame) and data.source is self.source
+                and data.direction == FrameDirection.DOWNSTREAM):
+            future = self._waiting.pop(frame.id, None)
+            if future is not None and not future.done():
+                future.set_result(True)
+
+
+class BareYesGate(FrameProcessor):
+    """Spoken half of the bare-yes rule (contract 3.10).
+
+    Sits directly before the user aggregator. A finalized, non-empty transcript
+    that is a bare yes while two or more approvals are open is dropped and a
+    fixed question is spoken instead (no model call); everything else passes
+    untouched. Any error passes the frame (fail open, as the speaker gate does).
+
+    Known limit: a spoken turn that arrives as two final transcripts ("yes",
+    then "the plan one") with two approvals open has its first transcript
+    dropped and the question spoken, and the second goes to the Supervisor on
+    its own. Nothing is approved wrongly in that case.
+    """
+
+    def __init__(self, book: ApprovalBook, *, is_sensitive, offer_pending, speak, **kwargs: Any):
+        super().__init__(**kwargs)
+        self._book, self._is_sensitive = book, is_sensitive
+        self._offer_pending, self._speak = offer_pending, speak
+
+    async def process_frame(self, frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+        if (direction == FrameDirection.DOWNSTREAM and isinstance(frame, TranscriptionFrame)
+                and getattr(frame, "finalized", True) and (frame.text or "").strip()):
+            question = None
+            try:
+                question = self._book.yes_verdict(
+                    frame.text, sensitive=bool(self._is_sensitive()),
+                    offer_pending=bool(self._offer_pending()), source="voice")
+            except Exception:  # noqa: BLE001 - never eat a user's words on a fault
+                _logger.warning("bare_yes_gate_error")
+            if question is not None:
+                try:
+                    await self._speak(question)
+                except Exception:  # noqa: BLE001
+                    _logger.info("approval_question_not_spoken")
+                return
+        await self.push_frame(frame, direction)
+
+
+async def start_typed_turn(runtime: Runtime, pusher: FramePusher, aggregators: Any,
+                           text: str, tag: str) -> bool:
+    """Make ``text`` the user's next turn, as a spoken one would be (C7-py).
+
+    Queues its own InterruptionFrame (a spoken barge-in; in-flight delegations
+    survive it) and waits, bounded, for that exact frame to pass
+    TranscriptLogger BEFORE clearing and arming the sensitive flag: that logger
+    clears the flag on every interruption, so arming first could be undone. If
+    the frame never passes, nothing is stored and False is returned (the caller
+    replies not_ready). No consent parsing, no speaker gate, no transcription
+    frame and so no ``user-transcription`` echo.
+    """
+    if not runtime.alive:
+        return False
+    interruption = InterruptionFrame()
+    passed = runtime.interruption_passed.watch(interruption.id)
+    await pusher.push(interruption)
+    try:
+        await asyncio.wait_for(passed, timeout=TYPED_INTERRUPT_WAIT_S)
+    except asyncio.TimeoutError:
+        runtime.interruption_passed.forget(interruption.id)
+        _logger.warning("typed_turn_interruption_not_confirmed")
+        return False
+    if not runtime.alive:
+        return False
+    runtime.sensitive_turn.clear()
+    arm_from_text(text)  # before anything is logged or stored
+    _log_transcript("USER:", text)
+    if not _voice_is_sensitive():
+        _persist(runtime.session_id, "user", text)
+    await runtime.foreground_requests.accept_typed(text, f"{time.time():.6f}", tag)
+    runtime.voice_sources.append(aggregators.user(), text)
+    await aggregators.user().push_context_frame()
+    return True
 
 
 def request_bound_service(service_class, requests: ForegroundRequests):
@@ -694,6 +856,14 @@ class Runtime:
     weather_context: Any = field(default_factory=WeatherContextMinimizer)
     voice_sources: Any = field(default_factory=VoiceSources)
     foreground_requests: Any = None
+    # C3: per-connection AnswerComposer, None when the kill switch is off.
+    display_composer: Any = None
+    # C7-py: per-connection pending-approval list (None when
+    # JARVIS_APPROVALS_ENABLED is off), the observer that tells the typed
+    # start its interruption has passed TranscriptLogger, and that logger.
+    approvals: Any = None
+    interruption_passed: Any = None
+    transcript_source: Any = None
     # Command Console state is created per pipeline in build_pipeline() and
     # read by run_session()'s message handlers. It lives here because the
     # two functions share no scope: #80 read these as build_pipeline locals
@@ -943,7 +1113,35 @@ def _log_console_validation_failure(kind: str, _error: ValueError) -> None:
     _logger.warning(event)
 
 
-def make_agent_event_handler(transport: Any) -> Any:
+def _compose_display_items(composer: Any, payload: dict) -> list[tuple[dict, str | None]]:
+    """``(payload, origin)`` pairs to send for ``payload``: just it when no
+    composer exists (byte-identical to the legacy path), else the composer's
+    output.  ``origin`` is ``None`` (the emit site's context stamps the
+    request) except for the closing revision of an answer pushed out by the
+    composer's cap, which carries its owning request id (contract 1.5 rule 10).
+    """
+    if composer is None:
+        return [(payload, None)]
+    request = _foreground_request.get()
+    return composer.compose_items(payload, request_id=request.request_id if request else None)
+
+
+def _compose_display(composer: Any, payload: dict) -> list[dict]:
+    """Payloads only (no origins); the emit sites use ``_compose_display_items``."""
+    return [item for item, _origin in _compose_display_items(composer, payload)]
+
+
+async def _send_display(transport: Any, item: dict, origin: str | None) -> None:
+    """Send one composed display payload; only the composer's emit helpers
+    pass an explicit origin (every other caller keeps the context variable)."""
+    message = {"type": "display", "display": item}
+    if origin is None:
+        await send_app_message(transport, message)
+    else:
+        await send_app_message(transport, message, origin_request_id=origin)
+
+
+def make_agent_event_handler(transport: Any, composer: Any = None, approvals: Any = None) -> Any:
     """Plan Phase 6 step 6.3: log agent events AND feed them to the UI.
 
     on_event callbacks are sync (agents/base.py EventCallback), so the async
@@ -967,9 +1165,37 @@ def make_agent_event_handler(transport: Any) -> Any:
     # merge semantics (never suppresses a lone result).
     weather_merger = WeatherReportMerger()
 
+    def _request_id() -> str | None:
+        request = _foreground_request.get()
+        return request.request_id if request else None
+
+    def _compose(payload: dict) -> list[tuple[dict, str | None]]:
+        # Inlined (not _compose_display) so this closure stays self-contained.
+        if composer is None:
+            return [(payload, None)]
+        return composer.compose_items(payload, request_id=_request_id())
+
+    def _schedule(message: dict, origin: str | None = None) -> None:
+        try:
+            if origin is None:
+                coro = send_app_message(transport, message)
+            else:
+                coro = send_app_message(transport, message, origin_request_id=origin)
+            asyncio.get_running_loop().create_task(coro)
+        except RuntimeError:
+            coro.close()  # no running loop (tests calling the handler directly)
+
     def on_agent_event(event: dict) -> None:
         bot_event_log(event)
         etype = event.get("type")
+        if etype == "agent_tool_result" and approvals is not None:
+            # C7-py (contract 3.3): a preview result opens an approval entry.
+            # The list never calls a tool; it only records what to ask about.
+            try:
+                approvals.observe(event, origin_id=_request_id(),
+                                  sensitive=_voice_is_sensitive())
+            except Exception:  # noqa: BLE001 - never break the event path
+                _logger.warning("approval_observe_failed")
         if etype == "agent_tool_result":
             # Activity ticker (Larry 2026-08-21, "like how claude displays
             # updates to current work"): every finished tool call becomes
@@ -1037,6 +1263,7 @@ def make_agent_event_handler(transport: Any) -> Any:
                     if isinstance(event.get("arguments"), dict) else {},
                     result_str=str(event.get("result") or ""),
                     run_id=str(event.get("run_id") or "") or None,
+                    **({"layout_hints": True} if composer is not None else {}),
                 )
             if payload is None:
                 return  # voice-only tool result, or still awaiting the pair
@@ -1049,8 +1276,13 @@ def make_agent_event_handler(transport: Any) -> Any:
                 event.get("tool"), payload.get("surface"),
                 event.get("agent"), payload.get("kind"),
             )
-            message = {"type": "display", "display": payload}
+            outgoing = _compose(payload)
+            for extra, extra_origin in outgoing[:-1]:
+                _schedule({"type": "display", "display": extra}, extra_origin)
+            message = {"type": "display", "display": outgoing[-1][0]}
         elif etype == "delegate_start":
+            if composer is not None:
+                composer.delegation_started(_request_id(), str(event.get("run_id") or ""))
             message = {
                 "type": "agent",
                 "name": event.get("agent"),
@@ -1070,13 +1302,15 @@ def make_agent_event_handler(transport: Any) -> Any:
             # (offer() only fires once both are accounted for). Flush it
             # now rather than losing it silently: the run is over, so
             # nothing more is coming.
+            if composer is not None:
+                composer.delegation_finished(_request_id(), str(event.get("run_id") or ""))
             for flushed in weather_merger.finalize_all(str(event.get("run_id") or "")):
-                try:
-                    asyncio.get_running_loop().create_task(
-                        send_app_message(
-                            transport, {"type": "display", "display": flushed}))
-                except RuntimeError:
-                    pass  # no running loop (tests calling the handler directly)
+                for item, item_origin in _compose(flushed):
+                    _schedule({"type": "display", "display": item}, item_origin)
+            if composer is not None:
+                completion = composer.take_completion(_request_id())
+                if completion is not None:
+                    _schedule({"type": "display", "display": completion})
             message = {
                 "type": "agent",
                 "name": event.get("agent"),
@@ -1261,9 +1495,37 @@ def build_pipeline(
 
     sub_agents = load_sub_agents(settings, runtime.registry)
     runtime.sub_agents = sub_agents
+    # C3: read once; off means every display site sends today's exact payload.
+    display_composer = AnswerComposer() if composed_answers_enabled() else None
+    runtime.display_composer = display_composer
+    # C7-py: read once; off means no list, nothing published, no spoken check.
+    if approvals_flag_enabled():
+        def _emit_approval_message(message: dict) -> None:
+            if not runtime.alive:
+                return
+            async def _send() -> None:
+                try:
+                    await send_app_message(transport, message)
+                except Exception:  # noqa: BLE001
+                    _logger.info("approval_message_delivery_unconfirmed")
+            try:
+                asyncio.get_running_loop().create_task(_send())
+            except RuntimeError:
+                pass  # no running loop (tests)
+
+        def _schedule_approval_expiry(delay: float, fn: Any) -> Any:
+            try:
+                return asyncio.get_running_loop().call_later(delay, fn)
+            except RuntimeError:
+                return None
+
+        runtime.approvals = ApprovalBook(
+            session_id=runtime.session_id, generation=console_generation,
+            emit=_emit_approval_message, schedule=_schedule_approval_expiry)
+    runtime.interruption_passed = InterruptionPassed()
     delegate_schema, delegate_handler = build_delegate_tool(
         sub_agents,
-        on_event=make_agent_event_handler(transport),
+        on_event=make_agent_event_handler(transport, display_composer, runtime.approvals),
         max_parallel=settings.jarvis_max_parallel_delegations,
         session_id=runtime.session_id,
         # Barge-in survival: run_session fills runtime.late_delivery["fn"]
@@ -1320,7 +1582,8 @@ def build_pipeline(
         _mark_weather_context()
         _logger.info("display_payload tool=local_weather surface=%s agent=supervisor kind=%s",
                      payload.get("surface"), payload.get("kind"))
-        await send_app_message(transport, {"type": "display", "display": payload})
+        for item, origin in _compose_display_items(display_composer, payload):
+            await _send_display(transport, item, origin)
 
     local_weather_on = True
     # W12 — both read their kill switch once, here, and pass it to the menu,
@@ -1398,7 +1661,7 @@ def build_pipeline(
         await send_app_message(transport, message)
 
     _, ui_control_handler = build_ui_control_tool(_send_ui_message)
-    command_console_enabled = os.environ.get("JARVIS_COMMAND_CONSOLE_ENABLED", "false").strip().lower() in ("1", "true", "yes")
+    command_console_enabled = command_console_flag_enabled()
     runtime.command_console_enabled = command_console_enabled
     weather_query_lock = asyncio.Lock()
 
@@ -1556,8 +1819,8 @@ def build_pipeline(
         message shape the client already handles."""
         _logger.info("display_payload tool=%s surface=%s agent=%s kind=direct",
                      payload.get("tool"), payload.get("surface"), "supervisor")
-        asyncio.create_task(
-            send_app_message(transport, {"type": "display", "display": payload}))
+        for item, origin in _compose_display_items(display_composer, payload):
+            asyncio.create_task(_send_display(transport, item, origin))
 
     # Late-bound: the context aggregators are created further down, after
     # tools are registered. The holder is populated there; a tool can only
@@ -1971,9 +2234,24 @@ def build_pipeline(
     # the conversations table (the memory sweep folds that table into
     # long-term memory — observed live 2026-08-21: TV dialogue persisted).
     runtime.speaker_gate = speaker_transcript_gate
-    runtime.foreground_requests.install(speaker_transcript_gate or stt, aggregators.user(), aggregators.assistant())
+    # C7-py: the spoken bare-yes check sits last before the aggregator, so it
+    # becomes the one input source ForegroundRequests and TranscriptObserver
+    # count each transcript on (they must see only what the model receives).
+    bare_yes_gate = None
+    if runtime.approvals is not None:
+        async def _speak_fixed(text: str) -> None:
+            await pusher.push(TTSSpeakFrame(text=text))
+
+        bare_yes_gate = BareYesGate(
+            runtime.approvals, is_sensitive=_voice_is_sensitive,
+            offer_pending=lambda: runtime.pending_content_offer is not None,
+            speak=_speak_fixed)
+    runtime.transcript_source = bare_yes_gate or speaker_transcript_gate
+    runtime.foreground_requests.install(
+        bare_yes_gate or speaker_transcript_gate or stt, aggregators.user(), aggregators.assistant())
 
     transcript = TranscriptLogger(session_id=runtime.session_id)
+    runtime.interruption_passed.source = transcript
 
     pipeline_steps = [
         transport.input(),
@@ -1994,6 +2272,8 @@ def build_pipeline(
     pipeline_steps.append(stt)
     if speaker_transcript_gate is not None:
         pipeline_steps.append(speaker_transcript_gate)
+    if bare_yes_gate is not None:
+        pipeline_steps.append(bare_yes_gate)
     pipeline_steps.extend([
         aggregators.user(),
         runtime.weather_context,
@@ -2057,13 +2337,21 @@ def _unwrap_client_message(message: Any) -> dict | None:
     return message
 
 
-def _prepare_app_message(message: dict) -> dict:
+def _prepare_app_message(message: dict, origin_request_id: str | None = None) -> dict:
     """The one envelope path for server->client app messages: tag a display
-    payload with the foreground request id, then wrap it for RTVI."""
+    payload with the foreground request id, then wrap it for RTVI.
+
+    ``origin_request_id`` is used instead of the context variable when given;
+    only the composer's emit helpers pass it (the closing revision of an
+    answer pushed out by the cap belongs to another request, 1.5 rule 10).
+    """
     if message.get("type") == "display" and isinstance(message.get("display"), dict):
         payload = dict(message["display"])
         payload.pop("origin_request_id", None)
-        if (request := _foreground_request.get()) is not None:
+        if origin_request_id is not None:
+            payload["origin_request_id"] = origin_request_id
+            _logger.info("display_dispatch request_id=%s explicit_origin=1", origin_request_id)
+        elif (request := _foreground_request.get()) is not None:
             payload["origin_request_id"] = request.request_id
             _logger.info("display_dispatch request_id=%s request_sequence=%d",
                          request.request_id, request.sequence)
@@ -2071,7 +2359,7 @@ def _prepare_app_message(message: dict) -> dict:
     return _wrap_rtvi(message)
 
 
-async def send_app_message(transport: Any, message: dict) -> None:
+async def send_app_message(transport: Any, message: dict, origin_request_id: str | None = None) -> None:
     """Server->client app message, on whichever transport is running.
 
     Both cases go through ``transport.output()``: the data channel on
@@ -2084,7 +2372,8 @@ async def send_app_message(transport: Any, message: dict) -> None:
     logged (the brief), use ``send_app_message_checked``.
     """
     await transport.output().send_message(
-        OutputTransportMessageUrgentFrame(message=_prepare_app_message(message)))
+        OutputTransportMessageUrgentFrame(
+            message=_prepare_app_message(message, origin_request_id)))
 
 
 async def send_app_message_checked(transport: Any, message: dict) -> None:
@@ -2310,7 +2599,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             enabled=settings.jarvis_late_result_neutralize_enabled, sources=runtime.voice_sources,
         )
         observers = [
-            TranscriptObserver(runtime.session_id, only_from=runtime.speaker_gate,
+            TranscriptObserver(runtime.session_id, only_from=runtime.transcript_source,
                                on_consent=handle_voice_consent),
             InterruptionNotifier(
                 inject_silent,
@@ -2334,6 +2623,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             ),
             late_neutralizer,
             WeatherContextRelayObserver(runtime.weather_context, llm),
+            runtime.interruption_passed,
         ]
         if os.environ.get("JARVIS_DEBUG_OBSERVER"):
             # Temporary diagnostic: print every function-call frame hop with
@@ -2542,7 +2832,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await pusher.push(TTSSpeakFrame(text=text))
 
             async def _push_plan_display(payload: dict) -> None:
-                await send_app_message(transport, {"type": "display", "display": payload})
+                for item, origin in _compose_display_items(runtime.display_composer, payload):
+                    await _send_display(transport, item, origin)
 
             plan_watcher = PlanWatcher(
                 speak=_speak_plan,
@@ -2565,12 +2856,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await pusher.push(TTSSpeakFrame(text=text))
 
             async def _push_research_display(payload: dict) -> None:
-                await send_app_message(transport, {"type": "display", "display": payload})
+                for item, origin in _compose_display_items(runtime.display_composer, payload):
+                    await _send_display(transport, item, origin)
 
             research_watcher = ResearchWatcher(
                 speak=_speak_research,
                 push_display=_push_research_display,
                 is_connected=lambda: client_connected["value"],
+                layout_hints=runtime.display_composer is not None,
             )
             research_watcher.start()
 
@@ -2592,6 +2885,58 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             )
             progress_watcher.start()
             runtime.timing["progress"] = progress_watcher  # W12: progress_updates
+
+        # ---- C7-py: typed requests and approvals (contract sections 2 and 3) ----
+        async def start_typed_turn_bound(text: str, tag: str) -> bool:
+            return await start_typed_turn(runtime, pusher, aggregators, text, tag)
+
+        async def _send_typed_reply(message: dict) -> None:
+            await send_app_message(transport, message)
+
+        async def _speak_fixed_line(text: str) -> None:
+            await pusher.push(TTSSpeakFrame(text=text))
+
+        async def _note_decline_silently(text: str) -> None:
+            # The silent append the speaker gate's drop note uses: a plain
+            # context append, never push_context_frame, so a decline starts no
+            # model run and nothing is spoken (contract 3.8).
+            runtime.voice_sources.append(aggregators.user(), text)
+
+        typed_session = TypedRequestSession(
+            session_id=runtime.session_id, generation=runtime.console_generation,
+            send=_send_typed_reply, start_turn=start_typed_turn_bound, speak=_speak_fixed_line,
+            note=_note_decline_silently,
+            is_alive=lambda: runtime.alive, is_sensitive=_voice_is_sensitive,
+            book=runtime.approvals, typed_enabled=typed_request_flag_enabled(),
+            offer_pending=lambda: runtime.pending_content_offer is not None)
+        typed_tasks: set[asyncio.Task] = set()
+
+        def _spawn_typed(coro: Any) -> None:
+            # Detached on purpose: on the WebSocket this handler runs on the
+            # client-message processor's input task, which must stay free to
+            # carry the very InterruptionFrame start_typed_turn waits for.
+            async def guarded() -> None:
+                try:
+                    await coro
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001
+                    _logger.warning("typed_request_handler_failed")
+            task = asyncio.create_task(guarded())
+            typed_tasks.add(task)
+            task.add_done_callback(typed_tasks.discard)
+
+        async def handle_turn_typed(message: Any) -> None:
+            msg = _unwrap_client_message(message)
+            if msg is None or msg.get("type") != TURN_TYPED:
+                return
+            _spawn_typed(typed_session.handle_turn(msg))
+
+        async def handle_approval_decide(message: Any) -> None:
+            msg = _unwrap_client_message(message)
+            if msg is None or msg.get("type") != APPROVAL_DECIDE:
+                return
+            _spawn_typed(typed_session.handle_decide(msg))
 
         voice_state = {"current": catalog["default"]}
 
@@ -2640,8 +2985,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             generation=runtime.console_generation,
         )
         shared_content_enabled = (
-            os.environ.get("JARVIS_COMMAND_CONSOLE_ENABLED", "false").strip().lower()
-            in ("1", "true", "yes") and
+            command_console_flag_enabled() and
             os.environ.get("JARVIS_SHARED_CONTENT_ENABLED", "false").strip().lower()
             in ("1", "true", "yes")
         )
@@ -2761,7 +3105,7 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
 
         async def handle_console(message: Any) -> None:
             """Route versioned console requests through the bounded backend contract."""
-            if os.environ.get("JARVIS_COMMAND_CONSOLE_ENABLED", "").strip().lower() in ("false", "0", "no"):
+            if not command_console_flag_enabled():
                 return
             msg = _unwrap_client_message(message)
             if msg is None:
@@ -2848,14 +3192,14 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 # written to the transcript or database here.
                 payload = result.get("data") if isinstance(result, dict) else None
                 if isinstance(payload, dict) and payload.get("ok"):
-                    await send_app_message(transport, {
-                        "type": "display", "display": {
-                            "surface": "drawer", "kind": "text",
-                            "title": "Shared content analysis",
-                            "text": str(payload.get("answer", ""))[:12000],
-                            "tool": "shared_content",
-                        },
-                    })
+                    shared_display = {
+                        "surface": "drawer", "kind": "text",
+                        "title": "Shared content analysis",
+                        "text": str(payload.get("answer", ""))[:12000],
+                        "tool": "shared_content",
+                    }
+                    for item, origin in _compose_display_items(runtime.display_composer, shared_display):
+                        await _send_display(transport, item, origin)
             else:
                 result = shared_transfer.handle(msg)
                 if msg.get("type") == "input/cancel":
@@ -2890,6 +3234,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
                 await handle_console(message)
                 await handle_shared_content(message)
                 await handle_location(message)
+                await handle_turn_typed(message)
+                await handle_approval_decide(message)
         elif client_messages is not None:
             # WebSocket transport (native-audio plan §3.2 findings): no
             # connection object and no on_app_message event — the same two
@@ -2897,7 +3243,8 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             client_messages.bind(handle_voice_set, handle_ui_noop,
                                   handle_console_result, handle_console_ready,
                                   handle_console, handle_shared_content,
-                                  handle_location)
+                                  handle_location, handle_turn_typed,
+                                  handle_approval_decide)
 
         runner = PipelineRunner()
         try:
@@ -2908,6 +3255,10 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # the top of on_client_disconnected; this covers every other end.)
             runtime.alive = False
             notices.clear_live_session(runtime.session_id)
+            if runtime.approvals is not None:
+                runtime.approvals.close()
+            for typed_task in list(typed_tasks):
+                typed_task.cancel()
             shared_transfer.close()
             await watcher.stop()
             await memory_watcher.stop()

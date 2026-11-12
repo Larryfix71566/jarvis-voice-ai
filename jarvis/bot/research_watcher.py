@@ -63,9 +63,11 @@ class ResearchWatcher:
         interval_s: float = DEFAULT_INTERVAL_S,
         admin_url: str | None = None,
         fetch_job: FetchJobFn | None = None,
+        layout_hints: bool = False,
     ):
         self._speak = speak
         self._push_display = push_display
+        self._layout_hints = layout_hints
         self._is_connected = is_connected
         self._interval_s = interval_s
         self._admin_url = admin_url or os.environ.get(ADMIN_URL_ENV) or DEFAULT_ADMIN_URL
@@ -141,6 +143,7 @@ class ResearchWatcher:
         }
         payload = build_display_payload(
             "analyst", "Analyst", "research_report", {}, json.dumps(data),
+            layout_hints=self._layout_hints,
         )
         if payload is not None:
             await self._push_display(payload)
