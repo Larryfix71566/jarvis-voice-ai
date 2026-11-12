@@ -54,6 +54,47 @@ What the run shows: this source does not type-check within the compiler's limit 
 - **B1 cannot go green on this PR alone.** It needs a source change in `SkillsWorkspaceView.swift` that splits the chain, for example by moving the `.onChange` group into a separate `ViewModifier` or helper function. That file is outside B1's scope (`.github/workflows/validate.yml`). It needs a Swift compile to verify. Under the closure plan, Claude writes no Swift until B1 is green, so Claude cannot make this fix. Who owns the fix is Larry's call. It could land as its own small PR against `next`, with #338 rerun after it.
 - Not a finding: the job's 45-minute timeout leaves room. The failing leg ran about 4 minutes.
 
+## Addendum, same day: Codex's repair at `3c85fcb` and `e4ef119`
+
+Codex pushed two commits on 2026-11-12 after the run above:
+
+- `3c85fcb`: "split Skills workspace observers for Swift 6.2". Codex's B1 log says Larry approved this split on 2026-11-12.
+- `e4ef119`: documentation only. It updates the B1 log, the closure plan and the WS-35 block.
+
+The Swift source is identical at the two heads.
+
+**The repair is behavior-preserving.** It splits `workspaceContent(width:)` into four chained helpers, each returning `some View`: `workspaceSelectionContent`, `workspaceLifecycleContent`, `workspaceActionContent` and `workspaceContent`. Extracting the modifier lines from all four helpers, in call order, gives 44 lines. They are identical, line for line, to the 44 lines of the single chain on `next`. The one call site, line 369, still calls `workspaceContent(width:)`. No other file changed.
+
+**The compile blocker is resolved; the Host suite now fails on tests.** Checked in the job logs:
+
+| Run (head) | Host result | Failing tests |
+| --- | --- | --- |
+| [43240213503](https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/43240213503) (`3c85fcb`) | "Executed 618 tests, with 3 tests skipped and 16 failures" | 7 |
+| [43242777826](https://github.com/Larryfix71566/jarvis-voice-ai/actions/runs/43242777826) (`e4ef119`) | "Executed 618 tests, with 3 tests skipped and 14 failures" | 6 |
+
+Six tests failed in both runs:
+
+- `CompactConversationTests.testLegacyCompactOrbRetainsTranscriptCaptions`
+- `CompactConversationTests.testV2CompactOrbOmitsTranscriptButKeepsConversationAndNotices`
+- `MemoryGraphFrameTimeTests.testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate`
+- `OrbShellFrameTimeTests.testCrystalShellStaysWithinTheFrameBudget`
+- `SkillsRenderedNavigationBenchmarkTests.testRenderedCatalogSelectionAndCachedNavigationP95AtWideAndCompactSizes`
+- `WindowVisibilityTests.testWaveStopsSamplingWhileWindowHiddenAndResumes`
+
+`MemoryGraphImageStoreTests.testCancelledImageStaysStoppedUntilExplicitReload` failed at `3c85fcb` and passed at `e4ef119`, with identical Swift source. That test's result therefore varies between runs. Why it varies is not established here.
+
+JarvisKit and PhoneCore passed in both runs. The first run's counts and test names match Codex's B1 log.
+
+The same tests on Larry's Mac:
+
+- Kimi's 2026-11-06 revalidation ([log](2026-11-06-ws-17-kimi-combined-main-revalidation.md)) ran `swift test --package-path macos/MortimerHost` at `4e58eaa` on Larry's Mac. The main target reported "590 tests, 5 skips, 0 failures". The only failure was F1, in the separate PhoneRemoteAuthority target.
+- None of the seven tests above is in that log's skip list.
+- `git diff --stat 4e58eaa origin/next -- macos/MortimerHost` is empty. Apart from the behavior-preserving split, the hosted runs compiled the same MortimerHost sources and tests that passed on the Mac.
+
+So these seven tests pass on Larry's Mac and fail on the hosted x86_64 runner (Xcode 26.3, Swift 6.2.4). Why they fail on the runner is not established here: hardware, display/WindowServer, timing budgets and OCR are all untested candidates. A rerun on the Mac at `3c85fcb` would confirm that the split itself changes nothing there.
+
+**Updated verdict.** The workflow and the Skills view split are both correct. B1 is still not green. The remaining blockers are the six consistent test failures plus the one that varies. All seven pass on Larry's Mac with the same sources. Their diagnosis is the next step, and Codex's B1 log says it needs Larry's authorization. The question of who should fix the compile timeout, raised above, is settled.
+
 ## Unchanged
 
 No source, test, workflow, plan, ROADMAP block or acceptance checkbox was changed. No GitHub review or comment was posted on #338.
