@@ -155,14 +155,14 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 **Workstream:** Larry approved the three lane rows in his Claude Duet channel on 2026-11-11 at 02:35:41 UTC: "Take your picks", answering decisions 2 to 7 of `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §7 (decision 6: approve the WS-34 to WS-36 rows). His earlier direction for the split, 01:58:16 UTC: "first let's seperate this plan so that kimi and codex can help with development, the division should not be absolute but a guide to keep the models from stepping on each other, then we should freeze main and begin". Under §0 rule 14 a lane is a guide, not a lock: any system not engaged may pick up an item another system is not engaged with, by updating this block's Owner and Where first.
 
 - **Owner:** `kimi`
-- **Status:** proposed; approved by Larry, starts when `next` exists (WS-34 item A2, after the freeze SHA is recorded in WS-17). Mark `claimed` when the first item starts.
+- **Status:** in-progress; C0/C0b independent review landed via this PR with CHANGES REQUESTED on head `1f8aca7`; A3 is next
 - **Implemented by:** Kimi
 - **Remaining work / acceptance:** Items A3 (the WS-17 combined-source review, already claimed there), C2 (add the approved palette's tokens with `amber` unchanged; contrast on glass), C6 (glass energy orb on the Mac, replacing `OrbFieldView`'s compact satellites) and C7a (thread activity row and inline approve/decline). Each item in the plan's §4 table for this lane, as a PR into `next` with its tests, reviewed by the item's named reviewer (never its author). Interface items then pass the rewritten UI boxes in `docs/acceptance/mac-acceptance-2026-11-11.md` §4 on the final build; `next` merges into `main` at closure.
 - **Model version:** not recorded
-- **Where:** not started; items branch from `next` (F1 and other acceptance fixes branch from `main`)
+- **Where:** `kimi/ws36-c0-contract-review-20261111` (C0/C0b review, landed via this PR into `next`); subsequent items branch from `next` (F1 and other acceptance fixes branch from `main`)
 - **Plan:** `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md` §4 (WS-36) and §5; add only dated progress for this lane
 - **Scope:** The files named for those items in the plan's §4 WS-36 table: `App/AppTheme.swift`, `App/Glass.swift`, `App/AppTuning.swift`, `Console/TopBarView.swift`, `Console/ConsoleActionBar.swift` (C2); the orb files and the orb slots in `Console/AdaptiveStageView.swift`, `OrbFieldView.swift` removal (C6); `Console/ConversationThreadView.swift`, `MicControlsView.swift`, `CommandConsoleView.swift`, `App/ConsoleActionCoordinator.swift`, `Stores/ConversationStore.swift` (C7a). Paths are under `macos/MortimerHost/Sources/MortimerHost/`. A3 writes docs only. Hand-off order for shared files is the plan's §4 "Hand-off points"; overlaps with other rows are CX-29.
-- **Next step:** kimi: A3 once the freeze SHA is recorded in WS-17; C2 after WS-34's C0b.
+- **Next step:** claude: correct the C0/C0b findings for independent re-review. kimi: A3 combined-source review; F1 review when Codex publishes it; C2 after the corrected C0b.
 - **Updated:** 11-11
 
 </details>

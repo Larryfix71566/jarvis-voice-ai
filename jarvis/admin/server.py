@@ -72,6 +72,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from jarvis import graphs
 from jarvis.auth import auth_enabled, service_headers
 from jarvis.authmw import BearerAuthMiddleware
+from jarvis import request_guard
+from jarvis.request_guard import RequestGuardMiddleware
 from jarvis.bind import BindRefused, resolve_bind_host, resolve_port
 from jarvis import memory as memory_module
 from jarvis.admin.reminder_notifier import ReminderNotifier
@@ -139,14 +141,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 app = FastAPI(title="jarvis-admin", docs_url=None, redoc_url=None, openapi_url=None)
 
-# Middleware is wrapped in reverse registration order. Register auth first so
-# CORS is outside it and can add headers to authenticated failures/preflights.
+# Middleware is wrapped in reverse registration order. Register auth first,
+# then the request guard, then CORS: resulting order CORS -> guard -> auth, so
+# preflights work and cheap host/origin rejections precede token verification.
 app.add_middleware(BearerAuthMiddleware)
+app.add_middleware(RequestGuardMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=list(request_guard.allowed_browser_origins()),
     allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", request_guard.CLIENT_HEADER],
 )
 
 

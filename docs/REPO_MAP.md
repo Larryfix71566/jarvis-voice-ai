@@ -77,7 +77,8 @@ review and human release workflow for changes; a status request is read-only.
   read-only memory/capability/execution/deliberation graphs.
 - `jarvis/selfedit/service.py`: sandbox facade, allowlist, validation and PRs.
 - `jarvis/db.py`: SQLite schema/migrations. `jarvis/auth.py` and
-  `authmw.py`: authenticated request identity; `tenant.py`: validated,
+  `authmw.py`: authenticated request identity; `request_guard.py`: Host/Origin
+  allow-list and `X-Mortimer-Client` check (admin, bot, costs); `tenant.py`: validated,
   request-scoped tenant context. User-scoped APIs must enforce ownership
   server-side; do not trust UI filters or caller-supplied identity.
 - `jarvis/vault.py`: encrypted credential store (CLI); `jarvis/prompts.py`:
