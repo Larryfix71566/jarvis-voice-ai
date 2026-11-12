@@ -49,4 +49,18 @@ Reviewer: Kimi. Draft target: `next`. No merge/deployment authority exercised.
 
 **Incomplete integration / merge blocker:** `WorkspaceStore.swift` is not edited pending Larry's specific authorization for a bounded C4/C5 overlap. Current workspace routing still assigns a new UUID for repeated answer IDs. The required change is higher-revision in-place replacement preserving reader state and router stale/replay handling, including completion-only update suppression. This slice is not C4 completion or merge-ready. No carousel/C5, C7, SkillsWorkspaceView, harness model, production, credentials or deployment changes.
 
-Evidence so far: JarvisKit full suite 248 passed, zero failures. Host pre-final-refactor full suite 593 tests, 3 existing skips, zero failures; no skips added. Five transition sequences pass at both display stores. Offline seven-block renderer captured at 480/1100 widths; final-source rerun and visual inspection follow below. First Host filter matched no tests and is recorded only as compilation evidence.
+Evidence so far: JarvisKit full suite 248 passed, zero failures. Host pre-final-refactor full suite: 28 authority tests (4 existing skips) plus 593 Host tests (3 existing skips), zero failures; no skips added. Five transition sequences pass at both display stores. Offline seven-block renderer captured at 480/1100 widths; final-source rerun and visual inspection follow below. First Host filter matched no tests and is recorded only as compilation evidence.
+
+
+## Exact-source validation and publication gate
+
+Source commit: `3a490ee67749bd11d036b85663ed67d3ab00a097`.
+Final `swift test --package-path macos/MortimerHost` exited 0: authority bundle 28 tests / 4 skipped / 0 failures; Host bundle 593 tests / 3 skipped / 0 failures. Combined 621 tests / 7 existing skips. Four authority process cases require the offline owner executable; three display cases require two connected displays. No skips or gates were added/relaxed. Full JarvisKit suite on the same model source: 248 tests / 0 failures.
+
+Final-source screenshot fixtures were visually inspected at 480 and 1100 logical widths: readable ordered blocks, one content header, signed chart axis and command handoff footer. These are offline fixtures, not final-build UI acceptance. Local artifacts live under `macos/MortimerHost/.build/interface-fixtures/`:
+- `composed-answer-480.png` SHA-256 `9f46e4638d045c102b2b5187d344386213076b380d34a1ba8e79e4008d703c9a`
+- `composed-answer-1100.png` SHA-256 `fbcbd208129c826ff976cf83e211bab3dca24117efe2174efb78970122f02766`
+
+Publication attempt was denied before execution because the action reviewer required explicit Larry authorization for pushing/opening the draft. A read-only remote check confirmed no matching branch or PR. No retry without materially relevant approval evidence. WorkspaceStore/router integration remains separately pending Larry's bounded scope approval. Next actor: Larry for both decisions; Codex to finish integration/validation and publish after the respective gates clear; Kimi for independent review when complete.
+
+Base reconciliation note: the required merge of main imports existing main changes absent from next. Compare the C4 implementation commit separately from that merge; its 13 changed files are the actual implementation slice. The eventual PR diff includes inherited main documentation/F1 history, not new C4 scope.
