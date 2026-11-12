@@ -17,7 +17,6 @@ struct WorkspaceResultPane: View {
     @Environment(DrawerState.self) private var drawer
     @Environment(ShareCoordinator.self) private var sharing
     @State private var showingSharePreview = false
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
 
     init(result: WorkspaceResult, onSupportingDisplay: Bool = false,
          coordinator: ConsoleActionCoordinator? = nil, showsActions: Bool = true) {
@@ -43,8 +42,7 @@ struct WorkspaceResultPane: View {
                 }
             }
             if !onSupportingDisplay && display.isPresented(.result(result.id),
-                selection: workspace.supportingContent,
-                layoutVersion: InterfaceLayoutVersion.resolve(layoutVersion)) {
+                selection: workspace.supportingContent) {
                 ContentUnavailableView {
                     Label("On the supporting display", systemImage: "display")
                 } actions: {

@@ -9,7 +9,6 @@ struct WorkspaceView: View {
     @EnvironmentObject private var client: JarvisClient
     @Environment(WorkspaceStore.self) private var workspace
     @State private var pinLimitNotice = false
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
     @Environment(\.mortimerReduceMotion) private var reduceMotion
     @Environment(DisplayWindowStore.self) private var display
     @Environment(DrawerState.self) private var drawer
@@ -146,8 +145,7 @@ struct WorkspaceView: View {
     }
 
     private func isOnSupportingDisplay(_ content: SupportingDisplayContent) -> Bool {
-        display.isPresented(content, selection: workspace.supportingContent,
-                            layoutVersion: InterfaceLayoutVersion.resolve(layoutVersion))
+        display.isPresented(content, selection: workspace.supportingContent)
     }
 
     @ViewBuilder

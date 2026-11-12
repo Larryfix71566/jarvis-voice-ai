@@ -1,13 +1,12 @@
 import Foundation
 
-/// Closed layout contract shared by every native window. Unknown persisted
-/// values fail safe to the adaptive layout instead of accidentally selecting
-/// a newer composition.
+/// Layouts 0 and 1 have been retired. Persisted preferences are migrated to
+/// the sole Command Console composition; views never branch on this value.
 enum InterfaceLayoutVersion {
-    static func resolve(_ raw: Int) -> Int {
-        switch raw {
-        case 0, 1, 2: return raw
-        default: return 1
-        }
+    static let current = 2
+    static let preferenceKey = "mortimer.interface.layoutVersion"
+
+    static func migrate(_ defaults: UserDefaults = .standard) {
+        defaults.set(current, forKey: preferenceKey)
     }
 }

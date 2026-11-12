@@ -1,47 +1,29 @@
 import SwiftUI
 import JarvisKit
 
-/// APP plan §3 P13 + parity sweep 2026-08-30 — the command-deck stage,
-/// matched to web/src/components/OrbField.tsx: agent satellites (cards,
-/// pentagon layout) + beams + the M.O.R.T.I.M.E.R. readout with
-/// STATE_LABEL / thinking shimmer / armed + attention glow + live
-/// captions + ambient strip + system vitals + wake ripple, all over the
-/// full-window VoiceWave (the wave owns voice display).
+/// Agent identities and display order shared by the compact voice rail and Runs tab.
 struct AgentLayoutEntry {
     let key: String
     let label: String
-    let x: Double   // percent of stage width
-    let y: Double   // percent of stage height
 }
 
-/// agentLayout.ts:48-54, verbatim.
-// 2026-09-06 — six satellites, not five: `app_builder` split out of
-// `developer`. Rebalanced from a pentagon to an even hexagon (Larry's
-// call) rather than bolting a sixth point onto the old shape. The
-// angular ORDER of the original five is preserved, so nothing crosses
-// the field; each moves a few percent and the new one takes the vacant
-// bottom vertex. Centre (50,50), radius 29. Keep in sync with
-// web/src/agentLayout.ts.
 let AGENT_LAYOUT: [AgentLayoutEntry] = [
-    AgentLayoutEntry(key: "developer", label: "Developer", x: 50, y: 21),
-    AgentLayoutEntry(key: "analyst", label: "Analyst", x: 79, y: 36),
-    AgentLayoutEntry(key: "systems", label: "Systems", x: 79, y: 64),
-    AgentLayoutEntry(key: "app_builder", label: "App Builder", x: 50, y: 79),
-    AgentLayoutEntry(key: "librarian", label: "Librarian", x: 21, y: 64),
-    AgentLayoutEntry(key: "scheduler", label: "Scheduler", x: 21, y: 36),
+    AgentLayoutEntry(key: "developer", label: "Developer"),
+    AgentLayoutEntry(key: "analyst", label: "Analyst"),
+    AgentLayoutEntry(key: "systems", label: "Systems"),
+    AgentLayoutEntry(key: "app_builder", label: "App Builder"),
+    AgentLayoutEntry(key: "librarian", label: "Librarian"),
+    AgentLayoutEntry(key: "scheduler", label: "Scheduler"),
 ]
 
 struct OrbFieldView: View {
     let voiceState: VoiceState
-    var compactPresentation = false
     var hidesLettering = false
     var presentation: VoicePresentationState? = nil
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
     @EnvironmentObject private var client: JarvisClient
     @Environment(AgentRunStore.self) private var agentRuns
     @Environment(DrawerState.self) private var drawer
     @Environment(DisplayResultStore.self) private var displayResults
-    @Environment(ConversationStore.self) private var conversation
     @Environment(ConsoleNoticeState.self) private var notices
 
     /// E2 — boot counter: increments when a connection arrives; keys the
@@ -59,143 +41,8 @@ struct OrbFieldView: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            if compactPresentation {
-                compactReadout
-            } else {
-            ZStack {
-                // Faint center radial (command-deck.css .orb-field).
-                RadialGradient(colors: [AppTheme.accent.opacity(0.05), .clear],
-                               center: .center, startRadius: 0,
-                               endRadius: min(geo.size.width, geo.size.height) * 0.6)
-
-                // E4 — ambient signs of life, top-left.
-                AmbientStripView(connected: connected)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .padding(16)
-
-                // Machine vitals, bottom-right — nothing when healthy.
-                SystemVitalsView(connected: connected)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .padding(16)
-
-                // Wake burst: expanding ring from the field center.
-                if ripplePulse > 0 {
-                    WakeRipple().id(ripplePulse)
-                }
-
-                // Beams: satellite -> centre, lit while that agent works;
-                // brief fade-out afterglow when it settles (beam-done).
-                Canvas { context, size in
-                    let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                    for agent in AGENT_LAYOUT {
-                        let from = CGPoint(x: size.width * agent.x / 100,
-                                           y: size.height * agent.y / 100)
-                        var path = Path()
-                        path.move(to: from)
-                        path.addLine(to: center)
-                        if isWorking(agent.key) {
-                            context.stroke(path, with: .color(AppTheme.accent.opacity(0.55)), lineWidth: 1.5)
-                        } else if let done = agentRuns.lastCompleted[agent.key] {
-                            // beam-fade 2.4s ease-out.
-                            let age = now.timeIntervalSince(done.doneAt)
-                            if age < 2.4 {
-                                let opacity = 0.5 * (1 - age / 2.4)
-                                context.stroke(path, with: .color(AppTheme.accent.opacity(opacity)), lineWidth: 1)
-                            }
-                        }
-                    }
-                }
-                .allowsHitTesting(false)
-
-                // The five satellites at their pentagon positions, with
-                // the E2 staggered entrance per connect.
-                ForEach(Array(AGENT_LAYOUT.enumerated()), id: \.element.key) { index, agent in
-                    satellite(agent)
-                        .position(x: geo.size.width * agent.x / 100,
-                                  y: geo.size.height * agent.y / 100)
-                        .modifier(BootFadeIn(
-                            pulse: bootPulse,
-                            delay: 0.2 + Double(index) * 0.08,
-                            restingOpacity: isWorking(agent.key) ? 1.0 : 0.9
-                        ))
-                }
-
-                // The centre readout (OrbField.tsx .orb-center).
-                centerReadout
-
-                // Live captions / first-run hint, lower third.
-                captions
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, geo.size.height * 0.08)
-
-                // F4 — the speaker-gate "voice not recognized" chip, same
-                // bottom-of-stage position, amber, auto-fading.
-                if let notice = notices.speakerGateNotice {
-                    Text(notice)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(AppTheme.attn)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
-                        .mortimerGlass(.chip)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, geo.size.height * 0.08 + 60)
-                        .transition(.opacity)
-                        .allowsHitTesting(false)
-                }
-
-                // 2026-09-05 — the default output device moved (AirPods)
-                // and the bot's voice did not follow (AudioOutputMonitor).
-                // Same chip idiom, but interactive and persistent: it
-                // carries the one fix this WebRTC build allows.
-                if let notice = notices.audioOutputNotice {
-                    HStack(spacing: 10) {
-                        Text(notice)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(AppTheme.attn)
-                            .lineLimit(1)
-                        Button("Reconnect") {
-                            notices.clearAudioOutputNotice()
-                            Task { await client.reconnect() }
-                        }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(AppTheme.accent)
-                        .help("Open a new session so Mortimer's voice plays on the new output device")
-                        Button {
-                            notices.clearAudioOutputNotice()
-                        } label: {
-                            Text("×").font(.system(size: 13, design: .monospaced))
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(AppTheme.textDim)
-                        .help("Keep the current session")
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 6)
-                    .mortimerGlass(.chip)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .padding(.bottom, geo.size.height * 0.08 + 96)
-                    .transition(.opacity)
-                }
-
-                // 2026-09-05 — the input got repointed to a rate-matching
-                // mic at connect (AirPods 24 kHz-mic fix). Informational,
-                // auto-fading; the correction already happened.
-                if let notice = notices.audioInputNotice {
-                    Text(notice)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(AppTheme.textDim)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
-                        .mortimerGlass(.chip)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                        .padding(.bottom, geo.size.height * 0.08 + 60)
-                        .transition(.opacity)
-                        .allowsHitTesting(false)
-                }
-            }
-        }
+        GeometryReader { _ in
+            compactReadout
         }
         .onChange(of: voiceState) { _, next in
             // E2: every connect is an arrival (connecting -> live).
@@ -215,9 +62,8 @@ struct OrbFieldView: View {
         }
     }
 
-    /// Compact layout reuses the same status and satellite owners. Layout v2
-    /// keeps the transcript in the main conversation surface instead of
-    /// repeating captions here. Legacy layouts retain their existing captions.
+    /// The compact rail keeps the transcript in the main conversation surface
+    /// instead of repeating captions here.
     /// Scrolling keeps every notice and agent reachable in a narrow voice rail.
     private var compactReadout: some View {
         ScrollView {
@@ -249,9 +95,6 @@ struct OrbFieldView: View {
                     }
                 }
                 if let notice = notices.audioInputNotice { Text(notice).font(.caption) }
-                if InterfaceLayoutVersion.resolve(layoutVersion) != 2 {
-                    captions
-                }
                 ForEach(AGENT_LAYOUT, id: \.key) { agent in
                     HStack(spacing: 8) { compactBeam(agent); satellite(agent) }
                 }
@@ -342,7 +185,7 @@ struct OrbFieldView: View {
 
     /// C2.1 (gap G05): the beam's meaning — "this agent is working now /
     /// just finished" — in a form that fits the compact rail. Same
-    /// isWorking / lastCompleted truth as the full-stage beams.
+    /// isWorking / lastCompleted truth as the agent cards.
     private func compactBeam(_ agent: AgentLayoutEntry) -> some View {
         let working = isWorking(agent.key)
         var opacity = 0.0
@@ -382,70 +225,6 @@ struct OrbFieldView: View {
         case .connecting: return 0.6
         case .offline: return 0
         }
-    }
-
-    // MARK: - Live captions (OrbField.tsx:338-367 + E8 first-run hint)
-
-    private var lastUser: ConversationEntry? {
-        conversation.entries.last {
-            $0.role == "user" && !$0.text.trimmingCharacters(in: .whitespaces).isEmpty
-        }
-    }
-
-    private var lastAssistant: ConversationEntry? {
-        conversation.entries.last {
-            $0.role == "assistant" && !$0.text.trimmingCharacters(in: .whitespaces).isEmpty
-        }
-    }
-
-    @ViewBuilder
-    private var captions: some View {
-        if lastUser == nil && lastAssistant == nil && connected {
-            // E8 — connected, nothing said yet; replaced forever by the
-            // first caption.
-            captionPanel {
-                Text("Try: \"What's the weather?\" · \"Show me the runs\" · \"Remind me in twenty minutes\"")
-                    .font(.system(size: 11, design: .monospaced))
-                    .kerning(0.7)
-                    .foregroundStyle(AppTheme.textDim)
-            }
-        } else if lastUser != nil || lastAssistant != nil {
-            captionPanel {
-                VStack(spacing: 4) {
-                    if let user = lastUser {
-                        Text("You — \(truncateCaption(user.text, AppTuning.captionMaxUser))")
-                            .font(.system(size: 11, design: .monospaced))
-                            .kerning(0.7)
-                            .foregroundStyle(AppTheme.textDim)
-                    }
-                    if let bot = lastAssistant {
-                        Text(InterfaceLayoutVersion.resolve(layoutVersion) == 2
-                             ? ConversationStore.liveCaption(bot.text)
-                             : truncateCaption(bot.text, AppTuning.captionMaxBot))
-                            .font(.system(size: 13))
-                            .foregroundStyle(AppTheme.text)
-                            .shadow(color: AppTheme.accentFaint, radius: 7)
-                    }
-                }
-            }
-        }
-    }
-
-    private func captionPanel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        content()
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: 900)
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
-            .mortimerGlass(.chip)
-            .padding(.horizontal, 24)
-            .allowsHitTesting(false)
-    }
-
-    private func truncateCaption(_ s: String, _ max: Int) -> String {
-        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        return t.count > max ? String(t.prefix(max - 1)) + "…" : t
     }
 
     // MARK: - Satellite card (.satellite, command-deck.css — exact port)

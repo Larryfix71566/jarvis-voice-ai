@@ -41,9 +41,6 @@ final class ContentPanelTests: XCTestCase {
         XCTAssertEqual(store.stagePanels(selection: selection).count, 2)
         XCTAssertTrue(store.isPresented(.result(first), selection: selection))
         XCTAssertTrue(store.isPresented(.result(second), selection: selection))
-        XCTAssertFalse(store.isPresented(.result(first), selection: selection, layoutVersion: 1),
-                       "adaptive rollback shows only its selected supporting result")
-        XCTAssertTrue(store.isPresented(.result(second), selection: selection, layoutVersion: 1))
         let pointerOnly = SupportingDisplayContent.result(UUID())
         XCTAssertEqual(store.supplementalContent(pointerOnly), pointerOnly)
         XCTAssertTrue(store.isPresented(pointerOnly, selection: pointerOnly))

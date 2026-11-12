@@ -6,9 +6,20 @@ import JarvisKit
 
 @MainActor
 final class FullConsoleRenderingTests: XCTestCase {
-    func testUnknownPersistedLayoutFallsBackToAdaptive() {
-        XCTAssertEqual(InterfaceLayoutVersion.resolve(99), 1)
-        XCTAssertEqual(InterfaceLayoutVersion.resolve(-1), 1)
+    func testEveryPersistedLayoutMigratesToCommandConsole() throws {
+        let suite = "layout-migration-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        for previous in [nil, 0, 1, 2, 99, -1] as [Int?] {
+            if let previous { defaults.set(previous, forKey: InterfaceLayoutVersion.preferenceKey) }
+            else { defaults.removeObject(forKey: InterfaceLayoutVersion.preferenceKey) }
+            // The former one-time migration must not preserve a retired layout.
+            defaults.set(true, forKey: "mortimer.interface.commandConsoleDefaultMigrated")
+            InterfaceLayoutVersion.migrate(defaults)
+            XCTAssertEqual(defaults.integer(forKey: InterfaceLayoutVersion.preferenceKey), 2)
+            InterfaceLayoutVersion.migrate(defaults)
+            XCTAssertEqual(defaults.integer(forKey: InterfaceLayoutVersion.preferenceKey), 2)
+        }
     }
 
     func testMinimumConsoleKeepsOutputAndMicrophoneControlsReachable() throws {
@@ -23,14 +34,13 @@ final class FullConsoleRenderingTests: XCTestCase {
         try checkConsole(tabTextSize: 11, layoutVersion: 2, startup: true)
     }
 
-    func testPreviousLayoutRollbackKeepsSidecarAndVoiceControlsReachable() throws {
-        // SW-A rollback-mode regression: the one-step rollback must continue
-        // to render the established voice/orb console and the sidecar, rather
-        // than leaving the app in a partially torn-down adaptive workspace.
-        try checkConsole(tabTextSize: 11, layoutVersion: 0)
+    func testRetiredAndUnknownPreferencesStillRenderCommandConsole() throws {
+        for previous in [0, 1, -1, 99] {
+            try checkConsole(tabTextSize: 11, layoutVersion: previous, startup: true)
+        }
     }
 
-    private func checkConsole(tabTextSize: Double, layoutVersion: Int = 1, startup: Bool = false) throws {
+    private func checkConsole(tabTextSize: Double, layoutVersion: Int = 2, startup: Bool = false) throws {
         _ = NSApplication.shared
         NSApplication.shared.accessibilitySetValue(true,
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
@@ -38,7 +48,7 @@ final class FullConsoleRenderingTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(layoutVersion, forKey: "mortimer.interface.layoutVersion")
-        // Existing-layout checks opt out explicitly. The startup fixture
+        // Result-view checks opt out explicitly. The startup fixture
         // exercises the production default, which is compact conversation.
         if !startup { defaults.set(false, forKey: "mortimer.interface.compactConversation") }
         defaults.set(tabTextSize, forKey: "mortimer.interface.sidecarTabTextSize")

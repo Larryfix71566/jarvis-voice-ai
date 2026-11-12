@@ -68,7 +68,7 @@ final class CompactConversationTests: XCTestCase {
             adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
         let notices = ConsoleNoticeState()
         notices.showAudioInputNotice("Audio input notice remains visible")
-        let compact = NSHostingView(rootView: OrbFieldView(voiceState: .offline, compactPresentation: true)
+        let compact = NSHostingView(rootView: OrbFieldView(voiceState: .offline)
             .defaultAppStorage(defaults)
             .environment(conversation)
             .environment(AgentRunStore())
@@ -124,7 +124,7 @@ final class CompactConversationTests: XCTestCase {
         XCTAssertTrue(logOCR.contains(arrivingText.filter { !$0.isWhitespace }), "main transcript receives later entries: \(logOCR)")
     }
 
-    func testLegacyCompactOrbRetainsTranscriptCaptions() throws {
+    func testRetiredLayoutPreferenceCannotRestoreOrbTranscriptCaptions() throws {
         if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
             throw XCTSkip("Hosted-runner skip: this test still gates on Mac.")
         }
@@ -145,7 +145,7 @@ final class CompactConversationTests: XCTestCase {
         conversation.set(entries)
         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
             adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
-        let view = NSHostingView(rootView: OrbFieldView(voiceState: .offline, compactPresentation: true)
+        let view = NSHostingView(rootView: OrbFieldView(voiceState: .offline)
             .defaultAppStorage(defaults)
             .environment(conversation)
             .environment(AgentRunStore())
@@ -161,8 +161,8 @@ final class CompactConversationTests: XCTestCase {
         view.layoutSubtreeIfNeeded(); window.contentView?.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
         let legacyOCR = try renderedText(in: view)
-        XCTAssertTrue(legacyOCR.contains("Legacyusercaptionb931"), "legacy compact layout retains the user caption: \(legacyOCR)")
-        XCTAssertTrue(legacyOCR.contains("LegacyMortimercaptione527"), "legacy compact layout retains Mortimer’s caption: \(legacyOCR)")
+        XCTAssertFalse(legacyOCR.contains("Legacyusercaptionb931"), "retired layout cannot duplicate the user caption: \(legacyOCR)")
+        XCTAssertFalse(legacyOCR.contains("LegacyMortimercaptione527"), "retired layout cannot duplicate Mortimer’s caption: \(legacyOCR)")
     }
 
     func testSavedCompactPreferenceChangesNativeConversationPresentation() throws {

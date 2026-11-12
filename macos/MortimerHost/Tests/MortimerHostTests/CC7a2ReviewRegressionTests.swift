@@ -86,7 +86,7 @@ private final class ReviewTransport: RTVITransport {
             }
         }
     }
-    func testRealConsoleLayoutAndFlagTransitionsKeepQuietArrivalsInSync() throws {
+    func testRetiredLayoutPreferencesDoNotChangeThreadArrivalOwnership() throws {
         _ = NSApplication.shared
         let suite = "CC7a2-review-" + UUID().uuidString
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -106,12 +106,12 @@ private final class ReviewTransport: RTVITransport {
         window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
         defer { closeRenderingFixtureWindow(window) }
         func settle() { window.layoutIfNeeded(); view.layoutSubtreeIfNeeded(); RunLoop.main.run(until: Date().addingTimeInterval(0.3)) }
-        settle(); XCTAssertFalse(workspace.quietArrivals)
+        settle(); XCTAssertTrue(workspace.quietArrivals)
         var previousLayout = 1
-        for layout in [2, 1, 2, 0, 2] {
+        for layout in [2, 1, 2, 0, -1, 99, 2] {
             defaults.set(layout, forKey: "mortimer.interface.layoutVersion")
             settle(); print("REVIEW transition \(previousLayout) -> \(layout), quiet=\(workspace.quietArrivals)")
-            XCTAssertEqual(workspace.quietArrivals, layout == 2, "Layout \(previousLayout) -> \(layout)")
+            XCTAssertEqual(workspace.quietArrivals, true, "Layout \(previousLayout) -> \(layout)")
             previousLayout = layout
         }
         defaults.set(false, forKey: ConversationThread.flagKey)

@@ -70,7 +70,6 @@ final class SupportingDisplayCoordinator {
         var assignDisplay: @MainActor (String) -> Void
         var openDisplay: @MainActor () -> Void
         var closeDisplay: @MainActor () -> Void
-        var layoutVersion: @MainActor () -> Int
         var pause: @MainActor () async -> Void
         var now: @MainActor () -> TimeInterval
         /// Inside the bot's 5 s wait for a console result.
@@ -85,10 +84,6 @@ final class SupportingDisplayCoordinator {
                 assignDisplay: { _ = ScreenPlacement.shared.assignDisplay(to: $0) },
                 openDisplay: { placement.openDisplay() },
                 closeDisplay: { placement.closeDisplay() },
-                layoutVersion: {
-                    InterfaceLayoutVersion.resolve(
-                        UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2)
-                },
                 pause: { _ = try? await Task.sleep(nanoseconds: 50_000_000) },
                 now: { ProcessInfo.processInfo.systemUptime })
         }
@@ -234,8 +229,7 @@ final class SupportingDisplayCoordinator {
     /// What the display window renders right now (the main surface's own
     /// locator rule), and that the window is open.
     func isPresented(_ content: SupportingDisplayContent) -> Bool {
-        display.isPresented(content, selection: workspace.supportingContent,
-                            layoutVersion: environment.layoutVersion())
+        display.isPresented(content, selection: workspace.supportingContent)
     }
 
     /// A failed transfer must not leave main pointing at an absent window or
@@ -279,8 +273,7 @@ final class SupportingDisplayCoordinator {
     /// `content`/`result_id` name the first tile; `result_ids` lists every
     /// listable result. A protected result's ID is never listed.
     func supportingDisplayInventory() -> JSONValue {
-        let stage = display.visibleStage(selection: workspace.supportingContent,
-                                         layoutVersion: environment.layoutVersion())
+        let stage = display.visibleStage(selection: workspace.supportingContent)
         func listable(_ id: UUID?) -> UUID? {
             guard let id, let result = workspace.results.first(where: { $0.id == id }),
                   !result.payload.isProtectedLocal else { return nil }

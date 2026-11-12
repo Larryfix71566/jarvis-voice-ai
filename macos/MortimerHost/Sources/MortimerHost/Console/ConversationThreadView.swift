@@ -18,14 +18,13 @@ enum ConversationThread {
         defaults.object(forKey: flagKey) as? Bool ?? true
     }
 
-    /// Codex boundary 1 (CX-15): spoken answers become results only in the
-    /// pre-CC7a layout-2 stage. Other layouts never routed them.
-    static func routesSpokenAnswersToResults(layoutVersion: Int, threadEnabled: Bool) -> Bool {
-        InterfaceLayoutVersion.resolve(layoutVersion) == 2 && !threadEnabled
+    /// Spoken answers become results only when the conversation thread is off.
+    static func routesSpokenAnswersToResults(threadEnabled: Bool) -> Bool {
+        !threadEnabled
     }
 
-    static func showsThread(layoutVersion: Int, threadEnabled: Bool) -> Bool {
-        InterfaceLayoutVersion.resolve(layoutVersion) == 2 && threadEnabled
+    static func showsThread(threadEnabled: Bool) -> Bool {
+        threadEnabled
     }
 
     struct Row: Identifiable, Equatable {

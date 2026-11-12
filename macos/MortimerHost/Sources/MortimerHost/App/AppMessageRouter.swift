@@ -45,11 +45,10 @@ final class AppMessageRouter {
         // user-transcription / bot-llm-text frames (2026-08-30).
         transcriptSink = client.$transcript.sink { [weak self] entries in
             conversation?.set(entries)
-            let layout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
             // CC7a.1 (WS-17): with the conversation thread on, spoken
             // answers stay in the thread and no longer become results.
             if ConversationThread.routesSpokenAnswersToResults(
-                layoutVersion: layout, threadEnabled: ConversationThread.isEnabled()), let workspace {
+                threadEnabled: ConversationThread.isEnabled()), let workspace {
                 let previousRevision = workspace.consoleRevision
                 self?.responseRouter.receive(entries, workspace: workspace, display: displayWindow)
                 if workspace.consoleRevision != previousRevision {
@@ -479,9 +478,7 @@ final class AppMessageRouter {
     private static func arrivalPresentation(of content: SupportingDisplayContent, ownerID: UUID,
                                             in workspace: WorkspaceStore, display: DisplayWindowStore)
         -> (main: Bool, supporting: Bool) {
-        let rawLayout = UserDefaults.standard.object(forKey: "mortimer.interface.layoutVersion") as? Int ?? 2
-        let supporting = display.isPresented(content, selection: workspace.supportingContent,
-            layoutVersion: InterfaceLayoutVersion.resolve(rawLayout))
+        let supporting = display.isPresented(content, selection: workspace.supportingContent)
         if case .memoryGraph = content {
             return (workspace.showsMemoryGraph && !supporting, supporting)
         }
