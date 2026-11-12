@@ -173,6 +173,28 @@ def test_websocket_rules():
     )[0]
 
 
+@pytest.mark.parametrize("port", ["\u00b2", "1" * 5000, "0", "65536", "99999", "123456"])
+def test_bad_ports_refused_not_raised(port):
+    """Codex R3 on #342: a crafted port is a refusal (403 / 4403), never an exception."""
+    for type_ in ("http", "websocket"):
+        expected = 403 if type_ == "http" else 4403
+        called, sent = _run(
+            {"host": "127.0.0.1:7861", "origin": f"http://localhost:{port}"}, type_=type_
+        )
+        assert not called
+        assert (_status(sent) if type_ == "http" else sent[0]["code"]) == expected
+        called, sent = _run({"host": f"127.0.0.1:{port}"}, type_=type_)
+        assert not called
+        assert (_status(sent) if type_ == "http" else sent[0]["code"]) == expected
+        called, sent = _run({"host": f"[::1]:{port}"}, type_=type_)
+        assert not called
+
+
+def test_edge_ports_still_accepted():
+    assert _run({"host": "127.0.0.1:1"})[0]
+    assert _run({"host": "127.0.0.1:65535"})[0]
+
+
 def test_lifespan_passes():
     called = []
 

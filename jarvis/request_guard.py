@@ -78,14 +78,27 @@ def allowed_extra_hosts() -> frozenset[str]:
     return frozenset(hosts)
 
 
+def _valid_port(text: str) -> bool:
+    """ASCII digits only, at most five, 1 to 65535. str.isdigit() alone also
+    accepts superscripts like '²' (int() then raises) and unbounded digit runs
+    (int() raises past Python's conversion limit), so a crafted Host or Origin
+    became an exception instead of a refusal (Codex review of #342, R3)."""
+    return (
+        0 < len(text) <= 5
+        and text.isascii()
+        and text.isdigit()
+        and 0 < int(text) <= 65535
+    )
+
+
 def _port_of(value: str) -> int | None:
     value = value.strip()
     if value.startswith("["):
         rest = value[value.find("]") + 1 :]
-        return int(rest[1:]) if rest.startswith(":") and rest[1:].isdigit() else None
+        return int(rest[1:]) if rest.startswith(":") and _valid_port(rest[1:]) else None
     if ":" in value:
         port = value.rsplit(":", 1)[1]
-        return int(port) if port.isdigit() else None
+        return int(port) if _valid_port(port) else None
     return None
 
 
@@ -100,7 +113,7 @@ def _split_host(value: str) -> str | None:
             return None
         host = value[1:end]
         rest = value[end + 1 :]
-        if rest and not (rest.startswith(":") and rest[1:].isdigit()):
+        if rest and not (rest.startswith(":") and _valid_port(rest[1:])):
             return None
         try:
             ipaddress.ip_address(host)
@@ -112,7 +125,7 @@ def _split_host(value: str) -> str | None:
     host = value
     if ":" in value:
         host, port = value.rsplit(":", 1)
-        if port and not port.isdigit():
+        if port and not _valid_port(port):
             return None
     return host or None
 
