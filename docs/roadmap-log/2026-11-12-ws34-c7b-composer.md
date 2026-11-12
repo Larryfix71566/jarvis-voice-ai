@@ -2,12 +2,12 @@
 date: 2026-11-12
 system: claude
 rows: [WS-34]
-prs: []
+prs: [365]
 ---
 
 # C7b: typed-request composer, Command-K and the app's client header
 
-Claude claims C7b (closure plan §4, WS-34 table) with this PR into `next`. It is cut from `next` at `b17842c`, after C0, C1a, C7-py and B1 merged.
+Claude claims C7b (closure plan §4, WS-34 table) with PR #365 into `next`. It is cut from `next` at `b17842c`, after C0, C1a, C7-py and B1 merged.
 
 ## What changed
 
