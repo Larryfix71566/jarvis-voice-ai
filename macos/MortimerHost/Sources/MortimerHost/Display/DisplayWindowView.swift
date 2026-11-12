@@ -1,46 +1,15 @@
 import SwiftUI
 import JarvisKit
 
-/// APP plan §3 P14, §5 step 12 — the DisplayScene body: a cascade stack
-/// of independent, draggable/resizable panels for `surface == "window"`
-/// payloads (weather, radar, research). Parked on a second monitor by
-/// ScreenPlacement (P11).
+/// Supporting-display scene: one bounded result grid plus explicitly pinned
+/// overflow panels. ScreenPlacement owns its monitor assignment.
 struct DisplayWindowView: View {
-    // C9.5 / G30 — see MortimerHostApp for the default and one-time migration.
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
-    private var activeLayoutVersion: Int {
-        InterfaceLayoutVersion.resolve(layoutVersion)
-    }
     @Environment(DisplayWindowStore.self) private var store
     @Environment(WorkspaceStore.self) private var workspace
-    @Environment(SkillsStore.self) private var skills
-    @Environment(DrawerState.self) private var drawer
-    @EnvironmentObject private var client: JarvisClient
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             AppTheme.bg.ignoresSafeArea()
-            if activeLayoutVersion == 1 && workspace.supportingContent != nil {
-                VStack(spacing: 12) {
-                    HStack {
-                        Button("Original display panels") { workspace.showOriginalDisplayPanels() }
-                        Spacer()
-                        Button("Return to main window") { drawer.placementRef?.closeDisplay() }
-                    }
-                    if workspace.supportingContent == .memoryGraph {
-                        MemoryGraphView(store: workspace.memoryGraph, api: client.admin)
-                    } else if workspace.supportingContent == .workflows {
-                        WorkflowsView(store: workspace.workflows, api: client.admin)
-                    } else if workspace.supportingContent == .skills {
-                        SkillsWorkspaceView()
-                    } else if let result = workspace.supportingResult {
-                        WorkspaceResultPane(result: result, onSupportingDisplay: true)
-                    } else if case .some(.skillDetail(let skillID)) = workspace.supportingContent,
-                              skills.selectedSkillID == skillID {
-                        SkillsWorkspaceView(detailOnly: true)
-                    }
-                }.padding(16)
-            } else {
             let stagePanels = store.stagePanels(selection: workspace.supportingContent)
             let supplemental = store.supplementalContent(workspace.supportingContent)
             if !stagePanels.isEmpty {
@@ -51,7 +20,7 @@ struct DisplayWindowView: View {
                 // path in the same single supporting-stage window so layout 2
                 // cannot open an empty window while leaving a duplicate graph
                 // or result visible in the main surface.
-                LegacySupportingDisplayStage(content: supportingContent)
+                SelectedSupportingDisplayStage(content: supportingContent)
             } else {
                 Text("Nothing on display. Ask for something visual — \"show the radar\".")
                     .foregroundStyle(AppTheme.textDim)
@@ -62,7 +31,6 @@ struct DisplayWindowView: View {
             // default one-window presentation.
             ForEach(store.panels.filter(\.pinned)) { panel in
                 SingleDisplayPanel(panel: panel)
-            }
             }
         }
         .frame(minWidth: 700, minHeight: 500)
@@ -80,7 +48,7 @@ struct DisplayWindowView: View {
 /// Renderer for pointer-selected WorkspaceStore content. This is deliberately
 /// one outer stage, matching SupportingDisplayStage; it does not create a
 /// nested result window inside the display window.
-private struct LegacySupportingDisplayStage: View {
+private struct SelectedSupportingDisplayStage: View {
     let content: SupportingDisplayContent
     @Environment(WorkspaceStore.self) private var workspace
     @EnvironmentObject private var client: JarvisClient
@@ -191,7 +159,7 @@ struct SupportingDisplayStage: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 420), spacing: 14)],
                               spacing: 14) {
                         if let supplemental {
-                            LegacySupportingDisplayStage(content: supplemental)
+                            SelectedSupportingDisplayStage(content: supplemental)
                                 .frame(height: 480)
                         }
                         ForEach(panels) { panel in

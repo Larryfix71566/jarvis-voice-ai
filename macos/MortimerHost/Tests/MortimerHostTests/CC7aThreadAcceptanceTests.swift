@@ -117,7 +117,7 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
                 consoleScreenID: { main.id }, preferredSupportingScreenID: { external.id },
                 assignDisplay: { probe.displayAssignments.append($0) },
                 openDisplay: { probe.displayOpens += 1; display.setWindowOpen(true) },
-                closeDisplay: { display.setWindowOpen(false) }, layoutVersion: { 2 },
+                closeDisplay: { display.setWindowOpen(false) },
                 pause: { probe.clock += 0.25; await Task.yield() }, now: { probe.clock }))
         let coordinator = ConsoleActionCoordinator(workspace: workspace, display: display,
             placement: placement, drawer: drawer, sharing: sharing, supportingDisplay: supporting,

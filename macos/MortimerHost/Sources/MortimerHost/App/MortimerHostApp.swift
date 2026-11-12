@@ -19,29 +19,12 @@ struct MortimerHostApp: App {
         // fix is the .app bundle (macos/MortimerHost/scripts/bundle.sh);
         // this is the belt to that suspenders.
         NSApplication.shared.setActivationPolicy(.regular)
-        // Command Console is the shipped default. Migrate an existing
-        // adaptive-default install once, while preserving any later explicit
-        // choice of the legacy layouts through the normal Debug menu.
-        let defaults = UserDefaults.standard
-        let layoutKey = "mortimer.interface.layoutVersion"
-        let migrationKey = "mortimer.interface.commandConsoleDefaultMigrated"
-        if defaults.object(forKey: migrationKey) == nil {
-            if defaults.object(forKey: layoutKey) == nil || defaults.integer(forKey: layoutKey) == 1 {
-                defaults.set(2, forKey: layoutKey)
-            }
-            defaults.set(true, forKey: migrationKey)
-        }
+        InterfaceLayoutVersion.migrate()
         DispatchQueue.main.async {
             NSApplication.shared.activate(ignoringOtherApps: true)
         }
     }
 
-    // C9.5 / G30 — command console is the shipped default. The Debug menu
-    // retains a one-press rollback to the previous layouts.
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
-    private var activeLayoutVersion: Int {
-        InterfaceLayoutVersion.resolve(layoutVersion)
-    }
     @State private var agentRuns = AgentRunStore()
     @State private var displayResults = DisplayResultStore()
     @State private var workspace = WorkspaceStore()
@@ -282,10 +265,6 @@ struct MortimerHostApp: App {
                 }
             }
             CommandMenu("Debug") {
-                Button(activeLayoutVersion == 0 ? "Preview adaptive layout" : (activeLayoutVersion == 1 ? "Preview Command Console" : "Use previous layout")) {
-                    layoutVersion = activeLayoutVersion == 0 ? 1 : (activeLayoutVersion == 1 ? 2 : 0)
-                }
-                Divider()
                 Button("Clear stored token") {
                     KeychainStore.setToken(nil, for: client.config.botURL)
                 }

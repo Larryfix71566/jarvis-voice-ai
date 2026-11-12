@@ -12,12 +12,11 @@ struct AdaptiveStageView: View {
     let voiceState: VoiceState
     let wideWindow: Bool
     /// Supplied by the command-console composition so navigation shares the
-    /// same dispatcher as voice actions. Nil preserves legacy previews.
+    /// same dispatcher as voice actions. Nil supports standalone previews.
     let coordinator: ConsoleActionCoordinator?
-    /// Compact conversation is the startup presentation. The button below
+    /// Compact conversation is the startup presentation. The console action bar
     /// still lets the user expand it and AppStorage preserves that choice.
     @AppStorage("mortimer.interface.compactConversation") private var compactConversation = true
-    @AppStorage("mortimer.interface.layoutVersion") private var layoutVersion = 2
     /// CC7a.1 (WS-17): the conversation thread replaces the two-caption
     /// stage in layout 2. See ConversationThread.
     @AppStorage(ConversationThread.flagKey) private var threadEnabled = true
@@ -69,16 +68,6 @@ struct AdaptiveStageView: View {
                 switch mode {
                 case .conversation:
                     VStack(spacing: 0) {
-                        if !consoleBarOwnsControls {
-                        HStack {
-                            Text("Command Center")
-                                .font(.system(size: 24, weight: .semibold))
-                            Spacer()
-                            conversationControls
-                        }
-                        .padding(.horizontal, AdaptiveLayoutMetrics.workspacePadding)
-                        .padding(.top, AdaptiveLayoutMetrics.workspacePadding)
-                        }
                         if showsThread {
                             ConversationThreadView(coordinator: coordinator)
                         } else {
@@ -88,8 +77,8 @@ struct AdaptiveStageView: View {
                                     ContentUnavailableView("Ready", systemImage: "waveform",
                                         description: Text("Use the microphone controls to start a conversation."))
                                 } else {
-                                    ForEach(InterfaceLayoutVersion.resolve(layoutVersion) == 2 ? conversation.latestCaptions : conversation.entries) { entry in
-                                        Text(InterfaceLayoutVersion.resolve(layoutVersion) == 2 ? ConversationStore.liveCaption(entry.text) : entry.text)
+                                    ForEach(conversation.latestCaptions) { entry in
+                                        Text(ConversationStore.liveCaption(entry.text))
                                             .font(.system(size: 15))
                                             .textSelection(.enabled)
                                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -112,7 +101,7 @@ struct AdaptiveStageView: View {
                         VStack(spacing: 0) {
                             VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse, presentation: voicePresentation)
                                 .frame(height: 150)
-                            OrbFieldView(voiceState: voiceState, compactPresentation: true, hidesLettering: true, presentation: voicePresentation())
+                            OrbFieldView(voiceState: voiceState, hidesLettering: true, presentation: voicePresentation())
                         }.frame(width: AdaptiveLayoutMetrics.voiceRailWidth)
                         Divider()
                         compactStageContent
@@ -127,7 +116,7 @@ struct AdaptiveStageView: View {
                                 // the measured lobe enough horizontal travel
                                 // to remain legible at the default width.
                                 .frame(minWidth: 220, idealWidth: 240, maxWidth: 280)
-                            OrbFieldView(voiceState: voiceState, compactPresentation: true, hidesLettering: true, presentation: voicePresentation())
+                            OrbFieldView(voiceState: voiceState, hidesLettering: true, presentation: voicePresentation())
                         }.frame(height: 180)
                     }
                 }
@@ -136,8 +125,8 @@ struct AdaptiveStageView: View {
         }
         // CC7a.2 (WS-17): while the thread shows, results arrive quietly
         // (a card in the thread, or the "New" notice) instead of taking
-        // the stage. Other layouts keep the previous arrival behaviour.
-        // Reported per stage: on a layout switch the departing stage's
+        // the stage. The thread switch retains the previous arrival behaviour.
+        // Reported per stage: on replacement the departing stage's
         // onDisappear runs after its replacement's onAppear (Codex review
         // of PR #164), so it withdraws only its own report.
         .onAppear { workspace.setQuietArrivals(showsThread, owner: arrivalOwner) }
@@ -145,44 +134,7 @@ struct AdaptiveStageView: View {
         .onDisappear { workspace.releaseQuietArrivals(owner: arrivalOwner) }
     }
 
-    /// WS-17: in the Command Console (layout 2) every control lives in the
-    /// console's single row (`ConsoleActionBar`); the stage draws none.
-    private var consoleBarOwnsControls: Bool {
-        InterfaceLayoutVersion.resolve(layoutVersion) == 2
-    }
-
-    private var showsThread: Bool {
-        ConversationThread.showsThread(layoutVersion: layoutVersion, threadEnabled: threadEnabled)
-    }
-
-    @ViewBuilder
-    private var conversationControls: some View {
-        Button(compactConversation ? "Expand voice" : "Keep voice compact") {
-            compactConversation.toggle()
-        }
-        Button("Knowledge Atlas") {
-            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "atlas") }
-            else { workspace.openAtlas() }
-        }
-        Button("Skills") {
-            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "skills") }
-            else { workspace.openSkills() }
-        }
-        Button("Memory graph") {
-            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "memory") }
-            else { workspace.openMemoryGraph() }
-        }
-        Button("Workflows") {
-            if let coordinator { _ = coordinator.executePointer(.viewSet, target: "workflows") }
-            else { workspace.openWorkflows() }
-        }
-        if workspace.activeResult != nil || workspace.showsMemoryGraph {
-            Button("Return to workspace") {
-                if let coordinator { _ = coordinator.executePointer(.viewSet, target: "results") }
-                else { workspace.returnToWorkspace() }
-            }
-        }
-    }
+    private var showsThread: Bool { ConversationThread.showsThread(threadEnabled: threadEnabled) }
 
     /// CC7a.2: while the thread is on and something other than the
     /// conversation is on the stage, a quiet arrival's "New: … Show /
@@ -205,18 +157,11 @@ struct AdaptiveStageView: View {
             SkillsWorkspaceView(coordinator: coordinator)
         } else if workspace.showsConversation && showsThread {
             VStack(alignment: .leading, spacing: 0) {
-                if !consoleBarOwnsControls {
-                    HStack { conversationControls; Spacer(minLength: 0) }
-                        .padding(.horizontal, AdaptiveLayoutMetrics.workspacePadding)
-                        .padding(.top, AdaptiveLayoutMetrics.workspacePadding)
-                        .padding(.bottom, 4)
-                }
                 ConversationThreadView(coordinator: coordinator)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else if workspace.showsConversation {
             VStack(alignment: .leading, spacing: 16) {
-                if !consoleBarOwnsControls { HStack { conversationControls; Spacer(minLength: 0) } }
                 Spacer()
                 Text("Conversation").font(.title2)
                 Text("Use the microphone controls to talk. Your results stay available in the workspace.")
@@ -225,7 +170,7 @@ struct AdaptiveStageView: View {
             }
             .padding(AdaptiveLayoutMetrics.workspacePadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        } else { WorkspaceView(coordinator: coordinator, showsControls: !consoleBarOwnsControls) }
+        } else { WorkspaceView(coordinator: coordinator, showsControls: false) }
     }
 
 }

@@ -134,12 +134,11 @@ final class DisplayWindowStore {
     }
 
     /// What `DisplayWindowView` renders for this selection, in its order:
-    /// the selection alone in layout 1; otherwise the supplemental tile, the
+    /// the supplemental tile, the
     /// bounded stage panels, then pinned panels. Whether the window is on
     /// screen is separate (`isWindowOpen`). WS-21 D6: the inventory and
     /// `isPresented` both read this, so neither can disagree with the stage.
-    func visibleStage(selection: SupportingDisplayContent?, layoutVersion: Int = 2) -> [StageItem] {
-        if layoutVersion == 1, let selection { return [.selection(selection)] }
+    func visibleStage(selection: SupportingDisplayContent?) -> [StageItem] {
         var items: [StageItem] = []
         if let supplemental = supplementalContent(selection) { items.append(.selection(supplemental)) }
         items += (stagePanels(selection: selection) + panels.filter(\.pinned)).map(StageItem.panel)
@@ -149,9 +148,9 @@ final class DisplayWindowStore {
     /// Used by the main surface's return locator. A queued selection alone
     /// cannot hide a result which the supporting window is not rendering.
     func isPresented(_ content: SupportingDisplayContent,
-                     selection: SupportingDisplayContent?, layoutVersion: Int = 2) -> Bool {
+                     selection: SupportingDisplayContent?) -> Bool {
         guard isWindowOpen else { return false }
-        return visibleStage(selection: selection, layoutVersion: layoutVersion).contains { item in
+        return visibleStage(selection: selection).contains { item in
             switch item {
             case .selection(let shown):
                 return shown == content

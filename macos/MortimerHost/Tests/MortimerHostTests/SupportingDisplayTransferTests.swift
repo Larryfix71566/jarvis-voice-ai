@@ -56,7 +56,6 @@ private final class FakeDisplay {
                 self.closed += 1
                 self.store.setWindowOpen(false)
             },
-            layoutVersion: { 2 },
             pause: { [unowned self] in
                 self.clock += 0.25
                 await Task.yield()
