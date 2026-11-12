@@ -178,6 +178,7 @@ def test_shared_content_gate_cannot_enable_without_command_console(clean_env):
 
     _set_required(clean_env)
     clean_env.setenv("JARVIS_SHARED_CONTENT_ENABLED", "true")
+    clean_env.setenv("JARVIS_COMMAND_CONSOLE_ENABLED", "false")
     settings = load_settings(env_file=None)
     clean_env.delenv("JARVIS_SHARED_CONTENT_ENABLED", raising=False)
     clean_env.delenv("JARVIS_COMMAND_CONSOLE_ENABLED", raising=False)
@@ -185,6 +186,23 @@ def test_shared_content_gate_cannot_enable_without_command_console(clean_env):
     bridge_settings_to_env(settings)
 
     assert os.environ["JARVIS_COMMAND_CONSOLE_ENABLED"] == "false"
+    assert os.environ["JARVIS_SHARED_CONTENT_ENABLED"] == "false"
+
+
+def test_command_console_defaults_on_and_shared_content_stays_off(clean_env):
+    """WS-34 C7-py (contract 2.5): the console is on unless explicitly false;
+    shared content keeps its own default of off."""
+    from jarvis.config import bridge_settings_to_env
+
+    _set_required(clean_env)
+    clean_env.delenv("JARVIS_SHARED_CONTENT_ENABLED", raising=False)
+    clean_env.delenv("JARVIS_COMMAND_CONSOLE_ENABLED", raising=False)
+    settings = load_settings(env_file=None)
+    assert settings.jarvis_command_console_enabled is True
+
+    bridge_settings_to_env(settings)
+
+    assert os.environ["JARVIS_COMMAND_CONSOLE_ENABLED"] == "true"
     assert os.environ["JARVIS_SHARED_CONTENT_ENABLED"] == "false"
 
 
