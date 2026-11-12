@@ -1,0 +1,21 @@
+Building for debugging...
+[1 / 4]
+Build complete! (0.37 sec)
+Test Suite 'Selected tests' started at 2026-11-12 11:04:43.989.
+Test Suite 'PhoneRemoteAuthorityTests.xctest' started at 2026-11-12 11:04:43.989.
+Test Suite 'PhoneRemoteAuthorityTests.xctest' passed at 2026-11-12 11:04:43.989.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 11:04:43.990.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.001) seconds
+Test Suite 'Selected tests' started at 2026-11-12 11:04:44.040.
+Test Suite 'MortimerHostTests.xctest' started at 2026-11-12 11:04:44.041.
+Test Suite 'OrbShellFrameTimeTests' started at 2026-11-12 11:04:44.041.
+Test Case '-[MortimerHostTests.OrbShellFrameTimeTests testCrystalShellStaysWithinTheFrameBudget]' started.
+Test Case '-[MortimerHostTests.OrbShellFrameTimeTests testCrystalShellStaysWithinTheFrameBudget]' passed (3.495 seconds).
+Test Suite 'OrbShellFrameTimeTests' passed at 2026-11-12 11:04:47.535.
+	 Executed 1 test, with 0 failures (0 unexpected) in 3.495 (3.495) seconds
+Test Suite 'MortimerHostTests.xctest' passed at 2026-11-12 11:04:47.535.
+	 Executed 1 test, with 0 failures (0 unexpected) in 3.495 (3.495) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 11:04:47.535.
+	 Executed 1 test, with 0 failures (0 unexpected) in 3.495 (3.495) seconds
+Orb frame time p50/p95: empty 0.766/0.871, crystal 7.576/13.413 ms
