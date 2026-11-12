@@ -154,13 +154,26 @@ class AnswerComposer:
             return None
 
     def _completion(self, ans: _Answer) -> dict | None:
-        """The ``complete: true`` re-send of ``ans`` (revision + 1), recorded."""
+        """The ``complete: true`` re-send of ``ans`` (revision + 1), recorded.
+
+        A layout that cannot be built falls back to the whole-answer legacy
+        fields with the same ``answer_id`` and the next ``answer_revision``
+        (1.5 rule 11), so the mandatory close of rules 4 and 7 is still sent;
+        a legacy payload has no ``layout``, so it carries no "still working"
+        mark.  If neither form can be built, no close is sent, the answer is
+        not marked complete, and ``compose_close_dropped`` is logged: the
+        last revision the client holds stays ``complete: false``.  The
+        result itself was already delivered (rule 6), so nothing is hidden.
+        """
         if not ans.parts or ans.last_complete is not False:
             return None
-        payload = self._build(ans.answer_id, ans.parts, ans.revision + 1, True)
+        revision = ans.revision + 1
+        payload = (self._build(ans.answer_id, ans.parts, revision, True)
+                   or self._build_legacy(ans.answer_id, ans.parts, revision))
         if payload is None:
+            _logger.warning("compose_close_dropped answer=%s revision=%d", ans.answer_id, revision)
             return None
-        ans.revision += 1
+        ans.revision = revision
         ans.last_complete = True
         return payload
 

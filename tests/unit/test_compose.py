@@ -373,6 +373,79 @@ def test_legacy_failing_too_sends_standalone_and_held_revision_does_not_move(mon
     assert held.answer_id == first["answer_id"] and held.revision == 1 and len(held.parts) == 1
 
 
+def test_completion_under_layout_failure_sends_legacy_close(monkeypatch):
+    c = make()
+    c.delegation_started("q1", "run1")
+    first = c.compose(search(), request_id="q1")[-1]
+    assert first["layout"]["complete"] is False
+    c.delegation_finished("q1", "run1")
+    _break_layouts(monkeypatch)
+    done = c.take_completion("q1")
+    assert done is not None and "layout" not in done
+    assert done["answer_id"] == first["answer_id"] and done["answer_revision"] == 2
+    assert done["title"] == "A" and validate_envelope(done) == []
+    held = c._answers["q1"]
+    assert held.revision == 2 and held.last_complete is True
+    assert c.take_completion("q1") is None
+
+
+def test_eviction_under_layout_failure_sends_legacy_close_with_owner(monkeypatch):
+    c = make()
+    c.delegation_started("q0", "r")  # the oldest answer stays open
+    first = c.compose(search("0"), request_id="q0")[-1]
+    for i in range(1, MAX_ANSWERS):
+        c.compose(search(str(i)), request_id=f"q{i}")
+    _break_layouts(monkeypatch)
+    out = c.compose_items(search("9"), request_id="q9")
+    assert len(out) == 2
+    close, owner = out[0]
+    assert owner == "q0"
+    assert "layout" not in close and close["answer_id"] == first["answer_id"]
+    assert close["answer_revision"] == 2 and validate_envelope(close) == []
+    assert out[1][1] is None and out[1][0]["answer_revision"] == 1
+    assert "q0" not in c._answers
+
+
+def _legacy_fails_for(monkeypatch, title):
+    real_legacy = compose_mod.templates.legacy_fields
+
+    def legacy(parts, header, now=None):
+        if any(p["payload"].get("title") == title for p in parts):
+            raise RuntimeError("y")
+        return real_legacy(parts, header, now=now)
+
+    monkeypatch.setattr("jarvis.bot.compose.templates.legacy_fields", legacy)
+
+
+def test_completion_with_both_forms_failing_logs_and_stays_incomplete(monkeypatch, caplog):
+    c = make()
+    c.delegation_started("q1", "run1")
+    c.compose(search(), request_id="q1")
+    c.delegation_finished("q1", "run1")
+    _break_layouts(monkeypatch)
+    _legacy_fails_for(monkeypatch, "A")
+    with caplog.at_level(logging.WARNING, logger=compose_mod._logger.name):
+        assert c.take_completion("q1") is None
+    assert "compose_close_dropped" in caplog.text
+    held = c._answers["q1"]
+    assert held.revision == 1 and held.last_complete is False
+
+
+def test_eviction_with_both_forms_failing_still_sends_the_new_result(monkeypatch, caplog):
+    c = make()
+    c.delegation_started("q0", "r")
+    c.compose(search("0"), request_id="q0")
+    for i in range(1, MAX_ANSWERS):
+        c.compose(search(str(i)), request_id=f"q{i}")
+    _break_layouts(monkeypatch)
+    _legacy_fails_for(monkeypatch, "0")
+    with caplog.at_level(logging.WARNING, logger=compose_mod._logger.name):
+        out = c.compose(search("9"), request_id="q9")
+    assert len(out) == 1 and out[0]["title"] == "9"  # the new result is never suppressed
+    assert "compose_close_dropped" in caplog.text
+    assert "q0" not in c._answers
+
+
 def test_flag_values(monkeypatch):
     assert composed_answers_enabled({}) is False
     assert composed_answers_enabled({"JARVIS_COMPOSED_ANSWERS_ENABLED": "true"}) is True
