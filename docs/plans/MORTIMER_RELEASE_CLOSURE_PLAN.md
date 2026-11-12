@@ -1,6 +1,6 @@
 # Mortimer release closure plan: acceptance on main, new interface on `next`
 
-- **Status:** adopted 2026-11-11 (#327). WS-35 records the 2026-11-12 independent B2 review as CHANGES REQUESTED at #342 `5d714af`; this is review evidence only, not implementation or acceptance. The freeze is WS-33 and the WS-17 combined-source review claim. The three lanes are rows WS-34 (Claude), WS-35 (Codex) and WS-36 (Kimi), approved by Larry on 2026-11-11 (decision 6) and on `main` since #329.
+- **Status:** adopted 2026-11-11 (#327). The freeze is WS-33 and the WS-17 combined-source review claim. The three lanes are rows WS-34 (Claude), WS-35 (Codex) and WS-36 (Kimi), approved by Larry on 2026-11-11 (decision 6) and on `main` since #329.
 - **Source of truth:** this file. The Claude Doc "Mortimer combined implementation plan" in Larry's account mirrors it; when they differ, this file wins (ROADMAP.md §0 rule 11 still ranks ROADMAP.md above it).
 - **Built at:** `origin/main` `4e58eaa`; checked again at `b9024ed` (2026-11-11, after #322 and #324). Line numbers below are from those commits.
 - **Written by:** Claude (Opus), from Claude's 2026-11-10 deep review, the 2026-11-10 interface review and mockups, ROADMAP.md and AGENTS.md.
@@ -160,6 +160,8 @@ Decision 1 (freeze with `next`) is Larry's 01:58:16 answer. Larry answered decis
 - What causes the `PhoneRemoteAuthority` failure (F1 investigates).
 
 ## Progress log
+
+Only the daily batch PR adds lines here; other PRs record status in their own `docs/roadmap-log/` file (Larry, 2026-11-12 16:41:17 UTC, "Adopt the batch rule"; `AGENTS.md`, *Status records and the daily batch*).
 
 - 2026-11-11: plan written and synced to the repo with the freeze docs PR (Claude). Freeze SHA not yet recorded: Larry is deciding whether the flaky `test_outer_task_deadline_covers_tool_execution` (seen in #324's CI) is fixed before the freeze.
 - 2026-11-11: Larry's rule (02:07:51 UTC, "at least the enhancement planning"): interface planning runs on Fable 5.2. A Fable 5.2 review of the interface items, checked against the tree at `b9024ed`, changed §4 to §6: C1 split into C1a (app layouts, Codex, day 1) and C1b (`web/` and the old packages with their Python, sandbox, CI and docs fallout, Claude); C0b split out for tokens; C2 adds an `approval` token instead of recolouring `amber`; C7 split, with the composer half (C7b) moved to Claude; C10 added for the box 810 baseline; file lists for C3 to C7 and C9 completed; `AdaptiveStageView.swift` and three thread/result files added to the hand-offs; C9 gets a shared orb package. Before this, the plan's text was written by Claude on Opus; the deep review, UI critique, design directions 1 to 4 and the carousel idea it draws on were Fable 5.2.
