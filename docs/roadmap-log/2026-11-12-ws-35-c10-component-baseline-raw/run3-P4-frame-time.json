@@ -1,0 +1,77 @@
+{
+  "dimensions" : {
+    "bitmap_pixels" : [
+      2880,
+      1800
+    ],
+    "height" : 900,
+    "width" : 1440
+  },
+  "fixture" : {
+    "edges" : 2000,
+    "hub_degree" : 220,
+    "label_length" : 48,
+    "nodes" : 500,
+    "path_traced" : true,
+    "selection" : "prefix:hub"
+  },
+  "frames" : 300,
+  "gate" : {
+    "limit" : 33,
+    "metric" : "p95_ms",
+    "passed" : true
+  },
+  "hardware" : {
+    "cpu" : "Apple M5",
+    "memory_bytes" : 17179869184,
+    "model" : "Mac17,4",
+    "os" : "Version 27.0.1 (Build 26A434)"
+  },
+  "layers" : [
+    "NSViewBackingLayer async=false needsDisplay=false bounds=1440x900",
+    " CALayer async=false needsDisplay=false bounds=1440x900",
+    " RBDrawingLayer async=false needsDisplay=false bounds=592x580",
+    "  RBImageQueueLayer async=false needsDisplay=false bounds=0x0"
+  ],
+  "main_thread_ms" : {
+    "max" : 10.965999999999999,
+    "note" : "setCamera + run-loop pass + CATransaction commit\/flush; the part of each frame spent on the main thread",
+    "p50" : 8.0739999999999998,
+    "p95" : 9.6319999999999997
+  },
+  "max_ms" : 10.971,
+  "method" : "per frame: explicit CATransaction with a completion block; MemoryGraphStore.setCamera + one main run-loop pass (0.5 ms timeout; SwiftUI commit) + CATransaction commit\/flush (layer display); frame time = CACurrentMediaTime from setCamera until the render server ran the completion block; main-thread part reported separately; the span's sensitivity to drawing cost is checked against a four-node control; verified: every transaction completed, no layer needs display after render-server completion, pixels differ between fit\/pan\/zoom; 10 unrecorded warm-up frames; NSHostingView 1440×900 in an ordered-front borderless window",
+  "p50_ms" : 8.0779999999999994,
+  "p95_ms" : 9.6430000000000007,
+  "pan_frames" : 150,
+  "pan_p50_ms" : 8.0709999999999997,
+  "pan_p95_ms" : 9.5909999999999993,
+  "recorded_at" : "2026-11-12T16:05:40Z",
+  "scale" : {
+    "camera_fit" : 1.5736412402102276,
+    "main_screen" : 2,
+    "window_backing" : 2,
+    "zoom_range" : [
+      0.5,
+      4
+    ]
+  },
+  "sensitivity_control" : {
+    "frames" : 300,
+    "graph" : "GraphFixture.make(count: 4)",
+    "note" : "same steps on a trivial graph; the stress p50 must exceed 1.25× this p50, otherwise the span would be blind to the Canvas work",
+    "p50_ms" : 3.5529999999999999,
+    "p95_ms" : 14.961,
+    "stress_over_control_p50" : 2.274
+  },
+  "test" : "MemoryGraphFrameTimeTests.testPanAndZoomFrameTimesOnTheDenseHubFixtureMeetTheP95Gate",
+  "test_bitmap_rasterize_ms" : {
+    "max" : 1105.894,
+    "note" : "cacheDisplay of the hosting view for the pixel checks (CoreGraphics re-render); not part of a frame, not the on-screen path",
+    "p50" : 826.38,
+    "samples" : 12
+  },
+  "zoom_frames" : 150,
+  "zoom_p50_ms" : 8.1329999999999991,
+  "zoom_p95_ms" : 10.702999999999999
+}
