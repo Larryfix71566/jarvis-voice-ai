@@ -20,6 +20,7 @@ from jarvis.bot.console_actions import build_console_action_tool, handle_console
 from jarvis.bot.console_protocol import MAX_MESSAGE, ALLOWED_ACTIONS
 from jarvis.bot.console_protocol import validate_inventory
 from jarvis.bot.console_session import ConsoleSession
+from jarvis.bot.pipeline import command_console_flag_enabled
 
 SESSION = "00000000-0000-4000-8000-00000000000a"
 GENERATION = "00000000-0000-4000-8000-00000000000b"
@@ -37,6 +38,7 @@ def bridge(*, with_sender=False):
                      ALLOWED_ACTIONS=ALLOWED_ACTIONS, _logger=logging.getLogger("jarvis.bot.pipeline"),
                      MAX_MESSAGE=MAX_MESSAGE, _disclosed_inventory=_disclosed_inventory,
                      validate_inventory=validate_inventory,
+                     command_console_flag_enabled=command_console_flag_enabled,
                      console_session=ConsoleSession(session_id=SESSION, generation=GENERATION),
                      console_inventory_revision={"value": 0},
                      _log_console_validation_failure=lambda *_: None,

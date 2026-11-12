@@ -315,13 +315,15 @@ def test_pipeline_processor_order_locked(runtime, fakes):
         else:  # context aggregators user()/assistant()
             kinds.append(type(p).__name__)
     # Locked Phase 5 order: input -> VAD -> STT -> user -> LLM -> transcript
-    # -> TTS -> output -> assistant, plus MORTIMER_VOICE_WORKFLOWS_PLAN.md
+    # -> TTS -> output -> assistant, plus WS-34 C7-py's BareYesGate (contract
+    # 3.10: after STT, before the user aggregator; present because the
+    # approvals flag defaults on), plus MORTIMER_VOICE_WORKFLOWS_PLAN.md
     # D5/D6: the voice-workflow injector right before the LLM and the reply
     # guard right after it, so nothing reaches the transcript or TTS unchecked.
     # WS-17 minimizes completed weather delegation context before workflow
     # injection; it must not sit after the LLM or mutate the audio stages.
     assert kinds == [
-        "TRANSPORT_INPUT", "VAD", "STT", "LLMUserAggregator",
+        "TRANSPORT_INPUT", "VAD", "STT", "BareYesGate", "LLMUserAggregator",
         "WeatherContextMinimizer", "VoiceWorkflowInjector", "LLM", "ReplyGuard",
         "TRANSCRIPT", "TTS", "TRANSPORT_OUTPUT", "LLMAssistantAggregator",
     ]
@@ -341,7 +343,7 @@ def test_websocket_case_puts_the_client_message_processor_right_after_input(runt
     assert pipeline.processors[0] == "TRANSPORT_INPUT"
     assert pipeline.processors[1] is processor
     assert isinstance(pipeline.processors[2], FakeVAD)
-    assert len(pipeline.processors) == 13   # the order above plus this processor
+    assert len(pipeline.processors) == 14   # the order above plus this processor
 
 
 def test_anthropic_base_url_builds_native_service_with_caching(runtime, fakes, monkeypatch):
@@ -424,10 +426,11 @@ def test_memory_context_size_is_logged_at_build(runtime, fakes, caplog):
 def test_six_functions_registered(runtime, fakes):
     # remember (memory plan D6), ui_control (MORTIMER_VOICE_UI_PLAN.md U1),
     # show_commands/clear_clipboard/read_clipboard (HANDOFF_LOOP H3/H4 —
-    # the handoff loop: show a command, Larry runs it, read the output back)
+    # the handoff loop: show a command, Larry runs it, read the output back),
+    # console_action (registered because the Command Console flag defaults on, 02e5eaf)
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
+        "clear_clipboard", "console_action", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
         "local_weather",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "system_status", "ui_control", "view_screen",
@@ -460,7 +463,7 @@ def test_ui_control_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     monkeypatch.setenv("JARVIS_UI_CONTROL_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
+        "clear_clipboard", "console_action", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
         "local_weather",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "system_status", "view_screen",
@@ -476,7 +479,7 @@ def test_status_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     monkeypatch.setenv("JARVIS_STATUS_TOOLS_ENABLED", "false")
     _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
+        "clear_clipboard", "console_action", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
         "local_weather",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "ui_control", "view_screen",
@@ -499,7 +502,7 @@ def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch
     monkeypatch.setenv("JARVIS_SCREEN_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "cost_summary", "daily_brief", "delegate_task", "follow_up", "local_weather",
+        "clear_clipboard", "console_action", "cost_summary", "daily_brief", "delegate_task", "follow_up", "local_weather",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "system_status", "ui_control",
     ]
