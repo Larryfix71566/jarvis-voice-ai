@@ -122,8 +122,13 @@ def build_display_payload(
     run_id: str | None = None,
     *,
     weather_metadata: dict | None = None,
+    layout_hints: bool = False,
 ) -> dict | None:
-    """Format a tool result as a display payload, or None to stay voice-only."""
+    """Format a tool result as a display payload, or None to stay voice-only.
+
+    ``layout_hints=True`` (only when an AnswerComposer exists) adds the private
+    ``layout_hints`` key for the tools whose structure the legacy fields
+    flatten; the composer pops it. Default output is unchanged."""
     if tool not in DISPLAY_TOOLS:
         return None
     try:
@@ -220,7 +225,43 @@ def build_display_payload(
         payload["roadmap_timezone"] = os.environ.get("JARVIS_TIMEZONE")
         payload["title"] = "Project roadmap"
         payload["body"] = "Read-only project roadmap from the local repository. Open the roadmap cards for complete details."
+    if layout_hints:
+        hints = _LAYOUT_HINTS_FN(tool, arguments, data)
+        if hints is not None:
+            payload["layout_hints"] = hints
     return payload
+
+
+def layout_hints(tool: str, arguments: dict, data: dict) -> dict | None:
+    """Structured items the legacy formatters flatten into markdown, for the
+    composer's list blocks (compose_templates). Pure; None for other tools."""
+    if tool == "app_create":
+        files = [p for p in (data.get("files") or []) if isinstance(p, str) and p]
+        hints: dict[str, Any] = {"text": (data.get("summary") or "").strip()}
+        if files:
+            hints["list"] = {"title": "Files", "items": [{"title": p[:120]} for p in files[:12]],
+                             "more_count": max(0, len(files) - 12)}
+        return hints
+    if tool == "research_report":
+        comparison = data.get("comparison")
+        if not isinstance(comparison, str) or not comparison.strip():
+            return None
+        parts = [comparison]
+        footer = _research_footer(data)
+        if footer:
+            parts.append(footer)
+        hints = {"text": "\n\n".join(parts)}
+        failed = [s for s in (data.get("sites") or []) if isinstance(s, dict) and not s.get("ok")]
+        if failed:
+            hints["list"] = {"title": "Crawl issues", "more_count": max(0, len(failed) - 12), "items": [
+                {"title": str(s.get("url") or "site")[:120],
+                 "detail": str(s.get("error", "unknown error"))[:240],
+                 "meta": str(s.get("error_kind", "unknown"))[:40]} for s in failed[:12]]}
+        return hints
+    return None
+
+
+_LAYOUT_HINTS_FN = layout_hints
 
 
 # ------------------------------------------------------------- formatters
@@ -480,6 +521,14 @@ def _fmt_research_report(args: dict, data: dict) -> tuple | None:
                 for s in failed
             )
         )
+    footer = _research_footer(data)
+    if footer:
+        parts.append(footer)
+
+    return ("markdown", title, "\n\n".join(parts), [], [])
+
+
+def _research_footer(data: dict) -> str:
     credits = data.get("credits_used")
     footer_bits = []
     if credits is not None:
@@ -487,10 +536,7 @@ def _fmt_research_report(args: dict, data: dict) -> tuple | None:
     saved = data.get("saved_path")
     if saved:
         footer_bits.append(f"saved to {saved}")
-    if footer_bits:
-        parts.append("_" + " · ".join(footer_bits) + "_")
-
-    return ("markdown", title, "\n\n".join(parts), [], [])
+    return "_" + " · ".join(footer_bits) + "_" if footer_bits else ""
 
 
 def _fmt_graph_view(args: dict, data: dict) -> tuple | None:
