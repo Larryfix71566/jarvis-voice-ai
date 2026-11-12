@@ -2,7 +2,7 @@
 date: 2026-11-12
 system: codex
 rows: [WS-35]
-prs: []
+prs: [366]
 ---
 
 # C4 block renderer
@@ -326,3 +326,12 @@ index 8371694..05c8f28 100644
 +- 2026-11-12 (daily batch): Kimi's independent reviews of Claude's docs PRs: #358 APPROVE at `6354680`, C10 medians recomputed from the raw files with no discrepancy (#360, [log](../roadmap-log/2026-11-13-ws-35-ws-36-pr-358-independent-review.md)); #359 APPROVE at `16ac1b9` (#361, [log](../roadmap-log/2026-11-13-ws-34-pr-359-independent-review.md)).
 +- 2026-11-12 (daily batch): Larry approved F1 #339 by name at 17:12:26 UTC ("I approve #339"), recorded on the PR under §0 rule 15. The merge decision is his.
 ```
+
+
+## Published draft and current-next validation
+
+Draft [#366](https://github.com/Larryfix71566/jarvis-voice-ai/pull/366) targets `next`, reviewer Kimi, initially published and remotely verified at `fcf98341d7165e3aade8369c65fe19533d3bc5fb`. Publication succeeded under Larry's new explicit authorization. GitHub reported MERGEABLE, which is conflict status only, not completion or merge approval. ROADMAP and closure-plan are absent from the PR diff.
+
+Full local Host rerun on that exact current-next-integrated source exited 0: authority 28 tests / 4 existing skips / 0 failures; Host 593 tests / 3 existing skips / 0 failures. The separate flake-investigation test `testActualScrollViewFollowsGrowingReplyOnlyWhileReadingTheEnd` passed locally in 0.638 s; this does not establish a hosted-runner diagnosis. Initial hosted allowlist/controller/knowledge-base/policy checks passed; validate and the three Swift jobs remained pending at this record. This record-only commit does not change the tested source.
+
+Still incomplete: WorkspaceStore/router integration is not authorized or implemented. Actions fallback and read-only roadmap wrapper limitations remain as above. No merge/deploy and no request to mark ready. Next actor: Larry for bounded workspace scope, then Codex implementation/tests and Kimi review.
