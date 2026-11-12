@@ -15,3 +15,13 @@ Larry requested this bounded migration under the daily batch rule recorded in #3
 - 2026-11-11 (Codex, WS-35 F1): source `3e04808` corrects the one process test’s inconsistent optional-owner/Python prerequisites. Enabled authority suite passed 28 without skips; full ordinary MortimerHost passed 618 with seven explained skips and zero failures. Production source unchanged. Evidence: `docs/roadmap-log/2026-11-11-ws35-f1-process-prerequisites.md`. Kimi review and Larry’s named acceptance-fix approval remain required before merge; main stays frozen.
 
 - 2026-11-12 (Codex, WS-35 F1, #339): Larry requested reviewer-ready draft promotion. Exact prior head `97ef24ba322bc16abc620825676e01c6d6ea17a4` had green hosted workflows and no merge conflict. This handoff changes documentation only; source and prior test evidence are unchanged. Kimi independently reviews F1 and its test evidence; Larry must approve #339 by name before frozen-main merge. Only after an authorized merge may main be merged forward into next. Reviewer-ready is not approval to merge or live acceptance.
+
+
+## Roadmap status relocated on 2026-11-12
+
+Larry requested that #339 keep current main's ROADMAP.md unchanged after #362. The branch-local lines below are preserved as historical handoff text, not as changes to current main status.
+
+- **Status:** in-progress; F1 prerequisite repair and exact-source evidence delivered by #339 at `3e04808`; production source unchanged. Review handoff recorded 2026-11-12; no merge or acceptance approval implied.
+- **Where:** `codex/ws35-f1-phone-authority-20261111` from `main` (F1, #339); #334 contract review, #335 C10 baseline instructions, #337 C1a and #338 B1 target `next`.
+- **Next step:** kimi: review #339. Kimi independently reviews F1 and its test evidence; Larry must approve #339 by name before frozen-main merge. Only after an authorized merge may main be merged forward into next. Other lane items retain their existing dependencies.
+- **Updated:** 11-12
