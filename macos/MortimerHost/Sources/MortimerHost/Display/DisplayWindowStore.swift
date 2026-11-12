@@ -186,6 +186,7 @@ final class DisplayWindowStore {
         // must not be able to append a local-only payload to an existing
         // Developer batch or create a panel on the supporting display.
         guard !payload.isProtectedLocal else { return nil }
+        if let existing = updateExistingAnswer(payload) { return existing }
         let aggregationKey = Self.aggregationKey(for: payload)
         if let aggregationKey,
            let index = panels.firstIndex(where: {
@@ -391,7 +392,20 @@ final class DisplayWindowStore {
     /// visual content, so they are intentionally excluded. The remaining
     /// fields are length-prefixed to avoid delimiter collisions and preserve
     /// exact distinctions between research, weather, radar and graph data.
+    /// Update every pinned copy in place, without focus, placement or budget changes.
+    @discardableResult
+    func updateExistingAnswer(_ payload: DisplayPayload) -> Int? {
+        guard !payload.isProtectedLocal, let answer = payload.answerID,
+              let revision = payload.answerRevision else { return nil }
+        let indices = panels.indices.filter { panels[$0].payload.answerID == answer }
+        for index in indices where revision > (panels[index].payload.answerRevision ?? 0) {
+            panels[index].payload = payload
+        }
+        return indices.first.map { panels[$0].id }
+    }
+
     static func identityKey(for payload: DisplayPayload) -> String {
+        if let answer = payload.answerID { return "answer:\(answer.uuidString)" }
         func field(_ value: String?) -> String {
             guard let value else { return "-1:" }
             return "\(value.utf8.count):\(value)"
@@ -418,7 +432,7 @@ final class DisplayWindowStore {
     /// carrying the same backend run ID; ordinary research and weather
     /// requests remain independent panels.
     private static func aggregationKey(for payload: DisplayPayload) -> String? {
-        guard payload.surface == .window,
+        guard payload.answerID == nil, payload.surface == .window,
               let runID = payload.runID?.trimmingCharacters(in: .whitespacesAndNewlines),
               !runID.isEmpty,
               let agent = payload.agent?.lowercased(),

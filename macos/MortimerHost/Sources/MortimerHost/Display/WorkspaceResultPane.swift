@@ -29,7 +29,7 @@ struct WorkspaceResultPane: View {
     var body: some View {
         let presentation = workspace.presentation(for: result)
         VStack(alignment: .leading, spacing: 8) {
-            Text(result.payload.title ?? "Result").font(.headline)
+            if result.payload.layout == nil { Text(result.payload.title ?? "Result").font(.headline) }
             if result.payload.isProtectedLocal {
                 Label("Protected local result · sharing and export disabled",
                       systemImage: "lock.shield")
@@ -52,11 +52,11 @@ struct WorkspaceResultPane: View {
                 if showsActions {
                     ViewThatFits(in: .horizontal) {
                         HStack {
-                            if !result.payload.isProtectedLocal { modePicker(presentation) }
+                            if !result.payload.isProtectedLocal && result.payload.layout == nil { modePicker(presentation) }
                             copyButton; shareButton; exportButton
                         }
                         VStack(alignment: .leading) {
-                            if !result.payload.isProtectedLocal { modePicker(presentation) }
+                            if !result.payload.isProtectedLocal && result.payload.layout == nil { modePicker(presentation) }
                             HStack { copyButton; shareButton; exportButton }
                         }
                     }
@@ -64,7 +64,7 @@ struct WorkspaceResultPane: View {
                 if workspace.exporter.resultID == result.id, let message = workspace.exporter.message {
                     Text(message).font(.caption).textSelection(.enabled)
                 }
-                if result.payload.isProtectedLocal {
+                if result.payload.isProtectedLocal || result.payload.layout != nil {
                     original
                 } else {
                     switch presentation.mode {
@@ -145,7 +145,7 @@ struct WorkspaceResultPane: View {
     }
 
     @ViewBuilder private var original: some View {
-        if result.payload.roadmap != nil && !result.payload.isProtectedLocal {
+        if result.payload.roadmap != nil && !result.payload.isProtectedLocal && result.payload.layout == nil {
             RoadmapView(result: result, coordinator: coordinator)
         } else {
         DisplayContentView(payload: result.payload, restoredScrollOffset: workspace.scrollOffsets[result.id],

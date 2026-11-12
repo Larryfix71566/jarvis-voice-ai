@@ -35,3 +35,18 @@ Current main daily-batch status is retained. The old next-side conflict text is 
 ### docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md historical next-side record
 
 - 2026-11-11: Kimi's independent WS-36 review of C0/C0b PR #332 at `1f8aca7` is CHANGES REQUESTED (`docs/roadmap-log/2026-11-11-ws-36-c0-contract-review.md`). Five blockers require self-contained approval identity, exact-operation correlation, local no-model decline, enqueue-before-settle behavior, and explicit sensitive-turn guards. Four should-fix items cover request attribution, stale-session replies, replay bounds and zero-open bare yes. The palette values and contrast calculations had no finding. Claude corrects the contract for re-review; Kimi proceeds to A3 and C2 waits for corrected C0b.
+
+## C4 implementation slice
+
+System: Codex. Row: WS-35. Branch: `codex/ws35-c4-block-renderer-20261112`.
+Reviewer: Kimi. Draft target: `next`. No merge/deployment authority exercised.
+
+- C0 (#332) and C1a (#337) are ancestors; latest checked main `c23dda5` and next `2e9323a` are ancestors too.
+- Added lenient composed layout decoding, atomic answer identity/revision, bounded validated blocks and five transition fixtures. Protected/clipboard content ignores layout. Unknown blocks skip; malformed/all-unknown/future layout falls back without losing identity. Unsupported action blocks intentionally fall back pending C7 transport.
+- Added ordered Swift rendering with existing weather/brief, command/image views and shared typed roadmap card details. Roadmap wrappers are read-only; legacy interactive controls remain unchanged. Native bar charts retain signed geometry. Legacy output/export fields remain available.
+- Display result/window stores update higher revisions in place, consume replay/stale packets, and preserve placement/pins/expansion. WorkspaceResultPane uses the composed view rather than legacy mode switching.
+- Supporting scope: `Stores/DisplayResultStore.swift` is named by contract §1.12; new JarvisKit model/tests/fixture support its AppMessage scope. `RoadmapView.swift` extraction only shares the existing typed detail body.
+
+**Incomplete integration / merge blocker:** `WorkspaceStore.swift` is not edited pending Larry's specific authorization for a bounded C4/C5 overlap. Current workspace routing still assigns a new UUID for repeated answer IDs. The required change is higher-revision in-place replacement preserving reader state and router stale/replay handling, including completion-only update suppression. This slice is not C4 completion or merge-ready. No carousel/C5, C7, SkillsWorkspaceView, harness model, production, credentials or deployment changes.
+
+Evidence so far: JarvisKit full suite 248 passed, zero failures. Host pre-final-refactor full suite 593 tests, 3 existing skips, zero failures; no skips added. Five transition sequences pass at both display stores. Offline seven-block renderer captured at 480/1100 widths; final-source rerun and visual inspection follow below. First Host filter matched no tests and is recorded only as compilation evidence.
