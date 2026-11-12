@@ -172,6 +172,12 @@ def _finite(value: Any, field: str) -> float:
     return value
 
 
+# Contract 2.2 rule 8: the bot treats content starting with this as a system
+# note (``voice_guidance.is_real_user_message``), so typed text may not start
+# with it in any case.
+SYSTEM_PREFIX = "[system]"
+
+
 def normalize_text(text: Any) -> str:
     """Trim and validate typed text (contract 2.2 rule 5).
 
@@ -202,12 +208,12 @@ def _pair_ok(status: Any, code: Any, codes: frozenset[str], name: str) -> None:
 # ------------------------------------------------------------ turn/typed
 
 def validate_turn_typed(message: Any, *, session_id: str, generation: str) -> dict[str, Any]:
-    """Validate a client ``turn/typed`` message (contract 2.2, seven rules).
+    """Validate a client ``turn/typed`` message (contract 2.2, eight rules).
 
     Returns the normalised message (canonical UUIDs, trimmed text).  Rules 1,
     2, 3a and 4 raise with ``code=None`` (no reply).  A session or generation
     mismatch (3b), checked only after the three ids parse, raises
-    ``code="stale_session"``.  Rules 5 to 7 raise with ``code="invalid_text"``.
+    ``code="stale_session"``.  Rules 5 to 8 raise with ``code="invalid_text"``.
     """
     msg = _exact_keys(message, _TURN_TYPED_KEYS, "turn/typed")  # rule 1
     sid, gen = _header(msg, TURN_TYPED, session_id, generation, defer_session_check=True)  # rules 2, 3a
@@ -222,6 +228,8 @@ def validate_turn_typed(message: Any, *, session_id: str, generation: str) -> di
         raise TypedRequestError("message not encodable", "invalid_text") from exc
     if size > MAX_MESSAGE:
         raise TypedRequestError("message too large", "invalid_text")
+    if text[:len(SYSTEM_PREFIX)].lower() == SYSTEM_PREFIX:  # rule 8
+        raise TypedRequestError("text starts with the system-note prefix", "invalid_text")
     return {"type": TURN_TYPED, "version": VERSION, "session_id": sid, "generation": gen,
             "request_id": request_id, "text": text, "source": msg["source"]}
 
