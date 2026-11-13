@@ -7,7 +7,6 @@ import json
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Callable
 
 from sandbox.artifacts import Candidate, File, SandboxError, source_path_allowed
