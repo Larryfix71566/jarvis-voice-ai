@@ -2,7 +2,7 @@
 date: 2026-11-13
 system: codex
 rows: [WS-35]
-prs: []
+prs: [370]
 ---
 
 # C5 result carousel
@@ -38,3 +38,5 @@ Latest fetched base remains next `6a7ac289babee8da959706c16f9cc58abe1a44a6`. Mai
 - Inspected wide, flat narrow, and integrated720 native screenshots. Wide SHA256 `2171957289613a6b3d5b0521a4f2131f607bacc1f47cc749a46af8d464cbb054`; integrated `eade6f5d6ddf3340642f3caf14f5c0831d2f85e2978117fa00e4adfcc24176bd`; flat motion/transparency `c7312d82d5087647fa45c07a2608658b9f2d57a208ae6e747c599611ab97012c`. Fixtures generated in the package's .build/interface-fixtures directory, not committed binary artifacts.
 
 Next actor: Kimi independent review. Hosted B1 Swift must pass on the published exact head; draft publication is not readiness or acceptance. Final-build hardware/VoiceOver/Instruments GPU acceptance remains unclaimed. Base next hosted Swift is green (run43501487086), but that is not evidence for the new C5 head.
+
+Published draft: [#370](https://github.com/Larryfix71566/jarvis-voice-ai/pull/370), base next, source commit `7b2a806`. Final staged check removed one redundant blank line at EOF only; no executable source change after tests. Exact-head hosted checks remain pending at publication.
