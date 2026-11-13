@@ -2,7 +2,7 @@
 date: 2026-11-13
 system: claude
 rows: [WS-34]
-prs: []
+prs: [372]
 ---
 
 # WS-34 C1b: remove web/, MortimerShell, GlassSpike and VPIOBench
