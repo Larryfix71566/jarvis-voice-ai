@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import JarvisKit
 
 /// Read-only presentation. It never changes capture, wake, speaker gating or
@@ -73,6 +74,57 @@ struct VoicePresentationState: Equatable {
     }
 }
 
+/// Larry's C6 easing rule: every per-frame constant is referenced to 60 Hz.
+/// Invalid, negative and resume-sized deltas do not create a jump.
+enum FrameRateIndependentEasing {
+    static func ratio(dt: TimeInterval) -> Double {
+        guard dt.isFinite, dt > 0 else { return 0 }
+        return min(dt, 0.1) * 60
+    }
+
+    static func factor(_ reference: Double, dt: TimeInterval) -> Double {
+        guard reference.isFinite else { return 0 }
+        let k = min(1, max(0, reference))
+        return 1 - pow(1 - k, ratio(dt: dt))
+    }
+
+    static func step(_ reference: Double, dt: TimeInterval) -> Double {
+        reference * ratio(dt: dt)
+    }
+}
+
+/// Ownership state for the orb's 350 ms hold. It uses MicControlsView's
+/// pttOwned rule: only the gesture that acquired PTT may finish it, and a
+/// cancelled/disappearing gesture restores the microphone's prior state.
+struct OrbPushToTalkGuard {
+    static let holdSeconds: TimeInterval = 0.350
+    private(set) var pttOwned = false
+    private(set) var held = false
+    private(set) var restoreMicEnabled = false
+
+    mutating func begin(micEnabled: Bool) -> Bool {
+        guard !pttOwned else { return false }
+        pttOwned = true
+        held = false
+        restoreMicEnabled = micEnabled
+        return true
+    }
+
+    mutating func promote() -> Bool {
+        guard pttOwned, !held else { return false }
+        held = true
+        return true
+    }
+
+    mutating func finish() -> Bool? {
+        guard pttOwned else { return nil }
+        let restore = held ? restoreMicEnabled : nil
+        pttOwned = false
+        held = false
+        return restore
+    }
+}
+
 /// Elapsed-time smoothing, independent of frame rate. Unavailable/muted input
 /// clears immediately so smoothing cannot outlive the observation's deadline.
 struct VoiceEnvelope {
@@ -90,5 +142,20 @@ struct VoiceEnvelope {
         let duration = target > level ? AudioPresentationTuning.attackSeconds : AudioPresentationTuning.releaseSeconds
         level += (target - level) * (1 - exp(-(now - previous) / duration))
         return level
+    }
+}
+
+/// §4.3 barge-in indicator, retained after OrbFieldView's removal.
+struct VoiceOverlapLabel: View {
+    let presentation: VoicePresentationState?
+    var body: some View {
+        if let text = presentation?.overlapLabel {
+            Text(text)
+                .font(.caption2)
+                .foregroundStyle(AudioPresentationTuning.assistantColor)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(text)
+                .accessibilityAddTraits(.isStaticText)
+        }
     }
 }
