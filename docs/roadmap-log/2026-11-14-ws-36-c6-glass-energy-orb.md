@@ -2,7 +2,7 @@
 date: 2026-11-14
 system: kimi
 rows: [WS-36]
-prs: []
+prs: [373]
 ---
 
 # WS-36 C6: Mac glass energy orb
