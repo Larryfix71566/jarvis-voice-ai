@@ -1,3 +1,10 @@
+---
+date: 2026-11-13
+system: claude
+rows: [WS-35]
+prs: [363]
+---
+
 # WS-35 C6: frame-rate-independent easing (scope decision, 2026-11-13)
 
 Row: WS-35. Plan item: C6 (glass energy orb on the Mac), `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md`. Builder: whoever builds C6, into `next`. This is a decision record for the daily batch to fold into the C6 plan row and the WS-35 row. It changes no code.
