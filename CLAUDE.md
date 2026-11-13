@@ -8,11 +8,11 @@ Claude and Codex both work on this repository. `ROADMAP.md` is the master record
 
 - **At session start,** read `ROADMAP.md` §0, §2 and §4 as they are on `origin/main`. Work only on a row whose owner is `claude`. If the task doesn't match a row, stop and ask Larry.
 - **Scope is a lock.** Do not edit paths in another active row's `Scope`. Record a conflict in `ROADMAP.md` §4 instead.
-- **One plan per row.** Add dated progress to the row's plan. A new plan file needs a new row, and Larry approves it.
+- **One plan per row.** A new plan file needs a new row, and Larry approves it. Progress reaches the plan only through the daily batch PR (next rule).
 - **Reserve shared numbers** (migration ids, allow-list rows, launchd labels, ports) in `ROADMAP.md` §3 before using them.
 - **Production (`~/jarvis-voice-ai-clean`) is read-only for Claude.** Build in the Cowork VM or a separate clone, and hand Larry a branch or patch. Never run `git` against the Mac repo; Larry commits.
 - **Stay out of Codex's workspace** (`~/Documents/Codex/…`). Do not build branches in its `active-repo` or drop files there. The one exception is a read-only review Larry asks for. Handoffs go through `ROADMAP.md` and PRs.
-- **Update your row** (status, next step, date, log line) in the same change you hand off. PR bodies name the system and the session link.
+- **Status goes in your PR's own `docs/roadmap-log/` file**, never in a row's status lines, a plan's progress log or a checklist box (Larry, 2026-11-12 16:41:17 UTC, "Adopt the batch rule"; rules in `AGENTS.md`, *Status records and the daily batch*). Claude writes one batch PR to `main` each day that folds the merged log files into the plans and rows; a system other than Claude reviews it. PR bodies name the system and the session link.
 
 ## What this is
 

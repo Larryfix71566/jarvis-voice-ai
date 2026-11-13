@@ -1,0 +1,654 @@
+Fetching https://github.com/stasel/WebRTC.git from cache
+Fetched https://github.com/stasel/WebRTC.git from cache (0.29s)
+Computing version for https://github.com/stasel/WebRTC.git
+Computed https://github.com/stasel/WebRTC.git at 120.0.0 (0.71s)
+Creating working copy for https://github.com/stasel/WebRTC.git
+Working copy of https://github.com/stasel/WebRTC.git resolved at 120.0.0
+Fetching binary artifact https://github.com/stasel/WebRTC/releases/download/120.0.0/WebRTC-M120.xcframework.zip from cache
+Fetched https://github.com/stasel/WebRTC/releases/download/120.0.0/WebRTC-M120.xcframework.zip from cache (1.04s)
+Building for debugging...
+[Pre-planning 1 / 244]
+[Planning deferred tasks]
+[43 / 137]
+[64 / 137]
+[67 / 139] JarvisKitObjC
+[84 / 211]
+[91 / 211]
+[101 / 211]
+[103 / 211] JarvisKit
+[111 / 260]
+[123 / 260]
+[125 / 260]
+[133 / 260]
+[140 / 260]
+[147 / 260]
+[148 / 260]
+[161 / 260]
+[167 / 260]
+[183 / 261]
+[188 / 261]
+[191 / 263] PhoneRemoteAuthorityOwner-product
+[192 / 263]
+[193 / 263]
+[201 / 263] JarvisKit
+[204 / 263] JarvisKit
+[211 / 263] JarvisKit
+[215 / 265] JarvisKit
+[215 / 265] PhoneRemoteAuthority
+[221 / 266]
+[221 / 266] PhoneRemoteAuthorityOwner-product
+[225 / 292]
+[229 / 301]
+[234 / 301] MortimerHost-product
+[240 / 301] MortimerHost-product
+[241 / 301] MortimerHost-product
+[242 / 301] PhoneRemoteAuthorityTests-product
+[243 / 301] PhoneRemoteAuthorityTests-product
+[244 / 301] PhoneRemoteAuthorityTests-product
+[247 / 301] PhoneRemoteAuthorityTests-product
+[251 / 301] PhoneRemoteAuthorityTests-product
+[253 / 301] PhoneRemoteAuthorityTests-product
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/UICommandRouter.swift:224:44: [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m222 |[0;0m     init(drawer: DrawerState, overlay: ConsoleOverlayState, windows: WindowActions,
+[0;36m223 |[0;0m          placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil,
+[0;36m224 |[0;0m          weatherMap: WeatherMapCommands = .shared, workspace: WorkspaceStore? = nil) {
+    [0;36m|[0;0m                                            `- [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m225 |[0;0m         self.weatherMap = weatherMap
+[0;36m226 |[0;0m         self.workspace = workspace
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/Display/WeatherMapCommands.swift:13:16: [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m11 |[0;0m @Observable
+[0;36m12 |[0;0m final class WeatherMapCommands {
+[0;36m13 |[0;0m     static let shared = WeatherMapCommands()
+   [0;36m|[0;0m                `- [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m14 |[0;0m     static let actions: Set<String> = [
+[0;36m15 |[0;0m         "map_zoom_in", "map_zoom_out", "map_reset",
+[255 / 301] PhoneRemoteAuthorityTests-product
+[256 / 301] MortimerHost
+[257 / 301] PhoneRemoteAuthorityTests-product
+[259 / 301] MortimerHost
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:61:28: [1;33mwarning: [1;39m'CLGeocoder' was deprecated in macOS 26.0: Use MapKit[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m59 |[0;0m final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+ [0;36m60 |[0;0m     private let manager = CLLocationManager()
+ [0;36m61 |[0;0m     private let geocoder = CLGeocoder()
+    [0;36m|[0;0m                            `- [1;33mwarning: [1;39m'CLGeocoder' was deprecated in macOS 26.0: Use MapKit[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m62 |[0;0m     private var waiting: [(id: String, reply: (LocationResult) -> Void)] = []
+ [0;36m63 |[0;0m     private var started = false
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:59:38: [1;33mwarning: [1;39mconformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation\ConformanceIsolation]8;;\]
+ [0;36m57 |[0;0m 
+ [0;36m58 |[0;0m @MainActor
+ [0;36m59 |[0;0m final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+    [0;36m|[0;0m                                      |- [1;33mwarning: [1;39mconformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation\ConformanceIsolation]8;;\]
+    [0;36m|[0;0m                                      |- [1;39mnote: [1;39misolate this conformance to the main actor with '@MainActor'[0;0m
+    [0;36m|[0;0m                                      `- [1;39mnote: [1;39mturn data races into runtime errors with '@preconcurrency'[0;0m
+ [0;36m60 |[0;0m     private let manager = CLLocationManager()
+ [0;36m61 |[0;0m     private let geocoder = CLGeocoder()
+    [0;36m:[0;0m
+[0;36m107 |[0;0m     // MARK: - CLLocationManagerDelegate
+[0;36m108 |[0;0m 
+[0;36m109 |[0;0m     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    [0;36m|[0;0m          |- [1;39mnote: [1;39mmain actor-isolated instance method 'locationManager(_:didUpdateLocations:)' cannot satisfy nonisolated requirement[0;0m
+    [0;36m|[0;0m          `- [1;39mnote: [1;39mmark instance method 'locationManager(_:didUpdateLocations:)' 'nonisolated'[0;0m
+[0;36m110 |[0;0m         guard let location = locations.last, !waiting.isEmpty else { return }
+[0;36m111 |[0;0m         geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, _ in
+    [0;36m:[0;0m
+[0;36m121 |[0;0m     }
+[0;36m122 |[0;0m 
+[0;36m123 |[0;0m     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    [0;36m|[0;0m          |- [1;39mnote: [1;39mmain actor-isolated instance method 'locationManager(_:didFailWithError:)' cannot satisfy nonisolated requirement[0;0m
+    [0;36m|[0;0m          `- [1;39mnote: [1;39mmark instance method 'locationManager(_:didFailWithError:)' 'nonisolated'[0;0m
+[0;36m124 |[0;0m         let failure = DeviceLocationReply.failure(for: error)
+[0;36m125 |[0;0m         locationLogger.error("fix failed: \(error.localizedDescription, privacy: .public)")
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/UICommandRouter.swift:224:44: [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m222 |[0;0m     init(drawer: DrawerState, overlay: ConsoleOverlayState, windows: WindowActions,
+[0;36m223 |[0;0m          placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil,
+[0;36m224 |[0;0m          weatherMap: WeatherMapCommands = .shared, workspace: WorkspaceStore? = nil) {
+    [0;36m|[0;0m                                            `- [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m225 |[0;0m         self.weatherMap = weatherMap
+[0;36m226 |[0;0m         self.workspace = workspace
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/Display/WeatherMapCommands.swift:13:16: [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m11 |[0;0m @Observable
+[0;36m12 |[0;0m final class WeatherMapCommands {
+[0;36m13 |[0;0m     static let shared = WeatherMapCommands()
+   [0;36m|[0;0m                `- [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m14 |[0;0m     static let actions: Set<String> = [
+[0;36m15 |[0;0m         "map_zoom_in", "map_zoom_out", "map_reset",
+
+[#ConformanceIsolation]: <https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation>
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:61:28: [1;33mwarning: [1;39m'CLGeocoder' was deprecated in macOS 26.0: Use MapKit[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m59 |[0;0m final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+ [0;36m60 |[0;0m     private let manager = CLLocationManager()
+ [0;36m61 |[0;0m     private let geocoder = CLGeocoder()
+    [0;36m|[0;0m                            `- [1;33mwarning: [1;39m'CLGeocoder' was deprecated in macOS 26.0: Use MapKit[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m62 |[0;0m     private var waiting: [(id: String, reply: (LocationResult) -> Void)] = []
+ [0;36m63 |[0;0m     private var started = false
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:59:38: [1;33mwarning: [1;39mconformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation\ConformanceIsolation]8;;\]
+ [0;36m57 |[0;0m 
+ [0;36m58 |[0;0m @MainActor
+ [0;36m59 |[0;0m final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+    [0;36m|[0;0m                                      |- [1;33mwarning: [1;39mconformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation\ConformanceIsolation]8;;\]
+    [0;36m|[0;0m                                      |- [1;39mnote: [1;39misolate this conformance to the main actor with '@MainActor'[0;0m
+    [0;36m|[0;0m                                      `- [1;39mnote: [1;39mturn data races into runtime errors with '@preconcurrency'[0;0m
+ [0;36m60 |[0;0m     private let manager = CLLocationManager()
+ [0;36m61 |[0;0m     private let geocoder = CLGeocoder()
+    [0;36m:[0;0m
+[0;36m107 |[0;0m     // MARK: - CLLocationManagerDelegate
+[0;36m108 |[0;0m 
+[0;36m109 |[0;0m     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    [0;36m|[0;0m          |- [1;39mnote: [1;39mmain actor-isolated instance method 'locationManager(_:didUpdateLocations:)' cannot satisfy nonisolated requirement[0;0m
+    [0;36m|[0;0m          `- [1;39mnote: [1;39mmark instance method 'locationManager(_:didUpdateLocations:)' 'nonisolated'[0;0m
+[0;36m110 |[0;0m         guard let location = locations.last, !waiting.isEmpty else { return }
+[0;36m111 |[0;0m         geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, _ in
+    [0;36m:[0;0m
+[0;36m121 |[0;0m     }
+[0;36m122 |[0;0m 
+[0;36m123 |[0;0m     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    [0;36m|[0;0m          |- [1;39mnote: [1;39mmain actor-isolated instance method 'locationManager(_:didFailWithError:)' cannot satisfy nonisolated requirement[0;0m
+    [0;36m|[0;0m          `- [1;39mnote: [1;39mmark instance method 'locationManager(_:didFailWithError:)' 'nonisolated'[0;0m
+[0;36m124 |[0;0m         let failure = DeviceLocationReply.failure(for: error)
+[0;36m125 |[0;0m         locationLogger.error("fix failed: \(error.localizedDescription, privacy: .public)")
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/UICommandRouter.swift:224:44: [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m222 |[0;0m     init(drawer: DrawerState, overlay: ConsoleOverlayState, windows: WindowActions,
+[0;36m223 |[0;0m          placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil,
+[0;36m224 |[0;0m          weatherMap: WeatherMapCommands = .shared, workspace: WorkspaceStore? = nil) {
+    [0;36m|[0;0m                                            `- [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m225 |[0;0m         self.weatherMap = weatherMap
+[0;36m226 |[0;0m         self.workspace = workspace
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/Display/WeatherMapCommands.swift:13:16: [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m11 |[0;0m @Observable
+[0;36m12 |[0;0m final class WeatherMapCommands {
+[0;36m13 |[0;0m     static let shared = WeatherMapCommands()
+   [0;36m|[0;0m                `- [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m14 |[0;0m     static let actions: Set<String> = [
+[0;36m15 |[0;0m         "map_zoom_in", "map_zoom_out", "map_reset",
+
+[#ConformanceIsolation]: <https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation>
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[264 / 301] MortimerHost
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/Display/RadarMapView.swift:242:43: [1;33mwarning: [1;39m'placemark' was deprecated in macOS 26.0: Use location, address and addressRepresentations instead[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m240 |[0;0m                         return
+[0;36m241 |[0;0m                     }
+[0;36m242 |[0;0m                     let coordinate = item.placemark.coordinate
+    [0;36m|[0;0m                                           `- [1;33mwarning: [1;39m'placemark' was deprecated in macOS 26.0: Use location, address and addressRepresentations instead[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m243 |[0;0m                     radarLog.notice("map center: \(place, privacy: .public) -> \(coordinate.latitude, privacy: .public),\(coordinate.longitude, privacy: .public)")
+[0;36m244 |[0;0m                     let region = miles.map { WeatherMapZoom.region(center: coordinate, acrossMiles: $0, aspect: aspect) }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[269 / 301] MortimerHost
+[270 / 301] MortimerHostTests-product
+[271 / 301] MortimerHostTests-product
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:61:28: [1;33mwarning: [1;39m'CLGeocoder' was deprecated in macOS 26.0: Use MapKit[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m59 |[0;0m final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+ [0;36m60 |[0;0m     private let manager = CLLocationManager()
+ [0;36m61 |[0;0m     private let geocoder = CLGeocoder()
+    [0;36m|[0;0m                            `- [1;33mwarning: [1;39m'CLGeocoder' was deprecated in macOS 26.0: Use MapKit[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m62 |[0;0m     private var waiting: [(id: String, reply: (LocationResult) -> Void)] = []
+ [0;36m63 |[0;0m     private var started = false
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:59:38: [1;33mwarning: [1;39mconformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation\ConformanceIsolation]8;;\]
+ [0;36m57 |[0;0m 
+ [0;36m58 |[0;0m @MainActor
+ [0;36m59 |[0;0m final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+    [0;36m|[0;0m                                      |- [1;33mwarning: [1;39mconformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation\ConformanceIsolation]8;;\]
+    [0;36m|[0;0m                                      |- [1;39mnote: [1;39misolate this conformance to the main actor with '@MainActor'[0;0m
+    [0;36m|[0;0m                                      `- [1;39mnote: [1;39mturn data races into runtime errors with '@preconcurrency'[0;0m
+ [0;36m60 |[0;0m     private let manager = CLLocationManager()
+ [0;36m61 |[0;0m     private let geocoder = CLGeocoder()
+    [0;36m:[0;0m
+[0;36m107 |[0;0m     // MARK: - CLLocationManagerDelegate
+[0;36m108 |[0;0m 
+[0;36m109 |[0;0m     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    [0;36m|[0;0m          |- [1;39mnote: [1;39mmain actor-isolated instance method 'locationManager(_:didUpdateLocations:)' cannot satisfy nonisolated requirement[0;0m
+    [0;36m|[0;0m          `- [1;39mnote: [1;39mmark instance method 'locationManager(_:didUpdateLocations:)' 'nonisolated'[0;0m
+[0;36m110 |[0;0m         guard let location = locations.last, !waiting.isEmpty else { return }
+[0;36m111 |[0;0m         geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, _ in
+    [0;36m:[0;0m
+[0;36m121 |[0;0m     }
+[0;36m122 |[0;0m 
+[0;36m123 |[0;0m     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    [0;36m|[0;0m          |- [1;39mnote: [1;39mmain actor-isolated instance method 'locationManager(_:didFailWithError:)' cannot satisfy nonisolated requirement[0;0m
+    [0;36m|[0;0m          `- [1;39mnote: [1;39mmark instance method 'locationManager(_:didFailWithError:)' 'nonisolated'[0;0m
+[0;36m124 |[0;0m         let failure = DeviceLocationReply.failure(for: error)
+[0;36m125 |[0;0m         locationLogger.error("fix failed: \(error.localizedDescription, privacy: .public)")
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:111:18: [1;33mwarning: [1;39m'reverseGeocodeLocation(_:completionHandler:)' was deprecated in macOS 26.0: Use MKReverseGeocodingRequest[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m109 |[0;0m     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+[0;36m110 |[0;0m         guard let location = locations.last, !waiting.isEmpty else { return }
+[0;36m111 |[0;0m         geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, _ in
+    [0;36m|[0;0m                  `- [1;33mwarning: [1;39m'reverseGeocodeLocation(_:completionHandler:)' was deprecated in macOS 26.0: Use MKReverseGeocodingRequest[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m112 |[0;0m             let place = placemarks?.first
+[0;36m113 |[0;0m             let label = DeviceLocationReply.label(locality: place?.locality,
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/UICommandRouter.swift:224:44: [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m222 |[0;0m     init(drawer: DrawerState, overlay: ConsoleOverlayState, windows: WindowActions,
+[0;36m223 |[0;0m          placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil,
+[0;36m224 |[0;0m          weatherMap: WeatherMapCommands = .shared, workspace: WorkspaceStore? = nil) {
+    [0;36m|[0;0m                                            `- [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m225 |[0;0m         self.weatherMap = weatherMap
+[0;36m226 |[0;0m         self.workspace = workspace
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/Display/WeatherMapCommands.swift:13:16: [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m11 |[0;0m @Observable
+[0;36m12 |[0;0m final class WeatherMapCommands {
+[0;36m13 |[0;0m     static let shared = WeatherMapCommands()
+   [0;36m|[0;0m                `- [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m14 |[0;0m     static let actions: Set<String> = [
+[0;36m15 |[0;0m         "map_zoom_in", "map_zoom_out", "map_reset",
+
+[#ConformanceIsolation]: <https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation>
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[273 / 301] JarvisKit
+[277 / 301]
+[280 / 301] MortimerHost
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:61:28: [1;33mwarning: [1;39m'CLGeocoder' was deprecated in macOS 26.0: Use MapKit[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m59 |[0;0m final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+ [0;36m60 |[0;0m     private let manager = CLLocationManager()
+ [0;36m61 |[0;0m     private let geocoder = CLGeocoder()
+    [0;36m|[0;0m                            `- [1;33mwarning: [1;39m'CLGeocoder' was deprecated in macOS 26.0: Use MapKit[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m62 |[0;0m     private var waiting: [(id: String, reply: (LocationResult) -> Void)] = []
+ [0;36m63 |[0;0m     private var started = false
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:59:38: [1;33mwarning: [1;39mconformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation\ConformanceIsolation]8;;\]
+ [0;36m57 |[0;0m 
+ [0;36m58 |[0;0m @MainActor
+ [0;36m59 |[0;0m final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+    [0;36m|[0;0m                                      |- [1;33mwarning: [1;39mconformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation\ConformanceIsolation]8;;\]
+    [0;36m|[0;0m                                      |- [1;39mnote: [1;39misolate this conformance to the main actor with '@MainActor'[0;0m
+    [0;36m|[0;0m                                      `- [1;39mnote: [1;39mturn data races into runtime errors with '@preconcurrency'[0;0m
+ [0;36m60 |[0;0m     private let manager = CLLocationManager()
+ [0;36m61 |[0;0m     private let geocoder = CLGeocoder()
+    [0;36m:[0;0m
+[0;36m107 |[0;0m     // MARK: - CLLocationManagerDelegate
+[0;36m108 |[0;0m 
+[0;36m109 |[0;0m     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    [0;36m|[0;0m          |- [1;39mnote: [1;39mmain actor-isolated instance method 'locationManager(_:didUpdateLocations:)' cannot satisfy nonisolated requirement[0;0m
+    [0;36m|[0;0m          `- [1;39mnote: [1;39mmark instance method 'locationManager(_:didUpdateLocations:)' 'nonisolated'[0;0m
+[0;36m110 |[0;0m         guard let location = locations.last, !waiting.isEmpty else { return }
+[0;36m111 |[0;0m         geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, _ in
+    [0;36m:[0;0m
+[0;36m121 |[0;0m     }
+[0;36m122 |[0;0m 
+[0;36m123 |[0;0m     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    [0;36m|[0;0m          |- [1;39mnote: [1;39mmain actor-isolated instance method 'locationManager(_:didFailWithError:)' cannot satisfy nonisolated requirement[0;0m
+    [0;36m|[0;0m          `- [1;39mnote: [1;39mmark instance method 'locationManager(_:didFailWithError:)' 'nonisolated'[0;0m
+[0;36m124 |[0;0m         let failure = DeviceLocationReply.failure(for: error)
+[0;36m125 |[0;0m         locationLogger.error("fix failed: \(error.localizedDescription, privacy: .public)")
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:111:18: [1;33mwarning: [1;39m'reverseGeocodeLocation(_:completionHandler:)' was deprecated in macOS 26.0: Use MKReverseGeocodingRequest[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m109 |[0;0m     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+[0;36m110 |[0;0m         guard let location = locations.last, !waiting.isEmpty else { return }
+[0;36m111 |[0;0m         geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, _ in
+    [0;36m|[0;0m                  `- [1;33mwarning: [1;39m'reverseGeocodeLocation(_:completionHandler:)' was deprecated in macOS 26.0: Use MKReverseGeocodingRequest[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m112 |[0;0m             let place = placemarks?.first
+[0;36m113 |[0;0m             let label = DeviceLocationReply.label(locality: place?.locality,
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/UICommandRouter.swift:224:44: [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m222 |[0;0m     init(drawer: DrawerState, overlay: ConsoleOverlayState, windows: WindowActions,
+[0;36m223 |[0;0m          placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil,
+[0;36m224 |[0;0m          weatherMap: WeatherMapCommands = .shared, workspace: WorkspaceStore? = nil) {
+    [0;36m|[0;0m                                            `- [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m225 |[0;0m         self.weatherMap = weatherMap
+[0;36m226 |[0;0m         self.workspace = workspace
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/Display/WeatherMapCommands.swift:13:16: [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m11 |[0;0m @Observable
+[0;36m12 |[0;0m final class WeatherMapCommands {
+[0;36m13 |[0;0m     static let shared = WeatherMapCommands()
+   [0;36m|[0;0m                `- [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m14 |[0;0m     static let actions: Set<String> = [
+[0;36m15 |[0;0m         "map_zoom_in", "map_zoom_out", "map_reset",
+
+[#ConformanceIsolation]: <https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation>
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/Display/RadarMapView.swift:242:43: [1;33mwarning: [1;39m'placemark' was deprecated in macOS 26.0: Use location, address and addressRepresentations instead[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m240 |[0;0m                         return
+[0;36m241 |[0;0m                     }
+[0;36m242 |[0;0m                     let coordinate = item.placemark.coordinate
+    [0;36m|[0;0m                                           `- [1;33mwarning: [1;39m'placemark' was deprecated in macOS 26.0: Use location, address and addressRepresentations instead[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m243 |[0;0m                     radarLog.notice("map center: \(place, privacy: .public) -> \(coordinate.latitude, privacy: .public),\(coordinate.longitude, privacy: .public)")
+[0;36m244 |[0;0m                     let region = miles.map { WeatherMapZoom.region(center: coordinate, acrossMiles: $0, aspect: aspect) }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/App/UICommandRouter.swift:224:44: [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m222 |[0;0m     init(drawer: DrawerState, overlay: ConsoleOverlayState, windows: WindowActions,
+[0;36m223 |[0;0m          placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil,
+[0;36m224 |[0;0m          weatherMap: WeatherMapCommands = .shared, workspace: WorkspaceStore? = nil) {
+    [0;36m|[0;0m                                            `- [1;33mwarning: [1;39mmain actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode[0;0m
+[0;36m225 |[0;0m         self.weatherMap = weatherMap
+[0;36m226 |[0;0m         self.workspace = workspace
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Sources/MortimerHost/Display/WeatherMapCommands.swift:13:16: [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m11 |[0;0m @Observable
+[0;36m12 |[0;0m final class WeatherMapCommands {
+[0;36m13 |[0;0m     static let shared = WeatherMapCommands()
+   [0;36m|[0;0m                `- [1;39mnote: [1;39mstatic property declared here[0;0m
+[0;36m14 |[0;0m     static let actions: Set<String> = [
+[0;36m15 |[0;0m         "map_zoom_in", "map_zoom_out", "map_reset",
+[280 / 301] MortimerHost-product
+[282 / 301] MortimerHost-product
+[284 / 301] MortimerHost
+[286 / 301] MortimerHost
+[291 / 302] MortimerHostTests-product
+[297 / 319]
+[308 / 319] MortimerHostTests-product
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/CC7a4ConversationIntegrationTests.swift:893:13: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m891 |[0;0m         let reference = try XCTUnwrap(f.conversation.cachedReferences.first)
+[0;36m892 |[0;0m         let app = NSApplication.shared
+[0;36m893 |[0;0m         app.accessibilitySetValue(true, forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+    [0;36m|[0;0m             `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m894 |[0;0m         let root = AnyView(ConversationThreadView(coordinator: f.coordinator).environment(f.workspace)
+[0;36m895 |[0;0m             .environment(f.conversation).environment(\.mortimerReduceMotion, true)
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift:164:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m162 |[0;0m     func testSavedCompactPreferenceChangesNativeConversationPresentation() throws {
+[0;36m163 |[0;0m         _ = NSApplication.shared
+[0;36m164 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m165 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m166 |[0;0m         let suite = "compact-conversation-" + UUID().uuidString
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:156:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m154 |[0;0m     func testOverflowButtonsReachBothEndsWithoutChangingSelection() throws {
+[0;36m155 |[0;0m         _ = NSApplication.shared
+[0;36m156 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m157 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m158 |[0;0m         let selection = HeaderSelection()
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/SkillsWorkspaceRenderingTests.swift:478:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m476 |[0;0m     func testLibraryAndSelectedProcessStepRenderAtWideAndNarrowWidths() throws {
+[0;36m477 |[0;0m         _ = NSApplication.shared
+[0;36m478 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m479 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m480 |[0;0m         let client = JarvisClient(config: JarvisConfig(
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:125:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m123 |[0;0m     func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+[0;36m124 |[0;0m         _ = NSApplication.shared
+[0;36m125 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m126 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m127 |[0;0m         let suite = "supporting-display-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/AdaptiveInterfaceClosureC2Tests.swift:165:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m163 |[0;0m     func testCompactRailRendersAgentActivityAffordance() throws {
+[0;36m164 |[0;0m         _ = NSApplication.shared
+[0;36m165 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m166 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m167 |[0;0m         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/AdaptiveInterfaceClosureC2Tests.swift:191:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m189 |[0;0m     func testCompactRailRendersWithReducedMotionWhileAgentIsActive() throws {
+[0;36m190 |[0;0m         _ = NSApplication.shared
+[0;36m191 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m192 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m193 |[0;0m         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/AdaptiveInterfaceClosureC2Tests.swift:216:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m214 |[0;0m     func testCompactRailPinsClockAboveAgentActivity() throws {
+[0;36m215 |[0;0m         _ = NSApplication.shared
+[0;36m216 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m217 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m218 |[0;0m         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[313 / 319] MortimerHostTests-product
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripKeyboardTests.swift:13:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m11 |[0;0m     func testArrowAndHomeEndKeysMoveSelectionAndRevealTheSelectedLabel() throws {
+ [0;36m12 |[0;0m         _ = NSApplication.shared
+ [0;36m13 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m14 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ [0;36m15 |[0;0m         let selection = KeyboardHeaderSelection()
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:11:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+  [0;36m9 |[0;0m     func testNarrowStripRevealsEntireSelectedLastTab() throws {
+ [0;36m10 |[0;0m         _ = NSApplication.shared
+ [0;36m11 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m12 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ [0;36m13 |[0;0m         let view = NSHostingView(rootView: DrawerTabStrip(selectedTab: "costs", attention: [:], select: { _ in })
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:54:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m52 |[0;0m     func testNarrowMountedStripRevealsEverySelectionInBothDirections() throws {
+ [0;36m53 |[0;0m         _ = NSApplication.shared
+ [0;36m54 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m55 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ [0;36m56 |[0;0m         let selection = HeaderSelection()
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:102:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m100 |[0;0m     func testLargeTextMountedStripRevealsEverySelection() throws {
+[0;36m101 |[0;0m         _ = NSApplication.shared
+[0;36m102 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m103 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m104 |[0;0m         let selection = HeaderSelection()
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:156:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m154 |[0;0m     func testOverflowButtonsReachBothEndsWithoutChangingSelection() throws {
+[0;36m155 |[0;0m         _ = NSApplication.shared
+[0;36m156 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m157 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m158 |[0;0m         let selection = HeaderSelection()
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/DrawerTabStripRenderingTests.swift:207:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m205 |[0;0m     func testWideHeaderExposesEveryLabel() throws {
+[0;36m206 |[0;0m         _ = NSApplication.shared
+[0;36m207 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m208 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m209 |[0;0m         let view = NSHostingView(rootView: DrawerTabStrip(selectedTab: "memory", attention: [:], select: { _ in })
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/DrawerViewMinimumWidthTests.swift:23:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m21 |[0;0m     private func checkDrawer(poppedOut: Bool) throws {
+[0;36m22 |[0;0m         _ = NSApplication.shared
+[0;36m23 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+   [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m24 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m25 |[0;0m         let suite = "drawer-min-width-" + UUID().uuidString
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/FullConsoleRenderingTests.swift:35:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m33 |[0;0m     private func checkConsole(tabTextSize: Double, layoutVersion: Int = 1, startup: Bool = false) throws {
+ [0;36m34 |[0;0m         _ = NSApplication.shared
+ [0;36m35 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m36 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ [0;36m37 |[0;0m         let suite = "full-console-" + UUID().uuidString
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/KnowledgeAtlasTests.swift:33:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m31 |[0;0m     func testMountedAtlasResultControlExposesAccessibilityLabelAndValue() throws {
+ [0;36m32 |[0;0m         _ = NSApplication.shared
+ [0;36m33 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m34 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ [0;36m35 |[0;0m         let card = AtlasCard(id: UUID(), title: "Weather", summary: "Rain after 4 PM",
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/SkillsWorkspaceAccessibilityStateTests.swift:81:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m79 |[0;0m     func testLargeTextProcessStepExposesExpandedStateToAccessibilityClients() throws {
+ [0;36m80 |[0;0m         _ = NSApplication.shared
+ [0;36m81 |[0;0m         NSApplication.shared.accessibilitySetValue(
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m82 |[0;0m             true, forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+ [0;36m83 |[0;0m         )
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/SkillsWorkspaceRenderingTests.swift:478:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m476 |[0;0m     func testLibraryAndSelectedProcessStepRenderAtWideAndNarrowWidths() throws {
+[0;36m477 |[0;0m         _ = NSApplication.shared
+[0;36m478 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m479 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m480 |[0;0m         let client = JarvisClient(config: JarvisConfig(
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/SkillsWorkspaceRenderingTests.swift:622:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m620 |[0;0m     func testAccessibilitySizeEnvironmentKeepsProcessDetailsExposedInCompactLayout() throws {
+[0;36m621 |[0;0m         _ = NSApplication.shared
+[0;36m622 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m623 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m624 |[0;0m         let client = JarvisClient(config: JarvisConfig(
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/SkillsWorkspaceRenderingTests.swift:793:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m791 |[0;0m     func testVersionsViewSeparatesInstalledPinFromCandidateAndDisclaimsHistory() throws {
+[0;36m792 |[0;0m         _ = NSApplication.shared
+[0;36m793 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m794 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m795 |[0;0m         let client = JarvisClient(config: JarvisConfig(
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:13:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m11 |[0;0m     func testStreamedResponseRendersOnlyOnSupportingDisplayThenReturnsToMain() throws {
+ [0;36m12 |[0;0m         _ = NSApplication.shared
+ [0;36m13 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m14 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ [0;36m15 |[0;0m         let screens = NSScreen.screens
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:67:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m65 |[0;0m     func testPointerSelectedResultSharesStageOnConnectedDisplays() throws {
+ [0;36m66 |[0;0m         _ = NSApplication.shared
+ [0;36m67 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m68 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ [0;36m69 |[0;0m         let screens = NSScreen.screens
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/SupportingDisplayAcceptanceTests.swift:125:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m123 |[0;0m     func testReturningToOriginalPanelsPreservesResearchPinsAndReadingState() throws {
+[0;36m124 |[0;0m         _ = NSApplication.shared
+[0;36m125 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m126 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m127 |[0;0m         let suite = "supporting-display-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/ProtectedDisplayContentTests.swift:158:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m156 |[0;0m 
+[0;36m157 |[0;0m     private func host(_ payload: DisplayPayload) -> NSHostingView<AnyView> {
+[0;36m158 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m159 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m160 |[0;0m         let view = NSHostingView(rootView: displayView(payload))
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/RoadmapControlsTests.swift:229:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m227 |[0;0m     func testRenderedCompactAndExpandedRoadmapExposeFilterLabelsAndLateCard() throws {
+[0;36m228 |[0;0m         _ = NSApplication.shared
+[0;36m229 |[0;0m         NSApplication.shared.accessibilitySetValue(true, forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m230 |[0;0m         for width: CGFloat in [520, 1100] {
+[0;36m231 |[0;0m             let store = WorkspaceStore(), item = WorkspaceResult(payload: try payload())
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/MemoryGraphRenderingTests.swift:30:26: [1;33mwarning: [1;39minstance method 'run' is unavailable from asynchronous contexts; run(until:) cannot be used from async contexts.; this is an error in the Swift 6 language mode[0;0m
+[0;36m28 |[0;0m             defer { closeRenderingFixtureWindow(window) }
+[0;36m29 |[0;0m             window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
+[0;36m30 |[0;0m             RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+   [0;36m|[0;0m                          `- [1;33mwarning: [1;39minstance method 'run' is unavailable from asynchronous contexts; run(until:) cannot be used from async contexts.; this is an error in the Swift 6 language mode[0;0m
+[0;36m31 |[0;0m             let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+[0;36m32 |[0;0m             view.cacheDisplay(in: view.bounds, to: bitmap)
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.2.sdk/System/Library/Frameworks/Foundation.framework/Headers/NSRunLoop.h:125:1: [1;39mnote: [1;39m'run(until:)' declared here[0;0m
+[0;36m123 |[0;0m ///
+[0;36m124 |[0;0m /// If no input sources or timers are attached to the run loop, this method exits immediately; otherwise, it runs the receiver in the ``RunLoop/Mode/default`` mode by repeatedly invoking ``RunLoop/run(mode:before:)`` until the specified expiration date.
+[0;36m125 |[0;0m - (void)runUntilDate:(NSDate *)limitDate NS_SWIFT_UNAVAILABLE_FROM_ASYNC("run(until:) cannot be used from async contexts.");
+    [0;36m|[0;0m `- [1;39mnote: [1;39m'run(until:)' declared here[0;0m
+[0;36m126 |[0;0m 
+[0;36m127 |[0;0m /// Runs the loop once, blocking for input in the specified mode until a given date.
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/CC7aThreadAcceptanceTests.swift:160:13: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m158 |[0;0m     private func host(_ root: AnyView, width: CGFloat = 900, height: CGFloat = 500) -> Hosted {
+[0;36m159 |[0;0m         let app = NSApplication.shared
+[0;36m160 |[0;0m         app.accessibilitySetValue(true, forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+    [0;36m|[0;0m             `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m161 |[0;0m         let view = NSHostingView(rootView: root)
+[0;36m162 |[0;0m         view.frame = NSRect(x: 0, y: 0, width: width, height: height)
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/CompactConversationTests.swift:164:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m162 |[0;0m     func testSavedCompactPreferenceChangesNativeConversationPresentation() throws {
+[0;36m163 |[0;0m         _ = NSApplication.shared
+[0;36m164 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m165 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+[0;36m166 |[0;0m         let suite = "compact-conversation-" + UUID().uuidString
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/ConsoleActionBarTests.swift:90:30: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m88 |[0;0m     private func labels(layoutVersion: Int, width: CGFloat, withBar: Bool) throws -> [String] {
+ [0;36m89 |[0;0m         _ = NSApplication.shared
+ [0;36m90 |[0;0m         NSApplication.shared.accessibilitySetValue(true,
+    [0;36m|[0;0m                              `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+ [0;36m91 |[0;0m             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+ [0;36m92 |[0;0m         let suite = "console-bar-" + UUID().uuidString
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/CC7a3MenuRefreshTests.swift:32:40: [1;33mwarning: [1;39mcapture of 'capture' with non-Sendable type 'CC7a3MenuRefreshTests.Capture' in a '@Sendable' closure[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures\SendableClosureCaptures]8;;\]
+  [0;36m9 |[0;0m @MainActor
+ [0;36m10 |[0;0m final class CC7a3MenuRefreshTests: XCTestCase {
+ [0;36m11 |[0;0m     private final class Capture {
+    [0;36m|[0;0m                         `- [1;39mnote: [1;39mclass 'Capture' does not conform to the 'Sendable' protocol[0;0m
+ [0;36m12 |[0;0m         var menu: NSMenu?
+ [0;36m13 |[0;0m         var rows: [String] = []
+    [0;36m:[0;0m
+ [0;36m30 |[0;0m         let observer = NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification,
+ [0;36m31 |[0;0m                                                               object: nil, queue: .main) { note in
+ [0;36m32 |[0;0m             MainActor.assumeIsolated { capture.menu = note.object as? NSMenu }
+    [0;36m|[0;0m                                        `- [1;33mwarning: [1;39mcapture of 'capture' with non-Sendable type 'CC7a3MenuRefreshTests.Capture' in a '@Sendable' closure[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures\SendableClosureCaptures]8;;\]
+ [0;36m33 |[0;0m         }
+ [0;36m34 |[0;0m         defer { NotificationCenter.default.removeObserver(observer) }
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/CC7a3MenuRefreshTests.swift:39:34: [1;33mwarning: [1;39mcapture of 'capture' with non-Sendable type 'CC7a3MenuRefreshTests.Capture' in a '@Sendable' closure[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures\SendableClosureCaptures]8;;\]
+  [0;36m9 |[0;0m @MainActor
+ [0;36m10 |[0;0m final class CC7a3MenuRefreshTests: XCTestCase {
+ [0;36m11 |[0;0m     private final class Capture {
+    [0;36m|[0;0m                         `- [1;39mnote: [1;39mclass 'Capture' does not conform to the 'Sendable' protocol[0;0m
+ [0;36m12 |[0;0m         var menu: NSMenu?
+ [0;36m13 |[0;0m         var rows: [String] = []
+    [0;36m:[0;0m
+ [0;36m37 |[0;0m         let timer = Timer(timeInterval: 0.15, repeats: true) { _ in
+ [0;36m38 |[0;0m             MainActor.assumeIsolated {
+ [0;36m39 |[0;0m                 guard let menu = capture.menu else { return }
+    [0;36m|[0;0m                                  `- [1;33mwarning: [1;39mcapture of 'capture' with non-Sendable type 'CC7a3MenuRefreshTests.Capture' in a '@Sendable' closure[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures\SendableClosureCaptures]8;;\]
+ [0;36m40 |[0;0m                 capture.rows = menu.items.map(\.title)
+ [0;36m41 |[0;0m                 menu.cancelTracking()
+
+/Users/larryfix/mortimer-c10-20261112-1103/freeze/macos/MortimerHost/Tests/MortimerHostTests/CC7a4ConversationIntegrationTests.swift:893:13: [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m891 |[0;0m         let reference = try XCTUnwrap(f.conversation.cachedReferences.first)
+[0;36m892 |[0;0m         let app = NSApplication.shared
+[0;36m893 |[0;0m         app.accessibilitySetValue(true, forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+    [0;36m|[0;0m             `- [1;33mwarning: [1;39m'accessibilitySetValue(_:forAttribute:)' was deprecated in macOS 10.10: Use the NSAccessibility protocol methods instead (see NSAccessibilityProtocols.h)[0;0m [#]8;;https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration\DeprecatedDeclaration]8;;\]
+[0;36m894 |[0;0m         let root = AnyView(ConversationThreadView(coordinator: f.coordinator).environment(f.workspace)
+[0;36m895 |[0;0m             .environment(f.conversation).environment(\.mortimerReduceMotion, true)
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[#SendableClosureCaptures]: <https://docs.swift.org/compiler/documentation/diagnostics/sendable-closure-captures>
+[315 / 319] MortimerHostTests-product
+Build complete! (22.80 sec)
+Test Suite 'Selected tests' started at 2026-11-12 11:04:08.712.
+Test Suite 'PhoneRemoteAuthorityTests.xctest' started at 2026-11-12 11:04:08.714.
+Test Suite 'PhoneRemoteAuthorityTests.xctest' passed at 2026-11-12 11:04:08.714.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 11:04:08.714.
+	 Executed 0 tests, with 0 failures (0 unexpected) in 0.000 (0.002) seconds
+Test Suite 'Selected tests' started at 2026-11-12 11:04:08.765.
+Test Suite 'MortimerHostTests.xctest' started at 2026-11-12 11:04:08.765.
+Test Suite 'OrbShellFrameTimeTests' started at 2026-11-12 11:04:08.765.
+Test Case '-[MortimerHostTests.OrbShellFrameTimeTests testCrystalShellStaysWithinTheFrameBudget]' started.
+Test Case '-[MortimerHostTests.OrbShellFrameTimeTests testCrystalShellStaysWithinTheFrameBudget]' passed (3.507 seconds).
+Test Suite 'OrbShellFrameTimeTests' passed at 2026-11-12 11:04:12.272.
+	 Executed 1 test, with 0 failures (0 unexpected) in 3.507 (3.507) seconds
+Test Suite 'MortimerHostTests.xctest' passed at 2026-11-12 11:04:12.272.
+	 Executed 1 test, with 0 failures (0 unexpected) in 3.507 (3.507) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 11:04:12.272.
+	 Executed 1 test, with 0 failures (0 unexpected) in 3.507 (3.508) seconds
+Orb frame time p50/p95: empty 0.745/0.84, crystal 5.428/13.499 ms

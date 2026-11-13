@@ -256,22 +256,32 @@ struct RoadmapView: View {
                     if projection.cards.isEmpty { Text("No workstreams match these filters. Clear filters to see all work.") }
                     ForEach(projection.cards) { card in
                         DisclosureGroup(isExpanded: Binding(get: { workspace.roadmapExpanded[result.id, default: []].contains(card.id) }, set: { workspace.setRoadmapExpanded(result.id, card: card.id, expanded: $0) })) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Status: \(card.status)\nOwner: \(card.owner)").textSelection(.enabled)
-                                Text("Next: \(card.fields["Next step"] ?? "Not specified")").textSelection(.enabled)
-                                ForEach(Array(RoadmapFilter.blockerEvidence(card).enumerated()), id: \.offset) { _, text in Text("Blocker evidence: \(text)") }
-                                Text("\(filter.visibleChecklist(card).count)/\(card.checklist.count) checklist items").font(.caption)
-                                ForEach(Array(filter.visibleChecklist(card).enumerated()), id: \.offset) { _, item in
-                                    Text("\(item.checked ? "☑" : "☐") \(item.text)" + (filter.checklist == "larry" ? "\n\(RoadmapFilter.readiness(item.text))" : "")).textSelection(.enabled)
-                                }
-                                if filter.checklist == "all" { Text(verbatim: card.details).font(.caption).textSelection(.enabled) }
-                            }
+                            RoadmapCardDetails(card: card, filter: filter)
                         } label: { Text(card.title).font(.headline) }
                         .padding(12).background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12)).id(card.id)
                     }
                     ForEach(Array(projection.logs.enumerated()), id: \.offset) { _, entry in Text("\(entry.date) · \(entry.title)\n\(entry.path)").font(.caption).textSelection(.enabled) }
                 }.padding(12)
             }.onChange(of: filter.workstreams) { _, ids in if let first = ids.first { scroll.scrollTo(first, anchor: .top) } }
+        }
+    }
+}
+
+
+/// Shared typed card body used by both legacy controls and composed wrappers.
+struct RoadmapCardDetails: View {
+    let card: RoadmapSnapshot.Card
+    var filter = RoadmapFilter()
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Status: \(card.status)\nOwner: \(card.owner)").textSelection(.enabled)
+            Text("Next: \(card.fields["Next step"] ?? "Not specified")").textSelection(.enabled)
+            ForEach(Array(RoadmapFilter.blockerEvidence(card).enumerated()), id: \.offset) { _, text in Text("Blocker evidence: \(text)") }
+            Text("\(filter.visibleChecklist(card).count)/\(card.checklist.count) checklist items").font(.caption)
+            ForEach(Array(filter.visibleChecklist(card).enumerated()), id: \.offset) { _, item in
+                Text("\(item.checked ? "☑" : "☐") \(item.text)" + (filter.checklist == "larry" ? "\n\(RoadmapFilter.readiness(item.text))" : "")).textSelection(.enabled)
+            }
+            if filter.checklist == "all" { Text(verbatim: card.details).font(.caption).textSelection(.enabled) }
         }
     }
 }
