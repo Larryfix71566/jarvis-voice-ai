@@ -5,7 +5,6 @@ from unittest.mock import Mock, patch
 from sandbox.artifacts import SandboxError
 from sandbox.control import Controller
 from sandbox.durable import atomic_json
-from sandbox.profiles import MORTIMER
 from sandbox.runtime import Runtime
 
 class RuntimeTests(unittest.TestCase):

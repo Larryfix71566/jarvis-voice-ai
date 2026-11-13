@@ -6,7 +6,6 @@ import hashlib
 import json
 from pathlib import Path
 import re
-import shutil
 import uuid
 
 from sandbox.artifacts import Candidate, SandboxError
