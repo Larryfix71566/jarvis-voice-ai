@@ -633,6 +633,23 @@ public final class JarvisClient: ObservableObject {
         capTranscript()
     }
 
+    /// C7b (contract 2.5): the app adds the user's typed line itself, because
+    /// the bot sends no user-transcription for a typed turn. `sentAt` is when
+    /// the request left; an assistant entry opened after that belongs to this
+    /// turn, so the user line goes in front of it.
+    public func appendTypedUserEntry(_ text: String, sentAt: Double) {
+        let entry = ConversationEntry(id: UUID().uuidString, role: "user",
+                                      createdAt: sentAt, text: text)
+        if let id = pendingAssistantEntryId,
+           let index = transcript.lastIndex(where: { $0.id == id }),
+           transcript[index].createdAt >= sentAt {
+            transcript.insert(entry, at: index)
+        } else {
+            transcript.append(entry)
+        }
+        capTranscript()
+    }
+
     private func beginAssistantEntry() {
         // A new inference turn — close out any orphaned pending entry
         // (an interruption whose bot-llm-stopped never arrived).

@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct AttachmentTrayView: View {
     @Environment(AttachmentStore.self) private var attachments
     @EnvironmentObject private var client: JarvisClient
+    @Environment(TypedComposerModel.self) private var composer: TypedComposerModel?
     @State private var showPicker = false
     @State private var dropTargeted = false
     var onAsk: (() -> Void)?
@@ -12,6 +13,7 @@ struct AttachmentTrayView: View {
     var onDeclineOffer: (() -> Void)?
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if let composer { TypedComposerRow(composer: composer) }
             HStack {
                 Text(attachments.staged.isEmpty ? "Add content" : "Staged content").font(.headline)
                 Spacer()
