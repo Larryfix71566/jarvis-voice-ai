@@ -199,4 +199,35 @@ final class ConfigAndAuthTests: XCTestCase {
 
         XCTAssertEqual(stub.lastConfigSeenOnConnect?.token, "just-minted")   // F20 — no relaunch needed
     }
+
+    // MARK: - C7b / WS-34 B2 client header
+
+    private func headerConfig(token: String?) -> JarvisConfig {
+        JarvisConfig(
+            botURL: URL(string: "http://127.0.0.1:7860")!,
+            adminURL: URL(string: "http://127.0.0.1:7861")!,
+            wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!,
+            token: token
+        )
+    }
+
+    func testClientHeaderAttachedToEveryRequest() async throws {
+        for token in [nil, "jvt_abc"] as [String?] {
+            let config = headerConfig(token: token)
+            for method in ["GET", "POST"] {
+                StubURLProtocol.statusCode = 200
+                var req = URLRequest(url: config.adminURL.appending(path: "api/health"))
+                req.httpMethod = method
+                _ = try await JarvisHTTP.send(req, config: config)
+                XCTAssertEqual(StubURLProtocol.lastRequest?.value(forHTTPHeaderField: "X-Mortimer-Client"),
+                               "mortimer-host")
+            }
+        }
+    }
+
+    func testClientHeaderValueFitsTheGuardPattern() {
+        XCTAssertEqual(JarvisHTTP.clientHeaderName, "X-Mortimer-Client")
+        let value = JarvisHTTP.clientHeaderValue
+        XCTAssertNotNil(value.range(of: "^[A-Za-z0-9._-]{1,64}$", options: .regularExpression))
+    }
 }

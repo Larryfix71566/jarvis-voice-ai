@@ -2,14 +2,13 @@ from pathlib import Path
 import hashlib
 import io
 import json
-import subprocess
 import tarfile
 import tempfile
 from threading import Event, Thread
 import unittest
 from unittest.mock import patch
 
-from sandbox.artifacts import Candidate, File, SandboxError
+from sandbox.artifacts import SandboxError
 from sandbox.control import Controller
 from sandbox.profiles import Profile
 from sandbox.session import Session

@@ -1,6 +1,5 @@
 """Unit tests for jarvis/bot/voice_switch.py (plan Phase 5 Tests)."""
 
-import pytest
 
 from jarvis.bot.voice_switch import (
     available_list,

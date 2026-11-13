@@ -15,8 +15,8 @@ from jarvis.privacy_policy import DataPolicy, make_tool_execution_scope, validat
 from jarvis.runlog.context import run_logger_scope
 from jarvis.skills.registry import SkillRegistry
 from jarvis.tenant import user_id_scope
-from tests.unit.test_advisory_source_bridge import advisory, immediate_workers
-from tests.unit.test_council_budget_ownership import transport_env
+from tests.unit.test_advisory_source_bridge import advisory as advisory, immediate_workers as immediate_workers
+from tests.unit.test_council_budget_ownership import transport_env as transport_env
 
 
 @pytest.fixture

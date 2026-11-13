@@ -20,6 +20,7 @@ public enum AppMessage: Sendable, Equatable {
     case consoleHello(ConsoleHello)
     case consoleRequest(ConsoleRequest)
     case consoleResult(ConsoleResult)
+    case turnResult(TurnResult)
     case inputAccept(InputAccept)
     case inputAck(InputAck)
     case inputReady(InputReady)
@@ -50,6 +51,7 @@ extension AppMessage: CustomDebugStringConvertible {
         case .consoleRequest(let request): return "consoleRequest(\(request.action.rawValue))"
         case .consoleHello(let hello): return "consoleHello(\(hello.actions.count) actions)"
         case .consoleResult(let result): return "consoleResult(\(result.status), code: \(result.code))"
+        case .turnResult(let result): return "turnResult(\(result.status), code: \(result.code))"
         case .inputAccept(let accept): return "inputAccept(\(accept.transferID.uuidString))"
         case .inputAck(let ack): return "inputAck(\(ack.attachmentID.uuidString), sequence: \(ack.sequence))"
         case .inputReady(let ready): return "inputReady(\(ready.batchID.uuidString))"
@@ -253,6 +255,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         weather = nil; brief = nil; roadmap = nil; roadmapTimezone = nil
         subjectKey = nil; freshUntil = nil; weatherSource = nil
         originRequestID = nil
+        answerID = nil; answerRevision = nil; layout = nil
     }
 
     public let kind: String?
@@ -267,6 +270,9 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
     public let runID: String?
     /// Host-issued foreground request identity; never content/cache identity.
     public let originRequestID: UUID?
+    public let answerID: UUID?
+    public let answerRevision: Int?
+    public let layout: ComposedAnswerLayout?
     /// Epoch SECONDS, not ms (displayResults.ts:28).
     public let ts: Double?
     /// Absent/unrecognised -> .drawer (display.py:60-92, App.tsx:238-240).
@@ -310,6 +316,7 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         case basemapImages = "basemap_images"
         case links, agent, runID = "run_id", ts, surface, tool, commands, note
         case originRequestID = "origin_request_id"
+        case answerID = "answer_id", answerRevision = "answer_revision", layout
         case expectOutput = "expect_output"
         case content, chars, truncated
         case dataPolicy = "data_policy", opaqueRef = "opaque_ref"
@@ -346,6 +353,32 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated)
         dataPolicy = try c.decodeIfPresent(String.self, forKey: .dataPolicy)
         opaqueRef = try c.decodeIfPresent(String.self, forKey: .opaqueRef)
+        let decodedID = try? c.decodeIfPresent(UUID.self, forKey: .answerID)
+        let decodedRevision = try? c.decodeIfPresent(Int.self, forKey: .answerRevision)
+        if let decodedID, let decodedRevision, decodedRevision > 0 {
+            answerID = decodedID; answerRevision = decodedRevision
+        } else {
+            answerID = nil; answerRevision = nil
+        }
+        let candidate = try? c.decodeIfPresent(ComposedAnswerLayout.self, forKey: .layout)
+        // Console replies already enforce this ceiling; ordinary display events
+        // reach this decoder directly. Oversize composed structure must not
+        // discard the envelope identity or the existing legacy presentation.
+        let withinDisplayBudget: Bool
+        if candidate != nil, let raw = try? JSONValue(from: d) {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.withoutEscapingSlashes]
+            withinDisplayBudget = (try? encoder.encode(raw).count).map { $0 <= 1200 * 1024 } ?? false
+        } else {
+            withinDisplayBudget = false
+        }
+        if withinDisplayBudget, dataPolicy == nil || dataPolicy == "approved_external",
+           tool != "read_clipboard", kind != "clipboard", content == nil,
+           answerID != nil, candidate?.revision == answerRevision {
+            layout = candidate
+        } else {
+            layout = nil
+        }
         weather = (try? c.decodeIfPresent(WeatherCard.self, forKey: .weather)) ?? nil
         brief = (try? c.decodeIfPresent(BriefCard.self, forKey: .brief)) ?? nil
         roadmapTimezone = try? c.decodeIfPresent(String.self, forKey: .roadmapTimezone)
@@ -362,6 +395,26 @@ public struct DisplayPayload: Sendable, Equatable, Decodable {
         } else {
             freshUntil = nil; weatherSource = nil
         }
+    }
+
+    /// Compare visible content, not transport timestamps or revision bookkeeping.
+    /// Legacy fallback fields remain significant even when a layout is present.
+    public func hasSameAnswerContent(as other: Self) -> Bool {
+        let sameLayout: Bool
+        switch (layout, other.layout) {
+        case (nil, nil): sameLayout = true
+        case let (left?, right?): sameLayout = left.hasSameContent(as: right)
+        default: sameLayout = false
+        }
+        return sameLayout && kind == other.kind && title == other.title && body == other.body
+            && images == other.images && basemapImages == other.basemapImages && links == other.links
+            && agent == other.agent && surface == other.surface && tool == other.tool
+            && commands == other.commands && note == other.note && expectOutput == other.expectOutput
+            && content == other.content && chars == other.chars && truncated == other.truncated
+            && dataPolicy == other.dataPolicy && opaqueRef == other.opaqueRef
+            && weather == other.weather && brief == other.brief && roadmap == other.roadmap
+            && roadmapTimezone == other.roadmapTimezone && subjectKey == other.subjectKey
+            && freshUntil == other.freshUntil && weatherSource == other.weatherSource
     }
 
     private static func validWeatherSource(_ source: JSONValue) -> Bool {
@@ -561,6 +614,8 @@ public extension AppMessage {
             return .consoleHello(try dec.decode(ConsoleHello.self, from: payload))
         case "console/result":
             return .consoleResult(try dec.decode(ConsoleResult.self, from: payload))
+        case "turn/result":
+            return .turnResult(try dec.decode(TurnResult.self, from: payload))
         case "input/accept":
             return .inputAccept(try dec.decode(InputAccept.self, from: payload))
         case "input/ack":

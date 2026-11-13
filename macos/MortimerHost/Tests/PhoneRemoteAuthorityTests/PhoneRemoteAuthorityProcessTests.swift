@@ -73,8 +73,16 @@ final class PhoneRemoteAuthorityProcessTests: XCTestCase {
 
     func testOrdinaryUnknownWaitRetainsActualSingletonAfterPartialEOF() throws {
         let environment = ProcessInfo.processInfo.environment
-        let owner = try XCTUnwrap(environment["PHONE_REMOTE_AUTHORITY_OWNER_BIN"])
-        let python = try XCTUnwrap(environment["PHONE_REMOTE_AUTHORITY_PYTHON"])
+        // Like the other actual-process tests, this requires an explicitly built
+        // offline owner. Plain `swift test` still runs the injected reaper tests.
+        guard let owner = environment["PHONE_REMOTE_AUTHORITY_OWNER_BIN"],
+              FileManager.default.isExecutableFile(atPath: owner) else {
+            throw XCTSkip("focused process test requires the built offline owner executable")
+        }
+        guard let python = environment["PHONE_REMOTE_AUTHORITY_PYTHON"] ?? findPython() else {
+            XCTFail("Python 3.12 or python3 must be available on PATH for the process test")
+            return
+        }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("broker-held-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         XCTAssertEqual(chmod(root.path, S_IRWXU), 0)

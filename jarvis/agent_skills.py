@@ -63,7 +63,7 @@ from pathlib import Path
 from jarvis.procedures import _overlap_score, _tokens
 from jarvis.skill_compatibility import (
     MAX_SKILL_BYTES, MAX_FRONTMATTER_BYTES, MAX_ROOT_ENTRIES,
-    NAME_MAX_CHARS, DESCRIPTION_MAX_CHARS, NAME_RE, RESERVED_WORDS,
+    NAME_MAX_CHARS as NAME_MAX_CHARS, DESCRIPTION_MAX_CHARS as DESCRIPTION_MAX_CHARS, NAME_RE as NAME_RE, RESERVED_WORDS as RESERVED_WORDS,
     compatibility_reason, load_frontmatter, validate_frontmatter,
 )
 

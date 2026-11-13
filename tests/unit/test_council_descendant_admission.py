@@ -7,8 +7,8 @@ import pytest
 from jarvis import model_budget
 from jarvis.council import council
 from jarvis.model_routing import WorkloadLimits
-from tests.unit.test_council_budget_ownership import transport_env, rows
-from tests.unit.test_model_budget import isolated_budget
+from tests.unit.test_council_budget_ownership import transport_env as transport_env, rows
+from tests.unit.test_model_budget import isolated_budget as isolated_budget
 
 
 def coordinator(state, *, planning_limits=WorkloadLimits(9, 60, .1)):

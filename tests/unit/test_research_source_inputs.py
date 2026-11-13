@@ -4,8 +4,8 @@ import httpx
 import pytest
 from jarvis.admin import server as admin
 from jarvis.research import crawl
-from tests.unit.test_advisory_source_bridge import advisory, immediate_workers
-from tests.unit.test_council_budget_ownership import transport_env
+from tests.unit.test_advisory_source_bridge import advisory as advisory, immediate_workers as immediate_workers
+from tests.unit.test_council_budget_ownership import transport_env as transport_env
 
 @pytest.mark.parametrize('level', ['local_only', 'confidential'])
 def test_protected_focus_refuses_before_actual_tavily_transport(advisory, immediate_workers, monkeypatch, level):

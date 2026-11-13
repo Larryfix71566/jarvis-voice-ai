@@ -1,7 +1,7 @@
 """Localhost-only HTTP service on 127.0.0.1:8484 (§8)."""
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -123,7 +123,6 @@ def delete(req: DeleteReq):
         _vault.delete(req.id)
     except VaultError as e:
         return _err(e)
-    from pathlib import Path
     _index._remove_by_path(_vault.user_dir / "inbox" / f"{req.id}.md")
     return {"deleted": req.id}
 

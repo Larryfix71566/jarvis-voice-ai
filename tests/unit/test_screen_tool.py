@@ -6,7 +6,6 @@ logic.screen_view/screen_list are injected — no real capture/vision call.
 
 from __future__ import annotations
 
-import pytest
 
 from jarvis.bot.screen_tool import (
     LIST_SCREENS_SCHEMA,

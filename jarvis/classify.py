@@ -273,7 +273,6 @@ def extract_workflow(conn, key: str, slug: str | None = None) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     import argparse
-    import sys
 
     from jarvis.db import get_conn
 

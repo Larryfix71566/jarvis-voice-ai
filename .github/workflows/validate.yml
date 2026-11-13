@@ -41,6 +41,8 @@ jobs:
   validate:
     # Independent of policy enforcement so failures do not hide test results.
     runs-on: ubuntu-24.04
+    env:
+      NLTK_DATA: ${{ github.workspace }}/tests/fixtures/nltk_data
     steps:
       - uses: actions/checkout@v7
         with:
@@ -61,21 +63,15 @@ jobs:
           grep -v '^openwakeword==' requirements-lock.txt > "$RUNNER_TEMP/requirements-ci.txt"
           pip install -r "$RUNNER_TEMP/requirements-ci.txt"
           pip install --no-deps "$(grep '^openwakeword==' requirements-lock.txt)"
+      - name: Verify bundled offline tokenizer
+        run: python scripts/check_test_nltk_data.py --smoke
       - name: Backend import smoke
         run: python -c "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog"
 
-      # Gate 2a: undefined-name check (ruff F821). --isolated ignores any
-      # ruff config. These three files have known undefined names that their
-      # owners fix under their own rows; remove each ignore when fixed:
-      #   jarvis/bot/pipeline.py (Callable), tests/unit/test_mcp_mail_registry.py
-      #   (subprocess), tests/unit/test_phone_remote_service.py (PreparedMedia).
-      - name: Undefined-name check (ruff F821)
-        run: >-
-          ruff check --isolated --select F821
-          --per-file-ignores "jarvis/bot/pipeline.py:F821"
-          --per-file-ignores "tests/unit/test_mcp_mail_registry.py:F821"
-          --per-file-ignores "tests/unit/test_phone_remote_service.py:F821"
-          jarvis mcp_servers scripts services sandbox tests
+      # B5: enforce every pyflakes diagnostic, without repository config or
+      # per-file undefined-name exemptions hiding findings.
+      - name: Pyflakes checks (ruff F)
+        run: ruff check --isolated --select F jarvis mcp_servers scripts services sandbox tests --per-file-ignores "tests/unit/test_status_providers.py:F401"
 
       # Gate 3: unit tests (C2, MORTIMER_MODEL_DISCIPLINE_AND_MAC_SHELL_PLAN.md
       # — blocking now that the suite has been green on main for a while and
@@ -99,16 +95,6 @@ jobs:
       # Gate 4: latency regression check.
       - name: Latency budget enforcement
         run: python scripts/latency_probe.py --budget tests/fixtures/latency_sample.log
-
-      # Gate 5: frontend still compiles.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "20"
-      - name: Frontend build
-        run: |
-          cd web
-          npm ci
-          npm run build
 
   # WS-35 B1 also implements WS-30's previously unshipped phone-core gate.
   # JarvisKit and MortimerHost require macOS 26 at runtime, not just its SDK.

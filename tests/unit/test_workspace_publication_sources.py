@@ -1,14 +1,13 @@
 """Saved host PR metadata; no publication, provider or VM operation."""
 import json
 
-import pytest
 
 from jarvis import development_sources as sources
 from jarvis.privacy_policy import DataPolicy
 from jarvis.runlog.store import get_run
 from sandbox.durable import atomic_json
-from tests.unit.test_development_sources import workspace
-from tests.unit.test_workspace_source_bridge import bridge
+from tests.unit.test_development_sources import workspace as workspace
+from tests.unit.test_workspace_source_bridge import bridge as bridge
 
 
 def published(bridge, *, url=None):

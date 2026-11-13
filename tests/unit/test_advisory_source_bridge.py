@@ -22,9 +22,9 @@ from jarvis.runlog.context import run_logger_scope
 from jarvis.skills.registry import _ToolSourceContract
 from jarvis.skill_runtime import update_runtime_inventory
 from jarvis.tenant import user_id_scope
-from tests.unit.test_council_budget_ownership import transport_env, rows
+from tests.unit.test_council_budget_ownership import transport_env as transport_env, rows
 from tests.unit.test_registry_source_policy import registry_for
-from tests.unit.test_development_sources import workspace
+from tests.unit.test_development_sources import workspace as workspace
 
 
 @pytest.fixture

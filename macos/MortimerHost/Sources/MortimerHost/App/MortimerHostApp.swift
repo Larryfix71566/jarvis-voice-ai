@@ -40,6 +40,7 @@ struct MortimerHostApp: App {
     @State private var drawerModels = DrawerModels()
     @State private var overlay = ConsoleOverlayState()
     @State private var notices = ConsoleNoticeState()
+    @State private var composer = TypedComposerModel()
     @State private var contentWindows = ContentWindowRegistry()
 
     // Non-Observable plumbing, created once for the app's lifetime
@@ -71,6 +72,7 @@ struct MortimerHostApp: App {
                 .environment(drawerModels)
                 .environment(overlay)
                 .environment(notices)
+                .environment(composer)
                 .background(WindowIdentifierSetter(identifier: "console", registry: contentWindows))
                 // C7.5: every session that ends writes its own evidence.
                 // The Debug menu item stays for an on-demand reading
@@ -113,6 +115,7 @@ struct MortimerHostApp: App {
                 .environment(drawerModels)
                 .environment(overlay)
                 .environment(notices)
+                .environment(composer)
                 .background(WindowIdentifierSetter(identifier: "display", registry: contentWindows))
                 // The native form of the web's hasLivePopup poll: scene
                 // content on screen = window open. Drives the topbar's
@@ -133,6 +136,7 @@ struct MortimerHostApp: App {
                 .environment(displayWindow)
                 .environment(overlay)
                 .environment(notices)
+                .environment(composer)
                 .environment(agentRuns)
                 .environment(displayResults)
                 .environment(workspace)
@@ -170,6 +174,7 @@ struct MortimerHostApp: App {
                     .environment(skills)
                     .environment(overlay)
                     .environment(notices)
+                    .environment(composer)
                     .environment(agentRuns)
                     .environment(displayResults)
                     .environment(workspace)
@@ -202,6 +207,7 @@ struct MortimerHostApp: App {
                     .environment(skills)
                     .environment(overlay)
                     .environment(notices)
+                    .environment(composer)
                     .environment(agentRuns)
                     .environment(displayResults)
                     .environment(workspace)
@@ -263,6 +269,13 @@ struct MortimerHostApp: App {
                     ScreenPlacement.shared.resetLayout()
                     drawer.width = AppTuning.drawerDefaultWidth
                 }
+            }
+            CommandMenu("Request") {
+                Button("Type a Request") {
+                    windowActions.open("console")
+                    composer.requestFocus()
+                }
+                .keyboardShortcut("k", modifiers: [.command])
             }
             CommandMenu("Debug") {
                 Button("Clear stored token") {
@@ -334,6 +347,7 @@ struct MortimerHostApp: App {
             consoleCoordinator: consoleCoordinator
         )
         router.start(client: client)
+        composer.bind(client: client)
         drawer.placementRef = placement
         drawer.supportingDisplayRef = supportingDisplay
     }

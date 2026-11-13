@@ -4,7 +4,6 @@ These tests never invoke a model, VM, publication, production database or
 production settings. A fake transport below is explicitly unit evidence and
 cannot be used by the live entry point as a registry/SDK/admin substitute.
 """
-import asyncio
 from dataclasses import asdict
 import hashlib
 import importlib.util
@@ -23,7 +22,7 @@ import pytest
 import pytest_asyncio
 
 from scripts import run_model_use_full_development_pilot as pilot
-from tests.unit.test_model_use_development_pilot import owned_pilot_source, bind_owned_pilot_source
+from tests.unit.test_model_use_development_pilot import owned_pilot_source as owned_pilot_source, bind_owned_pilot_source as bind_owned_pilot_source
 
 
 def test_strict_committed_support_uses_actual_owned_snapshot_git(owned_pilot_source):

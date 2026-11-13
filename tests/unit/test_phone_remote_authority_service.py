@@ -2196,7 +2196,7 @@ class PhoneRemoteAuthorityServiceProcessTests(unittest.TestCase):
             self._wait_for_file(entered, process)
             process.terminate()
             process.communicate(timeout=10)
-            deadline = time.monotonic() + 10
+            _deadline = time.monotonic() + 10
             self._wait_for_marker(marker)
             self.assertEqual(pathlib.Path(marker).read_text(encoding="ascii"),
                              "lost-offer=unavailable;after=fenced")
@@ -2234,7 +2234,7 @@ class PhoneRemoteAuthorityServiceProcessTests(unittest.TestCase):
             process.terminate()
             process.communicate(timeout=10)
             pathlib.Path(release).write_text("continue", encoding="ascii")
-            deadline = time.monotonic() + 10
+            _deadline = time.monotonic() + 10
             self._wait_for_marker(marker)
             self.assertEqual(pathlib.Path(marker).read_text(encoding="ascii"),
                              "eof-preparation=unavailable;after=fenced")
@@ -2598,7 +2598,6 @@ class V4DrainBoundaryTests(unittest.TestCase):
         # reaching an authority exchange would fail instead of passing silently.
 
     def test_cancelled_authorized_operation_retains_owner_until_commit_terminal(self):
-        from jarvis.bot.phone_remote_service import _OwnedCompletion
         from unittest.mock import Mock
         host = self.fixture()
         cancel = threading.Event()
@@ -2970,7 +2969,6 @@ class PhoneCardOwnedWorkerTests(unittest.TestCase):
 
     def test_quiesce_waits_for_authorized_card_effect_and_terminal_receipt(self):
         from unittest.mock import Mock, patch
-        from contextlib import contextmanager
         from tests.unit.test_phone_remote_result_commands import CardFixture, wire
         fixture=CardFixture();self.addCleanup(fixture.close);fixture.sync()
         host=V4DrainBoundaryTests.fixture(self)
@@ -3082,7 +3080,7 @@ def _proof_connection_child_case(database, case):
     import asyncio
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
     from tests.unit.test_phone_remote_connection import InMemoryProofClient, wire
-    from jarvis.bot.phone_remote_connection import ConnectionFailure, ConnectionReply
+    from jarvis.bot.phone_remote_connection import ConnectionReply
     root=pathlib.Path(database).parent
     private=serialization.load_pem_private_key((root/'fixture-key.pem').read_bytes(),None)
     host,clock,source=_connection_fixture_host(database)
@@ -3341,7 +3339,6 @@ def _connection_recovery_normal(database, config, case):
     """The actual native-owned normal PID; only fixed disposable test controls."""
     import asyncio, time, signal
     from tests.unit.test_phone_remote_connection import InMemoryProofClient, wire
-    from jarvis.bot.phone_admission_store import StoreUnavailable
     assert config['mode']=='normal' and config['exercise_drain'] is True
     assert case in {'broker-retention','timely','queued','activation','stall','stall-ignore-term','lost-commit','lost-release','lost-shutdown','child-failure'}
     os.fstat(3);os.fstat(4)
@@ -3547,7 +3544,7 @@ class ProofConnectionRecoveryProcessTests(unittest.TestCase):
 
 
 async def _connection_live_race(case, a, record, host, clock, source, private, report):
-    import asyncio,time
+    import asyncio
     from tests.unit.test_phone_remote_connection import InMemoryProofClient,wire
     from jarvis.bot.phone_remote_connection import ConnectionFailure,ConnectionReply
     service=host._connections.service
@@ -3747,7 +3744,7 @@ class ProofConnectionRaceProcessTests(unittest.TestCase):
 
 
 async def _connection_handshake_case(case,host,clock,private,report):
-    import asyncio,base64,dataclasses
+    import base64,dataclasses
     from types import SimpleNamespace
     from tests.unit.test_phone_remote_connection import InMemoryProofClient,wire,handshake
     from tests.unit.test_phone_remote_login import sign_challenge_proof
@@ -4109,7 +4106,6 @@ class ConnectionSendAdmissionOutcomeProcessTests(unittest.TestCase):
 async def _broker_connection_case(case, host, clock, private, report):
     import asyncio
     from tests.unit.test_phone_remote_connection import InMemoryProofClient, wire
-    from jarvis.bot.phone_remote_service import FakeBoundedSink
     a=InMemoryProofClient(host);await a.login(private)
     registry=host._connections;service=registry.service;store=registry.store
     record=next(iter(registry.records.values()))

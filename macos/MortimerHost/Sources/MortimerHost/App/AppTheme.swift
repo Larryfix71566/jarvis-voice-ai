@@ -26,6 +26,15 @@ enum AppTheme {
     static let attn = amber
     static let attnDim = amber.opacity(0.35)
 
+    // C0b approved palette. Keep these distinct from the general semantic
+    // warning/success/failure tokens above; call sites migrate in C5/C7a.
+    static let listening = Color(red: 0x66 / 255.0, green: 0x73 / 255.0, blue: 0xFF / 255.0)
+    static let user = AudioPresentationTuning.userColor
+    static let mortimer = AudioPresentationTuning.assistantColor
+    static let ok = Color(red: 0xA6 / 255.0, green: 0xFF / 255.0, blue: 0xC1 / 255.0)
+    static let approval = Color(red: 0xFF / 255.0, green: 0xD8 / 255.0, blue: 0x4A / 255.0)
+    static let error = Color(red: 0xFF / 255.0, green: 0x59 / 255.0, blue: 0x8B / 255.0)
+
     // --glass-* (the CSS material recipe; used by Glass.swift's fallback
     // tinting — the primary glass-on arm is .glassEffect(), P10/T1.0).
     static let glassBg = Color(red: 43 / 255.0, green: 50 / 255.0, blue: 58 / 255.0).opacity(0.35)

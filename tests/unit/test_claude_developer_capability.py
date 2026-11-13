@@ -21,7 +21,7 @@ from jarvis.model_execution import ModelExecutionRequest, ModelToolReference
 from jarvis.privacy_policy import DataPolicy, issue_tool_result, make_tool_execution_scope
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.storage_context import storage_scope
-from tests.unit.test_model_use_development_pilot import owned_pilot_source, bind_owned_pilot_source
+from tests.unit.test_model_use_development_pilot import owned_pilot_source as owned_pilot_source, bind_owned_pilot_source as bind_owned_pilot_source
 
 
 @pytest.fixture(autouse=True)

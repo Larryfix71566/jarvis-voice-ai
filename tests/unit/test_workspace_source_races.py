@@ -10,8 +10,8 @@ from jarvis.runlog.context import run_logger_scope
 from jarvis.runlog.store import RunLogger,get_run
 from jarvis.db import get_conn
 from jarvis.tenant import user_id_scope
-from tests.unit.test_development_sources import workspace
-from tests.unit.test_workspace_source_bridge import bridge
+from tests.unit.test_development_sources import workspace as workspace
+from tests.unit.test_workspace_source_bridge import bridge as bridge
 from sandbox.durable import atomic_json
 
 

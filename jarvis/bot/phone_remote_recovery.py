@@ -15,7 +15,6 @@ import re
 import stat
 import sqlite3
 import math
-import shutil
 import struct
 import uuid
 from dataclasses import dataclass

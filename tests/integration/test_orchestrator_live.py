@@ -4,7 +4,6 @@ Marked `live`: skipped unless RUN_LIVE=1. Require real API keys in .env
 (LLM provider). Spawn real MCP servers; writes go to a temp DB.
 """
 
-import os
 import uuid
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo

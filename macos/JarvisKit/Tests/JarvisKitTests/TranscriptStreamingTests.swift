@@ -63,4 +63,34 @@ final class TranscriptStreamingTests: XCTestCase {
         XCTAssertEqual(client.transcript.map(\.text), ["confirmed"])
         XCTAssertEqual(client.transcript.map(\.role), ["user"])
     }
+
+    // MARK: - C7b typed user entry (contract 2.5)
+
+    func testTypedUserEntryAppendsWhenNoAssistantEntryIsOpen() {
+        let (client, _) = makeClient()
+        client.appendTypedUserEntry("hello there", sentAt: Date().timeIntervalSince1970)
+        XCTAssertEqual(client.transcript.map(\.role), ["user"])
+        XCTAssertEqual(client.transcript.map(\.text), ["hello there"])
+    }
+
+    func testTypedUserEntryGoesBeforeAReplyThatOpenedAfterTheSend() async {
+        let (client, transport) = makeClient()
+        let sentAt = Date().timeIntervalSince1970 - 5
+        transport.simulateReceivedAppMessage(json: send("bot-llm-started"))
+        await flushMainActor()
+        client.appendTypedUserEntry("question", sentAt: sentAt)
+        XCTAssertEqual(client.transcript.map(\.role), ["user", "assistant"])
+
+        transport.simulateReceivedAppMessage(json: send("bot-llm-text", data: "answer"))
+        await flushMainActor()
+        XCTAssertEqual(client.transcript.map(\.text), ["question", "answer"])
+    }
+
+    func testTypedUserEntryGoesAfterAnOlderOpenReply() async {
+        let (client, transport) = makeClient()
+        transport.simulateReceivedAppMessage(json: send("bot-llm-started"))
+        await flushMainActor()
+        client.appendTypedUserEntry("question", sentAt: Date().timeIntervalSince1970 + 5)
+        XCTAssertEqual(client.transcript.map(\.role), ["assistant", "user"])
+    }
 }

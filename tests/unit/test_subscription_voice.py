@@ -1,7 +1,6 @@
 """Synthetic voice/native integration; no provider subprocess or credentials."""
 import asyncio
 import copy
-import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 

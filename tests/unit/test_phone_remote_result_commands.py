@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from jarvis.auth import ClientIdentity
 from jarvis.bot.phone_admission_store import FakeProtectedAnchor, PhoneAdmissionStore
-from jarvis.bot.phone_remote_result_commands import ACTIONS, CommandCapability, MAX_INT
+from jarvis.bot.phone_remote_result_commands import ACTIONS, MAX_INT
 from jarvis.bot.phone_remote_results import PhoneRemoteResults, PhoneResultCollectionGrantV1, SyntheticResultRecord, SyntheticResultsSource
 from jarvis.bot.phone_remote_service import PhoneRemoteService, FakeContextVerifier, FakeMediaAdapter, FakeClockGate, TrustedRequestContext
 

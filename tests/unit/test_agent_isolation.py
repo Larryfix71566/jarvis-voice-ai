@@ -89,7 +89,6 @@ def test_report_self_edit_exposure(capsys):
     would make the suite red for a change the implementing model is
     forbidden (C8) to make.
     """
-    import json
 
     from jarvis.selfedit.allowlist import Allowlist
 

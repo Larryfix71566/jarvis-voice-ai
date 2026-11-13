@@ -11,7 +11,7 @@ from .config import Paths, load_retrieval_config
 from .gitutil import ensure_repo, commit
 from .index import Index
 from .mdfile import ParseError, parse, serialize
-from .schema import is_valid_slug, now_iso, validate_strict, ValidationError
+from .schema import validate_strict, ValidationError
 from .vault import Vault
 
 

@@ -515,10 +515,10 @@ def _worker_environment(directory, profile, route, capability_receipt, limits, *
     configured = {**policy.get('defaults', {}), **policy['workloads']['developer']}
     existing = workload_limits_from_policy(configured)
     chosen = policy['workloads']['developer']
-    for field in ('max_output_tokens_per_call', 'deadline_seconds', 'max_estimated_spend_usd_per_task'):
-        values = [value for value in (getattr(existing, field), getattr(limits, field),
-                  getattr(parent_policy.limits, field) if parent_policy is not None else None) if value is not None]
-        chosen[field] = min(values) if values else None
+    for limit_field in ('max_output_tokens_per_call', 'deadline_seconds', 'max_estimated_spend_usd_per_task'):
+        values = [value for value in (getattr(existing, limit_field), getattr(limits, limit_field),
+                  getattr(parent_policy.limits, limit_field) if parent_policy is not None else None) if value is not None]
+        chosen[limit_field] = min(values) if values else None
     if parent_policy is not None:
         from jarvis.privacy_policy import DataPolicy, strictest
         chosen['privacy'] = strictest(DataPolicy(configured['privacy'], 'current-pilot-policy'),

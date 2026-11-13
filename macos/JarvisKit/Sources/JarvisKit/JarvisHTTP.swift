@@ -14,6 +14,10 @@ public enum JarvisError: Error, Equatable {
 /// that stays true without two code paths to keep in sync.
 public enum JarvisHTTP {
     public static let timeoutSeconds: TimeInterval = 15   // §6
+    /// WS-34 B2: jarvis/request_guard.py CLIENT_HEADER. Value must match
+    /// [A-Za-z0-9._-]{1,64}.
+    public static let clientHeaderName = "X-Mortimer-Client"
+    public static let clientHeaderValue = "mortimer-host"
 
     public static func send(_ req: URLRequest, config: JarvisConfig)
         async throws -> (Data, HTTPURLResponse)
@@ -53,6 +57,7 @@ public enum JarvisHTTP {
         // K1 — Authorization on EVERY sidecar /api/* route AND on the bot's
         // signalling routes. One attach point; there is no other sender.
         if let t = config.token { r.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization") }
+        r.setValue(clientHeaderValue, forHTTPHeaderField: clientHeaderName)
         let (data, resp) = try await session.data(for: r)
         guard let http = resp as? HTTPURLResponse else { throw JarvisError.transport("non-HTTP response") }
         switch http.statusCode {

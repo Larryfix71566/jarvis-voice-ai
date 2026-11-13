@@ -8,7 +8,7 @@ from jarvis.selfedit import proposals
 from jarvis.selfedit.allowlist import Allowlist
 from sandbox.artifacts import Candidate
 from sandbox.durable import atomic_json
-from tests.unit.test_development_sources import workspace, dispatch
+from tests.unit.test_development_sources import workspace as workspace, dispatch
 
 CANARY = 'SYNTHETIC_PRIVATE_PROPOSAL_BASELINE_61924'
 

@@ -14,7 +14,7 @@ from jarvis.bot.phone_remote_results import (PhoneRemoteResults,
     PhoneResultCollectionGrantV1, SyntheticResultRecord, SyntheticResultsSource)
 from jarvis.bot.phone_remote_service import (FakeContextVerifier, FakeMediaAdapter,
     FakeBoundedSink, FakeClockGate, FakeOwnerAvailabilityGate, FakeReadinessGate, PhoneRemoteService,
-    TrustedRequestContext)
+    TrustedRequestContext, PreparedMedia)
 
 
 class BlockingMedia(FakeMediaAdapter):
@@ -492,7 +492,7 @@ class ServiceTests(unittest.TestCase):
                          ("unavailable", "authority_unavailable"))
 
         fresh_raw = self.request("results.snapshot", {}, "visibility-bound-snapshot")
-        fresh = service.handle(fresh_raw, self.context)
+        _fresh = service.handle(fresh_raw, self.context)
         source.replace((SyntheticResultRecord(result_id, 2, "hidden", "PROTECTED-CANARY",
             1_800_000_000_001, classification="protected"),))
         source.replace((SyntheticResultRecord(result_id, 3, "visible again", "safe again",

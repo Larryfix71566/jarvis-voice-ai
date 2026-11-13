@@ -90,7 +90,7 @@ def test_a_superseded_row_yields_ONE_edge_carrying_the_count(conn):
     solid one: composited ~0.835 alpha, i.e. BOLDER than a normal edge, the
     inverse of the intent. The relationship is drawn once now, and how many
     rows it replaced rides along as `superseded_count`."""
-    rows = _seed_real_round(conn)
+    _rows = _seed_real_round(conn)
     extra_old = _score_row("or-gpt-5.1", "Proposal A", "or-gemini-flash", 5.0,
                             shadow=1, tier="mid")
     extra_old["created_at"] = STARTED

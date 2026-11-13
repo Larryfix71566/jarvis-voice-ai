@@ -57,7 +57,8 @@ review and human release workflow for changes; a status request is read-only.
   `delegate.py`, `upgrade_agent.py`, `workspace.py`.
 - `jarvis/admin/server.py`: admin sidecar (bearer auth when enabled) (`:7861`) for
   self-edit, planning, workflow/status inspection, Skills catalog/creator,
-  Council and app workspaces.
+  Council and app workspaces. It keeps the shared state and job runners;
+  the HTTP handlers live in `jarvis/admin/routes/<area>.py` (B6).
 - `jarvis/skills/registry.py`: supervised MCP subprocess registry;
   `shared.py` owns the per-process registry. Keep Skills distinct from
   Workflows: packages are reusable instructions; workflows are operational

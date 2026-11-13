@@ -14,8 +14,8 @@ import pytest
 
 from scripts import run_model_use_development_pilot as pilot
 from scripts import model_use_development_oracle as oracle
-from tests.unit.test_development_sources import workspace
-from tests.unit.test_council_budget_ownership import transport_env
+from tests.unit.test_development_sources import workspace as workspace
+from tests.unit.test_council_budget_ownership import transport_env as transport_env
 
 
 _FROZEN_PILOT_SOURCE = Path(pilot.__file__).resolve().parents[1]
@@ -917,7 +917,7 @@ def test_actual_runtime_session_upgrade_sdk_and_all_profile_gates_are_wired(
     import httpx
     import openai
     import jarvis.agents.upgrade_agent as upgrade
-    from sandbox.artifacts import Candidate, File
+    from sandbox.artifacts import Candidate
     from sandbox.control import Controller
     from sandbox.profiles import MORTIMER
     from jarvis.model_routing import WorkloadLimits

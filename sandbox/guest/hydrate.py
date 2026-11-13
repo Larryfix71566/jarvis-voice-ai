@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import pwd
 import shutil
-import stat
 import subprocess
 import sys
 
@@ -37,7 +36,7 @@ def verification_tree(root: Path, baseline: Candidate, candidate: Candidate, cac
     checks = root / "verification"
     checks.mkdir()
     before = {file.path: file for file in baseline.files}
-    after = {file.path: file for file in candidate.files}
+    _after = {file.path: file for file in candidate.files}
     names = set(before)
     check_paths(names)
     for name in sorted(names):

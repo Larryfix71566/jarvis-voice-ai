@@ -8,8 +8,8 @@ import pytest
 from jarvis import advisory_sources as sources
 from jarvis.admin import server as admin
 from jarvis.skills.registry import SkillRegistry
-from tests.unit.test_advisory_source_bridge import advisory, immediate_workers
-from tests.unit.test_council_budget_ownership import transport_env
+from tests.unit.test_advisory_source_bridge import advisory as advisory, immediate_workers as immediate_workers
+from tests.unit.test_council_budget_ownership import transport_env as transport_env
 
 
 @pytest.mark.parametrize('tamper', ['caller', 'phase', 'body'])
