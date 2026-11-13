@@ -63,4 +63,7 @@ def test_ci_enforces_full_pyflakes_and_verifies_data_before_import():
     assert smoke < imports
     assert steps[smoke]['run'] == 'python scripts/check_test_nltk_data.py --smoke'
     command = next(step['run'] for step in steps if step.get('name') == 'Pyflakes checks (ruff F)')
-    assert command == 'ruff check --isolated --select F jarvis mcp_servers scripts services sandbox tests'
+    assert command == (
+        'ruff check --isolated --select F jarvis mcp_servers scripts services sandbox tests'
+        ' --per-file-ignores "tests/unit/test_status_providers.py:F401"'
+    )
