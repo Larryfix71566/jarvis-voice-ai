@@ -28,6 +28,8 @@ final class OrbShellFrameTimeTests: XCTestCase {
     enum Probe {
         case empty
         case crystal
+        case arcs
+        case arcsRefraction
     }
 
     struct ProbeView: View {
@@ -37,9 +39,17 @@ final class OrbShellFrameTimeTests: XCTestCase {
             // Read in body so each phase change re-renders the Canvas.
             let phase = model.phase
             Canvas { context, size in
-                guard case .crystal = probe else { return }
-                CometOrbRenderer.draw(context: &context, size: size, stageCenterX: nil, phase: phase,
-                                      userEnergy: 0.2, outputEnergy: 0.35, activity: .assistant)
+                switch probe {
+                case .empty: return
+                case .crystal:
+                    CometOrbRenderer.draw(context: &context, size: size, stageCenterX: nil, phase: phase,
+                                          userEnergy: 0.2, outputEnergy: 0.35, activity: .assistant)
+                case .arcs, .arcsRefraction:
+                    CometOrbRenderer.draw(context: &context, size: size, stageCenterX: nil, phase: phase,
+                                          userEnergy: 0.2, outputEnergy: 0.35, activity: .assistant,
+                                          pointer: CGPoint(x: size.width / 2 + 20, y: size.height / 2),
+                                          refraction: probe == .arcsRefraction)
+                }
             }
             .background(Color.black)
         }
@@ -157,6 +167,112 @@ final class OrbShellFrameTimeTests: XCTestCase {
             "the span does not respond to drawing cost (crystal p50 \(crystalP50) vs empty \(emptyP50) ms)")
         if !isSandboxGuest {
             XCTAssertLessThanOrEqual(crystalP95, 16.7, "crystal p95 \(crystalP95) ms exceeds one 60 Hz frame")
+        }
+    }
+
+    func testC6FadeTakesTheSameTimeAt60HzAnd15Hz() {
+        var sixty = 0.0
+        var fifteen = 0.0
+        for _ in 0..<60 { sixty += (1 - sixty) * FrameRateIndependentEasing.factor(0.06, dt: 1.0 / 60) }
+        for _ in 0..<15 { fifteen += (1 - fifteen) * FrameRateIndependentEasing.factor(0.06, dt: 1.0 / 15) }
+        XCTAssertEqual(sixty, fifteen, accuracy: 0.000000001)
+        XCTAssertEqual(sixty, 1 - pow(0.94, 60), accuracy: 0.000000001)
+    }
+
+    func testC6DepthAndFlashReferenceStepsUseMeasuredTime() {
+        XCTAssertEqual(FrameRateIndependentEasing.step(0.025, dt: 1.0 / 15), 0.1, accuracy: 1e-12)
+        var sixty = OrbFlashCap(), fifteen = OrbFlashCap()
+        for index in 0..<60 {
+            let luminance = index < 30 ? 0.1 : 0.8
+            sixty.advance(luminance: luminance, now: Double(index) / 60, dt: 1.0 / 60)
+        }
+        for index in 0..<15 {
+            let luminance = index < 8 ? 0.1 : 0.8
+            fifteen.advance(luminance: luminance, now: Double(index) / 15, dt: 1.0 / 15)
+        }
+        XCTAssertEqual(sixty.reference, fifteen.reference, accuracy: 0.000001)
+        XCTAssertLessThanOrEqual(fifteen.anchor, 0.1 + 0.04 * 0.8 * 4 * 7 + 0.000001)
+    }
+
+    func testOrbHoldRestoresPriorMicAndTapDoesNotOwnPTT() {
+        for initial in [false, true] {
+            var guardState = OrbPushToTalkGuard()
+            XCTAssertTrue(guardState.begin(micEnabled: initial))
+            XCTAssertFalse(guardState.begin(micEnabled: initial), "a second press cannot steal ownership")
+            XCTAssertTrue(guardState.promote())
+            XCTAssertEqual(guardState.finish(), initial)
+            XCTAssertNil(guardState.finish(), "Space-style release without ownership does nothing")
+        }
+        var tap = OrbPushToTalkGuard()
+        XCTAssertTrue(tap.begin(micEnabled: false))
+        XCTAssertNil(tap.finish())
+        XCTAssertFalse(tap.pttOwned)
+    }
+
+    func testRefractionUsesContinuousApprovedCurveAndBounds() {
+        let center = CrystalGlassRig.refractionSample(offset: .zero, radius: 50)
+        XCTAssertEqual(center.x, 0, accuracy: 1e-12)
+        let rim = CrystalGlassRig.refractionSample(offset: CGPoint(x: 50, y: 0), radius: 50)
+        XCTAssertEqual(rim.x, -50 / 0.42, accuracy: 1e-9)
+        let middle = CrystalGlassRig.refractionSample(offset: CGPoint(x: 25, y: 0), radius: 50)
+        let k = -(0.42 + 1.25 * (1 - 0.25))
+        XCTAssertEqual(middle.x, 25 / k, accuracy: 1e-9)
+        XCTAssertEqual(CrystalGlassRig.refractionAbsorption, 0.30)
+        XCTAssertEqual(CrystalGlassRig.refractionMaxSampleRadius, 3.4)
+    }
+
+    /// Larry's 2026-11-12 same-session comparison: five back-to-back crystal
+    /// and candidate runs; compare median p50/p95, never a stored baseline.
+    func testC6ArcsAndRefractionAgainstSameSessionCrystal() throws {
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
+            throw XCTSkip("Hosted-runner skip: Larry runs the ten/fifteen timing runs on his Mac.")
+        }
+        _ = NSApplication.shared
+        func measure(_ probe: Probe) -> (frames: [Double], completions: Int) {
+            let harness = Harness(probe: probe)
+            defer { harness.close() }
+            let frames = harness.run(frames: 300)
+            return (frames, harness.completions)
+        }
+        var crystals: [(frames: [Double], completions: Int)] = []
+        var arcs: [(frames: [Double], completions: Int)] = []
+        var refracted: [(frames: [Double], completions: Int)] = []
+        for _ in 0..<5 {
+            crystals.append(measure(.crystal))
+            arcs.append(measure(.arcs))
+            refracted.append(measure(.arcsRefraction))
+        }
+        for result in crystals + arcs + refracted {
+            XCTAssertEqual(result.completions, 310, "every frame must reach the render server")
+        }
+        func median(_ values: [Double]) -> Double {
+            let sorted = values.sorted()
+            return sorted[sorted.count / 2]
+        }
+        func summary(_ runs: [(frames: [Double], completions: Int)]) -> [String: Double] {
+            ["p50_ms": ms(median(runs.map { percentile($0.frames, 0.5) })),
+             "p95_ms": ms(median(runs.map { percentile($0.frames, 0.95) }))]
+        }
+        let crystal = summary(crystals), arc = summary(arcs), depth = summary(refracted)
+        let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent(".build/interface-fixtures")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let record: [String: Any] = [
+            "method": "five same-session runs per probe; median of run p50/p95; 300 frames per run",
+            "crystal": crystal, "arcs": arc, "arcs_refraction": depth,
+            "canvas_pt": ["width": Double(Harness.size.width), "height": Double(Harness.size.height)],
+            "recorded_at": ISO8601DateFormatter().string(from: Date()),
+        ]
+        try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
+            .write(to: directory.appendingPathComponent("orb-c6-frame-time.json"))
+        print("C6 median p50/p95: crystal \(crystal), arcs \(arc), arcs+refraction \(depth)")
+        let isSandboxGuest = ProcessInfo.processInfo.environment["MORTIMER_SANDBOX_GUEST"] == "1"
+        if !isSandboxGuest {
+            for (name, candidate) in [("arcs", arc), ("arcs+refraction", depth)] {
+                XCTAssertLessThanOrEqual(candidate["p50_ms"]!, crystal["p50_ms"]! * 1.10, "\(name) p50 regression")
+                XCTAssertLessThanOrEqual(candidate["p95_ms"]!, crystal["p95_ms"]! * 1.10, "\(name) p95 regression")
+                XCTAssertLessThanOrEqual(candidate["p95_ms"]!, 16.7, "\(name) exceeds one 60 Hz frame")
+            }
         }
     }
 
