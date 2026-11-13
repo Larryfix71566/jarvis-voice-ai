@@ -44,9 +44,10 @@ _TERMINAL_STATES = frozenset({"done", "error"})
 async def _default_fetch_job(admin_url: str) -> dict[str, Any] | None:
     import httpx  # local import: keeps module import light for tests
     from jarvis.auth import service_headers
+    from jarvis.request_guard import client_headers
 
     async with httpx.AsyncClient(timeout=3.0) as client:
-        resp = await client.get(f"{admin_url}/api/research/job", headers=service_headers())
+        resp = await client.get(f"{admin_url}/api/research/job", headers={**client_headers("mortimer-bot"), **service_headers()})
         resp.raise_for_status()
         return resp.json()
 

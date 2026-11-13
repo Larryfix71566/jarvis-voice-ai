@@ -108,3 +108,33 @@ def test_source_state_counts_dirty_files(tmp_path):
 
 def test_source_state_outside_git(tmp_path):
     assert S.source_state(tmp_path / "nope") == {"head": None, "dirty_files": None}
+
+
+def test_http_probe_sends_client_header(monkeypatch):
+    """WS-34 B2: the guarded ports reject a probe without X-Mortimer-Client."""
+    import urllib.request
+
+    from jarvis.request_guard import CLIENT_HEADER, _CLIENT_VALUE_RE
+
+    seen = {}
+
+    class Resp:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_urlopen(request, timeout=None):
+        seen["request"] = request
+        return Resp()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    assert S._http_probe("http://127.0.0.1:8487/costs/summary") == (True, "HTTP 200")
+    request = seen["request"]
+    assert isinstance(request, urllib.request.Request)
+    value = request.get_header(CLIENT_HEADER.capitalize())
+    assert value == "mortimer-health" and _CLIENT_VALUE_RE.fullmatch(value)
+    assert not request.has_header("Authorization")

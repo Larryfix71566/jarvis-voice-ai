@@ -188,6 +188,8 @@ final class NativeAudioTransportTests: XCTestCase {
         XCTAssertEqual(sockets[0].opened, 1)
         XCTAssertEqual(sockets[0].request.url?.absoluteString, "ws://127.0.0.1:7860/ws-client")
         XCTAssertEqual(sockets[0].request.value(forHTTPHeaderField: "Authorization"), "Bearer tok")
+        XCTAssertEqual(sockets[0].request.value(forHTTPHeaderField: JarvisHTTP.clientHeaderName),
+                       JarvisHTTP.clientHeaderValue, "WS-34 B2: the guard requires the client header")
         XCTAssertEqual(recorder.connects, 0, "not connected until the bot answers")
         // A message before open is queued, not sent.
         try transport.send(Data(#"{"type":"voice/set","voice":"a"}"#.utf8))
@@ -349,6 +351,22 @@ final class NativeAudioTransportTests: XCTestCase {
         XCTAssertEqual(recorder.disconnects.count, 0, "the old socket's late close is not reported")
         await transport.disconnect()
         XCTAssertEqual(audios[1].stopped, 1)
+    }
+
+    func testWebSocketRequestCarriesTheClientHeaderEvenWithoutAToken() async throws {
+        socketAutoOpens = false
+        let tokenless = JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
+                                     adminURL: URL(string: "http://127.0.0.1:7861")!,
+                                     wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: nil)
+        let transport = makeTransport()
+        let connecting = Task { try await transport.connect(config: tokenless) }
+        await awaitSocket(0)
+        XCTAssertEqual(sockets[0].request.value(forHTTPHeaderField: JarvisHTTP.clientHeaderName),
+                       JarvisHTTP.clientHeaderValue)
+        XCTAssertNil(sockets[0].request.value(forHTTPHeaderField: "Authorization"))
+        openAndAnswer(0)
+        try await connecting.value
+        await transport.disconnect()
     }
 
     func testAnEngineThatCannotStartClosesAnEarlySocketAndFailsConnect() async {

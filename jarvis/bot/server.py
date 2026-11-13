@@ -16,7 +16,7 @@ from jarvis.auth import auth_enabled, service_headers
 from jarvis.authmw import BearerAuthMiddleware
 from jarvis.bind import BindRefused, resolve_bind_host, resolve_port
 from jarvis.bot.bot import _runner_main_preserving_env
-from jarvis.request_guard import RequestGuardMiddleware
+from jarvis.request_guard import RequestGuardMiddleware, client_headers
 from jarvis.vault import inject_env
 
 # Vault credentials must be available before startup checks and child client
@@ -107,7 +107,7 @@ async def _dispatch_creator(body: SkillCreatorDispatchIn, request: Request) -> d
         raise HTTPException(status_code=503, detail="reviewed creator package is unavailable") from None
 
     admin_url = os.environ.get(ADMIN_URL_ENV) or DEFAULT_ADMIN_URL
-    client = httpx.AsyncClient(base_url=admin_url, timeout=600.0, headers=service_headers())
+    client = httpx.AsyncClient(base_url=admin_url, timeout=600.0, headers={**client_headers("mortimer-bot"), **service_headers()})
     created_run: asyncio.Future[str] = asyncio.get_running_loop().create_future()
     context = {
         "owner_id": body.owner_id,

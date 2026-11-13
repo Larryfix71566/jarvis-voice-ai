@@ -222,6 +222,7 @@ final class NativeAudioTransport: RTVITransport, @unchecked Sendable {
         }
         nativeLog.notice("dialing \(url.absoluteString, privacy: .public)")
         var request = URLRequest(url: url)
+        request.setValue(JarvisHTTP.clientHeaderValue, forHTTPHeaderField: JarvisHTTP.clientHeaderName)
         if let token = config.token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         var startedSession = 0
         var startedAudio: NativeAudioIO?
