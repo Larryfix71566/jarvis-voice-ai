@@ -296,6 +296,17 @@ final class AppMessageRouter {
                           client.consoleGeneration == consent.generation else { break }
                     attachments?.presentConsent(consent)
                 case .display(let payload):
+                    // C5: revisions update the retained owner without re-running
+                    // first-arrival routing, focus, transfer or transcript work.
+                    if let update = workspace?.applyAnswerRevision(payload) {
+                        if update.applied {
+                            displayResults.updateExistingAnswer(payload)
+                            displayWindow.updateExistingAnswer(payload)
+                            consoleCoordinator?.publishInventory()
+                        }
+                        break
+                    }
+
                     let existingID = workspace?.reuseExistingIdentity(for: payload)
                     if payload.roadmap != nil, let existingID {
                         // Refresh the existing owner. Only a proven current

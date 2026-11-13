@@ -55,6 +55,7 @@ final class WorkspaceStore {
     private(set) var comparisonID: UUID?
     private(set) var pinnedIDs: Set<UUID> = []
     private(set) var unreadIDs: Set<UUID> = []
+    private(set) var updatedIDs: Set<UUID> = []
     private(set) var showsConversation = true
     private(set) var showsMemoryGraph = false
     private(set) var showsAtlas = false
@@ -219,6 +220,7 @@ final class WorkspaceStore {
                 "kind": .string(card.kind),
                 "subject": .string(String(card.subject.prefix(120))),
                 "unread": .bool(unreadIDs.contains(result.id)),
+                "updated": .bool(updatedIDs.contains(result.id)),
                 "pinned": .bool(pinnedIDs.contains(result.id)),
                 "can_connections": .bool(MemoryGraphSource.imageURL(result.payload) != nil),
             ]
@@ -313,6 +315,7 @@ final class WorkspaceStore {
     /// retain the pre-CC7a presentation behavior.
     @discardableResult
     func receive(_ result: WorkspaceResult, quietly: Bool, answersCurrentRequest: Bool = false) -> UUID {
+        if let update = applyAnswerRevision(result.payload) { return update.result.id }
         if let id = reuseExistingIdentity(for: result.payload), result.payload.roadmap != nil {
             _ = refreshRoadmap(id, payload: result.payload)
             return id
@@ -360,9 +363,37 @@ final class WorkspaceStore {
         return result.id
     }
 
+    struct AnswerRevisionUpdate {
+        let result: WorkspaceResult
+        let applied: Bool
+        let contentChanged: Bool
+    }
+
+    /// nil means a first arrival; an ignored replay is still consumed. The
+    /// identity/revision envelope remains authoritative even without a layout.
+    @discardableResult
+    func applyAnswerRevision(_ payload: DisplayPayload) -> AnswerRevisionUpdate? {
+        guard let answer = payload.answerID, let revision = payload.answerRevision,
+              let index = results.firstIndex(where: { $0.payload.answerID == answer }) else { return nil }
+        let old = results[index]
+        guard revision > (old.payload.answerRevision ?? 0) else {
+            return AnswerRevisionUpdate(result: old, applied: false, contentChanged: false)
+        }
+        let changed = !payload.hasSameAnswerContent(as: old.payload)
+        let replacement = WorkspaceResult(payload: payload, id: old.id,
+            receivedAt: old.receivedAt, roadmapFilter: old.roadmapFilter)
+        results[index] = replacement
+        if changed && activeID != old.id { updatedIDs.insert(old.id) }
+        inventoryRevision += 1
+        return AnswerRevisionUpdate(result: replacement, applied: true, contentChanged: changed)
+    }
+
     /// The router uses this before creating display/thread references, so an
     /// upsert cannot leave those references pointing at a discarded new UUID.
     func reuseExistingIdentity(for payload: DisplayPayload) -> UUID? {
+        if let answer = payload.answerID, let result = results.first(where: { $0.payload.answerID == answer }) {
+            return result.id
+        }
         if let roadmap = payload.roadmap, !payload.isProtectedLocal {
             let matches = results.filter { !$0.payload.isProtectedLocal && $0.payload.roadmap?.provenance.repositoryID == roadmap.provenance.repositoryID && $0.payload.roadmap?.provenance.path == roadmap.provenance.path }
             return matches.count == 1 ? matches.first?.id : nil
@@ -485,6 +516,7 @@ final class WorkspaceStore {
         showsConversation = false
         showsMemoryGraph = false
         unreadIDs.remove(id)
+        updatedIDs.remove(id)
         if arrivalNoticeID == id { arrivalNoticeID = nil }
         inventoryRevision += 1
     }
@@ -643,6 +675,7 @@ final class WorkspaceStore {
               results.contains(where: { $0.id == id }) else { return false }
         comparisonID = id
         unreadIDs.remove(id)
+        updatedIDs.remove(id)
         showsConversation = false
         showsMemoryGraph = false
         showsWorkflows = false   // the comparison must be visible
@@ -748,6 +781,7 @@ final class WorkspaceStore {
         roadmapRefreshStatus.removeValue(forKey: id)
         pinnedIDs.remove(id)
         unreadIDs.remove(id)
+        updatedIDs.remove(id)
         scrollOffsets.removeValue(forKey: id)
     }
 
