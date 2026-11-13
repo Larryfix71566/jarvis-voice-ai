@@ -102,3 +102,24 @@ This evidence-only update does not apply the sandbox patch, add the proposed
 F401 exception, change fixture pins, or resolve required Claude review. Those
 prerequisites remain open. The results above belong to the named tested head;
 any checks triggered by this documentation update are separate evidence.
+
+## Larry's B5 decisions and CLI exception (2026-11-13)
+
+Larry approved the existing ten-file lint-only sandbox patch on 2026-11-12
+at 20:01 ET and will apply it himself; Codex must not edit those human-only
+files. The patch has not landed as of head `0a52c1e9`.
+Larry reported Claude's approval at `0a52c1e9`.
+
+Per Larry's subsequent explicit direction, commit `41e72f0a` adds only
+`--per-file-ignores "tests/unit/test_status_providers.py:F401"` to the existing
+isolated Ruff command in `.github/workflows/validate.yml`, not a config file.
+The frozen fixture and its pinned hash are unchanged. No sandbox edits or
+other exclusions were made.
+
+The updated workflow parses as YAML and scopes the exception to that exact
+file/rule. Executing the existing offline test's exact-command assertion in
+isolation confirms it now fails because it expects the old command. That test
+was deliberately not edited under Larry's change-nothing-else direction;
+a matching test expectation update remains pending authorization. CI will run
+on this update, but lint cannot be claimed green before Larry's sandbox patch
+lands and the remaining sixteen protected findings are resolved.
