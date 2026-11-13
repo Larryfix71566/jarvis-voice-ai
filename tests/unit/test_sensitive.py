@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from jarvis.sensitive import (
-    BALANCE_MIN_AMOUNT, FinancialMatch, detect_financial,
+    FinancialMatch, detect_financial,
 )
 from jarvis.skills.registry import REPO_ROOT
 

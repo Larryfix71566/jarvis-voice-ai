@@ -11,7 +11,7 @@ from jarvis.model_budget import (
     check_model_call_budget, reserve_model_call_budget, reserve_model_child_call_budget,
 )
 from jarvis.model_routing import WorkloadLimits
-from tests.unit.test_model_budget import isolated_budget
+from tests.unit.test_model_budget import isolated_budget as isolated_budget
 
 
 def budget(kind, limits=WorkloadLimits(100, 20, .2004)):

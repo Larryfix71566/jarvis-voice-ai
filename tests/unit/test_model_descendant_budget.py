@@ -21,7 +21,7 @@ from jarvis.model_budget import (
 )
 from jarvis.model_routing import WorkloadLimits
 from jarvis.tenant import user_id_scope
-from tests.unit.test_model_budget import isolated_budget
+from tests.unit.test_model_budget import isolated_budget as isolated_budget
 
 
 def coordinator(root_limits=WorkloadLimits(100, 100, 1), group_limits=WorkloadLimits(100, 50, .2004)):

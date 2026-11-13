@@ -78,7 +78,7 @@ def build_report(conn: sqlite3.Connection, month: str) -> dict:
     voice split can be pinned by a test (tests/unit/test_cost_report.py)
     instead of eyeballed in stdout; main() renders exactly this dict."""
     eff = "COALESCE(reported_cost, computed_cost)"
-    base = f"FROM llm_calls WHERE month = ?"
+    base = "FROM llm_calls WHERE month = ?"
 
     total, n_calls = q(conn, f"SELECT COALESCE(SUM({eff}),0), COUNT(*) {base}", (month,))[0]
     unpriced = q(conn, f"SELECT COUNT(*), GROUP_CONCAT(DISTINCT model) {base}"

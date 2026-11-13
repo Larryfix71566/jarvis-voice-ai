@@ -11,7 +11,7 @@ from jarvis.bot.skill_creator_dispatch import active_session, register_session
 from jarvis.model_routing import AccessRoute, ResolvedModelRoute
 from jarvis.privacy_policy import DataPolicy, issue_tool_result
 from jarvis.runlog.store import get_run
-from tests.integration.test_creator_dispatch_bridge import bridge
+from tests.integration.test_creator_dispatch_bridge import bridge as bridge
 
 CANARY = "SYNTHETIC_PRIVATE_CREATOR_SOURCE_38413"
 

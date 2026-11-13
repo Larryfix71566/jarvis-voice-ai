@@ -484,7 +484,7 @@ class ModelContract:
         helper = support()
         from jarvis.agents.upgrade_agent import load_model_registry
         try:
-            actual = helper.inspect_live_developer_registry(self.registry)
+            helper.inspect_live_developer_registry(self.registry)
             if (helper._canonical(self.registry.openai_tools(list(SERVERS))) != self.schemas
                     or helper._canonical(load_model_registry()) != self.models
                     or os.environ != self.environment

@@ -13,7 +13,7 @@ from jarvis.model_budget import begin_model_task_budget
 from jarvis.model_routing import WorkloadLimits
 from jarvis.privacy_policy import DataPolicy
 from jarvis.tenant import user_id_scope
-from tests.unit.test_council_budget_ownership import transport_env, rows
+from tests.unit.test_council_budget_ownership import transport_env as transport_env, rows
 
 
 @pytest.fixture

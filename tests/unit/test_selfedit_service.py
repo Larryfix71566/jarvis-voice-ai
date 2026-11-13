@@ -1,6 +1,5 @@
 """Policy/API regressions for self-edit's VM adapter; VM mechanics have their own suite."""
 import json
-from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
 from jarvis.selfedit import proposals

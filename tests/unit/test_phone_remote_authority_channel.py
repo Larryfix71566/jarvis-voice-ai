@@ -15,7 +15,6 @@ import threading
 import time
 import unicodedata
 import unittest
-import errno
 import uuid
 
 from jarvis.auth import ClientIdentity

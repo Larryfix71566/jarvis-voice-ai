@@ -25,7 +25,7 @@ from jarvis.db import get_conn, run_migrations
 from jarvis.procedures import PROCEDURE_PROMOTE_AFTER, learn_from_run
 
 from tests.unit.test_memory import _factory
-from tests.unit.test_subagent import FakeCompletions, FakeLLM, FakeRegistry
+from tests.unit.test_subagent import FakeLLM, FakeRegistry
 
 TASK = "look up the current weather conditions in tokyo japan"
 LABEL = "weather lookup"

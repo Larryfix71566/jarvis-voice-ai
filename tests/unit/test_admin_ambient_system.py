@@ -7,7 +7,6 @@ answer can never disagree about the same machine.
 
 from __future__ import annotations
 
-import pytest
 
 
 class TestSystemVitals:

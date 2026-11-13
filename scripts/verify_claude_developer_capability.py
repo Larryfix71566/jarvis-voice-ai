@@ -618,7 +618,6 @@ async def acquire(directory, frozen, timeout, started_at):
     import yaml
     registry = None
     sessions_clean = False
-    storage = None
     owners = []
     report = None
     deadline = started_at + timeout

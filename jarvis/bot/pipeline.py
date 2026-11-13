@@ -33,7 +33,7 @@ import uuid
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Callable, Any
 from zoneinfo import ZoneInfo
 
 from pipecat.adapters.schemas.function_schema import FunctionSchema
@@ -50,7 +50,7 @@ from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_context import LLMContext as LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
@@ -178,9 +178,9 @@ from jarvis.cli import bridge_settings_to_env
 from jarvis.config import Settings, load_settings
 from jarvis.status import status_enabled as jarvis_status_enabled
 from jarvis.memory_automation import (
-    heuristic_classifier,
+    heuristic_classifier as heuristic_classifier,
     memory_automation_enabled,
-    process_classification_jobs,
+    process_classification_jobs as process_classification_jobs,
 )
 # NOT `from jarvis.council import prune` — that binds the MODULE
 # jarvis/council/prune.py, and calling it raises "'module' object is not

@@ -9,10 +9,10 @@ from pipecat.processors.aggregators.llm_response_universal import LLMContextAggr
 
 from jarvis.privacy_policy import DataPolicy, issue_tool_result
 from jarvis.voice_sources import (
-    ClassifiedText, VoiceSources, UNKNOWN, bound_context_type,
+    ClassifiedText, VoiceSources, bound_context_type,
     observe_source, source_scope, text_policy,
 )
-from tests.unit.test_subscription_voice import Native, context as synthetic_context, setup
+from tests.unit.test_subscription_voice import Native, context as synthetic_context, setup as setup
 
 PUBLIC = DataPolicy("approved_external", "synthetic-public-source")
 LOCAL = DataPolicy("local_only", "synthetic-local-source")

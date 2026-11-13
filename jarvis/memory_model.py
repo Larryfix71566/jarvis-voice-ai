@@ -19,7 +19,6 @@ from jarvis.model_routing import (
     ModelRouteError,
     ResolvedModelRoute,
     make_route_client,
-    resolve_model_route,
     resolve_model_route_checked,
     resolve_policy,
 )

@@ -479,7 +479,6 @@ def adapt_instruction_package(
     if total > MAX_PACKAGE_BYTES:
         agg.add("source_aggregate_size_exceeded")
         caps_ok = False
-    src_rows: dict = {}
     if not count_exceeded:
         for rec in recs:
             if len(rec.file.data) > MAX_TEXT_FILE_BYTES:

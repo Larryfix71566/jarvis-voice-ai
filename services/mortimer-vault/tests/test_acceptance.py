@@ -14,7 +14,7 @@ def git_log(repo: Path):
 
 # 1. Round-trip
 def test_round_trip(vault, paths):
-    rec = vault.write(type="area", body="hello world", tags=["x"], confidence="high",
+    vault.write(type="area", body="hello world", tags=["x"], confidence="high",
                        source_sessions=[], id="test-area")
     read_back = vault.read("test-area")
     assert read_back.body == "hello world"
@@ -63,7 +63,7 @@ def test_decision_guard(vault):
     assert exc.value.code == "DECISION_GUARD"
 
     rec2 = vault.read("dec-test")
-    updated = vault.write(type="decision", body="We decided to use SwiftUI natively. Confirmed.",
+    vault.write(type="decision", body="We decided to use SwiftUI natively. Confirmed.",
                           tags=[], confidence="high", source_sessions=[], id="dec-test",
                           expected_hash=rec2.content_hash,
                           previous_excerpt="We decided to use SwiftUI natively.")
@@ -180,7 +180,7 @@ def test_delete_rules(vault):
         vault.read(cap.id)
     assert exc.value.code == "NOT_FOUND"
 
-    area = vault.write(type="area", body="area note", tags=[], confidence="medium",
+    vault.write(type="area", body="area note", tags=[], confidence="medium",
                        source_sessions=[], id="undeletable")
     with pytest.raises(VaultError) as exc:
         vault.delete("undeletable")
@@ -221,7 +221,6 @@ def test_import(tmp_path, paths, monkeypatch):
     args = argparse.Namespace(src_dir=str(src))
     cmd_import(args)
 
-    from mortimer_vault.vault import Vault
     v = Vault(paths, "local")
     ids = v._all_ids()
     assert "ai-assistant-app" in ids

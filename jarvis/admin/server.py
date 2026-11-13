@@ -61,27 +61,27 @@ import threading
 import time
 import uuid
 from contextvars import ContextVar, copy_context
-from contextlib import closing
+from contextlib import closing as closing
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI as FastAPI, HTTPException as HTTPException, Request as Request, Response as Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
-from jarvis import graphs
+from jarvis import graphs as graphs
 from jarvis.auth import auth_enabled, service_headers
 from jarvis.authmw import BearerAuthMiddleware
 from jarvis import request_guard
 from jarvis.request_guard import RequestGuardMiddleware
 from jarvis.bind import BindRefused, resolve_bind_host, resolve_port
-from jarvis import memory as memory_module
+from jarvis import memory as memory_module  # noqa: F401 - public compatibility export
 from jarvis.admin.reminder_notifier import ReminderNotifier
 from jarvis.agents.upgrade_agent import (
     AppBuildAgent,
     UnknownModelProfileError,
     UpgradeAgent,
-    available_models,
+    available_models as available_models,
     load_model_registry,
     resolve_profile,
 )
@@ -90,23 +90,23 @@ from jarvis.council import config as council_config
 from jarvis.council import council as council_mod
 from jarvis.db import (
     claim_execution_action,
-    get_conn,
+    get_conn as get_conn,
     get_execution_action,
-    now_iso,
-    run_migrations,
+    now_iso as now_iso,
+    run_migrations as run_migrations,
     update_execution_action,
 )
-from jarvis.graphs import config as gcfg
-from jarvis.graphs import render
+from jarvis.graphs import config as gcfg  # noqa: F401 - public compatibility export
+from jarvis.graphs import render as render
 from jarvis.model_preferences import (
-    ModelPreferenceError,
-    confirm_preference,
-    list_preferences,
-    stage_preference,
+    ModelPreferenceError as ModelPreferenceError,
+    confirm_preference as confirm_preference,
+    list_preferences as list_preferences,
+    stage_preference as stage_preference,
 )
 from jarvis.model_routing import (
-    available_routes, describe_route_choice, load_access_config,
-    model_profile_for_workload, ModelRouteError, resolve_policy,
+    available_routes as available_routes, describe_route_choice as describe_route_choice, load_access_config as load_access_config,
+    model_profile_for_workload as model_profile_for_workload, ModelRouteError as ModelRouteError, resolve_policy as resolve_policy,
 )
 from jarvis.model_budget import (
     ModelBudgetUnavailable, TaskBudget, begin_model_task_budget, remaining_seconds,
@@ -120,14 +120,14 @@ from jarvis.prompts import (
     RESEARCH_SYSTEM_PROMPT,
 )
 from jarvis.research import crawl as research_crawl
-from jarvis.runlog import get_run, list_runs, parse_since
-from jarvis.runlog.store import get_skill_events, list_skill_runs
+from jarvis.runlog import get_run as get_run, list_runs as list_runs, parse_since as parse_since
+from jarvis.runlog.store import get_skill_events as get_skill_events, list_skill_runs as list_skill_runs
 from jarvis.tenant import current_user_id
 from jarvis.selfedit.service import SelfEditService
 from jarvis.vault import inject_env
 from mcp_servers.mcp_apps.logic import validate_app_name
-from mcp_servers.mcp_git import logic
-from mcp_servers.mcp_repo import logic as repo_logic
+from mcp_servers.mcp_git import logic as logic
+from mcp_servers.mcp_repo import logic as repo_logic  # noqa: F401 - public compatibility export
 
 logger = logging.getLogger(__name__)
 
@@ -2673,7 +2673,7 @@ class SubscriptionProbeBody(BaseModel):
 # `server.<handler>` resolving for the in-process callers above and tests.
 from jarvis.admin.routes.core import (  # noqa: E402,F401
     health,
-    status,
+    status as status,
     architecture_reference,
     log,
     diff,

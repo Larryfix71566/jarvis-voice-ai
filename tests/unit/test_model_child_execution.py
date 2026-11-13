@@ -14,7 +14,7 @@ from jarvis.model_budget import (
 )
 from jarvis.model_execution import execute_chat
 from jarvis.model_routing import WorkloadLimits
-from tests.unit.test_model_execution_limits import ledger, request, route, sdk, success
+from tests.unit.test_model_execution_limits import ledger as ledger, request, route, sdk, success
 
 
 def sponsored(*, owner_limits=WorkloadLimits(100, None, .002), child_limits=WorkloadLimits(200, None, .01)):

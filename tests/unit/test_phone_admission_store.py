@@ -1021,7 +1021,6 @@ class BrokerTicketTests(unittest.TestCase):
         self.assertFalse(self.store._tickets['broker-ticket']['consumed'])
 
     def test_real_monotonic_expiry_after_authority_entry_prevents_consumed_effect(self):
-        import time
         from unittest.mock import patch
         broker=self.broker();self.issue(broker)
         original=self.store._authority_guard

@@ -186,8 +186,8 @@ def model_key_probe(base_url: str, api_key: str, model: str) -> tuple[str, str]:
             # diverge, so it gets its own verdict rather than being rounded
             # to the nearer neighbour.
             return "unfunded", (
-                f"HTTP 402 Payment Required — the key is VALID but the "
-                f"account has no credit, so every call through it will fail")
+                "HTTP 402 Payment Required — the key is VALID but the "
+                "account has no credit, so every call through it will fail")
         return "ok", (f"auth passed; the request itself failed "
                       f"(HTTP {exc.code} {exc.reason}) — key is valid")
     except Exception as exc:  # noqa: BLE001

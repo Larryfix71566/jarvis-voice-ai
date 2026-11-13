@@ -36,7 +36,6 @@ from jarvis.agent_skills import (
 )
 from jarvis.voice_sources import ClassifiedText, UNKNOWN, source_scope, source_tracking_active, text_policy
 from jarvis.bot.sensitive_turn import current_sensitive_turn
-from jarvis.model_routing import resolve_policy
 from jarvis.procedures import _overlap_score, _tokens, learn_from_run
 
 logger = logging.getLogger(__name__)
