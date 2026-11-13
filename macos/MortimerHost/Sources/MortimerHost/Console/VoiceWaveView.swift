@@ -156,7 +156,7 @@ struct VoiceWaveAnimation: View {
         holdTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled, pushToTalk.promote() else { return }
-            setMicEnabled?(true)
+            setMicEnabled(true)
         }
     }
 
