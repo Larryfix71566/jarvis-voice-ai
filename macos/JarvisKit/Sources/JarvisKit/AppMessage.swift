@@ -244,20 +244,6 @@ public struct RoadmapSnapshot: Codable, Sendable, Equatable {
 }
 
 public struct DisplayPayload: Sendable, Equatable, Decodable {
-    /// In-memory presentation of the assistant's existing transcript. This
-    /// creates no transport event, persistence, or additional model request.
-    public init(responseText: String, timestamp: Double) {
-        kind = "text"; title = "Mortimer response"; body = responseText
-        images = nil; basemapImages = nil; links = nil; agent = "Mortimer"
-        runID = nil; ts = timestamp; surface = .window; tool = nil
-        commands = nil; note = nil; expectOutput = nil; content = nil
-        chars = nil; truncated = nil; dataPolicy = nil; opaqueRef = nil
-        weather = nil; brief = nil; roadmap = nil; roadmapTimezone = nil
-        subjectKey = nil; freshUntil = nil; weatherSource = nil
-        originRequestID = nil
-        answerID = nil; answerRevision = nil; layout = nil
-    }
-
     public let kind: String?
     public let title: String?
     public let body: String?

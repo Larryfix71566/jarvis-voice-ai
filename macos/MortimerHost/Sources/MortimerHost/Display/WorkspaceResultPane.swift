@@ -85,6 +85,7 @@ struct WorkspaceResultPane: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .buttonStyle(ResultControlButtonStyle())
         .id(result.id)
         .sheet(isPresented: $showingSharePreview) {
             SharePreviewSheet(coordinator: coordinator, isPresented: $showingSharePreview)

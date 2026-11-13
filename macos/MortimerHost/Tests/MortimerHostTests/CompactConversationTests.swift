@@ -173,8 +173,11 @@ final class CompactConversationTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let workspace = WorkspaceStore()
+        // C5 mounts the result alongside the thread. Use real scrollable content:
+        // a one-line fixture cannot retain an offset beyond its native extent.
+        let body = (1...100).map { "Preserved research paragraph \($0)." }.joined(separator: "\n\n")
         let result = WorkspaceResult(payload: try JSONDecoder().decode(DisplayPayload.self,
-            from: Data(#"{"body":"Preserved research","surface":"drawer"}"#.utf8)))
+            from: JSONSerialization.data(withJSONObject: ["body": body, "surface": "drawer"])))
         workspace.receive(result)
         workspace.rememberScroll(240, for: result.id)
         workspace.returnToConversation()
@@ -189,12 +192,10 @@ final class CompactConversationTests: XCTestCase {
                           try transcriptEntry("stage-assistant", "assistant", assistantTranscript)])
         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
             adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
-        // CC7a.1 (WS-17, plan 7.2, approved by Larry 2026-09-30): with the
-        // conversation thread on, the conversation IS the main stage, so the
-        // compact presentation shows it too. With the thread off, the
-        // pre-CC7a rule (compact stage shows no transcript) still holds.
+        // C5 retires the thread preference: both stored values must retain
+        // the conversation in compact and expanded voice presentations.
         for thread in [false, true] {
-        defaults.set(thread, forKey: ConversationThread.flagKey)
+        defaults.set(thread, forKey: "mortimer.interface.conversationThread")
         for width in [512, 1000] {
         for compact in [true, false] {
             defaults.set(compact, forKey: "mortimer.interface.compactConversation")
@@ -236,19 +237,11 @@ final class CompactConversationTests: XCTestCase {
                 }
             }
             visit(view)
-            if compact && thread {
-                let stageOCR = try renderedText(in: view)
-                XCTAssertTrue(stageOCR.contains(userTranscript.filter { !$0.isWhitespace }), "thread on: compact stage shows the user's turn at width \(width): \(stageOCR)")
-                XCTAssertTrue(stageOCR.contains(assistantTranscript.filter { !$0.isWhitespace }), "thread on: compact stage shows Mortimer's turn at width \(width): \(stageOCR)")
-            } else if compact {
-                let stageOCR = try renderedText(in: view)
-                XCTAssertFalse(stageOCR.contains(userTranscript.filter { !$0.isWhitespace }) || stageOCR.contains(assistantTranscript.filter { !$0.isWhitespace }),
-                               "layout v2 compact stage at width \(width) must not repeat transcript: \(stageOCR)")
-            } else {
-                let stageOCR = try renderedText(in: view)
-                XCTAssertTrue(stageOCR.contains(userTranscript.filter { !$0.isWhitespace }), "expanded main conversation retains the user transcript: \(stageOCR)")
-                XCTAssertTrue(stageOCR.contains(assistantTranscript.filter { !$0.isWhitespace }), "expanded main conversation retains Mortimer’s transcript: \(stageOCR)")
-            }
+            let stageOCR = try renderedText(in: view)
+            XCTAssertTrue(stageOCR.contains(userTranscript.filter { !$0.isWhitespace }),
+                          "C5 keeps the user transcript for either retired preference at width \(width): \(stageOCR)")
+            XCTAssertTrue(stageOCR.contains(assistantTranscript.filter { !$0.isWhitespace }),
+                          "C5 keeps Mortimer’s transcript for either retired preference at width \(width): \(stageOCR)")
             XCTAssertTrue(labels.contains(compact ? "Expand voice" : "Keep voice compact"), "Missing mode control: \(labels)")
             XCTAssertTrue(labels.contains("Voice activity — user teal, Mortimer orange"),
                           "compact voice display must remain discoverable to VoiceOver: \(labels)")
@@ -280,16 +273,10 @@ final class CompactConversationTests: XCTestCase {
                 labels.removeAll(); controls.removeAll(); visit(view)
                 XCTAssertTrue(labels.contains(compact ? "Keep voice compact" : "Expand voice"))
                 let toggledOCR = try renderedText(in: view)
-                if compact {
-                    XCTAssertTrue(toggledOCR.contains(userTranscript.filter { !$0.isWhitespace }), "expanding voice exposes the main user transcript: \(toggledOCR)")
-                    XCTAssertTrue(toggledOCR.contains(assistantTranscript.filter { !$0.isWhitespace }), "expanding voice exposes Mortimer’s main transcript: \(toggledOCR)")
-                } else if thread {
-                    XCTAssertTrue(toggledOCR.contains(userTranscript.filter { !$0.isWhitespace }), "thread on: returning to compact keeps the user's turn: \(toggledOCR)")
-                    XCTAssertTrue(toggledOCR.contains(assistantTranscript.filter { !$0.isWhitespace }), "thread on: returning to compact keeps Mortimer's turn: \(toggledOCR)")
-                } else {
-                    XCTAssertFalse(toggledOCR.contains(userTranscript.filter { !$0.isWhitespace }) || toggledOCR.contains(assistantTranscript.filter { !$0.isWhitespace }),
-                                   "returning to compact removes duplicate transcript: \(toggledOCR)")
-                }
+                XCTAssertTrue(toggledOCR.contains(userTranscript.filter { !$0.isWhitespace }),
+                              "changing voice size retains the user's thread turn: \(toggledOCR)")
+                XCTAssertTrue(toggledOCR.contains(assistantTranscript.filter { !$0.isWhitespace }),
+                              "changing voice size retains Mortimer's thread turn: \(toggledOCR)")
                 XCTAssertEqual(workspace.activeID, result.id)
                 XCTAssertEqual(workspace.scrollOffsets[result.id], 240)
                 XCTAssertTrue(workspace.showsConversation)

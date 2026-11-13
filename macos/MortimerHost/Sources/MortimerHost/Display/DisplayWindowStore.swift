@@ -247,24 +247,6 @@ final class DisplayWindowStore {
         panels.first(where: { $0.id == panelID })?.workspaceID
     }
 
-    /// Responses use request identity, not body identity: two identical
-    /// answers to different requests remain distinct, while streamed chunks
-    /// update one tile. A closed/evicted tile is not reopened by later chunks.
-    func presentResponse(_ result: WorkspaceResult, isNew: Bool) {
-        // Stream updates can arrive after an initial response has already
-        // created a supporting-display tile. Reject protected updates before
-        // either replacing that tile or creating a new one.
-        guard !result.payload.isProtectedLocal else { return }
-        let identity = "response:\(result.id.uuidString)"
-        let matches = panels.indices.filter { panels[$0].identityKey == identity }
-        if !matches.isEmpty {
-            for index in matches { panels[index].payload = result.payload }
-        } else if isNew {
-            _ = insert(result.payload, identityKey: identity, workspaceID: result.id)
-            enforcePresentationBudget()
-        }
-    }
-
     /// Return the workspace identity already owned by this display renderer
     /// for an exact payload identity. A same-run Developer payload is only a
     /// match when its exact section is already present; a new file/result in
