@@ -31,11 +31,12 @@ class AdminClient:
     def __init__(self, base_url: str | None = None, timeout: float = 10.0):
         import httpx  # local import: keeps module import light for tests
         from jarvis.auth import service_headers
+        from jarvis.request_guard import client_headers
 
         self._client = httpx.Client(
             base_url=base_url or os.environ.get(ADMIN_URL_ENV) or DEFAULT_ADMIN_URL,
             timeout=timeout,
-            headers=service_headers(),
+            headers={**client_headers("mortimer-mcp"), **service_headers()},
         )
 
     def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:

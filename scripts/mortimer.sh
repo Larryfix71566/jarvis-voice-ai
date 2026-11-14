@@ -202,13 +202,14 @@ import os
 from urllib.request import Request, urlopen
 
 from jarvis.auth import service_headers
+from jarvis.request_guard import client_headers
 from jarvis.bind import resolve_bind_host
 from jarvis.vault import inject_env
 
 inject_env()
 host = resolve_bind_host("admin-health-check")
 port = int(os.environ.get("JARVIS_ADMIN_PORT", "7861"))
-request = Request(f"http://{host}:{port}/api/health", headers=service_headers())
+request = Request(f"http://{host}:{port}/api/health", headers={**client_headers("mortimer-health"), **service_headers()})
 with urlopen(request, timeout=3) as response:
     if response.status != 200:
         raise SystemExit(f"health returned {response.status}")

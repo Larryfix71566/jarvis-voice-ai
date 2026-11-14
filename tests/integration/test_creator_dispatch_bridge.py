@@ -68,9 +68,13 @@ async def bridge(tmp_path, monkeypatch):
     clear_runtime_inventories()
     update_runtime_inventory(session_id, [], True, active=True, owner_id=owner)
     http_client = httpx.AsyncClient
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: http_client(
-        **kwargs, transport=httpx.ASGITransport(app=admin_app),
-    ))
+    admin_client_kwargs = []
+
+    def admin_async_client(**kwargs):
+        admin_client_kwargs.append(kwargs)
+        return http_client(**kwargs, transport=httpx.ASGITransport(app=admin_app))
+
+    monkeypatch.setattr(httpx, "AsyncClient", admin_async_client)
     bot_app = FastAPI()
     bot_app.add_middleware(BearerAuthMiddleware)
     bot_app.post("/dispatch")(server._dispatch_creator)
@@ -112,6 +116,7 @@ async def bridge(tmp_path, monkeypatch):
             sandbox_job_id=state["sandbox_job_id"], sandbox_calls=sandbox_calls,
             read_result=read_result,
             native_messages=native_messages,
+            admin_client_kwargs=admin_client_kwargs,
             body={"owner_id": owner, "bot_session_id": session_id,
                   "request_id": request_id, "task_brief": "PRIVATE-BRIEF"},
         )
@@ -135,6 +140,9 @@ async def test_real_bridge_binds_run_owner_and_forwards_scrubbed_lifecycle(bridg
         current_sensitive_turn.reset(token)
     assert response.status_code == 200, response.text
     run_id = response.json()["developer_run_id"]
+    # WS-34 B2: the bot's call to the admin sidecar carries the client header.
+    assert bridge.admin_client_kwargs
+    assert bridge.admin_client_kwargs[0]["headers"]["X-Mortimer-Client"] == "mortimer-bot"
     assert len({run_id, bridge.request_id, bridge.sandbox_job_id, bridge.session_id}) == 4
     run = get_run(run_id)["run"]
     assert (run["agent"], run["user_id"], run["session_id"], run["status"]) == (

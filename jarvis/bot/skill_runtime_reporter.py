@@ -35,12 +35,13 @@ async def _send_inventory(payload: dict[str, Any], admin_url: str) -> None:
     import httpx
 
     from jarvis.auth import service_headers
+    from jarvis.request_guard import client_headers
 
     async with httpx.AsyncClient(timeout=2.0) as client:
         response = await client.post(
             f"{admin_url.rstrip('/')}/api/skills/runtime-inventory",
             json=payload,
-            headers=service_headers(),
+            headers={**client_headers("mortimer-bot"), **service_headers()},
         )
         response.raise_for_status()
 

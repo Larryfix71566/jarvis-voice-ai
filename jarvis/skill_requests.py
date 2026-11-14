@@ -407,10 +407,11 @@ def _cancel_developer_run(user_id: str, state: dict) -> bool:
             return True
         import httpx
         from jarvis.auth import service_headers
+        from jarvis.request_guard import client_headers
         from jarvis.urls import bot_url
         response = httpx.post(
             f"{bot_url()}/internal/skills/creator/cancel",
-            headers=service_headers(),
+            headers={**client_headers("mortimer-admin"), **service_headers()},
             json={
                 "owner_id": user_id,
                 "bot_session_id": state["bot_session_id"],
@@ -457,11 +458,12 @@ def _dispatch_developer_creator(user_id: str, state: dict, brief: str) -> dict:
     """Ask the owning live bot session to run the creator as its Developer."""
     import httpx
     from jarvis.auth import service_headers
+    from jarvis.request_guard import client_headers
     from jarvis.urls import bot_url
 
     response = httpx.post(
         f"{bot_url()}/internal/skills/creator/dispatch",
-        headers=service_headers(),
+        headers={**client_headers("mortimer-admin"), **service_headers()},
         json={
             "owner_id": user_id,
             "bot_session_id": state["bot_session_id"],

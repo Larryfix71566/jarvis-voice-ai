@@ -26,5 +26,6 @@ def test_mortimer_sh_waits_for_bind_gate_and_probes_authenticated_admin():
     assert 'sleep 25' in text
     assert 'JARVIS_ADMIN_PORT:-7861' in text
     assert 'service_headers()' in text
+    assert 'client_headers("mortimer-health")' in text  # WS-34 B2
     assert 'resolve_bind_host("admin-health-check")' in text
     assert '/api/health' in text
