@@ -701,8 +701,9 @@ async def _full_owned_worker(request):
                         if checked.get('ok') is not True:
                             raise FullPilotUnavailable('full_twelve_validation_failed')
                         receipt = runtime.verifier.receipt(files, request['image_id'], session.profile)
+                        from sandbox.profiles import MORTIMER
                         required = [name for name, _ in session.profile.checks]
-                        if (len(required) != 12 or [item['name'] for item in receipt['checks']] != required
+                        if (len(required) != len(MORTIMER.checks) or [item['name'] for item in receipt['checks']] != required
                                 or not receipt['passed']):
                             raise FullPilotUnavailable('full_twelve_validation_required')
                         report['verification'] = {key: receipt[key] for key in ('attempt', 'candidate', 'baseline',
@@ -1069,7 +1070,7 @@ def validate_success_evidence(value, expected, request, selection):
                 or saved.get('image') != request['image_id'] or saved.get('profile') != MORTIMER.fingerprint
                 or saved.get('runner') != runner_fingerprint() or saved.get('passed') is not True
                 or saved.get('source_unchanged') is not True or saved.get('status') != 'passed'
-                or len(saved.get('checks', [])) != 12
+                or len(saved.get('checks', [])) != len(MORTIMER.checks)
                 or [(item['name'], tuple(item['argv'])) for item in saved['checks']] != list(MORTIMER.checks)
                 or [{name: item[name] for name in ('name', 'passed', 'returncode', 'log_sha256')}
                     for item in saved['checks']] != verification.get('checks')):

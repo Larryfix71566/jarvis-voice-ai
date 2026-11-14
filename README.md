@@ -10,14 +10,13 @@ superseded documents are in `docs/archive/`.
 
 Mortimer is an Ironman-style voice assistant that runs entirely on your machine: you speak, it listens, thinks, acts, and answers out loud in a voice you choose. A single voice-facing **Supervisor** agent understands your intent and delegates specialist work to six text-only sub-agents — Scheduler, Librarian, Analyst, Systems, Developer, and App Builder (`config/agents.yaml`) — whose skills live in separate MCP (Model Context Protocol) server processes. State persists to local SQLite, and the only cloud dependencies are the speech/LLM/search APIs (plus GitHub, if you enable app development or self-edit PRs).
 
-The client is the native macOS app **MortimerHost** (`macos/MortimerHost`, built on the shared `macos/JarvisKit` package). Its default layout is the **Command Console** (layout 2); `Debug ▸ Use previous layout` switches to the earlier layouts without a rebuild. The React/Vite web console in `web/` is **frozen** (2026-09-04, `web/README.md`): it still runs by hand as a fallback but gets no new features and is not started by the launcher.
+The client is the native macOS app **MortimerHost** (`macos/MortimerHost`, built on the shared `macos/JarvisKit` package). Its default layout is the **Command Console** (layout 2); `Debug ▸ Use previous layout` switches to the earlier layouts without a rebuild.
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
 │             MortimerHost (SwiftUI, macOS) — uses JarvisKit          │
 │  NativeAudioTransport: AVAudioEngine (voice processing) mic/speaker │
 │  UI: Command Console | drawer (8 tabs) | display window             │
-│  (web/ console: FROZEN fallback, WebRTC to /api/offer)              │
 └──────────────────────────────┬─────────────────────────────────────┘
        WebSocket /ws-client (PCM + RTVI app messages, same Mac);
        WebRTC /api/offer when JARVIS_FORCE_WEBRTC=true or bot is remote
@@ -55,7 +54,7 @@ The client is the native macOS app **MortimerHost** (`macos/MortimerHost`, built
 - macOS 26 for the native client (`platforms: [.macOS(.v26)]`, Swift 6.2
   toolchain per `swift-tools-version: 6.2` in `macos/*/Package.swift`), 8 GB
   RAM, a working microphone. The backend alone runs on macOS or Linux.
-- Python 3.11 or 3.12. Node.js 18+ only if you run the frozen web console.
+- Python 3.11 or 3.12.
 - Five cloud accounts (free tiers or low pay-as-you-go spend are enough for development) and one keyless API:
 
 | Service | Get key at | Env var | Free tier (dev-sufficient) | Required? |
@@ -128,10 +127,6 @@ use. A merged Swift change does nothing until you rebuild (see
 service is listening on :8484 (`scripts/wait_for.sh`, 30 s), so without it the
 bot refuses to start (see below).
 
-The frozen web console still runs by hand as a fallback:
-`./scripts/run_web.sh`, then open http://localhost:5173 (first run installs
-npm dependencies).
-
 A text-only REPL is also available for quick checks without any client:
 
 ```bash
@@ -198,8 +193,7 @@ and test commands.
     `MortimerHost`; `core` = the rest of `jarvis/**` and `scripts/**`,
     which needs a plan; `deny` always wins — `sandbox/`, CI, dependency
     manifests, the self-edit service, admin sidecar, model registry, vault
-    and Swift packaging). The frozen `web/` tree is refused even though it
-    is on the allowlist. Work lands on `mortimer/selfedit/…` branches
+    and Swift packaging). Work lands on `mortimer/selfedit/…` branches
     (`mortimer/app-build/…` for app builds, `sandbox/publish.py`) and must
     pass every check in the `mortimer` profile (`sandbox/profiles.py`:
     backend imports, baseline and candidate `pytest tests/unit`, scripted
@@ -278,15 +272,13 @@ jarvis-voice-ai/
 ├── mcp_servers/                   # 13 MCP skill servers, each logic.py + server.py + skill.yaml
 ├── macos/                         # native client (Swift, SwiftPM)
 │   ├── JarvisKit/                 #   shared library: voice session, transports, sidecar API, wake word
-│   ├── MortimerHost/              #   the app (Command Console, drawer, display); scripts/bundle.sh
-│   └── MortimerShell/, GlassSpike/, VPIOBench/   # outgoing shell, spike and bench targets
+│   └── MortimerHost/              #   the app (Command Console, drawer, display); scripts/bundle.sh
 ├── sandbox/                       # disposable macOS VMs, verification, draft-PR publication
 ├── services/mortimer-vault/       # knowledge-base service (:8484), own venv
 ├── skills/                        # Agent Skills (SKILL.md), enabled via config/skills.yaml
 ├── scripts/                       # mortimer.sh (launcher), run_*.sh, check_env.py, init_db.py, …
 ├── tests/                         # unit/, integration/, evals/, acceptance/
-├── docs/                          # ARCHITECTURE.md, REPO_MAP.md, plans/, acceptance/, reviews/, archive/
-└── web/                           # React/Vite console — FROZEN 2026-09-04 (web/README.md)
+└── docs/                          # ARCHITECTURE.md, REPO_MAP.md, plans/, acceptance/, reviews/, archive/
 ```
 
 *(The internal package name `jarvis/` and the `JARVIS_*` environment variable
@@ -309,9 +301,6 @@ RUN_LIVE=1 python -m tests.evals.routing_eval
 swift test --package-path macos/JarvisKit
 swift test --package-path macos/MortimerHost
 
-# Frozen web client build gate (strict TypeScript + production build)
-cd web && npm run build
-
 # Latency report from a bot log (TURN lines)
 python scripts/latency_probe.py path/to/bot.log     # or pipe a log via stdin
 
@@ -324,7 +313,7 @@ ls tests/acceptance/
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | No audio | ElevenLabs key invalid, out of credits, or free tier blocked (`detected_unusual_activity`) | Check the bot log for TTS errors; verify the key at elevenlabs.io; upgrade or regenerate it; text transcript keeps working meanwhile |
-| Mic denied / no transcription | Microphone permission not granted to the app (or, for the frozen web console, the browser) | Native: allow MortimerHost under System Settings → Privacy & Security → Microphone, then reconnect (the prompt is attributed to the bundled app, so launch it via `bundle.sh`). Web: lock icon in the address bar → allow microphone → reload |
+| Mic denied / no transcription | Microphone permission not granted to the app | Native: allow MortimerHost under System Settings → Privacy & Security → Microphone, then reconnect (the prompt is attributed to the bundled app, so launch it via `bundle.sh`). |
 | 401 from the LLM | Wrong or regenerated `OPENAI_API_KEY` / wrong `OPENAI_BASE_URL` for the provider | Re-check key + base URL pair; run `python scripts/check_env.py` |
 | 401 from Deepgram / ElevenLabs | Bad or expired speech keys | Regenerate keys, update `.env`, restart the bot |
 | Slow responses | Large LLM model, slow provider, or cold MCP servers | Use a faster `OPENAI_MODEL`; check `TURN` lines / `latency_probe.py`; keep the bot running between turns |
@@ -334,14 +323,12 @@ ls tests/acceptance/
 | Voice edit asks for a key | The chosen planner profile's provider key is missing | Set `MOONSHOT_API_KEY` / `ANTHROPIC_API_KEY` in `.env` and restart the sidecar |
 | Edit run "crashed" or never finishes | Planner endpoint unreachable, key invalid for that provider, or loop bounds hit | Check `logs/admin.log` for the run traceback; verify the key works against the profile's `base_url`; runs cap at the iteration/time bounds in `config/upgrade_agent.yaml` |
 | Submit says validation hasn't passed | Edits changed after the last green validation, or a check is red | Validate again and read the failing check's output; every check in the `mortimer` profile (`sandbox/profiles.py`) must pass in the verification VM |
-| Port in use (7860 or 5173) | An old bot/web process is still running | `pkill -f jarvis.bot.bot` / `pkill -f vite`, or change the port (`JARVIS_BOT_PORT`, `npm run dev -- --port`) |
 | Voices not switching | Voice id not in `config/voices.yaml`, or TTS update failed | List valid ids: `python scripts/list_voices.py`; check the bot log for TTS errors |
 | Reminders not firing | Client not connected (watcher only delivers while connected), or `due_at` in the future | Reconnect and wait ≤ 30 s; inspect rows: `sqlite3 data/jarvis.db 'select * from reminders'` |
 | Wake-word toggle errors | Sidecar not running, `openwakeword` not installed, or model file missing | `pip install openwakeword websockets`; train the "Mortimer" model (see §4 wake-word setup) and set `JARVIS_WAKEWORD_MODEL`; run `./scripts/run_wakeword.sh` |
 | Wake word hears nothing / fires constantly | Threshold wrong for your mic/model | Adjust `JARVIS_WAKEWORD_THRESHOLD` (raise to reduce false wakes, lower to increase sensitivity) and restart the sidecar |
 | Wake-word training finds too few clips | Sample generator aborted early or a voice failed | Re-run `./scripts/wakeword_gen_samples_mac.sh`; the trainer needs ≥ 20 WAVs per class — check `ls data/wakeword/positive \| wc -l` |
 | `invalid temperature` from the LLM | Provider (e.g. kimi-k2.x) only accepts temperature=1 | Leave temperature unset — Mortimer omits it by default (DEVIATIONS.md D-003); Moonshot planner profiles omit it too |
-| Web build fails with missing module files | Flaky filesystem truncated `node_modules` | Reinstall on a healthy filesystem: `cd web && rm -rf node_modules && npm install --no-bin-links` (D-006) |
 | First bot boot or test run hangs for minutes | pipecat downloads NLTK `punkt_tab` on first import; the download stalls on restricted networks | One-time seed: `python -c "import nltk; nltk.download('punkt_tab')"`. If your network blocks raw.githubusercontent.com, download `https://cdn.jsdelivr.net/gh/nltk/nltk_data@gh-pages/packages/tokenizers/punkt_tab.zip` and unzip into `~/nltk_data/tokenizers/` |
 
 ## 8. Configuration reference

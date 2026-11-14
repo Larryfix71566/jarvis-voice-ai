@@ -102,7 +102,6 @@ MEMORY_ARTIFACTS = (
     "jarvis/prompts.py",
     "jarvis/config.py",
     "jarvis/admin/server.py",
-    "web/src/components/MemoryPanel.tsx",
     "jarvis/memory_model.py",
     "jarvis/memory_automation.py",
     "jarvis/memory_admission.py",

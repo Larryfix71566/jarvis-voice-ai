@@ -27,7 +27,7 @@ review and human release workflow for changes; a status request is read-only.
 ## Top level
 
 - `jarvis/` — Python bot, agents, admin API, status, memory, routing and tools.
-- `macos/` — native macOS client: `JarvisKit/`, `MortimerHost/`, `VPIOBench/`.
+- `macos/` — native macOS client: `JarvisKit/`, `MortimerHost/`.
 - `mcp_servers/` — MCP servers, generally `logic.py` (pure logic),
   `server.py` (FastMCP) and `skill.yaml`. `mcp_kb/` is read-only;
   KB writes go through `jarvis/kb_digest.py`. `mcp_status/` is a thin client
@@ -46,7 +46,6 @@ review and human release workflow for changes; a status request is read-only.
 - `scripts/` — startup/setup/checks, backup, cost and status jobs; see
   `mortimer.sh`, `run_bot.sh`, `run_admin.sh`, `init_db.py`, `check_env.py`.
 - `data/` and `logs/` — runtime-only, gitignored DB/vault/status and run logs.
-- `web/` — frozen React/Vite fallback; not launched by `mortimer.sh`.
 
 ## Backend paths
 
@@ -105,7 +104,7 @@ review and human release workflow for changes; a status request is read-only.
 `MortimerHost` depends on `JarvisKit` by path, so library changes rebuild both.
 Self-editable Swift sources require independent-VM `swift build` and
 `swift test` plus PR review; bundling/deployment remains a human release step.
-Manifests, plists, entitlements, scripts and legacy shell/spike targets are
+Manifests, plists, entitlements and scripts are
 human-only per the self-edit allowlist.
 
 - `macos/JarvisKit/Sources/JarvisKit/`: `JarvisClient.swift`, `AdminAPI.swift`,

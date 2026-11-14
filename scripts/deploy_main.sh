@@ -241,7 +241,7 @@ class Held:
         require(self.run('git','-C',self.c,'rev-parse','HEAD').stdout.strip()==a['target'],'installed source mismatch')
         self.run('git','-C',self.c,'diff','--quiet',a['target'],'--','.',':(exclude)docs/acceptance/adaptive-interface/P2-latency.json')
         untracked=self.run('git','-C',self.c,'ls-files','--others','--exclude-standard').stdout.splitlines()
-        require(not any(p.startswith(('jarvis/','macos/','scripts/','sandbox/','config/','services/','mcp_servers/','web/')) for p in untracked),'untracked runtime source')
+        require(not any(p.startswith(('jarvis/','macos/','scripts/','sandbox/','config/','services/','mcp_servers/')) for p in untracked),'untracked runtime source')
         info=plistlib.loads((self.c/'macos/MortimerHost/.build/MortimerHost.app/Contents/Info.plist').read_bytes())
         require(info.get('MortimerSourceRevision')==a['target'],'bundle source mismatch')
         a['installed_program_sha256']=self.program(self.c,a['target'])
@@ -415,7 +415,7 @@ PY_HELD
   DIRTY_TRACKED=$(git -C "$C" status --porcelain --untracked-files=no \
     | grep -v -x ' M docs/acceptance/adaptive-interface/P2-latency.json')
   UNTRACKED_CODE=$(git -C "$C" status --porcelain --untracked-files=all | sed -n 's/^?? //p' \
-    | grep -E '^(macos/|jarvis/|mcp_servers/|services/|skills/|sandbox/|scripts/|config/|web/|requirements)')
+    | grep -E '^(macos/|jarvis/|mcp_servers/|services/|skills/|sandbox/|scripts/|config/|requirements)')
   if [ -n "$DIRTY_TRACKED$UNTRACKED_CODE" ]; then
     echo "production holds work that is not on main:"
     { [ -n "$DIRTY_TRACKED" ] && echo "$DIRTY_TRACKED"; [ -n "$UNTRACKED_CODE" ] && sed 's/^/?? /' <<< "$UNTRACKED_CODE"; } | head -40 | sed 's/^/  /'

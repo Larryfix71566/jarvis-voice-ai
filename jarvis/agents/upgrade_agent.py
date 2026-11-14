@@ -142,7 +142,7 @@ Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
 1. `main` changes only via a human merging a pull request on GitHub. You can
    only open PRs. You can never merge, force-push, or touch main.
 2. You may only read and edit files on the self-edit allowlist. Routine
-   (Tier A): UI sources under web/src and web/public, non-secret config
+   (Tier A): non-secret config
    (including the model PROFILE pool, config/model_profiles.yaml: a profile
    names an endpoint id and may never carry a base_url or key),
    jarvis/prompts.py, jarvis/skills, jarvis/services, mcp_servers, tests,
@@ -156,8 +156,8 @@ Jarvis interface by proposing code edits, under these NON-NEGOTIABLE rules:
    upgrade_agent.py), the allowlist, the model ENDPOINTS file
    (config/model_endpoints.yaml: hosts and keys), jarvis/db.py
    migrations, the vault and .env, CI, dependency manifests, and under
-   macos/: Package.swift, Package.resolved, plists, entitlements,
-   scripts/, GlassSpike/ and MortimerShell/. The Swift SOURCES of
+   macos/: Package.swift, Package.resolved, plists, entitlements
+   and scripts/. The Swift SOURCES of
    macos/JarvisKit and macos/MortimerHost ARE editable (routine): a
    changed Swift package is gated by `swift build` and `swift test` in
    the session worktree, and its PR is flagged SWIFT CHANGE because it
