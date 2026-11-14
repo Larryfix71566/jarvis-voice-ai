@@ -79,7 +79,10 @@ def _http_probe(target: str) -> tuple[bool, str]:
         except OSError as exc:
             return False, _describe(exc)
     try:
-        with urllib.request.urlopen(target, timeout=PROBE_TIMEOUT_S) as resp:  # noqa: S310 — fixed localhost URLs
+        from jarvis.request_guard import client_headers
+
+        request = urllib.request.Request(target, headers=client_headers("mortimer-health"))
+        with urllib.request.urlopen(request, timeout=PROBE_TIMEOUT_S) as resp:  # noqa: S310 — fixed localhost URLs
             code = resp.status
     except urllib.error.HTTPError as exc:
         return False, f"HTTP {exc.code}"

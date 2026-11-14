@@ -74,8 +74,13 @@ SIDECAR_DOWN = "system_status failed: the admin sidecar is not reachable."
 def _default_client(base_url: str, timeout: float) -> Any:
     import httpx
     from jarvis.auth import service_headers
+    from jarvis.request_guard import client_headers
 
-    return httpx.AsyncClient(base_url=base_url, timeout=timeout, headers=service_headers())
+    return httpx.AsyncClient(
+        base_url=base_url,
+        timeout=timeout,
+        headers={**client_headers("mortimer-bot"), **service_headers()},
+    )
 
 
 def _turn_is_protected() -> bool:

@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from jarvis.auth import service_headers
+from jarvis.request_guard import client_headers
 from jarvis.vault import inject_env
 
 TARGETS = {
@@ -46,7 +47,9 @@ def status_code(target: str) -> int:
         inject_env()
         env_name, default_port, path = TARGETS[target]
         url = f"http://127.0.0.1:{_port(env_name, default_port)}{path}"
-        request = urllib.request.Request(url, headers=service_headers())
+        request = urllib.request.Request(
+            url, headers={**client_headers("mortimer-health"), **service_headers()},
+        )
         # Never let ambient proxy settings receive the internal bearer token
         # or route a loopback health check outside the host.
         opener = urllib.request.build_opener(

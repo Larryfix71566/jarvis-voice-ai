@@ -177,9 +177,10 @@ async def _default_fetch_delegations(session_id: str) -> list[dict[str, Any]]:
 async def _default_fetch_selfedit_job(admin_url: str) -> dict[str, Any] | None:
     import httpx  # local import: keeps module import light for tests
     from jarvis.auth import service_headers
+    from jarvis.request_guard import client_headers
 
     async with httpx.AsyncClient(timeout=3.0) as client:
-        resp = await client.get(f"{admin_url}/api/selfedit/run", headers=service_headers())
+        resp = await client.get(f"{admin_url}/api/selfedit/run", headers={**client_headers("mortimer-bot"), **service_headers()})
         resp.raise_for_status()
         data = resp.json()
     if not isinstance(data, dict) or not data.get("ok"):
