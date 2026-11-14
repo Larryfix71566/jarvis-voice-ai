@@ -17,7 +17,6 @@ import JarvisKit
 final class AppMessageRouter {
     private var task: Task<Void, Never>?
     private var transcriptSink: AnyCancellable?
-    private let responseRouter = ResponseResultRouter()
     private let runClock = ArrivalRunClock()
     private let currentRequests = CurrentRequestArrivals()
     private var stateSink: AnyCancellable?
@@ -43,18 +42,10 @@ final class AppMessageRouter {
         // ConversationStore mirrors JarvisClient.transcript (P8/P16) —
         // now live: JarvisClient aggregates the bot's own RTVI
         // user-transcription / bot-llm-text frames (2026-08-30).
-        transcriptSink = client.$transcript.sink { [weak self] entries in
+        // C5: the transcript has exactly one live surface. Retired stored
+        // preferences cannot recreate result cards or second-screen captions.
+        transcriptSink = client.$transcript.sink { entries in
             conversation?.set(entries)
-            // CC7a.1 (WS-17): with the conversation thread on, spoken
-            // answers stay in the thread and no longer become results.
-            if ConversationThread.routesSpokenAnswersToResults(
-                threadEnabled: ConversationThread.isEnabled()), let workspace {
-                let previousRevision = workspace.consoleRevision
-                self?.responseRouter.receive(entries, workspace: workspace, display: displayWindow)
-                if workspace.consoleRevision != previousRevision {
-                    consoleCoordinator?.publishInventory()
-                }
-            }
         }
         // E3 sound hooks on connection transitions: boot on
         // connecting → live (OrbField.tsx:95), fail on an error state
@@ -296,6 +287,17 @@ final class AppMessageRouter {
                           client.consoleGeneration == consent.generation else { break }
                     attachments?.presentConsent(consent)
                 case .display(let payload):
+                    // C5: revisions update the retained owner without re-running
+                    // first-arrival routing, focus, transfer or transcript work.
+                    if let update = workspace?.applyAnswerRevision(payload) {
+                        if update.applied {
+                            displayResults.updateExistingAnswer(payload)
+                            displayWindow.updateExistingAnswer(payload)
+                            consoleCoordinator?.publishInventory()
+                        }
+                        break
+                    }
+
                     let existingID = workspace?.reuseExistingIdentity(for: payload)
                     if payload.roadmap != nil, let existingID {
                         // Refresh the existing owner. Only a proven current

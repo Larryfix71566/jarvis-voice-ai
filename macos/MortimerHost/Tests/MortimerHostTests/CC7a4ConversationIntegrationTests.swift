@@ -72,7 +72,7 @@ final class CC7a4ConversationIntegrationTests: XCTestCase {
             throw NSError(domain: "CC7a4ConversationIntegrationTests.LiveProcess", code: 1)
         }
         let defaults = UserDefaults.standard
-        let keys = ["mortimer.interface.layoutVersion", ConversationThread.flagKey]
+        let keys = ["mortimer.interface.layoutVersion", "mortimer.interface.conversationThread"]
         let previous = keys.map { defaults.object(forKey: $0) }
         defaults.set(2, forKey: keys[0]); defaults.set(true, forKey: keys[1])
         return {

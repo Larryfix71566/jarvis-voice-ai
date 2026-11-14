@@ -30,6 +30,7 @@ enum WorkspaceRecents {
         let freshnessDate: Date
         let isUnread: Bool
         let isActive: Bool
+        var isUpdated: Bool = false
         var receivedAt: Date { card.time }
         var isPrivate: Bool { card.isPrivate }
         /// "3  Weather · Folly Beach"; a private entry shows no number.
@@ -53,7 +54,7 @@ enum WorkspaceRecents {
     /// Numbers run 1, 2, 3… down the list, skipping private entries.
     static func listing(results: [WorkspaceResult], pinned: Set<UUID>,
                         unread: Set<UUID>, active: UUID?,
-                        limit: Int = recentLimit) -> Listing {
+                        limit: Int = recentLimit, updated: Set<UUID> = []) -> Listing {
         let newestFirst = results.enumerated()
             .sorted { ($0.element.receivedAt, $0.offset) > ($1.element.receivedAt, $1.offset) }
             .map(\.element)
@@ -70,14 +71,14 @@ enum WorkspaceRecents {
                 entries.append(Entry(id: result.id, number: number, section: section, card: card,
                                      freshnessDate: freshnessDate(for: result),
                                      isUnread: unread.contains(result.id),
-                                     isActive: active == result.id))
+                                     isActive: active == result.id, isUpdated: updated.contains(result.id)))
             }
         }
         let olderEntries = unpinned.dropFirst(shown.count).map { result in
             Entry(id: result.id, number: nil, section: .older,
                   card: ConversationThread.card(result),
                   freshnessDate: freshnessDate(for: result),
-                  isUnread: unread.contains(result.id), isActive: active == result.id)
+                  isUnread: unread.contains(result.id), isActive: active == result.id, isUpdated: updated.contains(result.id))
         }
         return Listing(entries: entries, olderEntries: olderEntries)
     }

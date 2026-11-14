@@ -55,6 +55,8 @@ final class WorkspaceStore {
     private(set) var comparisonID: UUID?
     private(set) var pinnedIDs: Set<UUID> = []
     private(set) var unreadIDs: Set<UUID> = []
+    private(set) var updatedIDs: Set<UUID> = []
+    private(set) var showsAllResults = false
     private(set) var showsConversation = true
     private(set) var showsMemoryGraph = false
     private(set) var showsAtlas = false
@@ -156,7 +158,31 @@ final class WorkspaceStore {
     /// last 10 unpinned, numbered to match voice). A display limit only.
     var recents: WorkspaceRecents.Listing {
         WorkspaceRecents.listing(results: results, pinned: pinnedIDs,
-                                 unread: unreadIDs, active: activeID)
+                                 unread: unreadIDs, active: activeID, updated: updatedIDs)
+    }
+
+    /// A and B share one set. Retained open Older readers remain reachable
+    /// without changing their age or the numbered recent inventory.
+    var carouselResults: [WorkspaceResult] {
+        let ids = recents.entries.map(\.id)
+        let ordered = ids.compactMap { id in results.first { $0.id == id } }
+        let openOlder = [activeID, comparisonID].compactMap { $0 }
+            .filter { !ids.contains($0) }
+        var seen = Set(ids)
+        return ordered + openOlder.compactMap { id in
+            guard seen.insert(id).inserted else { return nil }
+            return results.first { $0.id == id }
+        }
+    }
+
+    var carouselFrontResult: WorkspaceResult? {
+        carouselResults.first { $0.id == activeID } ?? carouselResults.first
+    }
+
+    func setShowsAllResults(_ shown: Bool) {
+        guard showsAllResults != shown else { return }
+        showsAllResults = shown
+        inventoryRevision += 1
     }
 
     /// Resolve a voice or pointer result reference: a result UUID, or
@@ -219,6 +245,7 @@ final class WorkspaceStore {
                 "kind": .string(card.kind),
                 "subject": .string(String(card.subject.prefix(120))),
                 "unread": .bool(unreadIDs.contains(result.id)),
+                "updated": .bool(updatedIDs.contains(result.id)),
                 "pinned": .bool(pinnedIDs.contains(result.id)),
                 "can_connections": .bool(MemoryGraphSource.imageURL(result.payload) != nil),
             ]
@@ -313,6 +340,7 @@ final class WorkspaceStore {
     /// retain the pre-CC7a presentation behavior.
     @discardableResult
     func receive(_ result: WorkspaceResult, quietly: Bool, answersCurrentRequest: Bool = false) -> UUID {
+        if let update = applyAnswerRevision(result.payload) { return update.result.id }
         if let id = reuseExistingIdentity(for: result.payload), result.payload.roadmap != nil {
             _ = refreshRoadmap(id, payload: result.payload)
             return id
@@ -322,6 +350,9 @@ final class WorkspaceStore {
             // Keep identity and all app-owned reader state, including the
             // original card position/age. Invalid cache metadata may still
             // replace a legacy weather body safely under its public key.
+            if activeID != id && !result.payload.hasSameAnswerContent(as: results[index].payload) {
+                updatedIDs.insert(id)
+            }
             results[index] = WorkspaceResult(payload: result.payload, id: id,
                                              receivedAt: results[index].receivedAt)
             inventoryRevision += 1
@@ -360,9 +391,37 @@ final class WorkspaceStore {
         return result.id
     }
 
+    struct AnswerRevisionUpdate {
+        let result: WorkspaceResult
+        let applied: Bool
+        let contentChanged: Bool
+    }
+
+    /// nil means a first arrival; an ignored replay is still consumed. The
+    /// identity/revision envelope remains authoritative even without a layout.
+    @discardableResult
+    func applyAnswerRevision(_ payload: DisplayPayload) -> AnswerRevisionUpdate? {
+        guard let answer = payload.answerID, let revision = payload.answerRevision,
+              let index = results.firstIndex(where: { $0.payload.answerID == answer }) else { return nil }
+        let old = results[index]
+        guard revision > (old.payload.answerRevision ?? 0) else {
+            return AnswerRevisionUpdate(result: old, applied: false, contentChanged: false)
+        }
+        let changed = !payload.hasSameAnswerContent(as: old.payload)
+        let replacement = WorkspaceResult(payload: payload, id: old.id,
+            receivedAt: old.receivedAt, roadmapFilter: old.roadmapFilter)
+        results[index] = replacement
+        if changed && activeID != old.id { updatedIDs.insert(old.id) }
+        inventoryRevision += 1
+        return AnswerRevisionUpdate(result: replacement, applied: true, contentChanged: changed)
+    }
+
     /// The router uses this before creating display/thread references, so an
     /// upsert cannot leave those references pointing at a discarded new UUID.
     func reuseExistingIdentity(for payload: DisplayPayload) -> UUID? {
+        if let answer = payload.answerID, let result = results.first(where: { $0.payload.answerID == answer }) {
+            return result.id
+        }
         if let roadmap = payload.roadmap, !payload.isProtectedLocal {
             let matches = results.filter { !$0.payload.isProtectedLocal && $0.payload.roadmap?.provenance.repositoryID == roadmap.provenance.repositoryID && $0.payload.roadmap?.provenance.path == roadmap.provenance.path }
             return matches.count == 1 ? matches.first?.id : nil
@@ -467,14 +526,6 @@ final class WorkspaceStore {
         !showsAtlas && !showsSkills && !showsWorkflows && !showsMemoryGraph
     }
 
-    /// Streaming replaces the body under the same identity, preserving the
-    /// tab, pin, comparison, inspector and scroll state. It does not change
-    /// the inventory contract or steal selection on each token.
-    func updateResponse(_ result: WorkspaceResult) {
-        guard let index = results.firstIndex(where: { $0.id == result.id }) else { return }
-        results[index] = result
-    }
-
     func select(_ id: UUID) {
         guard results.contains(where: { $0.id == id }) else { return }
         if comparisonID == id { comparisonID = activeID }
@@ -485,6 +536,7 @@ final class WorkspaceStore {
         showsConversation = false
         showsMemoryGraph = false
         unreadIDs.remove(id)
+        updatedIDs.remove(id)
         if arrivalNoticeID == id { arrivalNoticeID = nil }
         inventoryRevision += 1
     }
@@ -507,11 +559,13 @@ final class WorkspaceStore {
 
     @discardableResult
     func selectAdjacentResult(step: Int) -> Bool {
-        guard !results.isEmpty, let activeID,
-              let index = results.firstIndex(where: { $0.id == activeID }) else { return false }
-        let next = min(max(index + step, 0), results.count - 1)
-        guard next != index else { return false }
-        select(results[next].id)
+        let cards = carouselResults
+        guard let front = carouselFrontResult,
+              let index = cards.firstIndex(where: { $0.id == front.id }) else { return false }
+        // Do not wrap or clamp a multi-step request to an unrelated card.
+        let (next, overflow) = index.addingReportingOverflow(step)
+        guard !overflow, cards.indices.contains(next), next != index else { return false }
+        select(cards[next].id)
         return true
     }
 
@@ -643,6 +697,7 @@ final class WorkspaceStore {
               results.contains(where: { $0.id == id }) else { return false }
         comparisonID = id
         unreadIDs.remove(id)
+        updatedIDs.remove(id)
         showsConversation = false
         showsMemoryGraph = false
         showsWorkflows = false   // the comparison must be visible
@@ -748,6 +803,7 @@ final class WorkspaceStore {
         roadmapRefreshStatus.removeValue(forKey: id)
         pinnedIDs.remove(id)
         unreadIDs.remove(id)
+        updatedIDs.remove(id)
         scrollOffsets.removeValue(forKey: id)
     }
 

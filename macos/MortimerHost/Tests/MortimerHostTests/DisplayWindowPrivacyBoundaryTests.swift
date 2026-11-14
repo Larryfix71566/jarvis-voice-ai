@@ -31,22 +31,20 @@ final class DisplayWindowPrivacyBoundaryTests: XCTestCase {
         XCTAssertFalse(serialized.contains("PRIVATE LINK"))
     }
 
-    func testStreamedResponseSinkRejectsProtectedCreationAndReplacement() throws {
+    func testComposedRevisionSinkRejectsProtectedCreationAndReplacement() throws {
         let store = DisplayWindowStore()
         let protectedPayload = try payload(
-            #"{"title":"PRIVATE RESPONSE CANARY","body":"PRIVATE STREAM CANARY","surface":"window","data_policy":"confidential"}"#
+            #"{"title":"PRIVATE RESPONSE CANARY","body":"PRIVATE STREAM CANARY","surface":"window","data_policy":"confidential","answer_id":"11111111-2222-3333-4444-555555555555","answer_revision":2}"#
         )
-        let protectedResult = WorkspaceResult(payload: protectedPayload)
 
-        store.presentResponse(protectedResult, isNew: true)
+        XCTAssertNil(store.apply(protectedPayload))
         XCTAssertTrue(store.panels.isEmpty, "protected response must not create a supporting tile")
 
         let publicPayload = try payload(
-            #"{"title":"Public response","body":"public streamed response","surface":"window"}"#
+            #"{"title":"Public response","body":"public streamed response","surface":"window","answer_id":"11111111-2222-3333-4444-555555555555","answer_revision":1}"#
         )
-        let publicResult = WorkspaceResult(payload: publicPayload)
-        store.presentResponse(publicResult, isNew: true)
-        store.presentResponse(protectedResult, isNew: false)
+        XCTAssertNotNil(store.apply(publicPayload))
+        XCTAssertNil(store.updateExistingAnswer(protectedPayload))
 
         XCTAssertEqual(store.panels.count, 1)
         XCTAssertEqual(store.panels.first?.payload, publicPayload,

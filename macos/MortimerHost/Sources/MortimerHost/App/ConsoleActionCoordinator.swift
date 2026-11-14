@@ -576,6 +576,12 @@ final class ConsoleActionCoordinator {
             guard let enabled = boolArg(request, "enabled") else { return .invalid }
             workspace.memoryGraph.usesImageFallback = enabled; return .applied
         case .resultMode:
+            if let mode = stringArg(request, "mode"), ["carousel", "all"].contains(mode) {
+                return withResult(request.target) { _ in
+                    workspace.setShowsAllResults(mode == "all")
+                    return .applied
+                }
+            }
             guard let id = request.target.flatMap(UUID.init(uuidString:)),
                   let mode = stringArg(request, "mode"),
                   let selected = WorkspaceResultMode(rawValue: mode.capitalized),

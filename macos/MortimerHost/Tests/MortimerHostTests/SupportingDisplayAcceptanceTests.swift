@@ -8,7 +8,7 @@ import JarvisKit
 /// not just its store method. Physical monitor recovery remains separate.
 @MainActor
 final class SupportingDisplayAcceptanceTests: XCTestCase {
-    func testStreamedResponseRendersOnlyOnSupportingDisplayThenReturnsToMain() throws {
+    func testComposedResultRendersOnlyOnSupportingDisplayThenReturnsToMain() throws {
         _ = NSApplication.shared
         NSApplication.shared.accessibilitySetValue(true,
             forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
@@ -16,15 +16,20 @@ final class SupportingDisplayAcceptanceTests: XCTestCase {
         guard screens.count >= 2 else { throw XCTSkip("requires two connected displays") }
         let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
             adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
-        let workspace = WorkspaceStore(), display = DisplayWindowStore(), router = ResponseResultRouter()
+        let workspace = WorkspaceStore(), display = DisplayWindowStore()
         let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
         defaults.set(2, forKey: "mortimer.interface.layoutVersion")
         defer { defaults.removeObject(forKey: "mortimer.interface.layoutVersion") }
-        func entry(_ text: String) throws -> ConversationEntry {
-            try JSONDecoder().decode(ConversationEntry.self, from: JSONSerialization.data(withJSONObject:
-                ["id": "answer", "role": "assistant", "text": text, "createdAt": 1234]))
+        let answerID = UUID()
+        func payload(_ text: String, revision: Int) throws -> DisplayPayload {
+            try JSONDecoder().decode(DisplayPayload.self, from: JSONSerialization.data(withJSONObject:
+                ["title": "Result", "body": text, "surface": "window", "answer_id": answerID.uuidString,
+                 "answer_revision": revision]))
         }
-        router.receive([try entry("Initial response")], workspace: workspace, display: display)
+        let result = WorkspaceResult(payload: try payload("Initial result", revision: 1))
+        workspace.receive(result); workspace.select(result.id)
+        display.apply(result.payload, workspaceID: result.id)
+        _ = workspace.sendToDisplay(.result(result.id))
         let main = NSHostingView(rootView: WorkspaceView().defaultAppStorage(defaults)
             .environment(ShareCoordinator()).environment(workspace).environment(display)
             .environment(DrawerState()).environmentObject(client).preferredColorScheme(.dark))
@@ -46,7 +51,9 @@ final class SupportingDisplayAcceptanceTests: XCTestCase {
         RunLoop.main.run(until: Date().addingTimeInterval(0.4))
         display.setWindowOpen(true)
         let answer = "Completed response with all findings, shown in the results area."
-        router.receive([try entry(answer)], workspace: workspace, display: display)
+        let updated = try payload(answer, revision: 2)
+        workspace.applyAnswerRevision(updated)
+        display.updateExistingAnswer(updated)
         RunLoop.main.run(until: Date().addingTimeInterval(0.4))
         XCTAssertTrue(labels(in: supporting).keys.contains { $0.contains(answer) })
         XCTAssertFalse(labels(in: main).keys.contains { $0.contains(answer) })

@@ -53,10 +53,10 @@ final class LiveVoiceResponseStreamTests: XCTestCase {
         }
     }
 
-    /// Pre-CC7a behaviour, kept behind the conversation-thread switch.
-    func testRTVIChunksReachTheExistingSingleResponseResult() async throws {
+    /// C5: the retired false preference cannot restore transcript result routing.
+    func testRetiredFalsePreferenceKeepsStreamingOnlyInTranscript() async throws {
         let restoreLayout = override("mortimer.interface.layoutVersion", 2)
-        let restoreThread = override(ConversationThread.flagKey, false)
+        let restoreThread = override("mortimer.interface.conversationThread", false)
         defer { restoreLayout(); restoreThread() }
 
         let config = JarvisConfig(
@@ -82,21 +82,19 @@ final class LiveVoiceResponseStreamTests: XCTestCase {
         try transport.emit("bot-llm-text", text: "A single ")
         await flushTranscriptDelivery()
 
-        let firstID = try XCTUnwrap(workspace.activeResult?.id)
-        XCTAssertEqual(workspace.results.count, 1)
-        XCTAssertEqual(workspace.activeResult?.payload.body, "A single")
-        XCTAssertEqual(conversation.latestCaptions.last?.text, "A single ")
+        XCTAssertTrue(workspace.results.isEmpty)
+        XCTAssertTrue(display.panels.isEmpty)
+        XCTAssertEqual(conversation.entries.last?.text, "A single ")
 
         try transport.emit("bot-llm-text", text: "streamed answer.")
         await flushTranscriptDelivery()
         try transport.emit("bot-llm-stopped")
         await flushTranscriptDelivery()
 
-        XCTAssertEqual(workspace.results.count, 1)
-        XCTAssertEqual(workspace.activeResult?.id, firstID)
-        XCTAssertEqual(workspace.activeResult?.payload.body, "A single streamed answer.")
-        XCTAssertEqual(display.panels.count, 1)
-        XCTAssertEqual(conversation.latestCaptions.last?.text, "A single streamed answer.")
+        XCTAssertTrue(workspace.results.isEmpty)
+        XCTAssertNil(workspace.activeResult)
+        XCTAssertTrue(display.panels.isEmpty)
+        XCTAssertEqual(conversation.entries.map(\.text), ["Tell me the result", "A single streamed answer."])
         router.stop()
     }
 
@@ -105,7 +103,7 @@ final class LiveVoiceResponseStreamTests: XCTestCase {
     /// workspace result or supporting-display panel.
     func testThreadKeepsSpokenAnswersOutOfResultsAndDisplay() async throws {
         let restoreLayout = override("mortimer.interface.layoutVersion", 2)
-        let restoreThread = override(ConversationThread.flagKey, true)
+        let restoreThread = override("mortimer.interface.conversationThread", true)
         defer { restoreLayout(); restoreThread() }
 
         let config = JarvisConfig(

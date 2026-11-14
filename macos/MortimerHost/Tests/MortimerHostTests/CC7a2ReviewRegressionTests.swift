@@ -92,7 +92,7 @@ private final class ReviewTransport: RTVITransport {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set(1, forKey: "mortimer.interface.layoutVersion")
-        defaults.set(true, forKey: ConversationThread.flagKey)
+        defaults.set(true, forKey: "mortimer.interface.conversationThread")
         let workspace = WorkspaceStore()
         let client = JarvisClient(config: config(), stubTransport: ReviewTransport())
         let view = NSHostingView(rootView: ConsoleView()
@@ -114,9 +114,9 @@ private final class ReviewTransport: RTVITransport {
             XCTAssertEqual(workspace.quietArrivals, true, "Layout \(previousLayout) -> \(layout)")
             previousLayout = layout
         }
-        defaults.set(false, forKey: ConversationThread.flagKey)
-        settle(); XCTAssertFalse(workspace.quietArrivals)
-        defaults.set(true, forKey: ConversationThread.flagKey)
+        defaults.set(false, forKey: "mortimer.interface.conversationThread")
+        settle(); XCTAssertTrue(workspace.quietArrivals, "Retired preference must not disable the thread")
+        defaults.set(true, forKey: "mortimer.interface.conversationThread")
         settle(); XCTAssertTrue(workspace.quietArrivals)
     }
 }

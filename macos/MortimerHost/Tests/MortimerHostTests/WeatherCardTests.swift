@@ -99,7 +99,7 @@ final class WeatherCardTests: XCTestCase {
         XCTAssertFalse(AppMessageRouter.showsInMainWindowOnly(try payload(kind: "image")))
         XCTAssertFalse(AppMessageRouter.showsInMainWindowOnly(try payload(schema: 2)))  // undecodable card
         XCTAssertFalse(AppMessageRouter.showsInMainWindowOnly(try payload(policy: "local_only")))
-        XCTAssertFalse(AppMessageRouter.showsInMainWindowOnly(DisplayPayload(responseText: "x", timestamp: 1)))
+        XCTAssertFalse(AppMessageRouter.showsInMainWindowOnly(decodedResponsePayload(text: "x", timestamp: 1)))
     }
 }
 

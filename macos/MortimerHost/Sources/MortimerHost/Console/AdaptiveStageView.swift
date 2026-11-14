@@ -17,9 +17,6 @@ struct AdaptiveStageView: View {
     /// Compact conversation is the startup presentation. The console action bar
     /// still lets the user expand it and AppStorage preserves that choice.
     @AppStorage("mortimer.interface.compactConversation") private var compactConversation = true
-    /// CC7a.1 (WS-17): the conversation thread replaces the two-caption
-    /// stage in layout 2. See ConversationThread.
-    @AppStorage(ConversationThread.flagKey) private var threadEnabled = true
     /// This stage's identity for `WorkspaceStore.setQuietArrivals(_:owner:)`.
     @State private var arrivalOwner = UUID()
     @EnvironmentObject private var client: JarvisClient
@@ -68,29 +65,7 @@ struct AdaptiveStageView: View {
                 switch mode {
                 case .conversation:
                     VStack(spacing: 0) {
-                        if showsThread {
-                            ConversationThreadView(coordinator: coordinator)
-                        } else {
-                        ScrollView {
-                            LazyVStack(alignment: .leading, spacing: 10) {
-                                if conversation.entries.isEmpty {
-                                    ContentUnavailableView("Ready", systemImage: "waveform",
-                                        description: Text("Use the microphone controls to start a conversation."))
-                                } else {
-                                    ForEach(conversation.latestCaptions) { entry in
-                                        Text(ConversationStore.liveCaption(entry.text))
-                                            .font(.system(size: 15))
-                                            .textSelection(.enabled)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .padding(12)
-                                            .background(AppTheme.panel.opacity(0.7))
-                                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                                    }
-                                }
-                            }
-                            .padding(AdaptiveLayoutMetrics.workspacePadding)
-                        }
-                        }
+                        conversationAndResults
                         Divider()
                         VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
                                       presentation: voicePresentation)
@@ -123,31 +98,46 @@ struct AdaptiveStageView: View {
             }
             .animation(AdaptiveTransition.animation(reduceMotion: reduceMotion), value: mode)
         }
-        // CC7a.2 (WS-17): while the thread shows, results arrive quietly
-        // (a card in the thread, or the "New" notice) instead of taking
-        // the stage. The thread switch retains the previous arrival behaviour.
-        // Reported per stage: on replacement the departing stage's
-        // onDisappear runs after its replacement's onAppear (Codex review
-        // of PR #164), so it withdraws only its own report.
-        .onAppear { workspace.setQuietArrivals(showsThread, owner: arrivalOwner) }
-        .onChange(of: showsThread) { _, shows in workspace.setQuietArrivals(shows, owner: arrivalOwner) }
+        // C5 always keeps transcript arrivals quiet unless the router has
+        // attested the still-active request. Stage ownership remains paired.
+        .onAppear { workspace.setQuietArrivals(true, owner: arrivalOwner) }
         .onDisappear { workspace.releaseQuietArrivals(owner: arrivalOwner) }
     }
 
-    private var showsThread: Bool { ConversationThread.showsThread(threadEnabled: threadEnabled) }
-
-    /// CC7a.2: while the thread is on and something other than the
-    /// conversation is on the stage, a quiet arrival's "New: … Show /
-    /// Dismiss" notice sits above it.
-    @ViewBuilder
+    /// C5 owns this content slot only. Voice/orb slots above stay unchanged.
     private var compactStageContent: some View {
-        if showsThread && !workspace.showsConversation {
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            if workspace.showsSkills || workspace.showsMemoryGraph || workspace.showsAtlas
+                || workspace.showsWorkflows || workspace.comparisonResult != nil {
                 ArrivalNoticeView(coordinator: coordinator)
-                stageBody
             }
-        } else {
             stageBody
+        }
+    }
+
+    @ViewBuilder
+    private var conversationAndResults: some View {
+        if workspace.carouselResults.isEmpty {
+            ConversationThreadView(coordinator: coordinator)
+        } else {
+            GeometryReader { geometry in
+                if geometry.size.width >= 900 {
+                    HStack(spacing: 12) {
+                        ConversationThreadView(coordinator: coordinator)
+                            .frame(minWidth: 280, maxWidth: .infinity)
+                        Divider()
+                        ResultCarouselView(coordinator: coordinator, showsActions: false)
+                            .frame(minWidth: 480, maxWidth: .infinity)
+                    }
+                } else {
+                    VStack(spacing: 8) {
+                        ConversationThreadView(coordinator: coordinator)
+                            .frame(maxHeight: max(120, geometry.size.height * 0.32))
+                        Divider()
+                        ResultCarouselView(coordinator: coordinator, showsActions: false)
+                    }
+                }
+            }
         }
     }
 
@@ -155,21 +145,9 @@ struct AdaptiveStageView: View {
     private var stageBody: some View {
         if workspace.showsSkills {
             SkillsWorkspaceView(coordinator: coordinator)
-        } else if workspace.showsConversation && showsThread {
-            VStack(alignment: .leading, spacing: 0) {
-                ConversationThreadView(coordinator: coordinator)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        } else if workspace.showsConversation {
-            VStack(alignment: .leading, spacing: 16) {
-                Spacer()
-                Text("Conversation").font(.title2)
-                Text("Use the microphone controls to talk. Your results stay available in the workspace.")
-                    .foregroundStyle(AppTheme.textDim)
-                Spacer()
-            }
-            .padding(AdaptiveLayoutMetrics.workspacePadding)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        } else if !workspace.showsMemoryGraph && !workspace.showsAtlas
+                    && !workspace.showsWorkflows && workspace.comparisonResult == nil {
+            conversationAndResults
         } else { WorkspaceView(coordinator: coordinator, showsControls: false) }
     }
 

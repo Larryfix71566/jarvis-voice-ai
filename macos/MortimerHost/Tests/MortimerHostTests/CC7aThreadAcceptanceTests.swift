@@ -81,7 +81,7 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
             throw prerequisite("Refusing to change defaults in the live MortimerHost process")
         }
         let defaults = UserDefaults.standard
-        let keys = ["mortimer.interface.layoutVersion", ConversationThread.flagKey]
+        let keys = ["mortimer.interface.layoutVersion", "mortimer.interface.conversationThread"]
         let previous = keys.map { defaults.object(forKey: $0) }
         defaults.set(2, forKey: keys[0]); defaults.set(true, forKey: keys[1])
         return {
@@ -302,11 +302,18 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
         XCTAssertFalse(String(describing: f.coordinator.inventoryJSON()).contains(result.id.uuidString))
         XCTAssertFalse(String(describing: f.coordinator.inventoryJSON()).contains(Self.privateTitle))
         let hosted = host(threadView(f)); defer { closeRenderingFixtureWindow(hosted.window) }
-        try await waitUntil("rendered private card") { self.labels(hosted.view).contains { $0.contains(ConversationThread.privateSummary) } }
+        try await waitUntil("rendered transcript") { self.labels(hosted.view).contains { $0.contains("A protected local result is ready.") } }
+        XCTAssertFalse(labels(hosted.view).contains { $0.contains(Self.privateTitle) }, "C5 does not duplicate cards in the transcript")
         let rendered = labels(hosted.view).joined(separator: "\n")
         for sentinel in [Self.privateBody, "synthetic-command-canary", "synthetic-clipboard-canary", "synthetic-link-canary"] {
             XCTAssertFalse(rendered.contains(sentinel), "Protected content entered the rendered thread")
         }
+        hosted.view.rootView = AnyView(ResultCarouselView(coordinator: f.coordinator)
+            .environmentObject(f.client).environment(f.workspace).environment(f.display)
+            .environment(f.drawer).environment(f.sharing).preferredColorScheme(.dark))
+        hosted.view.layoutSubtreeIfNeeded()
+        try await waitUntil("private carousel preview") { self.labels(hosted.view).contains { $0.contains(ConversationThread.privateSummary) } }
+        XCTAssertFalse(labels(hosted.view).contains(Self.privateBody))
         let open = try XCTUnwrap(accessibilityObjects(hosted.view).first {
             self.label($0).hasPrefix("Open ") && self.label($0).contains(Self.privateTitle)
         })
@@ -369,8 +376,8 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
         XCTAssertEqual(f.coordinator.executePointer(.viewSet, args: ["mode": .string("conversation")]), .applied)
         let hosted = host(threadView(f), width: 760, height: 420)
         defer { closeRenderingFixtureWindow(hosted.window) }
-        try await waitUntil("private card AX ready for window capture") {
-            self.labels(hosted.view).contains { $0.contains(ConversationThread.privateSummary) }
+        try await waitUntil("public transcript AX ready for window capture") {
+            self.labels(hosted.view).contains { $0.contains("A protected local result is ready.") }
         }
         hosted.window.displayIfNeeded()
         // AppKit's activation and occlusion flags are not the capture inventory.
@@ -403,7 +410,7 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
         }
         try await Task.sleep(for: .milliseconds(200)) // Allow the WindowServer to composite this fixture.
         let original = try await captureWindow(hosted.window)
-        // Same window and identical public card metadata, but entirely
+        // Same window and identical public transcript, but entirely
         // different private body. Capture equality must not depend on it.
         let payload = try JSONDecoder().decode(DisplayPayload.self, from: JSONSerialization.data(
             withJSONObject: protectedFields(body: "DIFFERENT PUBLIC SYNTHETIC PRIVATE BODY")))
@@ -413,9 +420,9 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
         reference.returnToConversation()
         hosted.view.rootView = threadView(f, workspace: reference, identity: "thread-candidate-reference")
         hosted.window.layoutIfNeeded(); hosted.view.layoutSubtreeIfNeeded()
-        try await waitUntil("reference private card rendered in the replaced view") {
+        try await waitUntil("reference public transcript rendered in the replaced view") {
             self.hasIdentifier("thread-candidate-reference", in: hosted.view)
-                && self.labels(hosted.view).contains { $0.contains(ConversationThread.privateSummary) }
+                && self.labels(hosted.view).contains { $0.contains("A protected local result is ready.") }
         }
         hosted.window.displayIfNeeded()
         try await Task.sleep(for: .milliseconds(200))
@@ -423,14 +430,15 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
         XCTAssertEqual(original.width, referenceImage.width)
         XCTAssertEqual(original.height, referenceImage.height)
         XCTAssertTrue(original.bytes == referenceImage.bytes, "Actual thread capture depends on a protected body excerpt")
-        reference.close(result.id)
-        try await waitUntil("private card removed from reference thread") { !self.labels(hosted.view).contains { $0.contains(ConversationThread.privateSummary) } }
+        // Negative control: removing public transcript must change actual pixels.
+        f.conversation.set([])
+        try await waitUntil("public transcript removed from reference thread") { !self.labels(hosted.view).contains { $0.contains("A protected local result is ready.") } }
         hosted.window.displayIfNeeded()
         try await Task.sleep(for: .milliseconds(200))
         let withoutCard = try await captureWindow(hosted.window)
         XCTAssertEqual(withoutCard.width, referenceImage.width)
         XCTAssertEqual(withoutCard.height, referenceImage.height)
-        XCTAssertFalse(referenceImage.bytes == withoutCard.bytes, "Equal empty captures do not prove that the private card was visible")
+        XCTAssertFalse(referenceImage.bytes == withoutCard.bytes, "Equal empty captures do not prove that the public transcript was visible")
     }
 
     private func captureWindow(_ window: NSWindow) async throws -> (width: Int, height: Int, bytes: Data) {

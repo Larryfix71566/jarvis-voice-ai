@@ -26,27 +26,6 @@ final class ConversationThreadTests: XCTestCase {
             ["id": id, "role": role, "text": text, "createdAt": time]))
     }
 
-    func testSwitchDefaultsOnAndCanBeTurnedOff() throws {
-        let suite = "ConversationThreadTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        XCTAssertTrue(ConversationThread.isEnabled(defaults))
-        defaults.set(false, forKey: ConversationThread.flagKey)
-        XCTAssertFalse(ConversationThread.isEnabled(defaults))
-        defaults.set(true, forKey: ConversationThread.flagKey)
-        XCTAssertTrue(ConversationThread.isEnabled(defaults))
-    }
-
-    func testSpokenAnswersBecomeResultsOnlyWithTheThreadOff() {
-        XCTAssertFalse(ConversationThread.routesSpokenAnswersToResults(threadEnabled: true))
-        XCTAssertTrue(ConversationThread.routesSpokenAnswersToResults(threadEnabled: false))
-    }
-
-    func testThreadShowsOnlyWithTheSwitchOn() {
-        XCTAssertTrue(ConversationThread.showsThread(threadEnabled: true))
-        XCTAssertFalse(ConversationThread.showsThread(threadEnabled: false))
-    }
-
     func testRowsKeepBothSpeakersFullTextInOrder() throws {
         let long = String(repeating: "GitHub moves ubuntu-latest to Ubuntu 26 on October 19. ", count: 5)
         XCTAssertGreaterThan(long.count, 160)
@@ -148,7 +127,10 @@ final class ConversationThreadTests: XCTestCase {
         XCTAssertGreaterThan(longReply.count, 160)
         conversation.set([try entry("u1", "user", "Weather question marker"),
                           try entry("a1", "assistant", longReply)])
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "c5-obsolete-thread-" + UUID().uuidString))
+        defaults.set(false, forKey: "mortimer.interface.conversationThread")
         let view = NSHostingView(rootView: ConversationThreadView()
+            .defaultAppStorage(defaults)
             .environment(conversation)
             .environment(WorkspaceStore())
             .environment(\.mortimerReduceMotion, true)
@@ -273,7 +255,7 @@ final class ConversationThreadTests: XCTestCase {
 
     /// UI2-23 evidence in the suite: the rendered thread shows the card's
     /// title and summary under the reply.
-    func testRenderedThreadShowsAResultCard() throws {
+    func testRenderedThreadDoesNotDuplicateCarouselCard() throws {
         _ = NSApplication.shared
         let conversation = ConversationStore()
         conversation.set([try entry("u1", "user", "Card question marker", at: 1000),
@@ -298,10 +280,11 @@ final class ConversationThreadTests: XCTestCase {
         view.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.3))
         let text = try threadRenderedText(in: view)
-        for expected in ["cardreplymarker", "runnercardmarker"] {
+        for expected in ["cardreplymarker", "cardquestionmarker"] {
             XCTAssertTrue(text.contains(expected), "missing \(expected) in rendered thread: \(text)")
         }
-        XCTAssertTrue(workspace.showsConversation, "Rendering the card did not open the result.")
+        XCTAssertFalse(text.contains("runnercardmarker"), "C5 result summaries belong beside, not inside, the transcript.")
+        XCTAssertTrue(workspace.showsConversation, "Rendering the transcript did not open the result.")
     }
 
     // MARK: CC7a.2b: what counts as the answer to the current request

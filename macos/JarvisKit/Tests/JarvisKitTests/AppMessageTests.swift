@@ -276,12 +276,16 @@ final class AppMessageTests: XCTestCase {
         XCTAssertEqual(p.body, "Your mail headlines are in this card.")
     }
 
-    func testResponsePayloadHasNoBrief() {
-        XCTAssertNil(DisplayPayload(responseText: "x", timestamp: 1).brief)
+    func testDecodedTextPayloadHasNoBrief() throws {
+        let payload = try JSONDecoder().decode(DisplayPayload.self,
+            from: Data(#"{"kind":"text","body":"x","ts":1}"#.utf8))
+        XCTAssertNil(payload.brief)
     }
 
-    func testResponsePayloadHasNoWeather() {
-        XCTAssertNil(DisplayPayload(responseText: "x", timestamp: 1).weather)
+    func testDecodedTextPayloadHasNoWeather() throws {
+        let payload = try JSONDecoder().decode(DisplayPayload.self,
+            from: Data(#"{"kind":"text","body":"x","ts":1}"#.utf8))
+        XCTAssertNil(payload.weather)
     }
 
     func testDecodeUICommandWithTab() throws {
