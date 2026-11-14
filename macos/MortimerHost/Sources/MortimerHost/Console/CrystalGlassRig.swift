@@ -33,6 +33,17 @@ enum CrystalGlassRig {
         (0, 0.04), (0.7, 0.09), (0.88, 0.22), (0.965, 0.34), (1, 0.18),
     ]
     static let plasmaClipFraction = 0.885
+    /// Continuous solid-glass refraction from the approved orb specification.
+    /// A Canvas fallback redraws its static rail; a layer-effect host can use
+    /// this same offset without introducing stepped ring geometry.
+    static func refractionSample(offset: CGPoint, radius: Double) -> CGPoint {
+        guard radius > 0 else { return offset }
+        let rho = min(1, hypot(offset.x, offset.y) / radius)
+        let k = -(0.42 + 1.25 * (1 - rho * rho))
+        return CGPoint(x: offset.x / k, y: offset.y / k)
+    }
+    static let refractionAbsorption = 0.30
+    static let refractionMaxSampleRadius = 3.4
     /// Plasma light carried in the wall, strongest opposite the key light.
     static let wallInnerFraction = 0.84
     static let wallOuterFraction = 1.02
