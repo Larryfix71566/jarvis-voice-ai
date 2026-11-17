@@ -220,8 +220,10 @@ async def test_mcp_mail_failure_reason_reaches_the_hosts_stderr(tmp_path):
     brief. The child's per-account line (mail_account_done ... abort=...) must
     reach the stream the host gives the child for stderr: the registry's
     stdio_client passes the bot's own stderr, which launchd writes to
-    logs/bot.launchd.log. stdout is the MCP channel, so the tool call still
-    working proves nothing was logged there. No credential value may appear."""
+    logs/bot.launchd.log. stdout is the MCP channel: the client session's
+    default handler silently drops a stdout line that is not JSON-RPC, so the
+    test collects those parse errors and requires none. No credential value
+    may appear on stderr."""
     from tests.unit.mcp_mail_fake_server import FakeIMAPServer, Faults, make_certs
 
     certs = make_certs(tmp_path)
@@ -238,9 +240,15 @@ async def test_mcp_mail_failure_reason_reaches_the_hosts_stderr(tmp_path):
         })
         params.args = ["-c", _MAIL_CHILD]
         errlog_path = tmp_path / "child-stderr.log"
+        stdout_errors: list[Exception] = []
+
+        async def on_message(message) -> None:
+            if isinstance(message, Exception):
+                stdout_errors.append(message)
+
         with errlog_path.open("w") as errlog:
             async with stdio_client(params, errlog=errlog) as (read, write):
-                async with ClientSession(read, write) as session:
+                async with ClientSession(read, write, message_handler=on_message) as session:
                     await session.initialize()
                     result = await session.call_tool("mail_headlines",
                                                      {"window_hours": 24, "account": "att"})
@@ -251,6 +259,7 @@ async def test_mcp_mail_failure_reason_reaches_the_hosts_stderr(tmp_path):
     assert payload["accounts"][0]["status"] == "failed"
     assert payload["accounts"][0]["error"] == "login_rejected"
     assert srv.commands == ["CAPABILITY", "LOGIN"]
+    assert stdout_errors == [], f"non-protocol output on stdout: {stdout_errors!r}"
     stderr = errlog_path.read_text()
     done = [line for line in stderr.splitlines() if "mail_account_done" in line]
     assert len(done) == 1, stderr

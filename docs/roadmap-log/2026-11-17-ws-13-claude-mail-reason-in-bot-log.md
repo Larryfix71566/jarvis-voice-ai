@@ -23,8 +23,8 @@ On 2026-11-16, during Mac acceptance row M6, AT&T rejected the mail login. `logs
 ## What changed
 
 - `mcp_servers/mcp_mail/server.py`: under `__main__`, `setup_logging(JARVIS_LOG_LEVEL or "INFO")` from `jarvis/logging_config.py` before `mcp.run`. Its handler writes to stderr; stdout stays the MCP stdio channel.
-- `tests/integration/test_mcp_servers.py`: new `test_mcp_mail_failure_reason_reaches_the_hosts_stderr`. It starts the existing fake IMAP server (`tests/unit/mcp_mail_fake_server.py`) with a rejected login, runs the real server module as `__main__` in a child pointed at it, captures the child's stderr the way the registry passes it, and asserts one `mail_account_done account=att status=failed ... phase=session abort=login_rejected` line, a working tool call over stdout, and no credential value in stderr.
-- Side effect: the MCP SDK's own content-free INFO lines (`Processing request of type CallToolRequest` and `ListToolsRequest`) now also appear, about two per mail read.
+- `tests/integration/test_mcp_servers.py`: new `test_mcp_mail_failure_reason_reaches_the_hosts_stderr`. It starts the existing fake IMAP server (`tests/unit/mcp_mail_fake_server.py`) with a rejected login, runs the real server module as `__main__` in a child pointed at it, captures the child's stderr the way the registry passes it, and asserts one `mail_account_done account=att status=failed ... phase=session abort=login_rejected` line and no credential value in stderr. It also collects stdout parse errors through the client session's message handler and requires none (Codex review finding C1: the default handler drops them silently, so a working tool call alone did not prove stdout clean).
+- Side effect: the MCP SDK's own content-free INFO lines (`Processing request of type CallToolRequest` and `ListToolsRequest`) now also appear: one per tool call, plus a tool-list line whenever the client lists tools.
 
 Not changed: what the tool returns, the brief card, `jarvis/bot/brief_tool.py`. The tool result already carries each account's reason code (`accounts[].error`); the bot's `brief_job_sent` line logs status only. Adding the code there is a possible follow-up if reviewers want the reason on the same line as the brief.
 
@@ -39,8 +39,15 @@ WS-13's Scope line lists P3m files. `mcp_servers/mcp_mail/server.py` is WS-13 P1
 - `pytest tests/integration`: 199 passed, 4 skipped.
 - `pytest tests/unit`: 8,334 passed, 27 failed, 16 errors. The same 43 tests fail on clean `next` at `efffa0a` in the same environment (diffed: identical): 39 in the two model-use pilot files (C1b), 2 in `test_agents_yaml_frontend_parity.py`, 1 in `test_plan_manifests.py`, and the `test_ws_transport` teardown error (an earlier log, `2026-11-13-ws34-b2-client-header.md`, found it passes in hosted CI). None touches mail; `test_mcp_mail_logic.py` passes.
 
+- After C1: with a canary `print` added before `mcp.run`, the test fails on the stdout check; without it, `pytest tests/integration/test_mcp_servers.py -k mail` gives 2 passed.
+- Hosted CI on the PR: `validate`'s unit step has the same 42 failing tests as `next` at `efffa0a` (lists diffed), so the integration step, and the new test, did not run in hosted CI. `Swift (macos/MortimerHost)` fails to compile in C6 files, as on `next`; #375 carries those fixes.
+
+## Review
+
+- Codex, 2026-11-17, on head `142f483`: comment, no blocking defect; C1 (test coverage) addressed in the next commit. Codex's record: `docs/roadmap-log/2026-11-17-ws-13-codex-pr380-review.md` on its own branch.
+
 ## What is left and next actor
 
-- kimi or codex: review the draft PR.
+- codex: confirm C1 is addressed, if wanted.
 - larry: merge into `next` if the review passes. It reaches the Mac with the `next` to `main` merge and deploy, unless Larry names it an acceptance fix for `main`. After deploy, the next brief's `mail_account_done` lines should appear in `logs/bot.launchd.log` (readable through the admin log endpoint, `source=bot`).
 - Separate from this change: Larry's 2026-11-16 AT&T credential reset already made M6 pass.
