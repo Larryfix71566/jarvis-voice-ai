@@ -33,6 +33,24 @@ final class CrystalOrbShellTests: XCTestCase {
         return bitmap
     }
 
+    /// Isolate the fixed room-light pass. In the full renderer it is screened
+    /// over energy arcs, so a whole-frame bright-pixel count also counts arcs.
+    private func renderReflections() throws -> NSBitmapImageRep {
+        let view = NSHostingView(rootView: Canvas { context, size in
+            CometOrbRenderer.drawCrystalReflections(into: &context,
+                center: CGPoint(x: size.width / 2, y: size.height / 2), radius: Self.radius)
+        }.background(Color.black))
+        view.frame = NSRect(x: 0, y: 0, width: Self.width, height: Self.height)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
+        defer { closeRenderingFixtureWindow(window) }
+        window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        return bitmap
+    }
+
     /// Visits every pixel with its distance from the sphere center in units
     /// of the radius. Orientation-independent, so bitmap row order cannot
     /// change the answer.
@@ -51,8 +69,8 @@ final class CrystalOrbShellTests: XCTestCase {
     }
 
     /// Area (pt²) of the 0.55–0.95 radius band where every channel is ≥ 0.6.
-    /// The window reflection lives in this band; plasma and comets do not
-    /// reach this brightness there.
+    /// Use this on the isolated room-light pass when measuring reflections;
+    /// on a full frame, white arc strokes can meet the same threshold.
     private func reflectionArea(_ bitmap: NSBitmapImageRep) -> Double {
         let scale = Double(bitmap.pixelsWide) / Self.width
         var count = 0
@@ -113,31 +131,30 @@ final class CrystalOrbShellTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(crystal, 35, "half of the preview's 70 pt² window reflection")
     }
 
-    /// Reflections belong to the room, not to the voice state.
-    func testCrystalReflectionsDoNotFollowVoiceState() throws {
-        let standby = reflectionArea(try render(.offline))
-        let cases: [(VoicePresentationState.Activity, Double, Double)] = [
-            (.listening, 0, 0), (.user, 0.385, 0), (.assistant, 0, 0.294), (.user, 0.385, 0.294),
-        ]
-        for (activity, user, output) in cases {
-            let area = reflectionArea(try render(activity, userEnergy: user, outputEnergy: output))
-            XCTAssertEqual(area, standby, accuracy: standby * 0.15,
-                           "\(activity) changed the reflection area (\(area) vs standby \(standby) pt²)")
-        }
+    /// Reflections belong to the room, not to the voice state. Test the room
+    /// pass directly because screening it over energy changes full-frame area.
+    func testCrystalRoomReflectionsAreDeterministicAndStateIndependent() throws {
+        let first = try renderReflections()
+        let later = try renderReflections()
+        XCTAssertGreaterThanOrEqual(reflectionArea(first), 35)
+        XCTAssertEqual(first.representation(using: .png, properties: [:]),
+                       later.representation(using: .png, properties: [:]))
     }
 
-    /// The nucleus changes color with the active speaker while retaining the
-    /// approved room-light reflections.
-    func testNucleusReflectsTheCurrentSpeaker() throws {
+    /// C6 keeps a white nucleus; speaker identity belongs to the energy arcs.
+    func testNucleusKeepsApprovedWhiteCoreAcrossSpeakers() throws {
         let user = try render(.user, userEnergy: 0.385)
         let mortimer = try render(.assistant, outputEnergy: 0.294)
         let cx = user.pixelsWide / 2, cy = user.pixelsHigh / 2
         let userCenter = try XCTUnwrap(user.colorAt(x: cx, y: cy)?.usingColorSpace(.deviceRGB))
         let mortimerCenter = try XCTUnwrap(mortimer.colorAt(x: cx, y: cy)?.usingColorSpace(.deviceRGB))
-        let difference = abs(Double(userCenter.redComponent) - Double(mortimerCenter.redComponent))
-            + abs(Double(userCenter.greenComponent) - Double(mortimerCenter.greenComponent))
-            + abs(Double(userCenter.blueComponent) - Double(mortimerCenter.blueComponent))
-        XCTAssertGreaterThan(difference, 0.08, "the nucleus should distinguish user and Mortimer activity")
+        for center in [userCenter, mortimerCenter] {
+            let channels = [center.redComponent, center.greenComponent, center.blueComponent]
+            XCTAssertLessThan((channels.max() ?? 0) - (channels.min() ?? 0), 0.08)
+        }
+        XCTAssertEqual(userCenter.redComponent, mortimerCenter.redComponent, accuracy: 0.03)
+        XCTAssertEqual(userCenter.greenComponent, mortimerCenter.greenComponent, accuracy: 0.03)
+        XCTAssertEqual(userCenter.blueComponent, mortimerCenter.blueComponent, accuracy: 0.03)
     }
 
     /// Side-by-side fixtures for Larry's visual acceptance (§7 step V).

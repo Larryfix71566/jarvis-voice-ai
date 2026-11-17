@@ -41,9 +41,9 @@ def test_exactly_six_agents_today():
     }
 
 
-ORB_FIELD_SWIFT = (
+VOICE_WAVE_SWIFT = (
     REPO_ROOT / "macos" / "MortimerHost" / "Sources" / "MortimerHost"
-    / "Console" / "OrbFieldView.swift"
+    / "Console" / "VoiceWaveView.swift"
 )
 
 _SWIFT_KEY_RE = re.compile(r'AgentLayoutEntry\(key:\s*"([a-z_-]+)"')
@@ -51,10 +51,10 @@ _SWIFT_KEY_RE = re.compile(r'AgentLayoutEntry\(key:\s*"([a-z_-]+)"')
 
 def _swift_agent_keys() -> set[str]:
     keys = set(_SWIFT_KEY_RE.findall(
-        ORB_FIELD_SWIFT.read_text(encoding="utf-8")))
+        VOICE_WAVE_SWIFT.read_text(encoding="utf-8")))
     assert keys, (
         "no AgentLayoutEntry(key: \"...\") entries found in "
-        "OrbFieldView.swift — the regex may need updating if the file's "
+        "VoiceWaveView.swift — the regex may need updating if the file's "
         "structure changed"
     )
     return keys
@@ -64,7 +64,7 @@ def test_the_swift_orb_field_has_every_backend_agent():
     missing = _backend_agent_keys() - _swift_agent_keys()
     assert not missing, (
         f"agent(s) {sorted(missing)} exist in config/agents.yaml but are "
-        f"missing from OrbFieldView.swift's AGENT_LAYOUT — they will not "
+        f"missing from VoiceWaveView.swift's AGENT_LAYOUT — they will not "
         f"appear as satellites in the console that actually ships."
     )
 
@@ -72,6 +72,6 @@ def test_the_swift_orb_field_has_every_backend_agent():
 def test_the_swift_orb_field_invents_no_agents():
     extra = _swift_agent_keys() - _backend_agent_keys()
     assert not extra, (
-        f"OrbFieldView.swift positions {sorted(extra)}, which no longer "
+        f"VoiceWaveView.swift positions {sorted(extra)}, which no longer "
         f"exist in config/agents.yaml — a satellite that can never light up."
     )
