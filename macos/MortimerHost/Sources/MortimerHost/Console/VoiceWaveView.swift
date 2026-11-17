@@ -70,10 +70,10 @@ struct VoiceWaveView: View {
 /// and visibility fixtures can continue to host the wave without a client.
 private struct VoiceWaveClientBridge: View {
     let voiceState: VoiceState
-    var stageCenterX: CGFloat?
-    var wakePulse: Int
-    var needsYou: Bool
-    var presentation: (() -> VoicePresentationState)?
+    var stageCenterX: CGFloat? = nil
+    var wakePulse: Int = 0
+    var needsYou: Bool = false
+    var presentation: (() -> VoicePresentationState)? = nil
     let reduceMotion: Bool
     let reduceTransparency: Bool
     @EnvironmentObject private var client: JarvisClient
@@ -107,12 +107,7 @@ struct VoiceWaveAnimation: View {
 
     var body: some View {
         Group {
-            if presentation != nil, reduceMotion {
-                // Keep the existing paused Reduced Motion schedule (C6 choice).
-                wave(presentation?())
-            } else {
-                animatedWave
-            }
+            animatedWave
         }
         // C6: the crystal energy orb is a real button, not a decorative Canvas.
         .accessibilityAddTraits(.isButton)
@@ -138,7 +133,9 @@ struct VoiceWaveAnimation: View {
         let initial = presentation?()
         let active = (initial?.userLevel ?? 0) > 0 || (initial?.outputLevel ?? 0) > 0 ||
             initial?.activity == .thinking || initial?.activity == .connecting
-        return TimelineView(.animation(minimumInterval: presentation == nil ? nil : (active ? 1.0 / 60 : 1.0 / 15),
+        let interval: TimeInterval? = presentation == nil ? nil :
+            (reduceMotion ? OrbEnergyState.reducedMotionInterval : (active ? 1.0 / 60 : 1.0 / 15))
+        return TimelineView(.animation(minimumInterval: interval,
                                 paused: !visible || !windowVisible)) { _ in
             wave(presentation?())
         }
@@ -316,9 +313,10 @@ final class WaveEngine {
             // not look frozen between utterances. A missing level while
             // Mortimer is speaking remains static and is labelled unavailable
             // rather than synthesising speech.
-            let staticTrace = reduceMotion || (presentation.userLevel == nil && presentation.outputLevel == nil &&
+            let staticEnergy = presentation.userLevel == nil && presentation.outputLevel == nil &&
                 presentation.activity != .thinking && presentation.activity != .connecting &&
-                presentation.activity != .listening && presentation.activity != .muted)
+                presentation.activity != .listening && presentation.activity != .muted
+            let staticTrace = reduceMotion || staticEnergy
             let userTarget = AudioPresentationTuning.presentationLevel(
                 rms: presentation.userLevel, isInput: true)
             let outputTarget = AudioPresentationTuning.presentationLevel(
@@ -328,7 +326,7 @@ final class WaveEngine {
             drawAtom(context: &context, size: size, now: now,
                      stageCenterX: stageCenterX, userLevel: userLevel,
                      outputLevel: outputLevel, presentation: presentation,
-                     reduceMotion: reduceMotion, staticTrace: staticTrace,
+                     reduceMotion: reduceMotion, staticTrace: staticTrace, staticEnergy: staticEnergy,
                      pointer: pointer, dt: measuredDt, refraction: refraction,
                      needsYou: needsYou)
             return
@@ -388,7 +386,7 @@ final class WaveEngine {
         let voice = state == .speaking ? level * AudioPresentationTuning.measuredOutputGain : 0
         var bootRamp = 1.0
         if bootStart > 0 {
-            let p = min(1, (now - bootStart) / Self.bootRampSeconds)
+            let p = (now - bootStart) / Self.bootRampSeconds
             bootRamp = p * (2 - p)   // ease-out
         }
 
@@ -451,7 +449,7 @@ final class WaveEngine {
     private func drawAtom(context: inout GraphicsContext, size: CGSize, now: Double,
                           stageCenterX: CGFloat?, userLevel: Double,
                           outputLevel: Double, presentation: VoicePresentationState,
-                          reduceMotion: Bool, staticTrace: Bool,
+                          reduceMotion: Bool, staticTrace: Bool, staticEnergy: Bool,
                           pointer: CGPoint?, dt: Double, refraction: Bool,
                           needsYou: Bool) {
         let userEnergy = min(1, max(0, userLevel * AudioPresentationTuning.measuredInputGain))
@@ -460,7 +458,8 @@ final class WaveEngine {
                                        moving: !staticTrace)
         orbEnergy.advance(activity: presentation.activity,
                           measuredLevel: max(userEnergy, outputEnergy),
-                          phase: phase, now: now, dt: dt)
+                          phase: phase, now: staticEnergy ? 0 : now, dt: staticEnergy ? 0 : dt,
+                          reducedMotion: reduceMotion)
         if rippleStart == -1 { rippleStart = now }
         let rippleAge = rippleStart.map { now - $0 } ?? .infinity
         let ripple = rippleAge < 0.45 ? min(1, max(0, rippleAge / 0.45)) : 0
