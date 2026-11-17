@@ -2,7 +2,7 @@
 date: 2026-11-17
 system: codex
 rows: [WS-35]
-prs: []
+prs: [378]
 ---
 
 # C10: external measurement feasibility remains unverified
@@ -32,6 +32,24 @@ For a validated trace only: retain raw endpoint timestamps and latency samples; 
 1. The diagnostic executable calls only `AXIsProcessTrusted`, `CGPreflightPostEventAccess`, `CGPreflightListenEventAccess` and `CGPreflightScreenCaptureAccess`; it never requests permissions or injects/captures anything. In the command sandbox all four return false. Outside that sandbox, Accessibility, event posting and event listening still return false; Screen Recording returns true. Both probes exit 0: that is successful status reporting, not a permission pass. Thus the proposed CGEvent/AX driver cannot perform this session's intended run. This says nothing about permissions of another process or an untested XCTest runner. No privacy setting was changed.
 2. No offline fixture-loading entry point was found in the reviewed freeze app startup, debug menu, environment/argument handlers or workspace. `WorkspaceStore.swift:53` starts with an empty in-memory results array; incoming display messages reach it in `AppMessageRouter.swift:299–433`. `MemoryGraphView.swift:88` loads its graph through AdminAPI. The production native transport starts audio (`NativeAudioTransport.swift:349–366`). Starting a voice connection to populate a synthetic scene is outside this task. A separate hosting test that sets stores directly would measure a component, not the deployed app. The six-result/two-pin/graph scene therefore has not been prepared. An offline external replay transport might avoid app changes, but its feasibility and audio isolation have not been established or run.
 
+## Isolation requirement before any GUI trial
+
+Larry's follow-up requires isolation verification before any separately arranged experiment. A separate worktree or debug executable establishes neither a disposable preference domain nor synthetic routing. **Whether this debug executable shares the installed app's preference domain is unestablished.** No app was launched to investigate it.
+
+Read-only inspection at `7e8adc9` confirms the concrete risks:
+
+- `WorkspaceStore.swift:86` supplies persistence key `mortimer.interface.memoryGraph.view`; `MemoryGraphStore.swift:68–76` reads it using `UserDefaults.standard` by default, and `persist()` at lines 411–413 writes graph metadata back. Panning, zooming and leaving the graph can therefore affect persisted state.
+- `MortimerHostApp.swift:25–33` reads and can write `mortimer.interface.layoutVersion` and `mortimer.interface.commandConsoleDefaultMigrated` during initialization. Startup itself is not a read-only check of settings.
+- `JarvisConfig.swift:40–72` resolves each service URL from process environment, then standard defaults, then its compiled loopback endpoint. An unset or unparseable override can fall through; loopback alone does not mean synthetic. Changing only the admin URL leaves bot, wake-word and costs routing independently configured.
+- With client auth enabled, config initialization can query `KeychainStore`. Its service is `com.mortimer.jarviskit` and account derives from the bot URL (`KeychainStore.swift:17–36`), rather than the executable's checkout path. `JarvisHTTP` attaches a configured bearer token to requests. A different executable or admin URL therefore does not prove credential isolation. No Keychain item or production preference was read during this source review.
+- Read-only inspection of `scripts/bundle.sh:85` shows the packaged identifier `com.mortimer.host`; the script was not executed. This does not establish the bare debug executable's effective defaults domain or Keychain access.
+
+Before execution, the experiment must have evidence of a disposable user/VM preference and credential environment, the exact executable/bundle identity and effective defaults-domain arrangement, and explicit synthetic routing for every reachable service with no fallback to production. Do not use a first launch on Larry's desktop to discover which settings it changes. Verify isolation with configuration/source evidence and non-app checks first; any later app-side confirmation must occur inside that established isolated environment. Never export production tokens or clone a production Keychain into it.
+
+Preserve comparison meaning by recording an explicit non-sensitive configuration manifest: layout/thread choice, glass/accessibility settings, window geometry, display scaling/refresh, and initial graph camera/filter/layout state. Populate only those agreed settings inside the disposable environment and record before/after state there. A VM changes rendering/GPU/display conditions: it can establish functional feasibility, but its timings are not the deployed physical-Mac baseline. An eventual physical-Mac baseline still requires its own verified isolation/routing arrangement and configuration comparison before execution. Endpoint or identity changes must be documented as experimental configuration, not silently treated as an identical deployed setup.
+
+These are unfulfilled prerequisites, not verified isolation. This follow-up changes documentation only; no launch, preference write, credential access, endpoint connection, server execution or permissions change occurred. The independent graph fixture lead does not remove these requirements, and its disposable-VM/loopback restrictions remain intact.
+
 ## What ran
 
 The raw text evidence and exact build command/flags are in [the preflight evidence directory](../acceptance/ws35-c10-preflight-20261117/). Original local evidence is retained at `/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-evidence/`. `SHA256.json` records original filenames, byte sizes and hashes; the diagnostic C source is preserved as `driver-preflight.c.txt` rather than an executable source artifact in the repository.
@@ -56,7 +74,7 @@ Local executable: `ws35-c10-freeze/macos/MortimerHost/.build/debug/MortimerHost`
 
 ## Decision and next actor
 
-Larry can arrange the required input permissions for an agreed external driver and approve an offline scene-preparation route that demonstrably avoids voice and production services. Codex would then capture a bounded trial against local `7e8adc9`, inspect actual exported event/presentation associations, and only after successful attribution deliver the fixed action script and parser. These are prerequisites, not a request to change the freeze or a claim that permissions alone solve the measurement.
+Larry can arrange the required input permissions for an agreed external driver and approve an offline scene-preparation route that demonstrably avoids voice and production services. After the isolation requirements above are verified, Codex would capture a bounded trial against local `7e8adc9`, inspect actual exported event/presentation associations, and only after successful attribution deliver the fixed action script and parser. These are prerequisites, not a request to change the freeze or a claim that permissions alone solve the measurement.
 
 If Larry instead elects a first instrumented-build baseline, the concrete proposed changes are an explicit disconnected synthetic fixture entry point, stable result/acknowledgement/graph target identities, and action/revision correlation markers for selection, navigation and camera updates tied to verified presented frames. A marker after a method returns, SwiftUI `onAppear`, a Core Animation transaction completion or a display-link tick alone is not a demonstrated presentation boundary. Instrumented end boundaries still need validation. No such changes are made or declared necessary by this preflight. That option abandons these metrics as a freeze baseline and requires Larry's explicit acceptance decision.
 
