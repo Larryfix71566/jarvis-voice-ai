@@ -219,9 +219,9 @@ enum CometOrbRenderer {
                                 level: Double, activity: VoicePresentationState.Activity,
                                 pointer: CGPoint?, depths: [Double]?) -> [ArcEnd] {
         let count = arcCount(activity, level: level)
-        return (0..<count).map { index in
-            let thinkingSpin = activity == .thinking ? phase * 0.8 : 0
-            let angle = Double(index) * 0.63 + phase * (noise(index + 90) - 0.5) * 0.4 + thinkingSpin
+        return (0..<count).map { (index: Int) -> ArcEnd in
+            let thinkingSpin: Double = activity == .thinking ? phase * 0.8 : 0
+            let angle: Double = Double(index) * 0.63 + phase * (noise(index + 90) - 0.5) * 0.4 + thinkingSpin
             let z = depths.flatMap { $0.indices.contains(index) ? $0[index] : nil }
                 ?? sin(phase * 0.35 + Double(index) * 1.71) * 0.82
             let projected = sqrt(max(0, 1 - z * z))
