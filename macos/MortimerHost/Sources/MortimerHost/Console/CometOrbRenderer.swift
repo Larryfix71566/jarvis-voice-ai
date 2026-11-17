@@ -319,6 +319,8 @@ enum CometOrbRenderer {
 /// Mutable per-orb easing and brightness-rate state. Depth uses the approved
 /// ±0.025 reference step scaled by r; colour uses k=0.08 and level k=0.20.
 final class OrbEnergyState {
+    static let reducedMotionInterval: TimeInterval = 0.1
+
     struct RGB {
         var r = 102.0, g = 115.0, b = 255.0
     }
@@ -327,11 +329,24 @@ final class OrbEnergyState {
     private var rgb = RGB()
     private(set) var depths = (0..<10).map { sin(Double($0) * 1.71) * 0.82 }
     private(set) var flash = OrbFlashCap()
+    private var reducedMotionLastAdvance: Double?
 
     func advance(activity: VoicePresentationState.Activity, measuredLevel: Double,
-                 phase: Double, now: Double, dt: Double) {
+                 phase: Double, now: Double, dt: Double,
+                 reducedMotion: Bool = false) {
+        var scheduledDt = dt
+        if reducedMotion {
+            guard now.isFinite else { return }
+            if let last = reducedMotionLastAdvance {
+                guard now >= last + Self.reducedMotionInterval else { return }
+                scheduledDt = min(max(now - last, 0), 0.1)
+            } else {
+                scheduledDt = 0
+            }
+            reducedMotionLastAdvance = now
+        }
         let targetRGB = CometOrbRenderer.stateRGB(activity)
-        let colorEase = FrameRateIndependentEasing.factor(0.08, dt: dt)
+        let colorEase = FrameRateIndependentEasing.factor(0.08, dt: scheduledDt)
         rgb.r += (targetRGB.0 - rgb.r) * colorEase
         rgb.g += (targetRGB.1 - rgb.g) * colorEase
         rgb.b += (targetRGB.2 - rgb.b) * colorEase
@@ -347,15 +362,15 @@ final class OrbEnergyState {
         case .user, .assistant: base = 1
         }
         let target = voice ? min(1, max(0, measuredLevel)) : base * 0.4
-        level += (target - level) * FrameRateIndependentEasing.factor(0.20, dt: dt)
-        let depthStep = FrameRateIndependentEasing.step(0.025, dt: dt)
+        level += (target - level) * FrameRateIndependentEasing.factor(0.20, dt: scheduledDt)
+        let depthStep = FrameRateIndependentEasing.step(0.025, dt: scheduledDt)
         for index in depths.indices {
             depths[index] += sin(phase * 0.7 + Double(index) * 2.13) * depthStep
             if depths[index] > 0.95 { depths[index] = 1.9 - depths[index] }
             if depths[index] < -0.9 { depths[index] = -1.8 - depths[index] }
         }
         let luminance = min(1, max(0, (0.04 + level * 0.42) * (activity == .offline ? 0 : 1)))
-        flash.advance(luminance: luminance, now: now, dt: dt)
+        flash.advance(luminance: luminance, now: now, dt: scheduledDt)
     }
 }
 
@@ -468,8 +483,10 @@ extension CometOrbRenderer {
         // 4. The capped energy frame, seen through the unchanged inner wall.
         var inside = context
         inside.clip(to: disc(center, radius * Rig.plasmaClipFraction))
+        // Approved barge-in: Mortimer's rust arcs remain, with one teal bolt.
+        let energyTint = activity == .user && outputEnergy > 0 ? AppTheme.mortimer : tint
         drawEnergy(context: &inside, center: center, radius: radius, phase: phase,
-                   tint: tint, strength: strength * breath, energy: energy,
+                   tint: energyTint, strength: strength * breath, energy: energy,
                    activity: activity, pointer: pointer, ripple: ripple,
                    reduceMotion: reduceMotion, gain: gain, echo: true,
                    overlap: activity == .user && outputEnergy > 0, depths: depths)
@@ -516,7 +533,7 @@ extension CometOrbRenderer {
 
     }
 
-    private static func drawCrystalReflections(into env: inout GraphicsContext,
+    static func drawCrystalReflections(into env: inout GraphicsContext,
                                                center: CGPoint, radius: Double) {
         typealias Rig = CrystalGlassRig
         let sphere = disc(center, radius)
