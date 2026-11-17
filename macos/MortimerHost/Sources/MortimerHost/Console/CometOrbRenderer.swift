@@ -235,9 +235,9 @@ enum CometOrbRenderer {
                     point = pointer
                     depth = sqrt(max(0, 1 - distance * distance / (demoRadius * demoRadius)))
                 } else {
-                    let angle = atan2(dy, dx)
-                    point = CGPoint(x: center.x + cos(angle) * demoRadius * scale,
-                                    y: center.y + sin(angle) * demoRadius * scale)
+                    let pointerAngle: Double = atan2(Double(dy), Double(dx))
+                    point = CGPoint(x: center.x + cos(pointerAngle) * demoRadius * scale,
+                                    y: center.y + sin(pointerAngle) * demoRadius * scale)
                     depth = 0
                 }
             }

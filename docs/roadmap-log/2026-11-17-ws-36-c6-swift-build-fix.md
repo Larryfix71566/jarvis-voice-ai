@@ -20,10 +20,11 @@ The `Swift (macos/MortimerHost)` job is red on `next` at `efffa0a8` (run 4353559
 
 1. `VoiceWaveView.swift:407`: `dyn.g` becomes `dyn.cg`.
 2. `CometOrbRenderer.swift:222`: the `arcEnds` closure states its signature, `(index: Int) -> ArcEnd`, and `thinkingSpin` and `angle` are typed `Double`, so the compiler no longer infers the multi-statement closure's type. No value or behaviour changes.
+3. `CometOrbRenderer.swift:238`: the pointer branch's angle is computed as `Double` (`atan2(Double(dy), Double(dx))`) and renamed `pointerAngle`. The first CI build of this PR (run 43997602180, job 133753392208) cleared the type-check timeout and then reported `ambiguous use of 'cos'` at line 239, because `atan2` of two `CGFloat`s returned a `CGFloat` that `cos` could take as either type. Same values.
 
 ## Evidence and limits
 
-Fix 1 is certain from the struct declaration. Fix 2 is untested: there is no Swift toolchain in Claude's Linux environment, so this PR's own `Swift (macos/MortimerHost)` job is the first build of it. If that job finds a further error, it was hidden behind these two.
+Fix 1 is certain from the struct declaration. Fixes 2 and 3 are built only by this PR's `Swift (macos/MortimerHost)` job: there is no Swift toolchain in Claude's Linux environment. Fix 2 is confirmed by that job's first run, which no longer timed out at line 222. Any further error it shows was hidden behind these.
 
 ## Not fixed here
 
