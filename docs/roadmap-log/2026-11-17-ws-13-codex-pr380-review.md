@@ -42,12 +42,21 @@ Hosted evidence is separate: [validation run 44095815829](https://github.com/Lar
 
 Own batch status record: `docs/roadmap-log/2026-11-17-ws-13-codex-pr380-review.md` on separate branch `codex/ws13-pr380-review-20261117`. Claude owns C1; lane owners own the red CI; Larry owns any later merge/deploy and Mac confirmation.
 
-## Remaining work
+## Dated follow-up — 2026-11-17
 
-- Claude: consider C1's explicit stdout validation and correct the test's overclaim. Optional bot-line reason correlation must remain allowlisted and content-free.
-- Respective release-lane owners: resolve hosted unit/native failures and obtain actual hosted integration results. The full base-suite equivalence claim was not independently reproduced in this review.
-- Larry: any future merge/deploy and actual Mac log confirmation. This review performed neither, and does not close acceptance.
-- Claude daily batch: fold this record only after its documentation PR is merged. The author PR remains a draft; review state is COMMENT.
+This is a status reconciliation only. The original review and test evidence above remain bound to `142f4833750951eae31f408f65adb19a489d8a99`; Codex has not independently re-reviewed or retested the amended head.
+
+- **Claude's reported C1 amendment:** in [the 14:04:10 UTC follow-up comment](https://github.com/Larryfix71566/jarvis-voice-ai/pull/380#issuecomment-6950297583), Claude reports addressing C1 in [`bb9ec2585479cd89a3ac2fe167d7e0fa1bbf7b48`](https://github.com/Larryfix71566/jarvis-voice-ai/commit/bb9ec2585479cd89a3ac2fe167d7e0fa1bbf7b48). The reported change collects stdout parse errors through `ClientSession(message_handler=...)`, asserts none, and corrects the test docstring. Claude reports that the injected `PR380_NON_JSON_STDOUT_CANARY` print now makes the test fail, while removing it gives 2 passing mail integration tests. These are Claude's reported test results, not a new Codex verification or sign-off.
+- **Merged state:** GitHub now records [PR #380](https://github.com/Larryfix71566/jarvis-voice-ai/pull/380) as merged into `next` at **2026-11-17 14:21:59 UTC**, with final PR head `bb9ec2585479cd89a3ac2fe167d7e0fa1bbf7b48` and merge commit [`fd8ce2fb5a13fda2f4b2a7447a12ce747b2e6011`](https://github.com/Larryfix71566/jarvis-voice-ai/commit/fd8ce2fb5a13fda2f4b2a7447a12ce747b2e6011). This supersedes the earlier draft/pending-merge status; it does not extend Codex's original review to the amended head.
+- **Evidence limits:** the original hosted integration step was skipped, as recorded above. Claude's follow-up also explicitly distinguishes local integration results from hosted results. This update establishes no hosted integration pass, deployment, or live Mac log confirmation.
+- **Own review record:** [PR #381](https://github.com/Larryfix71566/jarvis-voice-ai/pull/381) remains an open draft into `main`. This follow-up changes only this Codex-owned log. Codex has neither approved nor merged either PR.
+
+## Remaining work after the follow-up
+
+- C1 is **reported addressed by Claude**, with independent verification of the amended head still unperformed. Optional bot-line reason correlation remains a separate follow-up using fixed keys, an allowlist of reason codes, and a fixed fallback.
+- Respective release-lane owners: obtain and record actual hosted integration results after resolving the relevant CI failures. The full base-suite equivalence claim was not independently reproduced in this review.
+- Larry / release owner: any subsequent release/deployment and actual Mac log confirmation require their own evidence; merging #380 into `next` does not establish either.
+- Claude daily batch: fold this record only after its documentation PR #381 is merged. Codex's original review remains COMMENT at `142f4833750951eae31f408f65adb19a489d8a99`.
 
 ## Local evidence artifacts
 
