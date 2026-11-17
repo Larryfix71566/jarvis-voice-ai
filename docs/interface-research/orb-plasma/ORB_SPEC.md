@@ -30,7 +30,7 @@ Larry approved the orb on 2026-11-11 at 03:07 UTC ("Looks right"). The palette w
 1. **Glass.** Use the existing crystal shell unchanged (`CrystalGlassRig.swift`; its values are frozen with Larry's approval). Refraction and the shadow (see "Depth of the orb itself" below) are added around it.
    - Replace only the `plasma()` call at `CometOrbRenderer.swift:300`, inside the 0.885 clip.
    - Drop the orbiting comets at `:286` and `:345`.
-2. **Energy.** Port the demo's `bolt()`, `arc()` and core code as written (page lines 1137 onward; `bolt()` and `arc()` are at 1159 and 1160).
+2. **Energy.** Port the demo's `bolt()`, `arc()` and core structure (page lines 1137 onward; `bolt()` and `arc()` are at 1159 and 1160). Per Larry's 2026-11-13 easing decision, the demo's per-frame temporal constants are not copied unchanged: every easing factor or step below is referenced to 60 Hz and scaled by the measured frame time.
    - Work in demo units: R = 148 sits on the shell's 0.885 inner wall.
    - The state table S is at line 1140:
 
@@ -46,7 +46,7 @@ Larry approved the orb on 2026-11-11 at 03:07 UTC ("Looks right"). The palette w
      | you over Mortimer | rust arcs | plus one teal bolt |
 
 3. **Arc depth** (line 1177). This is the arcs' own depth, separate from the orb's refraction below.
-   - Each arc end has a depth z. Each frame it moves by up to ±0.025, staying within [−0.9, 0.95]. It projects to r = R·√(1−z²).
+   - Each arc end has a depth z. Its 60 Hz reference movement is up to ±0.025 per frame, scaled by measured time: step = 0.025 × r, where r = dt × 60 and dt is the frame duration in seconds (capped for resume-sized gaps by the easing helper). It stays within [−0.9, 0.95] and projects to r = R·√(1−z²).
    - Front arcs (z > 0) are 1 + 0.9z wider. When z > 0.15 they end in a contact spot of radius (6+8·level)(1+1.6z).
    - Back arcs are drawn at alpha 0.4 + 0.6(1+z). They are drawn before a dark occluder (radius 0.8·core) and before the core.
    - A touch or the pointer inside the glass pulls arc ends to that point on the front face.
@@ -58,7 +58,7 @@ Larry approved the orb on 2026-11-11 at 03:07 UTC ("Looks right"). The palette w
 5. **Core** (line 1193). The gradient radius is 74.3 + 3 + 22·level + 3·sin(5t) units. Its half-strength edge (0.75 × that radius) is always at least 1/3 of the glass radius, in every state.
 6. **Flash cap** (line 1204). The far-wall echo and the cast light below ride this cap. After drawing each frame:
    - Measure the frame's mean luminance L on a 24×24 downsample.
-   - Show clamp(L, A ± 3% of Lref). The anchor A moves at most 4% of Lref per frame and reverses at most once per 220 ms. Lref = max(0.995·Lref, L).
+   - Show clamp(L, A ± 3% of Lref). The anchor A moves at most 4% of Lref per 60 Hz frame, scaled by measured time: step = 0.04 × Lref × r. It reverses at most once per 220 ms. Lref = max(0.995^r × Lref, L).
    - Apply the gain evenly to the whole frame, or blend with the previous frame. Never clip individual passes.
    - In the model this gives at most 2.5 flashes a second; the uncapped demo gives about 14. This is a brightness model, not a measurement of rendered pixels.
 7. **Input** (line 1225). Larry decided this works from the first version, not hover alone.
@@ -67,7 +67,7 @@ Larry approved the orb on 2026-11-11 at 03:07 UTC ("Looks right"). The palette w
    - Press and hold for 350 ms is push-to-talk. It must share the `pttOwned` guard (`MicControlsView.swift:19`, `:105`, `:110`), because releasing Space always mutes (`:113`). It must restore the mic to its state before the hold.
    - The orb needs a button role and an accessibility label. Today it ignores hits (`VoiceWaveView.swift:63`).
 8. **Needs you.** Show a yellow `#FFD84A` ring outside the glass, in any state. It is driven by a pending draft (today `OrbFieldView.swift:289`, `displayResults.hasPendingDraft`) and by a file-send approval.
-9. **Reduce Motion.** Redraw arcs every 6th frame, as the demo does. Thinking keeps a still ring. Reduce Transparency uses the existing `Glass.swift` fallbacks.
+9. **Reduce Motion.** Redraw and advance arcs at most once every 0.1 s (the 6-per-60 Hz schedule restated as time). Pointer, hover and other extra redraws may repaint the current state but must not advance arc depth between those 0.1 s ticks. Thinking keeps a still ring. Reduce Transparency uses the existing `Glass.swift` fallbacks.
 
 Line references are checked against `origin/main` at `5777e98`.
 
@@ -76,13 +76,13 @@ Line references are checked against `origin/main` at `5777e98`.
 - **Performance:** add an arcs probe to `OrbShellFrameTimeTests` (1440×220, 300 frames). A p50 or p95 more than 10% above the crystal shell's counts as a regression (box 810). The crystal figures to compare against come from the same session as the arcs runs, not from a stored baseline (Larry, 2026-11-12; see Measure first).
 - **Tests that need Larry's OK:**
   - The idle colour in code is still `#7C8CFF` (`AppTuning.swift:127`).
-  - Two tests expect a coloured nucleus, which is now white (`VoiceWaveRenderingTests.swift:297`, `:314`).
+  - The nucleus tests now assert C6's approved white core; speaker identity is tested on the arcs.
 - **Untested:** Swift Canvas rendering, Mac and iPhone frame time, touch feel, and flash safety measured on real pixels.
 
 ## Depth of the orb itself: refraction plus option 1's shadow
 
 Larry asked at 03:12 UTC whether the orb could look less flat. At 03:18:31 he picked option 3 ("I think the third"), and at 03:19:59 he refined that: "I actually like the third but add the shadow from the first".
-Shown on the mockups page (version 12, line 531, section "Depth for the orb itself", option 3, which now carries option 1's shadow too). Option 2 (tilt parallax) is built only if the fallback below is triggered.
+Shown on the mockups page (version 12, line 531, section "Depth of the orb itself", option 3, which now carries option 1's shadow too). Option 2 (tilt parallax) is built only if the fallback below is triggered.
 
 **Shadow and cast light (from option 1).** Drawn in the orb's Canvas, outside and below the glass, before the bloom.
 - Floor line at centre + 1.14 Rg.
@@ -112,7 +112,7 @@ Shown on the mockups page (version 12, line 531, section "Depth for the orb itse
 **Measure first (box 810: more than 10% over the crystal shell counts as a regression).**
 1. Before building the rest of the orb, add two probes to `OrbShellFrameTimeTests`, using the same 1440×220 size and 300 frames: arcs only, and arcs plus refraction. Compare each with the crystal shell probe measured in the same session.
 2. Include the shadow and cast light in the arcs plus refraction probe.
-3. **How to compare (Larry, 2026-11-12, "Use your pick for C6").** On the Mac, in one session, run the crystal probe and the arcs probe back to back, five runs of each. Take the median p50 and the median p95 of each side's five runs. Pass: the arcs median p50 is at most 1.10× the crystal median p50 from that session, the arcs median p95 is at most 1.10× the crystal median p95 from that session, and p95 is under 16.7 ms. Do the same for the arcs plus refraction probe. The reason: in the C10 freeze baseline, crystal p50 on one build ranged from 5.428 to 7.576 ms over three runs, 23% above the median at worst, so a stored p50 would let ordinary run-to-run variation fail the 10% rule. The C10 receipt (`docs/roadmap-log/2026-11-12-ws-35-c10-component-baseline-receipt.md`) and the 2026-09-29 receipt (p50 4.933 ms, p95 14.150 ms) stay as records, not as C6's comparison point.
+3. **How to compare (Larry, 2026-11-12, "Use your pick for C6").** On the Mac, in one session, run the crystal probe and the arcs probe back to back, five runs of each. Take the median p50 and the median p95 of each side's five runs. Pass: the arcs median p50 is at most 1.10× the crystal median p50 from that session, the arcs median p95 is at most 1.10× the crystal median p95 from that session, and p95 is under 16.7 ms. Do the same for the arcs plus refraction probe. The reason: in the C10 freeze baseline, crystal p50 on one build ranged from 5.428 to 7.576 ms over three runs, 23% above the median at worst, so a stored p50 would let ordinary run-to-run variation fail the 10% rule. The C10 receipt (`docs/roadmap-log/2026-11-12-ws-35-ws-36-pr-358-independent-review.md`) and the 2026-09-29 receipt (p50 4.933 ms, p95 14.150 ms) stay as records, not as C6's comparison point.
 4. If the test harness can't render a `layerEffect` off-screen, measure the same scene on screen with Instruments on the Mac and record the method.
 5. The phone has no frame-time probe yet; one is needed before the phone orb ships.
 6. If arcs plus refraction fails while arcs alone passes, the proposed fallback is options 1 and 2 together: keep the contact shadow with cast light, and replace refraction with tilt parallax. Switching needs Larry's OK. Both options are in the mockup and cost two gradient fills and some offsets.
