@@ -1,0 +1,32 @@
+{
+  "command": [
+    "swift",
+    "build",
+    "--package-path",
+    "macos/MortimerHost",
+    "--product",
+    "MortimerHost",
+    "--disable-sandbox",
+    "--disable-automatic-resolution",
+    "--skip-update",
+    "--cache-path",
+    "/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-evidence/swift-cache",
+    "--config-path",
+    "/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-evidence/swift-config",
+    "--security-path",
+    "/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-evidence/swift-security",
+    "-Xcc",
+    "-fmodules-cache-path=/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-evidence/clang-cache",
+    "-Xswiftc",
+    "-module-cache-path",
+    "-Xswiftc",
+    "/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-evidence/swift-module-cache"
+  ],
+  "environment_overrides": {
+    "SDKROOT": "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.2.sdk",
+    "CLANG_MODULE_CACHE_PATH": "/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-evidence/clang-cache",
+    "SWIFTPM_MODULECACHE_OVERRIDE": "/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-evidence/swift-module-cache"
+  },
+  "exit_status": 0,
+  "finished_utc": "2026-11-17T03:38:15.132083+00:00"
+}

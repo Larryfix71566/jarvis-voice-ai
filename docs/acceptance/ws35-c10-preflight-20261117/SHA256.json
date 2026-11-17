@@ -1,0 +1,52 @@
+[
+  {
+    "file": "freeze-build.log",
+    "bytes": 5973,
+    "sha256": "e3d1e281e0379e252ff3f9c23034bca323e68c9a5a20b0b33036f647359955c9"
+  },
+  {
+    "file": "freeze-build-command.json",
+    "bytes": 882,
+    "sha256": "0598b20583e9cfe026558b5e46ee1cdbb64a53220501588b09c9c8cddc06668b"
+  },
+  {
+    "file": "freeze-build-retry.log",
+    "bytes": 12438,
+    "sha256": "89c76dfeace888e70aaeeb742d68b98a8d93a8895f31b6d8938f0b06743e8237"
+  },
+  {
+    "file": "freeze-build-retry-command.json",
+    "bytes": 1268,
+    "sha256": "08f2e6fb31c8a6cbff4b477e91452842784e90fb89ca82d157f8fd3d1ca8551c"
+  },
+  {
+    "file": "driver-preflight.c",
+    "bytes": 361,
+    "sha256": "ca73052fe98a3f792f181b254b9123c0f63fa97fcd0eea1932fd9d31005b7f43"
+  },
+  {
+    "file": "driver-preflight.log",
+    "bytes": 114,
+    "sha256": "df6c29b39db7903912cff6d31e9cac1101032d84cab92989fc74f081af4a1bc1"
+  },
+  {
+    "file": "driver-preflight-unsandboxed.log",
+    "bytes": 114,
+    "sha256": "d2a31f527e07b25daa1a94bd55f88e07cf24235496b3d7e2165d50f9ab2f364e"
+  },
+  {
+    "file": "templates.log",
+    "bytes": 390,
+    "sha256": "6fab516934ef99c5cafe9ef9afbcb4db54cc9706feef3081b85a7c289f0e7729"
+  },
+  {
+    "file": "recording-options.log",
+    "bytes": 258,
+    "sha256": "ff49de8280c961c035bc21ea9bdae51a888b8c21657f1f8f9cf3fcdd4e734828"
+  },
+  {
+    "file": "external-preflight-commands.json",
+    "bytes": 514,
+    "sha256": "8b4998bf8c7dc523a4ecfa0ff6e2c9dca09d0336150c3823c742a91358cd3e11"
+  }
+]

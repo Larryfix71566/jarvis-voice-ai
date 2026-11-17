@@ -1,0 +1,4 @@
+AXIsProcessTrusted=0
+CGPreflightPostEventAccess=0
+CGPreflightListenEventAccess=0
+CGPreflightScreenCaptureAccess=1
