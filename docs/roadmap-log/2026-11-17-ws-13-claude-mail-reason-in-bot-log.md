@@ -2,7 +2,7 @@
 date: 2026-11-17
 system: claude
 rows: [WS-13]
-prs: []
+prs: [380]
 ---
 
 # WS-13: the mail child's per-account failure reason now reaches the bot's log
