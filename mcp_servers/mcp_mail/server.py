@@ -5,7 +5,11 @@ server passes none of logic.mail_headlines's keyword seams: production uses
 the verifying TLS context, the real account endpoints and os.environ.
 """
 
+import os
+
 from fastmcp import FastMCP
+
+from jarvis.logging_config import setup_logging
 
 from . import logic
 
@@ -24,4 +28,10 @@ def mail_headlines(window_hours: int = logic.DEFAULT_WINDOW_HOURS, account: str 
 
 
 if __name__ == "__main__":
+    # logic.py logs one content-free mail_account_done line per account (the
+    # failure reason included), but this child had no handler, so those INFO
+    # lines were dropped. setup_logging's handler writes to stderr, never
+    # stdout (stdout is the MCP stdio channel); the registry's stdio_client
+    # hands this child the bot's own stderr, so the lines reach the bot's log.
+    setup_logging(os.environ.get("JARVIS_LOG_LEVEL", "INFO"))
     mcp.run(transport="stdio")

@@ -200,6 +200,66 @@ async def test_mcp_mail_server():
     assert {a["key"] for a in payload["accounts"]} == {"att", "gmail"}
 
 
+# The child for the test below: point the accounts at a local fake IMAP server
+# (127.0.0.1, test CA) and run the real server module as __main__, exactly as
+# the registry starts it. Nothing else of the server is changed.
+_MAIL_CHILD = """
+import dataclasses, os, runpy
+from mcp_servers.mcp_mail import logic
+port = int(os.environ['TEST_FAKE_IMAP_PORT'])
+cafile = os.environ['TEST_FAKE_IMAP_CA']
+logic.ACCOUNTS = tuple(dataclasses.replace(a, host='localhost', port=port) for a in logic.ACCOUNTS)
+_real_context = logic.build_ssl_context
+logic.build_ssl_context = lambda cafile_=None: _real_context(cafile=cafile)
+runpy.run_module('mcp_servers.mcp_mail.server', run_name='__main__')
+"""
+
+
+async def test_mcp_mail_failure_reason_reaches_the_hosts_stderr(tmp_path):
+    """Nov 16: AT&T rejected the login, and the bot's log showed only a failed
+    brief. The child's per-account line (mail_account_done ... abort=...) must
+    reach the stream the host gives the child for stderr: the registry's
+    stdio_client passes the bot's own stderr, which launchd writes to
+    logs/bot.launchd.log. stdout is the MCP channel, so the tool call still
+    working proves nothing was logged there. No credential value may appear."""
+    from tests.unit.mcp_mail_fake_server import FakeIMAPServer, Faults, make_certs
+
+    certs = make_certs(tmp_path)
+    srv = FakeIMAPServer(certs, [], faults=Faults(reject_login=True)).start()
+    try:
+        params = _params("mcp_servers.mcp_mail.server", {
+            "MAIL_ATT_USER": "att-user@example.test",
+            "MAIL_ATT_SECURE_MAIL_KEY": "att-secret-value",
+            "MAIL_GMAIL_USER": "", "MAIL_GMAIL_APP_PASSWORD": "",
+            "JARVIS_MAIL_ENABLED": "true",
+            "JARVIS_LOG_LEVEL": "INFO",
+            "TEST_FAKE_IMAP_PORT": str(srv.port),
+            "TEST_FAKE_IMAP_CA": certs.ca_file,
+        })
+        params.args = ["-c", _MAIL_CHILD]
+        errlog_path = tmp_path / "child-stderr.log"
+        with errlog_path.open("w") as errlog:
+            async with stdio_client(params, errlog=errlog) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    result = await session.call_tool("mail_headlines",
+                                                     {"window_hours": 24, "account": "att"})
+        payload = json.loads(result.content[0].text)
+    finally:
+        srv.stop()
+
+    assert payload["accounts"][0]["status"] == "failed"
+    assert payload["accounts"][0]["error"] == "login_rejected"
+    assert srv.commands == ["CAPABILITY", "LOGIN"]
+    stderr = errlog_path.read_text()
+    done = [line for line in stderr.splitlines() if "mail_account_done" in line]
+    assert len(done) == 1, stderr
+    assert "account=att status=failed" in done[0]
+    assert "phase=session abort=login_rejected" in done[0]
+    for secret in ("att-user@example.test", "att-secret-value"):
+        assert secret not in stderr
+
+
 async def test_mcp_repo_server_read(tmp_path):
     """D10-D11 over the real stdio round trip: tool set is exactly the
     five repo_* tools (never app_*, confirming the two servers stay
