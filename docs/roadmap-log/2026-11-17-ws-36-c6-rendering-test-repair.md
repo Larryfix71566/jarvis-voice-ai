@@ -1,3 +1,10 @@
+---
+date: 2026-11-17
+system: kimi
+rows: [WS-36]
+prs: [376]
+---
+
 # WS-36 C6 rendering-test repair — 2026-11-17
 
 **System:** Kimi
