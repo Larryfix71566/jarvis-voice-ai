@@ -1,6 +1,6 @@
 # Mortimer release closure plan: acceptance on main, new interface on `next`
 
-- **Status:** adopted 2026-11-11 (#327). The freeze is WS-33 and the WS-17 combined-source review claim. The three lanes are rows WS-34 (Claude), WS-35 (Codex) and WS-36 (Kimi), approved by Larry on 2026-11-11 (decision 6) and on `main` since #329.
+- **Status:** adopted 2026-11-11 (#327). The freeze is WS-33 and the WS-17 combined-source review claim. The three lanes are rows WS-34 (Claude), WS-35 (Codex) and WS-36 (Kimi), approved by Larry on 2026-11-11 (decision 6) and on `main` since #329. **2026-11-18: Mortimer is non-production; the freeze is lifted and acceptance moves to the enhanced build from `next`** (ROADMAP.md §0 rule 15).
 - **Source of truth:** this file. The Claude Doc "Mortimer combined implementation plan" in Larry's account mirrors it; when they differ, this file wins (ROADMAP.md §0 rule 11 still ranks ROADMAP.md above it).
 - **Built at:** `origin/main` `4e58eaa`; checked again at `b9024ed` (2026-11-11, after #322 and #324). Line numbers below are from those commits.
 - **Written by:** Claude (Opus), from Claude's 2026-11-10 deep review, the 2026-11-10 interface review and mockups, ROADMAP.md and AGENTS.md.
@@ -15,6 +15,8 @@ All times UTC, in his Claude Duet channel:
 - 2026-11-11 01:35:44, answering whether non-UI acceptance should run now: "Yes, run it now".
 - 2026-11-11 01:58:16, answering whether main should freeze with the new interface on a `next` branch: "first let's seperate this plan so that kimi and codex can help with development, the division should not be absolute but a guide to keep the models from stepping on each other, then we should freeze main and begin".
 - 2026-11-11 01:59:13: "additionally this plan needs to be sync to the repo so that each model has access".
+- 2026-11-18 01:22:44: "ok, I dont really want to waste time on this. I wan to get to the enhanced developement and then test from there. I want it to be noted in the roadmpa and new development plan that we are working on a nonprod application. we dont need precasutions afforded a prod app". This lifts the freeze, the acceptance-fixes-by-name rule for `main`, deploy holds and frozen-build revalidation reviews (ROADMAP.md §0 rule 15).
+- 2026-11-18 01:26:12: "Yes, skip reviews", answering whether to drop the outside review for #379 and #375. Recorded as a general rule under the non-production direction: review before merge is optional and Larry merges at his discretion (ROADMAP.md §0 rule 14). Larry can narrow it.
 
 ## 1. How to use this plan
 
@@ -25,14 +27,14 @@ The lanes in §4 say who leads each piece of work. **They are a guide that keeps
 3. If the item is in another lane, update that lane's row (Owner/Where for the item) in your PR, so the others can see who has it.
 4. Stay inside the files listed for your item. If you must edit a file listed under another lane, say so in the PR body and add a line to ROADMAP.md §4.
 
-No system reviews its own work (rule 14). Larry merges every PR.
+No system reviews its own work (rule 14). Larry merges every PR. Since 2026-11-18 a review before merge is optional, so the Reviewer columns in §4 and the pairs in §8 name who to ask when a review is wanted, not a merge gate.
 
 ## 2. Branches
 
-- **`main` is frozen** under ROADMAP.md §0 rule 15 from the freeze SHA recorded in WS-17. Only docs-only PRs and acceptance fixes Larry approves by name merge there.
-- **`next`** is cut from the freeze SHA. All other work in this plan targets `next`: base your branch on `origin/next` and open PRs with `--base next`.
-- **Acceptance fixes** branch from `main`, merge to `main` on Larry's named approval, and are merged forward into `next` the same day by the fix's author (a merge of `main` into `next`, no rebase).
-- **Closure:** when the run-now acceptance batch and the combined-source review have closed, Larry approves merging `next` into `main` by name; that merge ends the freeze. `scripts/deploy_main.sh` then deploys the final build unchanged (it deploys only `origin/main`, line 383, and refuses production work missing from main, lines 407 to 420), and the rewritten UI boxes run on it.
+- **`main` is not frozen** (2026-11-18, ROADMAP.md §0 rule 15; it was frozen from `5777e98` on 2026-11-11). Docs and the daily batch still target `main`.
+- **`next`** was cut from the freeze SHA and is the enhanced build that acceptance now runs on. All other work in this plan targets `next`: base your branch on `origin/next` and open PRs with `--base next`.
+- **Fixes found in acceptance** branch from `next` and merge into `next`, like any other item. `main` is merged into `next` (a merge, no rebase) whenever `main` carries docs or rules that `next` needs.
+- **Closure:** when acceptance on the enhanced build has closed, Larry approves merging `next` into `main`. `scripts/deploy_main.sh` then deploys that build (it deploys only `origin/main`, line 383, and refuses production work missing from main, lines 407 to 420). Larry decides when to deploy; there is no deploy hold.
 - **CI:** the three workflows trigger only on `main` today (`validate.yml` lines 2 to 6, `sandbox.yml`, `knowledge-base.yml`). The first PR into `next` (WS-34 item A1) adds `next` to those triggers; pull-request workflows run from the merge ref, so that PR checks itself.
 
 ## 3. Acceptance, split by what the new design changes
@@ -41,8 +43,8 @@ No system reviews its own work (rule 14). Larry merges every PR.
 
 | Group | Boxes | When |
 |---|---|---|
-| Non-UI, run now | 9 | On the freeze build |
-| UI kept (the view inside doesn't change) | 18 open + 1 passed | Open ones now, on the freeze build |
+| Non-UI, run now | 9 | On the enhanced build (`next`); was the freeze build until 2026-11-18 |
+| UI kept (the view inside doesn't change) | 18 open + 1 passed | Open ones on the enhanced build (`next`); was the freeze build until 2026-11-18 |
 | UI rewritten for the new design | 19 | Once, on the final build |
 | UI dropped (828, becomes a design rule) | 1 | Never |
 | Non-UI, final build only | 11 | Release closure |
@@ -79,14 +81,14 @@ Claude cannot run `swift test`; it writes no Swift until B1 shows the hosted run
 
 | Id | Work | Reviewer | Depends on | Files |
 |---|---|---|---|---|
-| C10 | Performance baseline for box 810 on the freeze build, before C1a merges: Codex writes the steps, Larry runs them on the Mac | Kimi | freeze build deployed | `docs/acceptance/**` |
+| C10 | Performance baseline for box 810 on the enhanced build (`next`; was the freeze build until 2026-11-18): Codex writes the steps, Larry runs them on the Mac | Kimi | a `next` build on the Mac | `docs/acceptance/**` |
 | C1a | Delete layouts 0 and 1 in the app. Keep `OrbFieldView`'s compact mode, which layout 2 still embeds (`Console/AdaptiveStageView.swift` lines 115 and 130), until C6 replaces it | Kimi | A2, decision 3 | every file with `layoutVersion` (12 source and 13 test files at `b9024ed`: `grep -rl layoutVersion macos/MortimerHost`), including `App/InterfaceLayoutVersion.swift`, `MortimerHostApp.swift`, `ConsoleView.swift`, `App/AppMessageRouter.swift`, `App/SupportingDisplayCoordinator.swift`, `App/ConsoleActionCoordinator.swift`, `Display/DisplayWindowView.swift`, `WorkspaceView.swift`, `WorkspaceResultPane.swift`, `DisplayWindowStore.swift`, `Console/ConversationThreadView.swift`, `CommandConsoleView.swift`, `AdaptiveStageView.swift` |
 | B1 | macOS Swift CI job: `swift test` for JarvisKit, MortimerHost and MortimerPhoneCore; extends WS-30's adopted `phone-core-swift` claim (ROADMAP.md line 1689 at `4e58eaa`) | Claude, Kimi | A1 | `.github/workflows/validate.yml` |
 | B5 | Widen ruff from F821 to the pyflakes set; ship NLTK test data offline | Claude | B1 | `.github/workflows/validate.yml`, the lint fixes it forces |
 | C4 | Swift block renderer that wraps the existing typed views | Kimi | C0, C1a | `Display/**`, `App/AppMessageRouter.swift`, `macos/JarvisKit/Sources/JarvisKit/AppMessage.swift`, `macos/JarvisKit/Tests/JarvisKitTests/Fixtures/` |
 | C5 | Result carousel A, with "show all results" as B; flat fallback for Reduce Transparency and Reduce Motion; the reuse repair for box 196. Takes the result card and arrival notice out of the thread (`ConversationThreadView.swift` near lines 402 and 669) and the `result_next`/`result_previous`/`result_mode` actions. Acceptance: VoiceOver labels, keyboard paging, nothing shown by colour alone | Kimi | C4 | `Display/**`, `Stores/WorkspaceStore.swift`, `Stores/WorkspaceRecents.swift`, `Stores/DisplayResultStore.swift`, `Placement/**`, `App/ResponseResultRouter.swift`, `App/AppMessageRouter.swift`, `App/SupportingDisplayCoordinator.swift`, the carousel slot in `Console/AdaptiveStageView.swift`, those parts of `ConversationThreadView.swift` and `App/ConsoleActionCoordinator.swift` |
 | C9 | Phone orb in the iPhone preview, synthetic levels until WS-30 phone voice exists. The orb renderer lives in the Mac app target and `ios/MortimerPhoneCore/Package.swift` has no dependencies, so C9 first moves `CometOrbRenderer` and `CrystalGlassRig` into a shared package both apps import (both are SwiftUI only) | Kimi | C6, decision 5 | `ios/**`, a new shared package and its `Package.swift`, the two renderer files (after C6 lands), `PhonePreviewUITests` |
-| F1 | Acceptance fix (on `main`, by name): `PhoneRemoteAuthorityProcessTests.testOrdinaryUnknownWaitRetainsActualSingletonAfterPartialEOF` fails at `4e58eaa` (Kimi's revalidation, #325) | Kimi | none | `macos/MortimerHost/Sources/PhoneRemoteAuthority*/**` and its tests |
+| F1 | Acceptance fix (on `main` by name until 2026-11-18; now an ordinary fix into `next`): `PhoneRemoteAuthorityProcessTests.testOrdinaryUnknownWaitRetainsActualSingletonAfterPartialEOF` fails at `4e58eaa` (Kimi's revalidation, #325) | Kimi | none | `macos/MortimerHost/Sources/PhoneRemoteAuthority*/**` and its tests |
 
 Interface-review findings whose files are in `Display/**` (the white-on-white export buttons, duplicated titles) ride with C4 or C5.
 
@@ -123,7 +125,7 @@ Paths without a prefix are under `macos/MortimerHost/Sources/MortimerHost/`.
 
 Agent-days per item (estimates): C0 1, C0b 0.5, C3 2 to 3, C7-py 1 to 2, C7b 2, C1b 1, B2 to B4 about 2, B6 2 to 3, C8 1; C10 0.5, C1a 1 to 2, B1 0.5 to 1, B5 0.5, C4 2 to 3, C5 3 to 4, C9 2 to 3, F1 unknown; A3 2 to 3, C2 1 to 2, C6 2 to 3, C7a 2. Speed basis: #171 (1,376 Swift lines, 1 day), #164 (769, 1 day), #216 (967, under a day), #198 (2,181, 3 days), #290 (7,272 Swift plus 25,040 Python, 8 days), from git merge history. Projected closure near 2026-12-09 if the freeze starts this week; a projection, not a measurement. The critical path is C0, C1a, C4, C5, then C6 and C7a.
 
-The run-now acceptance batch (27 boxes) runs on the freeze build once A3 passes and Larry deploys; the final build adds the 19 rewritten UI boxes, the 11 final-build boxes and five days of use.
+The run-now acceptance batch (27 boxes) was to run on the freeze build. Since 2026-11-18 it runs on the enhanced build from `next`, with no A3-style revalidation before a deploy; the final build adds the 19 rewritten UI boxes, the 11 final-build boxes and five days of use.
 
 ## 6. Scope overlaps to record in ROADMAP.md §4
 
@@ -146,7 +148,7 @@ Decision 1 (freeze with `next`) is Larry's 01:58:16 answer. Larry answered decis
 
 ## 8. Review protocol
 
-- Reviewer is named per item above; if that system is busy, any system other than the author may review.
+- Review before merge is optional since 2026-11-18 (ROADMAP.md §0 rule 14). When one is wanted, the reviewer named per item above is the first to ask; if that system is busy, any system other than the author may review.
 - Swift PRs need a `swift test` run by Codex, Kimi or (after B1) CI, recorded in the PR body with counts.
 - PR body: system, session reference, row and item id, files outside the item's list with the reason, and the commands run.
 - Review verdicts go in a docs-only log under `docs/roadmap-log/`, never as an edit to the author's code.
