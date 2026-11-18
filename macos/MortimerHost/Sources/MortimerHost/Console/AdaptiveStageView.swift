@@ -23,6 +23,10 @@ struct AdaptiveStageView: View {
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(ConversationStore.self) private var conversation
     @Environment(\.mortimerReduceMotion) private var reduceMotion
+    /// Optional so fixtures that host the stage without them still render
+    /// (same pattern as ConversationThreadView's approvals and agentRuns).
+    @Environment(DisplayResultStore.self) private var displayResults: DisplayResultStore?
+    @Environment(ConsoleNoticeState.self) private var notices: ConsoleNoticeState?
 
     init(voiceState: VoiceState, wideWindow: Bool,
          coordinator: ConsoleActionCoordinator? = nil) {
@@ -42,6 +46,30 @@ struct AdaptiveStageView: View {
             botSpeaking: client.botIsSpeaking, thinking: client.botIsThinking,
             snapshot: client.audioActivity, generation: client.audioActivityGeneration,
             now: ProcessInfo.processInfo.systemUptime)
+    }
+
+    /// ORB_SPEC item 8: pending draft, open approval or file-send offer.
+    private var needsYou: Bool { displayResults?.hasPendingDraft ?? false }
+
+    private var notConnected: Bool {
+        if case .connected = client.state { return false }
+        return true
+    }
+
+    /// Interface cleanup Phase 1: one line under the orb replaces OrbFieldView.
+    private var orbStatusLine: some View {
+        OrbStatusLine(
+            status: OrbStatus.derive(connection: client.state, presentation: voicePresentation(),
+                                     needsYou: needsYou,
+                                     audioOutputNotice: notices?.audioOutputNotice,
+                                     speakerGateNotice: notices?.speakerGateNotice,
+                                     audioInputNotice: notices?.audioInputNotice),
+            onConnect: { Task { await client.connect() } },
+            onReconnectAudio: {
+                notices?.clearAudioOutputNotice()
+                Task { await client.reconnect() }
+            },
+            onDismissNotice: { notices?.clearAudioOutputNotice() })
     }
 
     /// §4.1 (as amended by closure C2.5): the large wave is shown when the
@@ -68,15 +96,18 @@ struct AdaptiveStageView: View {
                         conversationAndResults
                         Divider()
                         VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
-                                      presentation: voicePresentation)
+                                      needsYou: needsYou, presentation: voicePresentation)
                             .frame(minHeight: 150, maxHeight: 220)
+                        orbStatusLine
                     }
                 case .rail:
                     HStack(spacing: 0) {
                         VStack(spacing: 0) {
-                            VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse, presentation: voicePresentation)
-                                .frame(height: 150)
-                            OrbFieldView(voiceState: voiceState, hidesLettering: true, presentation: voicePresentation())
+                            VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
+                                          needsYou: needsYou, presentation: voicePresentation)
+                                .frame(height: AdaptiveLayoutMetrics.railOrbSlotHeight)
+                            orbStatusLine
+                            Spacer(minLength: 0)
                         }.frame(width: AdaptiveLayoutMetrics.voiceRailWidth)
                         Divider()
                         compactStageContent
@@ -86,12 +117,13 @@ struct AdaptiveStageView: View {
                         compactStageContent
                         Divider()
                         HStack(spacing: 0) {
-                            VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse, presentation: voicePresentation)
+                            VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
+                                          needsYou: needsYou, presentation: voicePresentation)
                                 // Keep the compact rail shallow while giving
                                 // the measured lobe enough horizontal travel
                                 // to remain legible at the default width.
                                 .frame(minWidth: 220, idealWidth: 240, maxWidth: 280)
-                            OrbFieldView(voiceState: voiceState, hidesLettering: true, presentation: voicePresentation())
+                            orbStatusLine
                         }.frame(height: 180)
                     }
                 }
@@ -118,12 +150,12 @@ struct AdaptiveStageView: View {
     @ViewBuilder
     private var conversationAndResults: some View {
         if workspace.carouselResults.isEmpty {
-            ConversationThreadView(coordinator: coordinator, thinking: client.botIsThinking)
+            ConversationThreadView(coordinator: coordinator, thinking: client.botIsThinking, offline: notConnected)
         } else {
             GeometryReader { geometry in
                 if geometry.size.width >= 900 {
                     HStack(spacing: 12) {
-                        ConversationThreadView(coordinator: coordinator, thinking: client.botIsThinking)
+                        ConversationThreadView(coordinator: coordinator, thinking: client.botIsThinking, offline: notConnected)
                             .frame(minWidth: 280, maxWidth: .infinity)
                         Divider()
                         ResultCarouselView(coordinator: coordinator, showsActions: false)
@@ -131,7 +163,7 @@ struct AdaptiveStageView: View {
                     }
                 } else {
                     VStack(spacing: 8) {
-                        ConversationThreadView(coordinator: coordinator, thinking: client.botIsThinking)
+                        ConversationThreadView(coordinator: coordinator, thinking: client.botIsThinking, offline: notConnected)
                             .frame(maxHeight: max(120, geometry.size.height * 0.32))
                         Divider()
                         ResultCarouselView(coordinator: coordinator, showsActions: false)

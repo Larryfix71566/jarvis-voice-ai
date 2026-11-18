@@ -20,7 +20,8 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
         XCTAssertEqual(AppTuning.wideLayoutMinWidth, 1180)
         XCTAssertEqual(AppTuning.inspectorSubpaneMinWidth, 820)
         XCTAssertEqual(AppTuning.inspectorWidth, 300)
-        XCTAssertEqual(AdaptiveLayoutMetrics.voiceRailWidth, 200)
+        XCTAssertEqual(AdaptiveLayoutMetrics.voiceRailWidth, 260)
+        XCTAssertEqual(AdaptiveLayoutMetrics.railOrbSlotHeight, 220)
         XCTAssertEqual(AdaptiveLayoutMetrics.resultContentWidth, 480)
         XCTAssertEqual(AudioPresentationTuning.attackSeconds, 0.040)
         XCTAssertEqual(AudioPresentationTuning.releaseSeconds, 0.180)
@@ -158,106 +159,6 @@ final class AdaptiveInterfaceClosureC2Tests: XCTestCase {
                        "no label outside overlap")
     }
 
-    // MARK: G05 — the compact rail has homes for agent activity and the wake ripple
-
-    func testCompactRailRendersAgentActivityAffordance() throws {
-        _ = NSApplication.shared
-        NSApplication.shared.accessibilitySetValue(true,
-            forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
-        let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
-            adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
-        let runs = AgentRunStore()
-        runs.apply(try XCTUnwrap(try AppMessage.decode(frame: Data("""
-        {"type":"agent","name":"developer","display_name":"Developer","state":"working",
-         "run_id":"r-c2","task":"synthetic","model":"fixture","model_fallback":false}
-        """.utf8))))
-        let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, hidesLettering: true)
-            .environmentObject(client).environment(runs).environment(DrawerState())
-            .environment(DisplayResultStore()).environment(ConversationStore()).environment(ConsoleNoticeState())
-            .environment(\.mortimerReduceMotion, true)
-            .frame(width: 200, height: 600))
-        view.frame = NSRect(x: 0, y: 0, width: 200, height: 600)
-        let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-        defer { closeRenderingFixtureWindow(window) }
-        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-        let labels = accessibilityLabels(in: view)
-        XCTAssertTrue(labels.contains("Developer working"), "compact rail must show the working affordance; tree: \(labels)")
-        XCTAssertTrue(labels.contains(where: { $0.hasPrefix("DEVELOPER") || $0 == "Developer" }), "satellite still present; tree: \(labels)")
-    }
-
-    func testCompactRailRendersWithReducedMotionWhileAgentIsActive() throws {
-        _ = NSApplication.shared
-        NSApplication.shared.accessibilitySetValue(true,
-            forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
-        let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
-            adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
-        let runs = AgentRunStore()
-        runs.apply(try XCTUnwrap(try AppMessage.decode(frame: Data("""
-        {"type":"agent","name":"developer","display_name":"Developer","state":"working",
-         "run_id":"r-reduce-motion","task":"synthetic","model":"fixture","model_fallback":false}
-        """.utf8))))
-        let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, hidesLettering: true)
-            .environmentObject(client).environment(runs).environment(DrawerState())
-            .environment(DisplayResultStore()).environment(ConversationStore()).environment(ConsoleNoticeState())
-            .environment(\.mortimerReduceMotion, true)
-            .frame(width: 220, height: 640))
-        view.frame = NSRect(x: 0, y: 0, width: 220, height: 640)
-        let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-        defer { closeRenderingFixtureWindow(window) }
-        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-        XCTAssertTrue(accessibilityLabels(in: view).contains("Developer working"),
-                      "active agent status remains visible with reduced motion enabled")
-    }
-
-    func testCompactRailPinsClockAboveAgentActivity() throws {
-        _ = NSApplication.shared
-        NSApplication.shared.accessibilitySetValue(true,
-            forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
-        let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
-            adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
-        let runs = AgentRunStore()
-        runs.apply(try XCTUnwrap(try AppMessage.decode(frame: Data("""
-        {"type":"agent","name":"developer","display_name":"Developer","state":"working",
-         "run_id":"r-clock","task":"synthetic","model":"fixture","model_fallback":false}
-        """.utf8))))
-        let view = NSHostingView(rootView: OrbFieldView(voiceState: .listening, hidesLettering: true)
-            .environmentObject(client).environment(runs).environment(DrawerState())
-            .environment(DisplayResultStore()).environment(ConversationStore()).environment(ConsoleNoticeState())
-            .environment(\.mortimerReduceMotion, true)
-            .frame(width: 220, height: 640))
-        view.frame = NSRect(x: 0, y: 0, width: 220, height: 640)
-        let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-        defer { closeRenderingFixtureWindow(window) }
-        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-        let labels = accessibilityLabels(in: view)
-        let clockIndex = try XCTUnwrap(labels.firstIndex(of: "Current time"),
-                                       "clock accessibility element missing; tree: \(labels)")
-        let developerIndex = try XCTUnwrap(labels.firstIndex(of: "Developer working"),
-                                           "agent accessibility element missing; tree: \(labels)")
-        XCTAssertLessThan(clockIndex, developerIndex,
-                          "persistent clock must remain before the changing agent/status stack")
-    }
-
-    private func accessibilityLabels(in view: NSView) -> [String] {
-        var labels: [String] = []
-        func visit(_ value: Any) {
-            guard let element = value as? NSObject else { return }
-            let labelSelector = NSSelectorFromString("accessibilityLabel")
-            if element.responds(to: labelSelector),
-               let label = element.perform(labelSelector)?.takeUnretainedValue() as? String, !label.isEmpty {
-                labels.append(label)
-            }
-            let childrenSelector = NSSelectorFromString("accessibilityChildren")
-            if element.responds(to: childrenSelector),
-               let children = element.perform(childrenSelector)?.takeUnretainedValue() as? [Any] {
-                children.forEach(visit)
-            }
-        }
-        visit(view)
-        return labels
-    }
+    // G05's rail homes (agent chips, clock, wake ripple) were removed by the interface cleanup, Phase 1; agent activity is the thread's activity row (C7aActivityRowTests).
 
 }

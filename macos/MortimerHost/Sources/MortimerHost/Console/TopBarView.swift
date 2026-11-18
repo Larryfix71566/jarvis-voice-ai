@@ -2,8 +2,7 @@ import SwiftUI
 import JarvisKit
 
 /// The console topbar, matched to the web's (App.tsx:534-623, parity
-/// sweep 2026-08-30): brand with breathing dot · ConnectButton + raw
-/// state pill · Voice picker (always visible; "(connect first)" when
+/// sweep 2026-08-30): brand with breathing dot · ConnectButton · Voice picker (always visible; "(connect first)" when
 /// empty) · CapabilityChip (ONLY when an agent is degraded) · drawer
 /// toggle ◧/◨/◪ with the aggregate live/attention dot · ↩︎ pop-in
 /// buttons while popped · ⧉ Display.
@@ -53,7 +52,7 @@ struct TopBarView: View {
         }
     }
 
-    // ConnectButton.tsx — button + the raw-state pill.
+    // ConnectButton.tsx — the Connect/Disconnect button.
     private var connectGroup: some View {
         HStack(spacing: 10) {
             Button {
@@ -69,15 +68,6 @@ struct TopBarView: View {
                     .foregroundStyle(connectColor)
             }
             .disabled(isConnecting)
-
-            Text(rawState)
-                .font(.system(size: 10, design: .monospaced))
-                .kerning(1.2)
-                .textCase(.uppercase)
-                .foregroundStyle(pillColor)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 3)
-                .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(pillColor.opacity(0.4), lineWidth: 1))
         }
     }
 
@@ -99,26 +89,6 @@ struct TopBarView: View {
         switch client.state {
         case .connected: return AppTheme.red       // .btn-danger
         default: return AppTheme.accent            // .btn-primary
-        }
-    }
-
-    /// The pill shows the RAW connection state (ConnectButton.tsx:44) —
-    /// a diagnostic readout, not a friendly label.
-    private var rawState: String {
-        switch client.state {
-        case .offline: return "disconnected"
-        case .connecting: return "connecting"
-        case .connected: return "ready"
-        case .failed: return "error"
-        }
-    }
-
-    private var pillColor: Color {
-        switch client.state {
-        case .connected: return AppTheme.green     // pill-ready
-        case .connecting: return AppTheme.amber    // pill-busy
-        case .failed: return AppTheme.red          // pill-error
-        case .offline: return AppTheme.textDim     // pill-idle
         }
     }
 
@@ -186,7 +156,7 @@ struct TopBarView: View {
             }
         } label: {
             HStack(spacing: 6) {
-                Text(drawer.isPoppedOut ? "◪ Panels ⧉" : drawer.isOpen ? "◨ Close" : "◧ Panels")
+                Text(inspectTitle)
                 if !drawer.isOpen && !drawer.isPoppedOut && dotVisible {
                     Circle()
                         .fill(attention ? AppTheme.attn : AppTheme.accent)
@@ -197,7 +167,16 @@ struct TopBarView: View {
         }
         .help(drawer.isPoppedOut
               ? "Panels are on the display screen — click to focus/move"
-              : "Console panels (Esc closes · T opens the Log)")
+              : "Inspect agents, runs, output and the log (Esc closes · T opens the Log)")
+        .accessibilityLabel(inspectTitle)
+        .accessibilityIdentifier("console.inspect")
+    }
+
+    /// Interface cleanup Phase 1: the drawer is the back room, behind a
+    /// labelled Inspect button. "Close Inspect" names what it closes.
+    private var inspectTitle: String {
+        if drawer.isPoppedOut { return "Inspect ⧉" }
+        return drawer.isOpen ? "Close Inspect" : "Inspect"
     }
 
     private var attention: Bool { displayResults.hasPendingDraft }

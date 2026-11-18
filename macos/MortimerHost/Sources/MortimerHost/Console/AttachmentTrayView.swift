@@ -15,18 +15,20 @@ struct AttachmentTrayView: View {
         VStack(alignment: .leading, spacing: 6) {
             if let composer { TypedComposerRow(composer: composer) }
             HStack {
-                Text(attachments.staged.isEmpty ? "Add content" : "Staged content").font(.headline)
+                if !attachments.staged.isEmpty {
+                    Text("Staged content").font(.headline)
+                }
                 Spacer()
                 Button("Paste") { paste() }
                     .accessibilityLabel("Paste content")
                 Button("Choose") { showPicker = true }
                     .accessibilityLabel("Choose content")
             }
-            Text(attachments.staged.isEmpty
-                 ? "Paste text or an image, choose a file, or drop it here for review."
-                 : "Analysis provider: \(client.consoleInputProfile?.label ?? "Configured vision")")
-                .font(.caption)
-                .foregroundStyle(AppTheme.textDim)
+            if !attachments.staged.isEmpty {
+                Text("Analysis provider: \(client.consoleInputProfile?.label ?? "Configured vision")")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.textDim)
+            }
             if let offer = attachments.pendingOffer {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Approval required").font(.subheadline.weight(.semibold))

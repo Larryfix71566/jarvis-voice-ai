@@ -3,8 +3,7 @@ import AppKit
 import JarvisKit
 
 /// The bottombar (App.tsx:655-659, parity sweep 2026-08-30): MicControls
-/// (exact web labels + SPACE push-to-talk) · SoundToggle 🔊/🔇 · hints
-/// "SPACE talk · T transcript".
+/// (exact web labels + SPACE push-to-talk) · SoundToggle 🔊/🔇.
 ///
 /// Mic semantics are the web's (MicControls.tsx): the mic button toggles;
 /// SPACE keydown unmutes and keyup ALWAYS mutes (pttOwned guard so a
@@ -37,20 +36,7 @@ struct MicControlsView: View {
                     .foregroundStyle(live ? AppTheme.green : AppTheme.textDim)
             }
             .disabled(!connected)
-
-            // .ptt — the dashed hint chip; cyan while held.
-            Text(pttHeld ? "Talking…" : "Hold SPACE to talk")
-                .font(.system(size: 10, design: .monospaced))
-                .kerning(1.4)
-                .textCase(.uppercase)
-                .foregroundStyle(pttHeld ? AppTheme.accent : AppTheme.textDim)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 2)
-                        .strokeBorder(pttHeld ? AppTheme.accentDim : AppTheme.hairline,
-                                      style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                )
+            .help("Hold Space to talk")
 
             // 👂 Wake word on / Wake word off (MicControls.tsx:152-160).
             Button {
@@ -73,12 +59,6 @@ struct MicControlsView: View {
                 Text(soundsOn ? "🔊" : "🔇")
             }
             .help(soundsOn ? "Sounds on" : "Sounds off")
-
-            // .hints (App.tsx:658).
-            Text("SPACE TALK · T TRANSCRIPT")
-                .font(.system(size: 10, design: .monospaced))
-                .kerning(1.8)
-                .foregroundStyle(AppTheme.textDim)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
