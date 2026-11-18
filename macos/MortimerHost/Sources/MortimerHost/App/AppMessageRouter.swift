@@ -526,6 +526,18 @@ final class AppMessageRouter {
         } == true
     }
 
+    /// C7a (C7b's collision note): the composer sent `turn/typed` with this
+    /// id; its `console/turn` (`typed:<id>`) is the current request.
+    func expectTypedTurn(_ requestID: UUID) {
+        currentRequests.expect(.typed, id: requestID)
+    }
+
+    /// C7a: an approve tap's turn (`approval:<id>`, contract 3.8) is the
+    /// user's own turn, so its answer may come to the front.
+    func expectApprovalTurn(_ approvalID: UUID) {
+        currentRequests.expect(.approval, id: approvalID)
+    }
+
     func stop() {
         currentRequests.reset()
         task?.cancel()

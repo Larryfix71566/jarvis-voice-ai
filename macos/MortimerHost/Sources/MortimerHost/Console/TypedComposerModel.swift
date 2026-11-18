@@ -43,6 +43,9 @@ final class TypedComposerModel {
     /// Called with the request id when a reply is awaited; the app arms the
     /// 10 s timeout here. Tests leave it nil and call `expire(_:)` directly.
     var armTimeout: ((UUID) -> Void)?
+    /// C7a: told the request id just before `turn/typed` goes out, so the
+    /// router can make its `console/turn` (`typed:<id>`) current.
+    var didSend: ((UUID) -> Void)?
 
     @ObservationIgnored private var subscription: JarvisSubscription?
     @ObservationIgnored private var identitySink: AnyCancellable?
@@ -144,6 +147,7 @@ final class TypedComposerModel {
         pending[requestID] = Pending(requestID: requestID, session: session, text: trimmed,
                                      source: source, sentAt: sentAt)
         notice = nil
+        didSend?(requestID)
         transmit(.typedRequest(TypedRequest(
             sessionID: session.sessionID, generation: session.generation,
             requestID: requestID, text: trimmed, source: source)))

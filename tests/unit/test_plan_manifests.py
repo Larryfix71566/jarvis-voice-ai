@@ -25,7 +25,6 @@ COMMAND_CONSOLE_ARTIFACTS = (
     "macos/MortimerHost/Sources/MortimerHost/Display/AtlasCardView.swift",
     "macos/MortimerHost/Sources/MortimerHost/Display/ContentPanelView.swift",
     "macos/MortimerHost/Sources/MortimerHost/App/AppMessageRouter.swift",
-    "macos/MortimerHost/Sources/MortimerHost/App/ResponseResultRouter.swift",
     "macos/MortimerHost/Sources/MortimerHost/Display/ShareCoordinator.swift",
     "macos/MortimerHost/Sources/MortimerHost/Display/SharePreviewView.swift",
     "macos/MortimerHost/Sources/MortimerHost/Console/AttachmentTrayView.swift",

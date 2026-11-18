@@ -27,7 +27,17 @@ final class DisplayResultStore {
     /// came from a draft-gated tool. Self-clearing — anything newer
     /// replaces it at the head.
     private static let draftTools: Set<String> = ["prepare_commit", "prepare_push", "repo_write_file"]
+    /// C7a (contract 3.9): the approval store and the file-send offer feed
+    /// the same signal, so its three readers (orb ring, drawer dot, top bar)
+    /// keep reading one property. Set once at app start; strong references
+    /// so a later assignment is observed (neither holds this store).
+    var approvals: ApprovalStore?
+    var attachments: AttachmentStore?
     var hasPendingDraft: Bool {
+        if approvals?.hasOpenItems == true { return true }
+        if attachments?.pendingOffer != nil { return true }
+        // The older rule (contract §0 item 2: unreachable against a current
+        // bot, kept so an older bot's draft still lights the signal).
         guard let newest = results.first else { return false }
         return Self.draftTools.contains(newest.payload.tool ?? "")
     }

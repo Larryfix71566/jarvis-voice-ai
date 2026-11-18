@@ -109,11 +109,19 @@ enum ConversationThread {
         case row(Row)
         case card(Card)
         case cachedReference(CachedResultReference)
+        /// C7a: an open approval, inline under the request it belongs to.
+        case approval(ApprovalStore.Item)
+        /// C7a: the one line an approval leaves when it settles.
+        case approvalNote(ApprovalStore.Note)
         var id: String {
             switch self {
             case .row(let row): return row.id
             case .card(let card): return "card-" + card.id.uuidString
             case .cachedReference(let reference): return "cache-reference-" + reference.id.uuidString
+            // An approval and the note it leaves share a slot but not an
+            // identity, so the note counts as a change at the end.
+            case .approval(let item): return "approval-" + item.id.uuidString
+            case .approvalNote(let note): return "approval-note-" + note.id.uuidString
             }
         }
     }
@@ -124,9 +132,21 @@ enum ConversationThread {
     /// tool's result arrived before the spoken reply. A card that arrived
     /// before any retained question leads the thread; one from the current
     /// turn ends it. Cards in one turn keep their arrival order.
-    static func items(rows: [Row], cards: [Card], references: [CachedResultReference] = []) -> [Item] {
+    ///
+    /// C7a (contract 3.9): an approval with an `origin_request_id` sits the
+    /// same way, at the end of the turn it arrived in, which is under the
+    /// request that produced it (the transcript carries no request id, so
+    /// the turn is found by time, as for cards). One with a null origin
+    /// sits at the end of the thread. A settled approval's note keeps the
+    /// item's place.
+    static func items(rows: [Row], cards: [Card], references: [CachedResultReference] = [],
+                      approvals: [ApprovalStore.Item] = [],
+                      approvalNotes: [ApprovalStore.Note] = []) -> [Item] {
+        let anchored = approvals.filter { $0.originRequestID != nil }
         let additions = cards.map { ($0.time, Item.card($0)) }
             + references.map { ($0.time, Item.cachedReference($0)) }
+            + approvalNotes.map { ($0.time, Item.approvalNote($0)) }
+            + anchored.map { ($0.receivedAt, Item.approval($0)) }
         let ordered = additions.enumerated().sorted {
             ($0.element.0, $0.offset) < ($1.element.0, $1.offset)
         }.map(\.element)
@@ -141,7 +161,45 @@ enum ConversationThread {
             items.append(.row(row))
         }
         items += slots[rows.count]
+        items += approvals.filter { $0.originRequestID == nil }.map(Item.approval)
         return items
+    }
+
+    // MARK: C7a activity row
+
+    /// The one activity row under the current request (box 192; contract
+    /// 4.1): it names the current step and updates in place. It is not a
+    /// transcript line, is never stored, and never becomes a message.
+    struct Activity: Equatable {
+        /// Who is working: an agent's display name, or "Mortimer".
+        let actor: String
+        /// The current step, in words.
+        let step: String
+        var text: String { "\(actor) · \(step)" }
+        var accessibilityLabel: String { "\(actor) is working: \(step)" }
+    }
+
+    /// The newest unfinished delegation names the step by its latest tool;
+    /// with none running, the Supervisor thinking is "Thinking". The run's
+    /// task text is the model's words and is not shown (it can hold what the
+    /// user said on a protected turn); agent and tool names are fixed ids.
+    static func activity(runs: [AgentRun], thinking: Bool) -> Activity? {
+        if let run = runs.filter({ $0.doneAt == nil }).max(by: { ($0.startedAt, $0.id) < ($1.startedAt, $1.id) }) {
+            let actor = nonEmpty(run.displayName) ?? nonEmpty(run.name) ?? "Mortimer"
+            let step = run.tools.last.flatMap { stepName($0) } ?? "Starting"
+            return Activity(actor: actor, step: step)
+        }
+        return thinking ? Activity(actor: "Mortimer", step: "Thinking") : nil
+    }
+
+    /// "repo_read_file" → "Repo read file". Bounded; never empty.
+    static func stepName(_ tool: String) -> String? {
+        let words = tool.replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !words.isEmpty else { return nil }
+        let clipped = words.count > 60 ? String(words.prefix(59)) + "…" : words
+        return clipped.prefix(1).uppercased() + clipped.dropFirst()
     }
 
     /// New items between two snapshots of the thread: the identities in
@@ -207,8 +265,15 @@ struct ConversationThreadView: View {
     /// Card actions go through the same dispatcher as voice and the console
     /// row. Nil (previews, tests) falls back to the store directly.
     let coordinator: ConsoleActionCoordinator?
+    /// C7a: the Supervisor is thinking (JarvisClient.botIsThinking), passed
+    /// in by the stage so this view needs no client.
+    let thinking: Bool
     @Environment(ConversationStore.self) private var conversation
     @Environment(WorkspaceStore.self) private var workspace
+    /// C7a: optional, so fixtures that host the thread without them still
+    /// render (the app injects both into every window).
+    @Environment(ApprovalStore.self) private var approvals: ApprovalStore?
+    @Environment(AgentRunStore.self) private var agentRuns: AgentRunStore?
     @Environment(\.mortimerReduceMotion) private var reduceMotion
     @State private var follow = ConversationThread.Follow()
     @Namespace private var contentSpace
@@ -219,20 +284,24 @@ struct ConversationThreadView: View {
     @State private var readerRestoreTarget: CGFloat?
     private static let endID = "conversation-thread-end"
 
-    init(coordinator: ConsoleActionCoordinator? = nil) {
+    init(coordinator: ConsoleActionCoordinator? = nil, thinking: Bool = false) {
         self.coordinator = coordinator
+        self.thinking = thinking
     }
 
     var body: some View {
         let rows = ConversationThread.rows(conversation.entries)
         let items = ConversationThread.items(rows: rows,
                                              cards: [], // C5: results live beside the thread, never as duplicate summaries.
-                                             references: conversation.cachedReferences)
+                                             references: conversation.cachedReferences,
+                                             approvals: approvals?.items ?? [],
+                                             approvalNotes: approvals?.notes ?? [])
+        let activity = ConversationThread.activity(runs: agentRuns?.runs ?? [], thinking: thinking)
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        if items.isEmpty {
+                        if items.isEmpty && activity == nil {
                             ContentUnavailableView("Ready", systemImage: "waveform",
                                 description: Text("Use the microphone controls to start a conversation."))
                                 .padding(.top, 40)
@@ -258,6 +327,12 @@ struct ConversationThreadView: View {
                                     .buttonStyle(.plain)
                                     .disabled(!workspace.containsResult(reference.resultID))
                                     .accessibilityLabel(reference.text)
+                                case .approval(let approval):
+                                    ConversationApprovalRowView(item: approval) { decision in
+                                        _ = approvals?.decide(approval.id, decision)
+                                    }
+                                case .approvalNote(let note):
+                                    ConversationApprovalNoteView(note: note)
                                 }
                             }
                             .background {
@@ -266,6 +341,9 @@ struct ConversationThreadView: View {
                                         value: [item.id: geometry.frame(in: .named(contentSpace))])
                                 }
                             }
+                        }
+                        if let activity {
+                            ConversationActivityRowView(activity: activity, reduceMotion: reduceMotion)
                         }
                         Color.clear.frame(height: 1).id(Self.endID)
                     }
@@ -316,6 +394,11 @@ struct ConversationThreadView: View {
                     let added = ConversationThread.newTurns(from: old, to: new)
                     guard added > 0 else { return }
                     if follow.rowsChanged(added: added) { scrollToEnd(proxy) }
+                }
+                .onChange(of: activity != nil) { _, shown in
+                    // The activity row appearing under the request is kept
+                    // in view while following; it is not counted as a turn.
+                    if shown && follow.following { scrollToEnd(proxy) }
                 }
                 .onChange(of: rows.last?.text) { _, _ in
                     // A streaming answer grows in place; keep its end in view
@@ -456,10 +539,44 @@ final class CurrentRequestArrivals {
     private var highestSequence = 0
     private var revokedThrough = 0
     private var winner: UUID?
+    /// C7a / C7b's collision note: a typed turn (`typed:<request_id>`) or an
+    /// approve tap (`approval:<approval_id>`) has no `user-transcription`,
+    /// so the app names the input it just sent and the matching
+    /// `console/turn` becomes current. Bounded; each is consumed once.
+    private var expected: [ExpectedInput] = []
+    static let expectedCapacity = 16
+
+    struct ExpectedInput: Equatable {
+        enum Kind: String { case typed, approval }
+        let kind: Kind
+        let id: UUID
+    }
 
     func reset() {
         input = nil; seenInputs = []; pending = nil; current = nil
         highestSequence = 0; revokedThrough = 0; winner = nil
+        expected = []
+    }
+
+    func expect(_ kind: ExpectedInput.Kind, id: UUID) {
+        let entry = ExpectedInput(kind: kind, id: id)
+        expected = Array((expected.filter { $0 != entry } + [entry]).suffix(Self.expectedCapacity))
+    }
+
+    /// `typed:<uuid>` / `approval:<uuid>`, the UUID compared as a UUID (the
+    /// bot sends lowercase, Foundation uppercase). Anything else is nil.
+    static func expectedInput(fromUserID userID: String) -> ExpectedInput? {
+        guard let colon = userID.firstIndex(of: ":"),
+              let kind = ExpectedInput.Kind(rawValue: String(userID[..<colon])),
+              let id = UUID(uuidString: String(userID[userID.index(after: colon)...])) else { return nil }
+        return ExpectedInput(kind: kind, id: id)
+    }
+
+    private func consumeExpected(_ userID: String) -> Bool {
+        guard let parsed = Self.expectedInput(fromUserID: userID),
+              let index = expected.firstIndex(of: parsed) else { return false }
+        expected.remove(at: index)
+        return true
     }
 
     func transcription(_ raw: [String: JSONValue]) {
@@ -508,6 +625,10 @@ final class CurrentRequestArrivals {
         let binding = Binding(id: id, sequence: number, input: Input(timestamp: timestamp, userID: userID))
         highestSequence = number; current = nil; winner = nil; pending = binding
         if input == binding.input && number > revokedThrough { current = binding; pending = nil }
+        else if number > revokedThrough && consumeExpected(userID) {
+            // The app sent this exact input; no transcription will follow.
+            current = binding; pending = nil
+        }
     }
 
     func canPresent(_ origin: UUID?, tool: String?) -> Bool {
@@ -533,7 +654,9 @@ struct ConversationThreadRowView: View {
                 Text(row.speaker)
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
                     .kerning(1.2)
-                    .foregroundStyle(row.isUser ? AppTheme.accent : AppTheme.textDim)
+                    // C2/C7a: the speaker tokens (user teal, Mortimer rust);
+                    // the YOU / MORTIMER word, not the colour, says who.
+                    .foregroundStyle(row.isUser ? AppTheme.user : AppTheme.mortimer)
                 Text(row.time.formatted(date: .omitted, time: .shortened))
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(AppTheme.textDim)
@@ -552,5 +675,175 @@ struct ConversationThreadRowView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(row.isUser ? "You" : "Mortimer"): \(row.text)")
+    }
+}
+
+// MARK: - C7a activity and approval rows
+
+/// The activity row (box 192): one line under the current request that
+/// names the step and updates in place. A spinner and words, never colour
+/// alone; under Reduce Motion the spinner is a still symbol.
+struct ConversationActivityRowView: View {
+    let activity: ConversationThread.Activity
+    let reduceMotion: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if reduceMotion {
+                Image(systemName: "ellipsis.circle")
+                    .accessibilityHidden(true)
+            } else {
+                ProgressView().controlSize(.small)
+                    .accessibilityHidden(true)
+            }
+            Text(verbatim: activity.text)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(AppTheme.textDim)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(activity.accessibilityLabel)
+        .accessibilityAddTraits(.updatesFrequently)
+        .accessibilityIdentifier("conversation-activity")
+    }
+}
+
+/// Labels and wording for an approval row, pure so tests read them
+/// without rendering (contract 3.9: text labels, VoiceOver labels that
+/// include the summary, the yellow token never the only cue).
+enum ApprovalRowText {
+    static let badge = "Needs you"
+    static let approve = "Approve"
+    static let decline = "Decline"
+    static let sending = "Sending…"
+
+    static func containerLabel(_ item: ApprovalStore.Item) -> String {
+        let name = item.title.isEmpty ? "" : " from \(item.title)"
+        return "Needs your approval\(name): \(item.summary)"
+    }
+
+    static func approveLabel(_ item: ApprovalStore.Item) -> String { "Approve: \(item.summary)" }
+    static func declineLabel(_ item: ApprovalStore.Item) -> String { "Decline: \(item.summary)" }
+}
+
+/// An open approval inline in the thread: a hand symbol and the words
+/// "Needs you" in the needs-you yellow, the bot's summary verbatim, and
+/// Approve and Decline. Buttons disable while a decision is in flight.
+/// Space and Return activate the focused button; while one holds focus it
+/// claims Space from push-to-talk (SpaceKeyClaims).
+struct ConversationApprovalRowView: View {
+    enum Field: Hashable { case approve, decline }
+
+    let item: ApprovalStore.Item
+    let onDecide: (ApprovalDecide.Decision) -> Void
+    @FocusState private var focus: Field?
+    @State private var claimID = UUID()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "hand.raised.fill")
+                    .accessibilityHidden(true)
+                Text(ApprovalRowText.badge.uppercased())
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .kerning(1.2)
+                if !item.title.isEmpty {
+                    Text(verbatim: "· " + item.title)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(AppTheme.textDim)
+                        .lineLimit(1)
+                }
+            }
+            .foregroundStyle(AppTheme.approval)
+            .accessibilityHidden(true)
+            Text(verbatim: item.summary)
+                .font(.system(size: 14))
+                .foregroundStyle(AppTheme.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityHidden(true)
+            if let notice = item.notice {
+                Label {
+                    Text(verbatim: notice)
+                } icon: {
+                    Image(systemName: "exclamationmark.circle")
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(AppTheme.textDim)
+                .accessibilityLabel(notice)
+            }
+            HStack(spacing: 10) {
+                Button {
+                    onDecide(.approve)
+                } label: {
+                    Label(item.inFlight?.decision == .approve ? ApprovalRowText.sending : ApprovalRowText.approve,
+                          systemImage: "checkmark")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(AppTheme.approval)
+                .foregroundStyle(Color.black)
+                .focused($focus, equals: .approve)
+                .onKeyPress(keys: [.space, .return]) { _ in activate(.approve) }
+                .accessibilityLabel(ApprovalRowText.approveLabel(item))
+                .accessibilityIdentifier("approval-approve-\(item.id.uuidString)")
+
+                Button {
+                    onDecide(.decline)
+                } label: {
+                    Label(item.inFlight?.decision == .decline ? ApprovalRowText.sending : ApprovalRowText.decline,
+                          systemImage: "xmark")
+                }
+                .buttonStyle(.bordered)
+                .focused($focus, equals: .decline)
+                .onKeyPress(keys: [.space, .return]) { _ in activate(.decline) }
+                .accessibilityLabel(ApprovalRowText.declineLabel(item))
+                .accessibilityIdentifier("approval-decline-\(item.id.uuidString)")
+            }
+            .disabled(item.isBusy)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.approval.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(alignment: .leading) {
+            // The bar is decoration; the badge words carry the meaning.
+            Rectangle().fill(AppTheme.approval).frame(width: 3)
+                .clipShape(RoundedRectangle(cornerRadius: 1.5))
+                .accessibilityHidden(true)
+        }
+        .padding(.vertical, 6)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(ApprovalRowText.containerLabel(item))
+        .accessibilityIdentifier("approval-\(item.id.uuidString)")
+        .onChange(of: focus) { _, field in
+            if field == nil { SpaceKeyClaims.release(claimID) } else { SpaceKeyClaims.claim(claimID) }
+        }
+        .onDisappear { SpaceKeyClaims.release(claimID) }
+    }
+
+    private func activate(_ field: Field) -> KeyPress.Result {
+        guard !item.isBusy else { return .handled }
+        onDecide(field == .approve ? .approve : .decline)
+        return .handled
+    }
+}
+
+/// The one line a settled approval leaves ("Declined.", "Expired before an
+/// answer."). App text only, never bot text (contract 3.9).
+struct ConversationApprovalNoteView: View {
+    let note: ApprovalStore.Note
+
+    var body: some View {
+        Label {
+            Text(verbatim: note.text)
+        } icon: {
+            Image(systemName: "hand.raised")
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(AppTheme.textDim)
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Approval: \(note.text)")
     }
 }
