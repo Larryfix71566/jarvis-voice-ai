@@ -36,12 +36,14 @@ class AllowlistGateTests(unittest.TestCase):
                               cwd=self.root, env=self.env, check=True,
                               capture_output=True, text=True)
 
-    def gate(self, *, branch=None, event="pull_request", ci=True, diff="HEAD~1...HEAD"):
+    def gate(self, *, branch=None, event="pull_request", ci=True, diff="HEAD~1...HEAD", ref=None):
         env = dict(self.env)
         if ci:
             env.update(GITHUB_ACTIONS="true", GITHUB_EVENT_NAME=event)
         if branch is not None:
             env["GITHUB_HEAD_REF"] = branch
+        if ref is not None:
+            env["GITHUB_REF"] = ref
         return subprocess.run([sys.executable, "scripts/check_allowlist.py", diff],
                               cwd=self.root, env=env, capture_output=True, text=True)
 
@@ -72,6 +74,30 @@ class AllowlistGateTests(unittest.TestCase):
 
     def test_unexpected_event_is_conservative(self):
         self.assertEqual(self.gate(branch="feature/maintenance", event="push").returncode, 1)
+
+    def test_push_to_human_merged_branch_uses_pushed_ref(self):
+        # validate.yml runs on pushes to main and next; next differs from main
+        # by every merged PR, none of which is a self-edit diff.
+        self.git("checkout", "--detach", "-q")
+        for branch in ("next", "main"):
+            result = self.gate(event="push", ref=f"refs/heads/{branch}")
+            self.assertEqual(result.returncode, 0, result.stdout)
+            self.assertIn("not a self-edit branch", result.stdout)
+
+    def test_push_to_agent_branch_remains_restricted(self):
+        self.git("checkout", "--detach", "-q")
+        for branch in ("jarvis/self-edit/task", "mortimer/selfedit/session-123"):
+            result = self.gate(event="push", ref=f"refs/heads/{branch}")
+            self.assertEqual(result.returncode, 1, branch)
+            self.assertIn("requirements.txt", result.stdout)
+
+    def test_push_of_a_tag_or_missing_ref_is_conservative(self):
+        self.assertEqual(self.gate(event="push", ref="refs/tags/next").returncode, 1)
+        self.assertEqual(self.gate(event="push", ref="").returncode, 1)
+
+    def test_push_ref_cannot_exempt_a_pull_request(self):
+        result = self.gate(branch="jarvis/self-edit/task", ref="refs/heads/next")
+        self.assertEqual(result.returncode, 1)
 
     def test_local_detached_checkout_is_conservative(self):
         self.git("checkout", "--detach", "-q")
