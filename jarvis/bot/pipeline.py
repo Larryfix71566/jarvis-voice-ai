@@ -99,7 +99,8 @@ from jarvis.bot.ws_transport import send_frame_checked
 from jarvis.bot.status_tool import build_system_status_tool
 from jarvis.bot.weather_tool import build_local_weather_tool
 from jarvis.bot.weather_reuse import WeatherReuseBridge, current_weather_reuse, weather_reuse_scope
-from jarvis.bot.weather_intent import WeatherIntent, accepted_weather_intent, current_weather_intent
+from jarvis.bot.weather_intent import (WeatherIntent, accepted_weather_intent, asked_for_location,
+    current_weather_intent)
 from jarvis.bot.device_location import DeviceLocation, resolve_location, summarize_location
 from jarvis import ambient_weather
 from jarvis.bot.console_actions import build_console_action_tool, _disclosed_inventory
@@ -425,7 +426,8 @@ class ForegroundRequests:
                         self.control_note = {"role": "user", "content": "[system] " + note}
                         messages.insert(next(i for i, m in enumerate(messages) if m is boundary), self.control_note)
                 self.sequence += 1
-                intent = accepted_weather_intent(boundary["content"], self.previous_weather_intent)
+                intent = accepted_weather_intent(boundary["content"], self.previous_weather_intent,
+                    location_asked=asked_for_location(messages, boundary))
                 request = ForegroundRequest(str(uuid.uuid4()), self.sequence, *self.input_identity,
                     weather_intent=intent, task_stop=task_stop_command(boundary["content"]) is not None)
                 self.previous_weather_intent = intent
