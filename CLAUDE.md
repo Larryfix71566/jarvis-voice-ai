@@ -12,7 +12,7 @@ Claude and Codex both work on this repository. `ROADMAP.md` is the master record
 - **Reserve shared numbers** (migration ids, allow-list rows, launchd labels, ports) in `ROADMAP.md` §3 before using them.
 - **Production (`~/jarvis-voice-ai-clean`) is read-only for Claude.** Build in the Cowork VM or a separate clone, and hand Larry a branch or patch. Never run `git` against the Mac repo; Larry commits.
 - **Stay out of Codex's workspace** (`~/Documents/Codex/…`). Do not build branches in its `active-repo` or drop files there. The one exception is a read-only review Larry asks for. Handoffs go through `ROADMAP.md` and PRs.
-- **Status goes in your PR's own `docs/roadmap-log/` file**, never in a row's status lines, a plan's progress log or a checklist box (Larry, 2026-11-12 16:41:17 UTC, "Adopt the batch rule"; rules in `AGENTS.md`, *Status records and the daily batch*). Claude writes one batch PR to `main` each day that folds the merged log files into the plans and rows; a system other than Claude reviews it. PR bodies name the system and the session link.
+- **Status goes in your PR's own `docs/roadmap-log/` file**, never in a row's status lines, a plan's progress log or a checklist box (Larry, 2026-11-12 16:41:17 UTC, "Adopt the batch rule"; rules in `AGENTS.md`, *Status records and the daily batch*). Claude writes one batch PR to `main` each day that folds the merged log files into the plans and rows; Larry merges it, and a review by another system is optional (`ROADMAP.md` §0 rules 14 and 15: Mortimer is non-production, no freeze, review before merge optional). PR bodies name the system and the session link.
 
 ## What this is
 

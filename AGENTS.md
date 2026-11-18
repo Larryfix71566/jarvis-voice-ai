@@ -18,7 +18,7 @@ Resolve the open conflicts assigned to `codex` in `ROADMAP.md` §4 before starti
 - **Commit at the end of every slice** on your branch. Push when credentials exist; otherwise say in your summary that Larry needs to push. Do not keep uncommitted work across sessions.
 - **Never edit `~/jarvis-voice-ai-clean`.** It is production, and changes reach it only through `scripts/deploy_main.sh`.
 - **Stay out of Claude's work.** Do not read or write Claude's working folders or patches (`Claude outputs/`, `closure-checks/`, Cowork VM paths). The one exception is a read-only review Larry asks for. Work reaches you through `ROADMAP.md` and PRs only.
-- **Assignments prevent overlap; they are not exclusive, and a code-only freeze may apply.** Any system not currently engaged may pick up work another system is not engaged with, after updating the row's Owner and Where; no system reviews its own work. Once Larry records a freeze SHA in WS-17, no PR that changes files outside `docs/` and `ROADMAP.md` merges unless Larry approves it by name as an acceptance fix; docs-only PRs keep merging. See `ROADMAP.md` §0, rules 14 and 15.
+- **Assignments prevent overlap; they are not exclusive.** Any system not currently engaged may pick up work another system is not engaged with, after updating the row's Owner and Where; no system reviews its own work. Mortimer is a non-production application (Larry, 2026-11-18): there is no code freeze, review before merge is optional, and Larry merges at his discretion. See `ROADMAP.md` §0, rules 14 and 15.
 
 ## Status records and the daily batch
 
@@ -26,7 +26,7 @@ Larry, 2026-11-12 16:41:17 UTC, "Adopt the batch rule". Every open PR was editin
 
 1. **A PR does not edit status lines.** That means a plan's Progress log or dated progress entries, a `ROADMAP.md` row's Status, Remaining work, Next step and Updated lines, and checklist boxes.
 2. **A PR records its status in its own new file** under `docs/roadmap-log/`: date, system, row, PR, what changed, evidence, what is left and the next actor. It never edits another PR's log file.
-3. **Claude writes one batch PR to `main` each day.** It folds the log files merged since the last batch into the plans' progress logs and the `ROADMAP.md` rows, links each folded line to its log file, and changes nothing else. A system other than Claude reviews it (`ROADMAP.md` §0 rule 14) by checking that every line traces to a merged log file.
+3. **Claude writes one batch PR to `main` each day.** It folds the log files merged since the last batch into the plans' progress logs and the `ROADMAP.md` rows, links each folded line to its log file, and changes nothing else. Larry merges it. A review by a system other than Claude is optional (`ROADMAP.md` §0 rule 14); a reviewer checks that every line traces to a merged log file.
 4. **These still go in their own PR**, because they are not status: rule, scope and design changes (for example `ORB_SPEC.md`), new rows Larry asks for, a claim (Owner and Where) when you take an item, §3 reservations and §4 conflict entries.
 5. **An open PR that already edits status lines** drops those edits and moves the text into its log file. Do not resolve the conflict by merging.
 
