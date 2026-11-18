@@ -118,12 +118,12 @@ struct AdaptiveStageView: View {
     @ViewBuilder
     private var conversationAndResults: some View {
         if workspace.carouselResults.isEmpty {
-            ConversationThreadView(coordinator: coordinator)
+            ConversationThreadView(coordinator: coordinator, thinking: client.botIsThinking)
         } else {
             GeometryReader { geometry in
                 if geometry.size.width >= 900 {
                     HStack(spacing: 12) {
-                        ConversationThreadView(coordinator: coordinator)
+                        ConversationThreadView(coordinator: coordinator, thinking: client.botIsThinking)
                             .frame(minWidth: 280, maxWidth: .infinity)
                         Divider()
                         ResultCarouselView(coordinator: coordinator, showsActions: false)
@@ -131,7 +131,7 @@ struct AdaptiveStageView: View {
                     }
                 } else {
                     VStack(spacing: 8) {
-                        ConversationThreadView(coordinator: coordinator)
+                        ConversationThreadView(coordinator: coordinator, thinking: client.botIsThinking)
                             .frame(maxHeight: max(120, geometry.size.height * 0.32))
                         Divider()
                         ResultCarouselView(coordinator: coordinator, showsActions: false)

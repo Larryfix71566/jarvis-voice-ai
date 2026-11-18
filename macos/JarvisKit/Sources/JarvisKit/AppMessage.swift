@@ -21,6 +21,9 @@ public enum AppMessage: Sendable, Equatable {
     case consoleRequest(ConsoleRequest)
     case consoleResult(ConsoleResult)
     case turnResult(TurnResult)
+    case approvalPending(ApprovalPending)
+    case approvalSettled(ApprovalSettled)
+    case approvalResult(ApprovalResult)
     case inputAccept(InputAccept)
     case inputAck(InputAck)
     case inputReady(InputReady)
@@ -52,6 +55,10 @@ extension AppMessage: CustomDebugStringConvertible {
         case .consoleHello(let hello): return "consoleHello(\(hello.actions.count) actions)"
         case .consoleResult(let result): return "consoleResult(\(result.status), code: \(result.code))"
         case .turnResult(let result): return "turnResult(\(result.status), code: \(result.code))"
+        // C7a: ids and states only; the summary never reaches the debug log.
+        case .approvalPending(let pending): return "approvalPending(\(pending.approvalID.uuidString), \(pending.agent)/\(pending.tool))"
+        case .approvalSettled(let settled): return "approvalSettled(\(settled.approvalID.uuidString), \(settled.state))"
+        case .approvalResult(let result): return "approvalResult(\(result.status), code: \(result.code))"
         case .inputAccept(let accept): return "inputAccept(\(accept.transferID.uuidString))"
         case .inputAck(let ack): return "inputAck(\(ack.attachmentID.uuidString), sequence: \(ack.sequence))"
         case .inputReady(let ready): return "inputReady(\(ready.batchID.uuidString))"
@@ -602,6 +609,12 @@ public extension AppMessage {
             return .consoleResult(try dec.decode(ConsoleResult.self, from: payload))
         case "turn/result":
             return .turnResult(try dec.decode(TurnResult.self, from: payload))
+        case "approval/pending":
+            return .approvalPending(try dec.decode(ApprovalPending.self, from: payload))
+        case "approval/settled":
+            return .approvalSettled(try dec.decode(ApprovalSettled.self, from: payload))
+        case "approval/result":
+            return .approvalResult(try dec.decode(ApprovalResult.self, from: payload))
         case "input/accept":
             return .inputAccept(try dec.decode(InputAccept.self, from: payload))
         case "input/ack":

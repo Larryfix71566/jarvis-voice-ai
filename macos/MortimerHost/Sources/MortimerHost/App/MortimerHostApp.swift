@@ -41,6 +41,7 @@ struct MortimerHostApp: App {
     @State private var overlay = ConsoleOverlayState()
     @State private var notices = ConsoleNoticeState()
     @State private var composer = TypedComposerModel()
+    @State private var approvals = ApprovalStore()
     @State private var contentWindows = ContentWindowRegistry()
 
     // Non-Observable plumbing, created once for the app's lifetime
@@ -73,6 +74,7 @@ struct MortimerHostApp: App {
                 .environment(overlay)
                 .environment(notices)
                 .environment(composer)
+                .environment(approvals)
                 .background(WindowIdentifierSetter(identifier: "console", registry: contentWindows))
                 // C7.5: every session that ends writes its own evidence.
                 // The Debug menu item stays for an on-demand reading
@@ -116,6 +118,7 @@ struct MortimerHostApp: App {
                 .environment(overlay)
                 .environment(notices)
                 .environment(composer)
+                .environment(approvals)
                 .background(WindowIdentifierSetter(identifier: "display", registry: contentWindows))
                 // The native form of the web's hasLivePopup poll: scene
                 // content on screen = window open. Drives the topbar's
@@ -137,6 +140,7 @@ struct MortimerHostApp: App {
                 .environment(overlay)
                 .environment(notices)
                 .environment(composer)
+                .environment(approvals)
                 .environment(agentRuns)
                 .environment(displayResults)
                 .environment(workspace)
@@ -175,6 +179,7 @@ struct MortimerHostApp: App {
                     .environment(overlay)
                     .environment(notices)
                     .environment(composer)
+                    .environment(approvals)
                     .environment(agentRuns)
                     .environment(displayResults)
                     .environment(workspace)
@@ -208,6 +213,7 @@ struct MortimerHostApp: App {
                     .environment(overlay)
                     .environment(notices)
                     .environment(composer)
+                    .environment(approvals)
                     .environment(agentRuns)
                     .environment(displayResults)
                     .environment(workspace)
@@ -348,6 +354,13 @@ struct MortimerHostApp: App {
         )
         router.start(client: client)
         composer.bind(client: client)
+        // C7a: approvals, and the two inputs that have no transcription.
+        let messageRouter = self.messageRouter
+        composer.didSend = { messageRouter.expectTypedTurn($0) }
+        approvals.didSendApprove = { messageRouter.expectApprovalTurn($0) }
+        approvals.bind(client: client)
+        displayResults.approvals = approvals
+        displayResults.attachments = attachments
         drawer.placementRef = placement
         drawer.supportingDisplayRef = supportingDisplay
     }

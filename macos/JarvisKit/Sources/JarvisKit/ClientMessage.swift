@@ -18,6 +18,7 @@ public enum ClientMessage: Sendable, Equatable {
     case locationHello(LocationHello)
     case locationResult(LocationResult)
     case typedRequest(TypedRequest)
+    case approvalDecide(ApprovalDecide)
 
     /// `if not reason or len(reason) > 200` in pipeline.py drops empty/over-200 reasons.
     public static func noop(_ reason: String) -> ClientMessage? {
@@ -46,6 +47,7 @@ public enum ClientMessage: Sendable, Equatable {
         case .locationHello(let message): return try JSONEncoder().encode(message)
         case .locationResult(let message): return try JSONEncoder().encode(message)
         case .typedRequest(let message): return try JSONEncoder().encode(message)
+        case .approvalDecide(let message): return try JSONEncoder().encode(message)
         }
     }
 }
