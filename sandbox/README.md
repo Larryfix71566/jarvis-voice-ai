@@ -78,7 +78,6 @@ python3 sandbox/control.py prepare TASK_ID
 python3 sandbox/control.py start TASK_ID
 python3 sandbox/control.py exec TASK_ID /bin/bash '/Volumes/My Shared Files/input/checks.sh'
 python3 sandbox/control.py exec TASK_ID /bin/bash '/Volumes/My Shared Files/input/preview.sh'
-python3 sandbox/control.py exec TASK_ID /bin/bash '/Volumes/My Shared Files/input/browser-smoke.sh'
 python3 sandbox/control.py export TASK_ID
 python3 sandbox/control.py stop TASK_ID
 ```
@@ -90,7 +89,7 @@ Run `status TASK_ID` to inspect saved state and source identifiers.
 ## Included development tools and checks
 
 Guest preparation installs the locked Python backend dependencies, the
-bundled knowledge-base package, Node 22 web dependencies, Swift package
+bundled knowledge-base package, Swift package
 dependencies, and a Chromium browser with Playwright 1.63.0. The Xcode image
 provides the native toolchain. Fake placeholder keys permit configuration
 parsing, and all application databases and knowledge records live under
@@ -98,14 +97,11 @@ parsing, and all application databases and knowledge records live under
 
 The check script runs policy/controller regressions, backend unit tests,
 scripted sub-agent evaluations, latency enforcement, knowledge-base tests,
-web compilation, and both native Swift test suites.
+and both native Swift test suites.
 It attempts every group and records separate logs even when one fails.
-The preview script starts guest-local knowledge-base, admin, cost and web
+The preview script starts guest-local knowledge-base, admin and cost
 services, and requires successful HTTP responses before reporting readiness.
-The browser smoke script checks console rendering and read-only navigation
-through all seven panels, recording a screenshot and JSON report inside the
-guest. It does not test voice, editing or publication. The VM desktop can
-be used to launch/debug the native application.
+The VM desktop can be used to launch/debug the native application.
 
 `probe.py` runs synthetic host-file and network canaries against a running
 guest, verifies that the source share exists and rejects writes, and checks

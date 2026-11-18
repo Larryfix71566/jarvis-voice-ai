@@ -13,9 +13,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from artifacts import Candidate, SandboxError, check_paths
 
-CACHES = {".venv", "services/mortimer-vault/.venv", "web/node_modules",
+CACHES = {".venv", "services/mortimer-vault/.venv",
           "macos/JarvisKit/.build", "macos/MortimerHost/.build"}
-PROTECTED = {".venv": "python", "services/mortimer-vault/.venv": "knowledge-python", "web/node_modules": "web/node_modules"}
+PROTECTED = {".venv": "python", "services/mortimer-vault/.venv": "knowledge-python"}
 TEST_ROOTS = ("tests/", "services/mortimer-vault/tests/", "macos/JarvisKit/Tests/", "macos/MortimerHost/Tests/")
 
 
@@ -117,16 +117,6 @@ def hydrate(root: Path, candidate: Candidate, caches: list[str], worker_uid: int
                     item = Path(directory) / child
                     if not item.is_symlink():
                         os.chmod(item, item.stat().st_mode & ~0o022)
-            if name == "web/node_modules":
-                # TypeScript and Vite need build caches, while installed
-                # package code stays protected. Preserve the node_modules
-                # directory name so Node/TypeScript can resolve sibling deps.
-                for cache_name in [".tmp", ".vite", ".vite-temp"]:
-                    writable = installed / cache_name
-                    if writable.is_symlink():
-                        raise SandboxError("Unexpected build cache link")
-                    writable.mkdir(exist_ok=True)
-                    os.chown(writable, worker_uid, worker_gid)
     holding.rmdir()
     for name in ["state", "logs", "reports"]:
         path = root / name

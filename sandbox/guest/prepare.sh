@@ -105,7 +105,6 @@ PY
 bash scripts/setup_kb.sh
 .venv/bin/python scripts/init_db.py
 services/mortimer-vault/.venv/bin/mortimer-vault init
-(cd web && npm ci)
 for package in JarvisKit MortimerHost; do
   (cd "macos/$package" && swift package resolve)
 done

@@ -6,7 +6,7 @@ from jarvis.selfedit import proposals
 from jarvis.selfedit.service import SelfEditService, BASE_REF_ENV, is_swift_path, swift_packages_for
 from tests.sandbox_fakes import FakeRuntime
 
-ALLOWLIST = {'allow':['docs/**','web/src/**','macos/**','config/agents.yaml','mcp_servers/**','tests/**'],
+ALLOWLIST = {'allow':['docs/**','macos/**','config/agents.yaml','mcp_servers/**','tests/**'],
     'core':['jarvis/**'], 'deny':['jarvis/wakeword.py','jarvis/selfedit/**','.github/**','sandbox/**','**/.env*']}
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def test_reopened_service_resumes_same_session(service):
     assert reopened.propose_edit('docs/README.md','new\n','reason')['ok']
     assert service.proposals[0]['path']=='docs/README.md'
 
-def test_policy_and_frozen_web_are_enforced_on_actual_edits(service):
+def test_policy_is_enforced_on_actual_edits(service):
     service.start_session('Update docs')
     for path in ['../outside','.env','web/src/App.tsx','docs/proposals/x.patch']:
         assert not service.propose_edit(path,'change','denied')['ok'],path
@@ -174,18 +174,6 @@ def test_appearance_never_uses_a_host_screenshot(service):
 def test_swift_dependency_closure_is_preserved():
     assert is_swift_path('macos/JarvisKit/Sources/Client.swift')
     assert swift_packages_for(['macos/JarvisKit/Sources/Client.swift'])==['JarvisKit','MortimerHost']
-class TestWebFreezeMessageNamesTheSwiftPath:
-    """SE7 — the freeze message used to end the conversation ("which is a
-    human PR"). It is now a redirect: the same request, aimed at the file
-    self-edit can actually change."""
-
-    def test_the_freeze_message_points_at_target_paths(self, service: SelfEditService):
-        res = service.preflight("restyle web/src/App.tsx", has_plan=False)
-        assert res["ok"] is False
-        assert "macos/MortimerHost" in res["error"]
-        assert "target_paths" in res["error"]
-        assert "human PR" not in res["error"]
-
 class TestPreflight:
     """The preview refuses what the planner would only discover after
     confirm + staging + a run (2026-08-30: three such runs)."""
@@ -215,7 +203,7 @@ class TestPreflight:
         assert res["tiers"]["core"] == ["jarvis/bot/display.py"]
 
     def test_routine_goal_passes_without_plan(self, service: SelfEditService) -> None:
-        res = service.preflight("tidy docs/README.md spacing", has_plan=False)  # GC4: web/ frozen
+        res = service.preflight("tidy docs/README.md spacing", has_plan=False)
         assert res["ok"] is True and res["tiers"]["core"] == []
 
     def test_goal_naming_no_files_passes_through(self, service: SelfEditService) -> None:
