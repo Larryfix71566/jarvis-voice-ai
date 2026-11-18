@@ -203,12 +203,24 @@ final class VoiceWaveRenderingTests: XCTestCase {
 
     /// Let the approved measured-time colour and audio envelopes settle before
     /// asserting the speaker palette; a single 100 ms frame is mid-transition.
+    /// The 60 warm-up frames only advance the engine, so they draw offscreen
+    /// through ImageRenderer instead of opening a window each: 61 fixture
+    /// windows per call (about 370 per run) slowed the window server for
+    /// WindowVisibilityTests, which runs next. Only the sampled frame uses
+    /// the on-screen fixture.
     private func renderSettled(_ state: VoicePresentationState, engine: WaveEngine) throws -> NSBitmapImageRep {
-        var bitmap = try render(state, now: 10, engine: engine)
-        for frame in 1...60 {
-            bitmap = try render(state, now: 10 + Double(frame) / 60, engine: engine)
+        var drawn = 0
+        for frame in 0..<60 {
+            let now = 10 + Double(frame) / 60
+            let renderer = ImageRenderer(content: Canvas { context, size in
+                drawn += 1
+                engine.draw(context: &context, size: size, now: now, state: .speaking,
+                    stageCenterX: nil, presentation: state, reduceMotion: false)
+            }.frame(width: 400, height: 180).background(Color.black))
+            _ = renderer.cgImage
         }
-        return bitmap
+        XCTAssertGreaterThanOrEqual(drawn, 60, "every warm-up frame must advance the engine")
+        return try render(state, now: 11, engine: engine)
     }
 
     private func assertWhiteCore(_ bitmap: NSBitmapImageRep, file: StaticString = #filePath,

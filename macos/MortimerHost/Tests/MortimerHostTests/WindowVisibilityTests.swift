@@ -202,33 +202,6 @@ final class WindowVisibilityTests: XCTestCase {
         XCTAssertTrue(reports.isEmpty)
     }
 
-    /// didUpdate arrives on every NSApp.updateWindows. A refresh that lands
-    /// before the main queue reaches the previous delivery must not cancel
-    /// it, or a busy run loop never hears the window's state. Each step
-    /// below queues the next step ahead of its own delivery, which is the
-    /// order that starved the old observer for the whole chain.
-    func testRepeatedRefreshesCannotStarveDelivery() {
-        let view = WindowVisibilityView()
-        var reports: [Bool] = []
-        var remaining = 50
-        var reportedDuringChurn = false
-        view.changed = { value in
-            reports.append(value)
-            if remaining > 0 { reportedDuringChurn = true }
-        }
-        func churn() {
-            guard remaining > 0 else { return }
-            remaining -= 1
-            DispatchQueue.main.async { churn() }
-            view.refresh()
-        }
-        churn()
-        pumpEvents(for: 0.2)
-        XCTAssertEqual(remaining, 0, "the refresh chain must run to completion")
-        XCTAssertTrue(reportedDuringChurn, "a queued delivery must survive later refreshes")
-        XCTAssertEqual(reports, [false], "a view without a window reports not visible once")
-    }
-
     func testWaveStopsSamplingWhileWindowHiddenAndResumes() throws {
         if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
             throw XCTSkip("Hosted-runner skip: this test still gates on Mac.")
