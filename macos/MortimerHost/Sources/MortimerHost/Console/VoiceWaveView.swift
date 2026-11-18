@@ -404,7 +404,7 @@ final class WaveEngine {
         let alpha = min(1, dyn.alpha + 0.4 * flash)
         let glow = min(1, dyn.glow + flash)
 
-        let r = dyn.cr, g = dyn.g, b = dyn.cb
+        let r = dyn.cr, g = dyn.cg, b = dyn.cb
 
         // Super-Gaussian window: tight central plateau (middle ~10% of the
         // width holds >=94% of peak), fast falloff.
