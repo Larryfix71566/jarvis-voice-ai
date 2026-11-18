@@ -29,8 +29,20 @@ def _current_branch() -> str:
     # branch independently of that checkout. Unknown CI context stays
     # empty so it cannot accidentally exempt an agent-authored change.
     if os.environ.get("GITHUB_ACTIONS") == "true":
-        if os.environ.get("GITHUB_EVENT_NAME") == "pull_request":
+        event = os.environ.get("GITHUB_EVENT_NAME")
+        if event == "pull_request":
             return os.environ.get("GITHUB_HEAD_REF", "").strip()
+        if event == "push":
+            # A push names the branch it landed on in GITHUB_REF. validate.yml
+            # runs on pushes to main and next, which only take merged PRs, and
+            # each PR was already checked by its own head branch above. Without
+            # this a push to next diffed all of next against main as if it were
+            # a self-edit and always failed. A push to a self-edit branch still
+            # names that branch and stays restricted; a tag or other ref stays
+            # empty.
+            ref = os.environ.get("GITHUB_REF", "").strip()
+            if ref.startswith("refs/heads/"):
+                return ref[len("refs/heads/"):]
         return ""
     proc = subprocess.run(
         ["git", "branch", "--show-current"],
