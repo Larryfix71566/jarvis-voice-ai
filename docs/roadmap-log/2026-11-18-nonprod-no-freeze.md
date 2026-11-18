@@ -1,3 +1,10 @@
+---
+date: 2026-11-18
+system: claude
+rows: [WS-17, WS-34, WS-35, WS-36]
+prs: [383]
+---
+
 # 2026-11-18: non-production, no freeze, optional review
 
 - **System:** Claude (Claude Code cloud session), at the coordinator's request.
