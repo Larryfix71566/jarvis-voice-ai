@@ -1,3 +1,10 @@
+---
+date: 2026-11-18
+system: codex
+rows: []
+prs: [391]
+---
+
 # 2026-11-18 · Astra independent Mortimer interface review
 
 - **System:** Codex (Astra); independent visual-design review requested by Larry.
