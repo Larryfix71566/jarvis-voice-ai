@@ -19,7 +19,7 @@ def _repo_root() -> Path:
 def _slugify(text: str, max_len: int=32) -> str:
     slug = re.sub('[^a-z0-9]+', '-', text.lower()).strip('-')
     return slug[:max_len].strip('-') or 'change'
-VISUAL_PATH_PREFIXES = ('web/src/', 'web/public/', 'macos/MortimerHost/Sources/MortimerHost/')
+VISUAL_PATH_PREFIXES = ('macos/MortimerHost/Sources/MortimerHost/',)
 
 def is_visual_path(path: str) -> bool:
     return str(path).replace('\\', '/').startswith(VISUAL_PATH_PREFIXES)
@@ -76,7 +76,7 @@ class SelfEditService(SandboxWorkspace):
         return self.base_ref[len('origin/'):] if self.base_ref.startswith('origin/') else self.base_ref
 
     def _allowed_path(self, path):
-        return self.allowlist.is_allowed(path) and path != 'web' and (not path.startswith('web/'))
+        return self.allowlist.is_allowed(path)
 
     def _tier(self, path):
         """The path's tier, or None for a path that is not a repo path at
@@ -208,7 +208,7 @@ class SelfEditService(SandboxWorkspace):
         return {'ok': False, 'error': 'Guest appearance verification requires this session’s sandbox preview.'}
 
     def describe_boundary(self):
-        return json.dumps({'allow': self.allowlist.allow_patterns, 'core': self.allowlist.core_patterns, 'deny': self.allowlist.deny_patterns, 'frozen': ['web/**'], 'execution': 'disposable offline VM; independently verified draft pull requests'}, indent=2)
+        return json.dumps({'allow': self.allowlist.allow_patterns, 'core': self.allowlist.core_patterns, 'deny': self.allowlist.deny_patterns, 'execution': 'disposable offline VM; independently verified draft pull requests'}, indent=2)
 
     def preflight(self, goal: str, has_plan: bool, target_paths: list[str] | None=None) -> dict:
         """Tier pre-flight for a goal BEFORE it is staged
@@ -238,9 +238,6 @@ class SelfEditService(SandboxWorkspace):
         tiers = self.allowlist.classify(paths)
         human_only = [p for p in tiers['denied'] if self.is_human_only(p)]
         result: dict = {'ok': True, 'paths': paths, 'tiers': tiers, 'human_only': human_only}
-        if any((p == 'web' or p.startswith('web/') for p in paths)):
-            result.update(ok=False, error='web/ is frozen (2026-09-04): interface work goes to macos/MortimerHost, which self-edit can change — name the Swift file in target_paths.')
-            return result
         sealed = [p for p in tiers['denied'] if p not in human_only]
         if sealed:
             result.update(ok=False, error='these files hold secrets or runtime data, and no self-edit can carry them, not even as a proposal: ' + ', '.join(sealed) + '. Larry changes them by hand; re-scope the goal to the other files.')

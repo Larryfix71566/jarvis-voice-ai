@@ -403,11 +403,12 @@ def test_inside_source_or_renamed_known_case_is_never_independent_holdout(git_so
         pilot._holdout_snapshot(inside, digest(raw), case)
 
 
-def test_mortimer_profile_keeps_all_twelve_checks_and_original_fingerprint():
+def test_mortimer_profile_keeps_all_eleven_checks():
     from sandbox.profiles import MORTIMER
-    assert len(MORTIMER.checks) == 12 and MORTIMER.requires_graphics
+    assert len(MORTIMER.checks) == 11 and MORTIMER.requires_graphics
     names = [name for name, _ in MORTIMER.checks]
-    assert {'backend', 'baseline-backend', 'native-app', 'baseline-native-app', 'knowledge-base', 'web'} <= set(names)
+    assert {'backend', 'baseline-backend', 'native-app', 'baseline-native-app', 'knowledge-base'} <= set(names)
+    assert 'web' not in names
 
 
 def test_native_public_fixture_receipt_cannot_approve_actual_upgrade_operations(monkeypatch):
@@ -1158,7 +1159,7 @@ def test_actual_runtime_session_upgrade_sdk_and_all_profile_gates_are_wired(
         return
     assert report['substrate_passed'], report
     assert len(requests) == 4
-    assert len(report['verification']['checks']) == len(MORTIMER.checks) == 12
+    assert len(report['verification']['checks']) == len(MORTIMER.checks) == 11
     assert report['cleanup']['verified'] and len(report['cleanup']['owned_tasks']) == 2
     assert all('session_submit' not in {tool['function']['name'] for tool in body['tools']} for body in requests)
     assert not report['developer_accepted'] and not report['mar_i_complete'] and not report['independent_holdout_verified']

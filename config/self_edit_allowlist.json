@@ -1,7 +1,5 @@
 {
   "allow": [
-    "web/src/**",
-    "web/public/**",
     "config/**",
     "jarvis/prompts.py",
     "jarvis/skills/**",
@@ -39,8 +37,6 @@
     "scripts/apply_proposal.py",
     "scripts/deploy_main.sh",
     "requirements*.txt",
-    "web/package.json",
-    "web/package-lock.json",
     "DEVIATIONS.md",
     ".env",
     ".env.*",

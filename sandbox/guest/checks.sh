@@ -22,7 +22,6 @@ check backend .venv/bin/python -m pytest tests/unit -q
 check scripted-evals .venv/bin/python -m pytest tests/evals/sub_agent_evals.py -q
 check latency .venv/bin/python scripts/latency_probe.py --budget tests/fixtures/latency_sample.log
 check knowledge-base services/mortimer-vault/.venv/bin/python -m pytest services/mortimer-vault/tests -q
-check web /bin/bash -c 'cd web && npm run build'
 check native-library swift test --package-path macos/JarvisKit
 check native-app swift test --package-path macos/MortimerHost
 exit "$failed"

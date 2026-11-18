@@ -1,0 +1,6 @@
+#include <ApplicationServices/ApplicationServices.h>
+#include <stdio.h>
+int main(void) {
+    printf("AXIsProcessTrusted=%d\nCGPreflightPostEventAccess=%d\nCGPreflightListenEventAccess=%d\nCGPreflightScreenCaptureAccess=%d\n", AXIsProcessTrusted(), CGPreflightPostEventAccess(), CGPreflightListenEventAccess(), CGPreflightScreenCaptureAccess());
+    return 0;
+}

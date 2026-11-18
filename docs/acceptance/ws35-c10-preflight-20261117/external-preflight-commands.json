@@ -1,0 +1,28 @@
+{
+  "templates": {
+    "command": [
+      "xcrun",
+      "xctrace",
+      "list",
+      "templates"
+    ],
+    "exit_status": 0
+  },
+  "recording-options": {
+    "command": [
+      "xcrun",
+      "xctrace",
+      "record",
+      "--template",
+      "Animation Hitches",
+      "--show-recording-options"
+    ],
+    "exit_status": 0
+  },
+  "driver-preflight-unsandboxed": {
+    "command": [
+      "/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-evidence/driver-preflight"
+    ],
+    "exit_status": 0
+  }
+}
