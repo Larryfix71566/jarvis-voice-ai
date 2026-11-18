@@ -161,9 +161,10 @@ enum CometOrbRenderer {
         drawArcSet(context: &frame, center: center, scale: scale, phase: phase,
                    tint: tint, level: energy, activity: activity, pointer: pointer,
                    front: false, contacts: true, depths: depths)
-        if activity != .offline {
-            let minimum = (demoRadius / CrystalGlassRig.plasmaClipFraction / 3) / 0.75
-            let core = (minimum + 3 + energy * 22 + (reduceMotion ? 0 : 3 * sin(phase * 5))) * scale
+        let minimum = (demoRadius / CrystalGlassRig.plasmaClipFraction / 3) / 0.75
+        let core: Double? = activity == .offline ? nil :
+            (minimum + 3 + energy * 22 + (reduceMotion ? 0 : 3 * sin(phase * 5))) * scale
+        if let core {
             frame.fill(disc(center, core * 0.8), with: .radialGradient(
                 Gradient(colors: [Color(red: 8 / 255, green: 11 / 255, blue: 15 / 255).opacity(0.7), .clear]),
                 center: center, startRadius: 0, endRadius: core * 0.8))
@@ -189,6 +190,21 @@ enum CometOrbRenderer {
                  depth: 5, seed: 4_241)
             frame.stroke(boltPath, with: .color(AppTheme.user.opacity(0.9)),
                          lineWidth: smallWidth(3, scale: scale))
+        }
+        if let core {
+            // C6's approved nucleus is white. Every front arc (and the
+            // barge-in bolt) starts at the centre, so their tinted halos were
+            // drawn over the core and left it 6-9% teal or rust. Re-light the
+            // core's inner white quarter after them; speaker colour stays in
+            // the arcs and in the core's outer ring.
+            let nucleus = core * 0.25
+            var white = frame
+            white.blendMode = .plusLighter
+            white.fill(disc(center, nucleus), with: .radialGradient(
+                Gradient(stops: [.init(color: .white.opacity(0.95), location: 0),
+                                 .init(color: .white.opacity(0.95), location: 0.4),
+                                 .init(color: .clear, location: 1)]),
+                center: center, startRadius: 0, endRadius: nucleus))
         }
         if ripple > 0 {
             frame.stroke(disc(center, inner * (0.35 + 0.65 * ripple)),
@@ -319,6 +335,8 @@ enum CometOrbRenderer {
 /// Mutable per-orb easing and brightness-rate state. Depth uses the approved
 /// ±0.025 reference step scaled by r; colour uses k=0.08 and level k=0.20.
 final class OrbEnergyState {
+    static let reducedMotionInterval: TimeInterval = 0.1
+
     struct RGB {
         var r = 102.0, g = 115.0, b = 255.0
     }
@@ -327,11 +345,24 @@ final class OrbEnergyState {
     private var rgb = RGB()
     private(set) var depths = (0..<10).map { sin(Double($0) * 1.71) * 0.82 }
     private(set) var flash = OrbFlashCap()
+    private var reducedMotionLastAdvance: Double?
 
     func advance(activity: VoicePresentationState.Activity, measuredLevel: Double,
-                 phase: Double, now: Double, dt: Double) {
+                 phase: Double, now: Double, dt: Double,
+                 reducedMotion: Bool = false) {
+        var scheduledDt = dt
+        if reducedMotion {
+            guard now.isFinite else { return }
+            if let last = reducedMotionLastAdvance {
+                guard now >= last + Self.reducedMotionInterval else { return }
+                scheduledDt = min(max(now - last, 0), 0.1)
+            } else {
+                scheduledDt = 0
+            }
+            reducedMotionLastAdvance = now
+        }
         let targetRGB = CometOrbRenderer.stateRGB(activity)
-        let colorEase = FrameRateIndependentEasing.factor(0.08, dt: dt)
+        let colorEase = FrameRateIndependentEasing.factor(0.08, dt: scheduledDt)
         rgb.r += (targetRGB.0 - rgb.r) * colorEase
         rgb.g += (targetRGB.1 - rgb.g) * colorEase
         rgb.b += (targetRGB.2 - rgb.b) * colorEase
@@ -347,15 +378,15 @@ final class OrbEnergyState {
         case .user, .assistant: base = 1
         }
         let target = voice ? min(1, max(0, measuredLevel)) : base * 0.4
-        level += (target - level) * FrameRateIndependentEasing.factor(0.20, dt: dt)
-        let depthStep = FrameRateIndependentEasing.step(0.025, dt: dt)
+        level += (target - level) * FrameRateIndependentEasing.factor(0.20, dt: scheduledDt)
+        let depthStep = FrameRateIndependentEasing.step(0.025, dt: scheduledDt)
         for index in depths.indices {
             depths[index] += sin(phase * 0.7 + Double(index) * 2.13) * depthStep
             if depths[index] > 0.95 { depths[index] = 1.9 - depths[index] }
             if depths[index] < -0.9 { depths[index] = -1.8 - depths[index] }
         }
         let luminance = min(1, max(0, (0.04 + level * 0.42) * (activity == .offline ? 0 : 1)))
-        flash.advance(luminance: luminance, now: now, dt: dt)
+        flash.advance(luminance: luminance, now: now, dt: scheduledDt)
     }
 }
 
@@ -379,10 +410,17 @@ struct OrbFlashCap {
         let r = FrameRateIndependentEasing.ratio(dt: dt)
         reference = max(reference * pow(0.995, r), l, 0.000001)
         let step = 0.04 * reference * r
+        // Moving on in the current direction lands exactly on the target
+        // (each move is min(difference, step)), so every frame rate settles
+        // at the same anchor. Only a reversal keeps a dead band, and it is
+        // the fixed 60 Hz half-step (2% of Lref). The old band, step × 0.5,
+        // grew with dt and stopped a 15 Hz cap 0.004 short of 60 Hz.
+        let reversalBand = 0.02 * reference
         let difference = l - anchor
-        if abs(difference) > step * 0.5 {
+        if step > 0 && difference != 0 {
             let next = difference > 0 ? 1 : -1
-            if direction == next || now - lastReversal >= 0.220 {
+            if direction == next ||
+                (abs(difference) > reversalBand && now - lastReversal >= 0.220) {
                 if direction != next { lastReversal = now }
                 direction = next
                 anchor += Double(next) * min(abs(difference), step)
@@ -468,8 +506,10 @@ extension CometOrbRenderer {
         // 4. The capped energy frame, seen through the unchanged inner wall.
         var inside = context
         inside.clip(to: disc(center, radius * Rig.plasmaClipFraction))
+        // Approved barge-in: Mortimer's rust arcs remain, with one teal bolt.
+        let energyTint = activity == .user && outputEnergy > 0 ? AppTheme.mortimer : tint
         drawEnergy(context: &inside, center: center, radius: radius, phase: phase,
-                   tint: tint, strength: strength * breath, energy: energy,
+                   tint: energyTint, strength: strength * breath, energy: energy,
                    activity: activity, pointer: pointer, ripple: ripple,
                    reduceMotion: reduceMotion, gain: gain, echo: true,
                    overlap: activity == .user && outputEnergy > 0, depths: depths)
@@ -516,7 +556,7 @@ extension CometOrbRenderer {
 
     }
 
-    private static func drawCrystalReflections(into env: inout GraphicsContext,
+    static func drawCrystalReflections(into env: inout GraphicsContext,
                                                center: CGPoint, radius: Double) {
         typealias Rig = CrystalGlassRig
         let sphere = disc(center, radius)

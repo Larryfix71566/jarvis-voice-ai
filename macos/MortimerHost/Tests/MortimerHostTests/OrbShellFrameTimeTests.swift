@@ -182,16 +182,56 @@ final class OrbShellFrameTimeTests: XCTestCase {
     func testC6DepthAndFlashReferenceStepsUseMeasuredTime() {
         XCTAssertEqual(FrameRateIndependentEasing.step(0.025, dt: 1.0 / 15), 0.1, accuracy: 1e-12)
         var sixty = OrbFlashCap(), fifteen = OrbFlashCap()
-        for index in 0..<60 {
-            let luminance = index < 30 ? 0.1 : 0.8
-            sixty.advance(luminance: luminance, now: Double(index) / 60, dt: 1.0 / 60)
+
+        // Prime both caps to 0.1, then compare mid-ramp after the same elapsed
+        // time. Without dt × 60, the 15 Hz anchor moves only a quarter as far.
+        for index in 0..<36 {
+            sixty.advance(luminance: 0.1, now: Double(index + 1) / 60, dt: 1.0 / 60)
         }
-        for index in 0..<15 {
-            let luminance = index < 8 ? 0.1 : 0.8
-            fifteen.advance(luminance: luminance, now: Double(index) / 15, dt: 1.0 / 15)
+        for index in 0..<9 {
+            fifteen.advance(luminance: 0.1, now: Double(index + 1) / 15, dt: 1.0 / 15)
         }
-        XCTAssertEqual(sixty.reference, fifteen.reference, accuracy: 0.000001)
-        XCTAssertLessThanOrEqual(fifteen.anchor, 0.1 + 0.04 * 0.8 * 4 * 7 + 0.000001)
+        for index in 0..<12 {
+            sixty.advance(luminance: 0.8, now: 0.6 + Double(index + 1) / 60, dt: 1.0 / 60)
+        }
+        for index in 0..<3 {
+            fifteen.advance(luminance: 0.8, now: 0.6 + Double(index + 1) / 15, dt: 1.0 / 15)
+        }
+        XCTAssertEqual(sixty.anchor, fifteen.anchor, accuracy: 0.000000001)
+
+        // Falling luminance must leave reference on the 0.995^r decay path.
+        // An unscaled 15 Hz frame decays only 0.995 once, so this cannot pass
+        // when the time ratio is removed.
+        for index in 0..<36 {
+            sixty.advance(luminance: 0.05, now: 0.8 + Double(index + 1) / 60, dt: 1.0 / 60)
+        }
+        for index in 0..<9 {
+            fifteen.advance(luminance: 0.05, now: 0.8 + Double(index + 1) / 15, dt: 1.0 / 15)
+        }
+        XCTAssertEqual(sixty.reference, fifteen.reference, accuracy: 0.000000001)
+        XCTAssertLessThan(sixty.reference, 0.72)
+    }
+
+    func testC6ReducedMotionHoverRedrawsDoNotAdvanceArcDepthBetweenTenthSecondTicks() {
+        let energy = OrbEnergyState()
+        let phase = 1.31
+        func redraw(_ now: Double, dt: Double) {
+            energy.advance(activity: .listening, measuredLevel: 0.25,
+                           phase: phase, now: now, dt: dt, reducedMotion: true)
+        }
+
+        redraw(10.0, dt: 0)
+        let initialDepths = energy.depths
+        redraw(10.02, dt: 0.02) // hover redraw: repaint only, no state advance
+        redraw(10.09, dt: 0.07) // another extra redraw still before the tick
+        XCTAssertEqual(energy.depths, initialDepths)
+
+        redraw(10.1000000001, dt: 0.0100000001)
+        let scheduledDepths = energy.depths
+        XCTAssertNotEqual(scheduledDepths, initialDepths)
+
+        redraw(10.12, dt: 0.02) // hover between ticks cannot move depth
+        XCTAssertEqual(energy.depths, scheduledDepths)
     }
 
     func testOrbHoldRestoresPriorMicAndTapDoesNotOwnPTT() {

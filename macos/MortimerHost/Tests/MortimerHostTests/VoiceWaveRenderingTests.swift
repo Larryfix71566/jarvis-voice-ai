@@ -163,6 +163,27 @@ final class VoiceWaveRenderingTests: XCTestCase {
         XCTAssertEqual(motion.advance(now: 2_000_000, energy: 1, moving: true), next)
     }
 
+    /// The legacy wave's E2 boot ramp eases in over 0.9 s and then holds full
+    /// amplitude. bootStart is never reset, so without the clamp p·(2 − p)
+    /// fell back to 0 at 1.8 s and reached about −19.8 at bootStart + 5 s.
+    func testLegacyBootRampHoldsSteadyAmplitudeAfterItCompletes() {
+        let start = 10.0
+        XCTAssertEqual(WaveEngine.bootRamp(now: start, bootStart: start), 0, accuracy: 1e-12)
+        XCTAssertEqual(WaveEngine.bootRamp(now: start + WaveEngine.bootRampSeconds, bootStart: start),
+                       1, accuracy: 1e-12)
+        XCTAssertEqual(WaveEngine.bootRamp(now: start + 5, bootStart: start), 1,
+                       "five seconds after boot the wave must be at steady-state amplitude")
+        XCTAssertEqual(WaveEngine.bootRamp(now: start + 5, bootStart: 0), 1,
+                       "a wave that never booted is at full amplitude")
+        var previous = 0.0
+        for step in 0...500 {
+            let ramp = WaveEngine.bootRamp(now: start + Double(step) * 0.01, bootStart: start)
+            XCTAssertGreaterThanOrEqual(ramp, previous, "the boot ramp never falls back")
+            XCTAssertLessThanOrEqual(ramp, 1)
+            previous = ramp
+        }
+    }
+
     private func render(_ state: VoicePresentationState, now: Double, engine: WaveEngine,
                         reduceMotion: Bool = false) throws -> NSBitmapImageRep {
         let view = NSHostingView(rootView: Canvas { context, size in
@@ -178,6 +199,37 @@ final class VoiceWaveRenderingTests: XCTestCase {
         let bitmap = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: bitmap)
         return bitmap
+    }
+
+    /// Let the approved measured-time colour and audio envelopes settle before
+    /// asserting the speaker palette; a single 100 ms frame is mid-transition.
+    /// The 60 warm-up frames only advance the engine, so they draw offscreen
+    /// through ImageRenderer instead of opening a window each: 61 fixture
+    /// windows per call (about 370 per run) slowed the window server for
+    /// WindowVisibilityTests, which runs next. Only the sampled frame uses
+    /// the on-screen fixture.
+    private func renderSettled(_ state: VoicePresentationState, engine: WaveEngine) throws -> NSBitmapImageRep {
+        var drawn = 0
+        for frame in 0..<60 {
+            let now = 10 + Double(frame) / 60
+            let renderer = ImageRenderer(content: Canvas { context, size in
+                drawn += 1
+                engine.draw(context: &context, size: size, now: now, state: .speaking,
+                    stageCenterX: nil, presentation: state, reduceMotion: false)
+            }.frame(width: 400, height: 180).background(Color.black))
+            _ = renderer.cgImage
+        }
+        XCTAssertGreaterThanOrEqual(drawn, 60, "every warm-up frame must advance the engine")
+        return try render(state, now: 11, engine: engine)
+    }
+
+    private func assertWhiteCore(_ bitmap: NSBitmapImageRep, file: StaticString = #filePath,
+                                 line: UInt = #line) throws {
+        let center = try XCTUnwrap(bitmap.colorAt(x: bitmap.pixelsWide / 2,
+            y: bitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB), file: file, line: line)
+        let channels = [center.redComponent, center.greenComponent, center.blueComponent]
+        XCTAssertLessThan((channels.max() ?? 0) - (channels.min() ?? 0), 0.08,
+                          "C6's approved nucleus is white, not the current talker colour", file: file, line: line)
     }
 
     func testUnavailableSpeechRendersIdenticallyAcrossTime() throws {
@@ -201,15 +253,19 @@ final class VoiceWaveRenderingTests: XCTestCase {
                           "The ready state should retain a subtle animated trace")
     }
 
-    func testReducedMotionFreezesIdlePlasmaAndComets() throws {
+    func testReducedMotionRedrawsIdleEnergyOnlyAtScheduledTicks() throws {
         let idle = VoicePresentationState(activity: .listening, userLevel: nil,
             outputLevel: nil, microphoneMuted: false, assistantSpeaking: false)
         let engine = WaveEngine()
         let first = try render(idle, now: 10, engine: engine, reduceMotion: true)
-        let later = try render(idle, now: 20, engine: engine, reduceMotion: true)
+        let hover = try render(idle, now: 10.02, engine: engine, reduceMotion: true)
+        let tick = try render(idle, now: 10.1000000001, engine: engine, reduceMotion: true)
         XCTAssertEqual(first.representation(using: .png, properties: [:]),
-                       later.representation(using: .png, properties: [:]),
-                       "Idle breathing, sparks and plasma must respect Reduced Motion too")
+                       hover.representation(using: .png, properties: [:]),
+                       "Pointer repaints between 0.1-second ticks must reuse the scheduled energy state")
+        XCTAssertNotEqual(first.representation(using: .png, properties: [:]),
+                          tick.representation(using: .png, properties: [:]),
+                          "Reduced Motion uses the approved 0.1-second cadence, not a frozen orb")
         let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent(".build/interface-fixtures")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -217,7 +273,7 @@ final class VoiceWaveRenderingTests: XCTestCase {
             .write(to: directory.appendingPathComponent("orb-idle.png"))
     }
 
-    func testConnectedMutedOrbMatchesIdleAndKeepsMoving() throws {
+    func testConnectedMutedOrbUsesMutedStateAndKeepsMoving() throws {
         let idle = VoicePresentationState(activity: .listening, userLevel: nil,
             outputLevel: nil, microphoneMuted: false, assistantSpeaking: false)
         let muted = VoicePresentationState(activity: .muted, userLevel: nil,
@@ -226,25 +282,34 @@ final class VoiceWaveRenderingTests: XCTestCase {
         let idleFrame = try render(idle, now: 10, engine: WaveEngine())
         let first = try render(muted, now: 10, engine: engine)
         let later = try render(muted, now: 10.1, engine: engine)
-        XCTAssertEqual(first.representation(using: .png, properties: [:]),
-                       idleFrame.representation(using: .png, properties: [:]),
-                       "Muting input must preserve the connected periwinkle orb")
+        XCTAssertNotEqual(first.representation(using: .png, properties: [:]),
+                          idleFrame.representation(using: .png, properties: [:]),
+                          "C6 muted uses one slate arc and a mic slash, not the listening orb")
         XCTAssertNotEqual(first.representation(using: .png, properties: [:]),
                           later.representation(using: .png, properties: [:]),
-                          "Connected/muted comets should keep moving without input audio")
+                          "Connected/muted arcs keep moving without input audio")
         XCTAssertEqual(muted.label, "Muted")
     }
 
-    func testMutedReducedMotionAndDisconnectedOrbRemainStill() throws {
-        for activity: VoicePresentationState.Activity in [.muted, .offline] {
-            let state = VoicePresentationState(activity: activity, userLevel: nil,
-                outputLevel: nil, microphoneMuted: true, assistantSpeaking: false)
-            let engine = WaveEngine()
-            let first = try render(state, now: 10, engine: engine, reduceMotion: activity == .muted)
-            let later = try render(state, now: 20, engine: engine, reduceMotion: activity == .muted)
-            XCTAssertEqual(first.representation(using: .png, properties: [:]),
-                           later.representation(using: .png, properties: [:]))
-        }
+    func testMutedReducedMotionUsesScheduleAndDisconnectedOrbRemainsStill() throws {
+        let offline = VoicePresentationState(activity: .offline, userLevel: nil,
+            outputLevel: nil, microphoneMuted: true, assistantSpeaking: false)
+        let offlineEngine = WaveEngine()
+        let offlineFirst = try render(offline, now: 10, engine: offlineEngine)
+        let offlineLater = try render(offline, now: 20, engine: offlineEngine)
+        XCTAssertEqual(offlineFirst.representation(using: .png, properties: [:]),
+                       offlineLater.representation(using: .png, properties: [:]))
+
+        let muted = VoicePresentationState(activity: .muted, userLevel: nil,
+            outputLevel: nil, microphoneMuted: true, assistantSpeaking: false)
+        let mutedEngine = WaveEngine()
+        let first = try render(muted, now: 10, engine: mutedEngine, reduceMotion: true)
+        let hover = try render(muted, now: 10.02, engine: mutedEngine, reduceMotion: true)
+        let tick = try render(muted, now: 10.1000000001, engine: mutedEngine, reduceMotion: true)
+        XCTAssertEqual(first.representation(using: .png, properties: [:]),
+                       hover.representation(using: .png, properties: [:]))
+        XCTAssertNotEqual(first.representation(using: .png, properties: [:]),
+                          tick.representation(using: .png, properties: [:]))
     }
 
     func testMeasuredSpeakersUseDistinctRenderedColors() throws {
@@ -253,8 +318,7 @@ final class VoiceWaveRenderingTests: XCTestCase {
                 userLevel: user ? 0.7 : nil, outputLevel: user ? nil : 0.7,
                 microphoneMuted: false, assistantSpeaking: !user)
             let engine = WaveEngine()
-            _ = try render(state, now: 10, engine: engine)
-            let bitmap = try render(state, now: 10.1, engine: engine)
+            let bitmap = try renderSettled(state, engine: engine)
             let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 .appendingPathComponent(".build/interface-fixtures")
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -279,8 +343,7 @@ final class VoiceWaveRenderingTests: XCTestCase {
         let state = VoicePresentationState(activity: .user, userLevel: 0.7,
             outputLevel: 0.7, microphoneMuted: false, assistantSpeaking: true)
         let engine = WaveEngine()
-        _ = try render(state, now: 10, engine: engine)
-        let bitmap = try render(state, now: 10.1, engine: engine)
+        let bitmap = try renderSettled(state, engine: engine)
         var teal = 0, orange = 0
         for y in 0..<bitmap.pixelsHigh {
             for x in 0..<bitmap.pixelsWide {
@@ -294,30 +357,18 @@ final class VoiceWaveRenderingTests: XCTestCase {
         XCTAssertGreaterThan(orange, 20, "overlap must retain Mortimer's orbital channel")
     }
 
-    func testAtomNucleusFollowsCurrentTalkerColor() throws {
+    func testAtomNucleusKeepsApprovedWhiteCoreAcrossTalkers() throws {
         let user = VoicePresentationState(activity: .user, userLevel: 0.8,
             outputLevel: nil, microphoneMuted: false, assistantSpeaking: false)
         let assistant = VoicePresentationState(activity: .assistant, userLevel: nil,
             outputLevel: 0.8, microphoneMuted: false, assistantSpeaking: true)
-        let userBitmap = try render(user, now: 10, engine: WaveEngine())
-        let assistantBitmap = try render(assistant, now: 10, engine: WaveEngine())
-        let userCenter = try XCTUnwrap(userBitmap.colorAt(x: userBitmap.pixelsWide / 2,
-                                                           y: userBitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
-        let assistantCenter = try XCTUnwrap(assistantBitmap.colorAt(x: assistantBitmap.pixelsWide / 2,
-                                                                     y: assistantBitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
-        XCTAssertGreaterThan(userCenter.greenComponent, userCenter.redComponent,
-                             "user nucleus should use teal")
-        XCTAssertGreaterThan(assistantCenter.redComponent, assistantCenter.greenComponent,
-                             "Mortimer nucleus should use orange")
+        try assertWhiteCore(renderSettled(user, engine: WaveEngine()))
+        try assertWhiteCore(renderSettled(assistant, engine: WaveEngine()))
     }
 
-    func testIdleNucleusUsesPeriwinkle() throws {
+    func testIdleNucleusUsesApprovedWhiteCore() throws {
         let idle = VoicePresentationState(activity: .listening, userLevel: nil,
             outputLevel: nil, microphoneMuted: false, assistantSpeaking: false)
-        let bitmap = try render(idle, now: 10, engine: WaveEngine())
-        let center = try XCTUnwrap(bitmap.colorAt(x: bitmap.pixelsWide / 2,
-                                                   y: bitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
-        XCTAssertGreaterThan(center.blueComponent, center.redComponent,
-                             "idle nucleus should use periwinkle")
+        try assertWhiteCore(render(idle, now: 10, engine: WaveEngine()))
     }
 }

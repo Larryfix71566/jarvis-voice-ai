@@ -245,7 +245,9 @@ final class WindowVisibilityTests: XCTestCase {
         XCTAssertEqual(samples, closed, "Closing the host window must stop requesting animation samples")
     }
 
-    func testReducedMotionKeepsVisibleWaveStatic() throws {
+    /// C6 Reduce Motion (ORB_SPEC item 9, Larry 2026-11-14: no paused orb):
+    /// the visible wave keeps updating, but no faster than every 0.1 s.
+    func testReducedMotionSamplesVisibleWaveAtTenHertzOrSlower() throws {
         let originalPolicy = try prepareVisibleWindowServer()
         defer { _ = NSApp.setActivationPolicy(originalPolicy) }
         var samples = 0
@@ -265,7 +267,12 @@ final class WindowVisibilityTests: XCTestCase {
         XCTAssertTrue(window.occlusionState.contains(.visible))
         XCTAssertGreaterThan(samples, 0, "The reduced-motion view must still present its initial state")
         let settled = samples
-        pumpEvents(for: 0.2)
-        XCTAssertEqual(samples, settled, "Reduce Motion must pause the visible wave's animation samples")
+        pumpEvents(for: 0.5)
+        let sampled = samples - settled
+        // 0.5 s at one tick per 0.1 s is 5 ticks, plus one for the window edge.
+        XCTAssertLessThanOrEqual(sampled, 6,
+            "Reduce Motion must sample the visible wave no faster than 10 Hz (\(sampled) in 0.5 s)")
+        XCTAssertGreaterThanOrEqual(sampled, 1,
+            "Reduce Motion keeps a slow cadence; the approved orb is not paused")
     }
 }
