@@ -1495,7 +1495,8 @@ def build_pipeline(
 
     sub_agents = load_sub_agents(settings, runtime.registry)
     runtime.sub_agents = sub_agents
-    # C3: read once; off means every display site sends today's exact payload.
+    # C3: read once, default on; JARVIS_COMPOSED_ANSWERS_ENABLED=false sends
+    # the legacy payload at every display site.
     display_composer = AnswerComposer() if composed_answers_enabled() else None
     runtime.display_composer = display_composer
     # C7-py: read once; off means no list, nothing published, no spoken check.
