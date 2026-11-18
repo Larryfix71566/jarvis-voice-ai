@@ -48,14 +48,77 @@ _TIME = re.compile(r"(?:\s+(?:again|now|please|today|tonight|tomorrow|this week|
 _LOCAL = frozenset({"", "here", "local", "current", "my", "my location", "my area",
     "where i am", "where we are", "right here", "right now", "today", "tonight", "tomorrow", "this week", "this weekend", "the week"})
 _FOLLOWUP = re.compile(r"^(?:and|what about|how about)\s+(.+?)[?.!]*$", re.I)
+# Leading acknowledgements and the assistant's name are not part of a place:
+# "Okay. Show me the weather." once parsed as a place called "okay. show me the"
+# and refused device-local weather (Larry, 2026-11-17).
+_FILLER = re.compile(r"^(?:(?:okay|ok|o\.k\.|alright|all right|hey|hi|hello|so|um+|uh+|er|erm|hmm+|"
+    r"yes|yeah|yep|yup|sure|well|right|thanks|thank you|mortimer|jarvis)(?:[\s,.!?;:…—–-]+|$))+", re.I)
+_SENTENCE_BREAK = re.compile(r"[.!?;]\s")
+# A bare answer to "which location?": letters, spaces and light punctuation,
+# at most one comma qualifier, a few words. Questions are not answers.
+_BARE_PLACE = re.compile(r"(?:(?:in|for|at)\s+)?([^\W\d_][\w'’.\- ]*(?:,\s*[^\W\d_][\w'’.\- ]*)?)", re.I)
+_NOT_A_PLACE = frozenset({"no", "nope", "nah", "never mind", "nevermind", "cancel", "stop", "nothing",
+    "forget it", "skip it", "not now", "wait", "hold on", "what", "huh", "pardon", "sorry"})
+_LOCATION_QUESTION = re.compile(r"\b(?:which|what)\s+(?:location|place|city|town|area)\b|"
+    r"\bwhere\b[^.!]*\?|\bcity name\b|\bwhich one\b", re.I)
+
+
+def strip_filler(text: str) -> str:
+    """Drop leading acknowledgements ("Okay.", "Hey Mortimer,") before parsing."""
+    return _FILLER.sub("", text).strip()
+
+
+def asked_for_location(messages: object, boundary: object) -> bool:
+    """True when the assistant's last words before `boundary`, since the
+    previous user turn, asked which place. Gates bare-place answers only; the
+    place itself always comes from the user's accepted input."""
+    if not isinstance(messages, list):
+        return False
+    try:
+        end = next(i for i, m in enumerate(messages) if m is boundary)
+    except StopIteration:
+        return False
+    for message in reversed(messages[:end]):
+        if not isinstance(message, dict):
+            continue
+        role = message.get("role")
+        if role == "user":
+            content = message.get("content")
+            if isinstance(content, str) and content.lstrip().startswith("[system]"):
+                continue
+            return False
+        if role != "assistant":
+            continue
+        content = message.get("content")
+        if isinstance(content, list):
+            content = " ".join(part.get("text", "") for part in content
+                               if isinstance(part, dict) and isinstance(part.get("text"), str))
+        if isinstance(content, str) and content.strip():
+            return bool(_LOCATION_QUESTION.search(content[-600:]))
+    return False
+
+
+def _bare_place(text: str) -> str | None:
+    if "?" in text or len(text) > 80:
+        return None
+    match = _BARE_PLACE.fullmatch(text.strip(" .!"))
+    if not match:
+        return None
+    target = _place(match.group(1))
+    if not target or target in _NOT_A_PLACE or len(target.replace(",", " ").split()) > 6:
+        return None
+    return target
 
 
 def _place(value: str) -> str | None:
     unqualified = canonical_place(value.strip(" ,?!."))
     if unqualified in _LOCAL:
         return unqualified
-    value = _TIME.sub("", value.strip(" ,?!.")).strip(" ,?!.")
+    # Leading space so a bare tail ("weather please") is trimmed like "weather today please".
+    value = _TIME.sub("", " " + value.strip(" ,?!.")).strip(" ,?!.")
     result = canonical_place(value)
+    if result is None and unqualified:
+        return ""  # only a time word or "please": no place named
     if not result or len(result) > 120 or any(c.isdigit() for c in result):
         return None
     if re.search(r"\b(?:and|or|versus|vs)\b", result):
@@ -63,10 +126,15 @@ def _place(value: str) -> str | None:
     return result
 
 
-def accepted_weather_intent(text: str, previous: WeatherIntent | None = None) -> WeatherIntent:
+def accepted_weather_intent(text: str, previous: WeatherIntent | None = None, *,
+                            location_asked: bool = False) -> WeatherIntent:
+    """`location_asked`: the assistant's last turn asked which place. Only then,
+    and only after a weather request, does a bare place ("Alpharetta.") count
+    as a named weather target."""
     text = " ".join(unicodedata.normalize("NFKC", text).split()).strip()
     if len(text) > 4096:
         return WeatherIntent("unclear")
+    text = strip_filler(text)
     local_question = canonical_place(_TIME.sub("", text.strip(" ?.！!")))
     if local_question in {"is it going to rain", "will it rain", "do i need an umbrella",
                           "should i bring an umbrella", "what's the week look like",
@@ -79,6 +147,14 @@ def accepted_weather_intent(text: str, previous: WeatherIntent | None = None) ->
             if target in {"there", "that city", "the same place"}:
                 return previous
             if target and target not in _LOCAL:
+                return WeatherIntent("named", target)
+        if location_asked and previous and previous.kind in {"local", "named", "unclear"}:
+            target = _bare_place(text)
+            if target in {"there", "that city", "the same place"}:
+                return previous if previous.kind == "named" else WeatherIntent("unclear")
+            if target in _LOCAL:
+                return WeatherIntent("local")
+            if target:
                 return WeatherIntent("named", target)
         return WeatherIntent("not_weather")
     places = _AFTER.findall(text)
@@ -94,7 +170,10 @@ def accepted_weather_intent(text: str, previous: WeatherIntent | None = None) ->
                 return previous if previous and previous.kind in {"local", "named"} else WeatherIntent("unclear")
             target = _place(tail) if tail else ""
         else:
-            target = _place(_TAIL.sub("", prefix))
+            before = _TAIL.sub("", prefix)
+            # Words from an earlier sentence are not a place ("I'm off to
+            # Denver. Show me the weather." must not name "…denver. show me the").
+            target = None if _SENTENCE_BREAK.search(before) else _place(before)
     if target in {"there", "that city", "the same place"}:
         return previous if previous and previous.kind == "named" else WeatherIntent("unclear")
     if target is None:
