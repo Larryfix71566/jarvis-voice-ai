@@ -47,10 +47,10 @@ class Profile:
 MORTIMER = Profile(
     name="mortimer",
     dependencies=("requirements.txt", "requirements-lock.txt", "services/mortimer-vault/pyproject.toml",
-                  "web/package.json", "web/package-lock.json", "macos/JarvisKit/Package.swift",
+                  "macos/JarvisKit/Package.swift",
                   "macos/JarvisKit/Package.resolved", "macos/MortimerHost/Package.swift",
                   "macos/MortimerHost/Package.resolved"),
-    caches=(".venv", "services/mortimer-vault/.venv", "web/node_modules",
+    caches=(".venv", "services/mortimer-vault/.venv",
             "macos/JarvisKit/.build", "macos/MortimerHost/.build"),
     checks=(
         ("backend-imports", (PYTHON, "-c", "import jarvis, jarvis.config, jarvis.cli, jarvis.runlog")),
@@ -60,7 +60,6 @@ MORTIMER = Profile(
         ("latency", (PYTHON, "scripts/latency_probe.py", "--budget", "tests/fixtures/latency_sample.log")),
         ("knowledge-base", (KB_PYTHON, "-m", "pytest", "services/mortimer-vault/tests", "-q")),
         ("baseline-knowledge-base", (KB_PYTHON, "-m", "pytest", VERIFICATION + "/services/mortimer-vault/tests", "-q")),
-        ("web", ("npm", "--prefix", "web", "run", "build")),
         ("native-library", ("swift", "test", "--package-path", "macos/JarvisKit")),
         ("native-app", ("swift", "test", "--package-path", "macos/MortimerHost")),
         ("baseline-native-library", ("swift", "test", "--package-path", VERIFICATION + "/macos/JarvisKit")),

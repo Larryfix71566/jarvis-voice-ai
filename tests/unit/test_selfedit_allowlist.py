@@ -18,9 +18,8 @@ def allowlist() -> Allowlist:
 
 
 @pytest.mark.parametrize("path", [
-    "web/src/App.tsx",
-    "web/src/components/NewPanel.tsx",
-    "web/public/icons/panel.png",
+    "macos/MortimerHost/Sources/MortimerHost/App/Glass.swift",
+    "macos/JarvisKit/Sources/JarvisKit/JarvisClient.swift",
     "config/voices.yaml",
     "jarvis/prompts.py",
     "jarvis/skills/new_skill.py",
@@ -66,16 +65,13 @@ def test_allowed_paths(allowlist: Allowlist, path: str) -> None:
     # dependency changes stay human-driven
     "requirements.txt",
     "requirements-lock.txt",
-    "web/package.json",
-    "web/package-lock.json",
     # secrets
     ".env",
     ".env.example",
-    "web/.env.local",
+    "macos/MortimerHost/.env.local",
     # human-only docs
     "DEVIATIONS.md",
     # not on any list at all
-    "web/index.html",
     "Makefile",
     # still denied even though mcp_servers/config opened up (2026-08-21):
     # the agent's own brain, the enable gate for agent skills, and the
@@ -124,10 +120,10 @@ def test_routine_outranks_core_and_deny_outranks_both(allowlist: Allowlist) -> N
 
 def test_classify_groups_by_tier(allowlist: Allowlist) -> None:
     groups = allowlist.classify([
-        "web/src/App.tsx", "jarvis/bot/display.py", "jarvis/vault.py", "Makefile",
+        "docs/a.md", "jarvis/bot/display.py", "jarvis/vault.py", "Makefile",
     ])
     assert groups == {
-        "routine": ["web/src/App.tsx"],
+        "routine": ["docs/a.md"],
         "core": ["jarvis/bot/display.py"],
         "denied": ["jarvis/vault.py"],
         "unlisted": ["Makefile"],
@@ -161,12 +157,12 @@ class TestExtractPaths:
 
 def test_path_traversal_rejected(allowlist: Allowlist) -> None:
     with pytest.raises(ValueError):
-        allowlist.is_allowed("web/src/../../etc/passwd")
+        allowlist.is_allowed("docs/../../etc/passwd")
 
 
 def test_filter_violations(allowlist: Allowlist) -> None:
     bad = allowlist.filter_violations([
-        "web/src/App.tsx", "jarvis/vault.py", "README.md",
+        "docs/a.md", "jarvis/vault.py", "README.md",
     ])
     assert bad == ["jarvis/vault.py"]
 

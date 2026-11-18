@@ -29,7 +29,7 @@ not useful"):
   plan_path is REQUIRED at preview (refused before staging otherwise), a
   fifth validation gate imports the pipeline/agent modules, and the PR body
   carries a CORE CHANGE block. The human merge is the last gate, as always.
-- ``allow`` — Tier A, routine. web/src, docs, tests, prompts, skills, MCP
+- ``allow`` — Tier A, routine. docs, tests, prompts, skills, MCP
   servers, configs. Unchanged behaviour.
 
 Precedence for a path matching several lists: deny > allow (routine) >
