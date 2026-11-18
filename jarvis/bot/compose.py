@@ -47,13 +47,17 @@ MAX_TRACKED_REQUESTS = 64
 COMPOSED_TOOL = "composed_answer"
 NOT_COMPOSED_TOOLS = frozenset({"read_clipboard", "protected_result"})
 APPROVED_POLICY = "approved_external"
-_ENABLED_VALUES = ("true", "1", "yes", "on")
+_DISABLED_VALUES = ("false", "0", "no", "off")
 
 
 def composed_answers_enabled(env: Any = None) -> bool:
-    """Kill switch, default OFF until the app understands ``answer_id`` (C4)."""
+    """Kill switch, default ON now that the app reads ``answer_id`` (C4, C5).
+
+    Off only when ``JARVIS_COMPOSED_ANSWERS_ENABLED`` is explicitly ``false``,
+    ``0``, ``no`` or ``off``; a blank or unset value is on.
+    """
     source = os.environ if env is None else env
-    return str(source.get("JARVIS_COMPOSED_ANSWERS_ENABLED", "")).strip().lower() in _ENABLED_VALUES
+    return str(source.get("JARVIS_COMPOSED_ANSWERS_ENABLED", "")).strip().lower() not in _DISABLED_VALUES
 
 
 class _Answer:

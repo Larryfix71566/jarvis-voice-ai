@@ -447,11 +447,14 @@ def test_eviction_with_both_forms_failing_still_sends_the_new_result(monkeypatch
 
 
 def test_flag_values(monkeypatch):
-    assert composed_answers_enabled({}) is False
-    assert composed_answers_enabled({"JARVIS_COMPOSED_ANSWERS_ENABLED": "true"}) is True
-    for off in ("false", "0", "no", ""):
+    assert composed_answers_enabled({}) is True
+    for on in ("true", "1", "yes", "on", "", "  "):
+        assert composed_answers_enabled({"JARVIS_COMPOSED_ANSWERS_ENABLED": on}) is True
+    for off in ("false", "0", "no", "off", " False ", "OFF"):
         assert composed_answers_enabled({"JARVIS_COMPOSED_ANSWERS_ENABLED": off}) is False
     monkeypatch.delenv("JARVIS_COMPOSED_ANSWERS_ENABLED", raising=False)
+    assert compose_mod.composed_answers_enabled() is True
+    monkeypatch.setenv("JARVIS_COMPOSED_ANSWERS_ENABLED", "false")
     assert compose_mod.composed_answers_enabled() is False
 
 
