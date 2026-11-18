@@ -202,6 +202,33 @@ final class WindowVisibilityTests: XCTestCase {
         XCTAssertTrue(reports.isEmpty)
     }
 
+    /// didUpdate arrives on every NSApp.updateWindows. A refresh that lands
+    /// before the main queue reaches the previous delivery must not cancel
+    /// it, or a busy run loop never hears the window's state. Each step
+    /// below queues the next step ahead of its own delivery, which is the
+    /// order that starved the old observer for the whole chain.
+    func testRepeatedRefreshesCannotStarveDelivery() {
+        let view = WindowVisibilityView()
+        var reports: [Bool] = []
+        var remaining = 50
+        var reportedDuringChurn = false
+        view.changed = { value in
+            reports.append(value)
+            if remaining > 0 { reportedDuringChurn = true }
+        }
+        func churn() {
+            guard remaining > 0 else { return }
+            remaining -= 1
+            DispatchQueue.main.async { churn() }
+            view.refresh()
+        }
+        churn()
+        pumpEvents(for: 0.2)
+        XCTAssertEqual(remaining, 0, "the refresh chain must run to completion")
+        XCTAssertTrue(reportedDuringChurn, "a queued delivery must survive later refreshes")
+        XCTAssertEqual(reports, [false], "a view without a window reports not visible once")
+    }
+
     func testWaveStopsSamplingWhileWindowHiddenAndResumes() throws {
         if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
             throw XCTSkip("Hosted-runner skip: this test still gates on Mac.")
@@ -245,7 +272,9 @@ final class WindowVisibilityTests: XCTestCase {
         XCTAssertEqual(samples, closed, "Closing the host window must stop requesting animation samples")
     }
 
-    func testReducedMotionKeepsVisibleWaveStatic() throws {
+    /// C6 Reduce Motion (ORB_SPEC item 9, Larry 2026-11-14: no paused orb):
+    /// the visible wave keeps updating, but no faster than every 0.1 s.
+    func testReducedMotionSamplesVisibleWaveAtTenHertzOrSlower() throws {
         let originalPolicy = try prepareVisibleWindowServer()
         defer { _ = NSApp.setActivationPolicy(originalPolicy) }
         var samples = 0
@@ -265,7 +294,12 @@ final class WindowVisibilityTests: XCTestCase {
         XCTAssertTrue(window.occlusionState.contains(.visible))
         XCTAssertGreaterThan(samples, 0, "The reduced-motion view must still present its initial state")
         let settled = samples
-        pumpEvents(for: 0.2)
-        XCTAssertEqual(samples, settled, "Reduce Motion must pause the visible wave's animation samples")
+        pumpEvents(for: 0.5)
+        let sampled = samples - settled
+        // 0.5 s at one tick per 0.1 s is 5 ticks, plus one for the window edge.
+        XCTAssertLessThanOrEqual(sampled, 6,
+            "Reduce Motion must sample the visible wave no faster than 10 Hz (\(sampled) in 0.5 s)")
+        XCTAssertGreaterThanOrEqual(sampled, 1,
+            "Reduce Motion keeps a slow cadence; the approved orb is not paused")
     }
 }

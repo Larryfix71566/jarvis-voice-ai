@@ -163,6 +163,27 @@ final class VoiceWaveRenderingTests: XCTestCase {
         XCTAssertEqual(motion.advance(now: 2_000_000, energy: 1, moving: true), next)
     }
 
+    /// The legacy wave's E2 boot ramp eases in over 0.9 s and then holds full
+    /// amplitude. bootStart is never reset, so without the clamp p·(2 − p)
+    /// fell back to 0 at 1.8 s and reached about −19.8 at bootStart + 5 s.
+    func testLegacyBootRampHoldsSteadyAmplitudeAfterItCompletes() {
+        let start = 10.0
+        XCTAssertEqual(WaveEngine.bootRamp(now: start, bootStart: start), 0, accuracy: 1e-12)
+        XCTAssertEqual(WaveEngine.bootRamp(now: start + WaveEngine.bootRampSeconds, bootStart: start),
+                       1, accuracy: 1e-12)
+        XCTAssertEqual(WaveEngine.bootRamp(now: start + 5, bootStart: start), 1,
+                       "five seconds after boot the wave must be at steady-state amplitude")
+        XCTAssertEqual(WaveEngine.bootRamp(now: start + 5, bootStart: 0), 1,
+                       "a wave that never booted is at full amplitude")
+        var previous = 0.0
+        for step in 0...500 {
+            let ramp = WaveEngine.bootRamp(now: start + Double(step) * 0.01, bootStart: start)
+            XCTAssertGreaterThanOrEqual(ramp, previous, "the boot ramp never falls back")
+            XCTAssertLessThanOrEqual(ramp, 1)
+            previous = ramp
+        }
+    }
+
     private func render(_ state: VoicePresentationState, now: Double, engine: WaveEngine,
                         reduceMotion: Bool = false) throws -> NSBitmapImageRep {
         let view = NSHostingView(rootView: Canvas { context, size in

@@ -34,3 +34,16 @@ This PR carries the approved measured-time and 0.1-second Reduced Motion follow-
 - Direct invocation of all three tests in `tests/unit/test_agents_yaml_frontend_parity.py`: passed (`PARITY_OK: 3 tests passed`). The sandbox does not have `pytest` installed.
 - Swift/MortimerHost: not run locally; this Linux sandbox has no Swift toolchain. Hosted B1 results on the exact PR head are the authoritative compile and rendering evidence.
 - No production deployment, restart, live test, merge, or main-branch change is included.
+
+## Claude takeover — 2026-11-18
+
+Larry handed #376 to Claude to finish (2026-11-18, "You fix it"). Claude merged `next` (`fec254e`, with #375, #378 and #382) into this branch and fixed the five failures read from the CI logs at `3dac764e`. No tolerance was widened and no test was skipped.
+
+- **White nucleus (2 tests):** every front arc and the barge-in bolt start at the centre, so their tinted halos were drawn over the core and left it 6-9% teal or rust. `drawEnergy` now re-lights the inner quarter of the core in white (plus-lighter) after the front arcs and the bolt. Speaker colour stays in the arcs and the core's outer ring.
+- **Flash cap (1 test):** `OrbFlashCap.advance` stopped once the remaining difference was under `step × 0.5`, a band that grows with dt, so the 15 Hz cap settled at 0.096 instead of 0.100 and ended 0.004 apart (0.480 vs 0.484). Moving on in the current direction now always lands exactly on the target; only a reversal keeps a dead band, fixed at 2% of Lref (the 60 Hz half-step). A Python port reproduces the old 0.480/0.484 and gives equal anchors at 15, 30, 60 and 120 Hz for 2,000 random targets with the fix.
+- **Reduce Motion test (1 test):** renamed to `testReducedMotionSamplesVisibleWaveAtTenHertzOrSlower`. It asserts the 0.1 s contract Larry chose on 2026-11-14 (at most 6 samples and at least 1 in 0.5 s) instead of the paused orb.
+- **Window visibility (1 test):** `WindowVisibilityView.publish` cancelled any queued delivery on each new refresh, and `didUpdate` fires on every `NSApp.updateWindows`. A run loop that refreshes again before reaching the queued delivery never delivers, which matches the CI probe (window visible to the window server, observer never reported `true`). Deliveries now coalesce instead of cancel and still read the window when they run; `stop()` still drops a queued delivery. New test `testRepeatedRefreshesCannotStarveDelivery` reproduces the starving order. That this is what #376 triggered is not proven: #376 added about 370 short-lived fixture windows in `VoiceWaveRenderingTests` (`renderSettled`), which runs just before `WindowVisibilityTests`. CI on this head decides.
+- **Boot ramp:** commit `108df44` dropped the `min(1, …)` clamp on the legacy wave's E2 boot ramp, so amplitude fell to 0 at 1.8 s and went negative after it. The ramp is now `WaveEngine.bootRamp(now:bootStart:)`, clamped to [0, 1], with `testLegacyBootRampHoldsSteadyAmplitudeAfterItCompletes` (full amplitude at bootStart + 5 s, never falling back).
+- **ORB_SPEC:** restored the C10 receipt path, which this branch had pointed at the #358 review.
+
+Swift was not run in Claude's sandbox (no toolchain). Hosted MortimerHost CI on this branch's head is the evidence. Larry waived outside Kimi/Codex review for this work (non-prod).

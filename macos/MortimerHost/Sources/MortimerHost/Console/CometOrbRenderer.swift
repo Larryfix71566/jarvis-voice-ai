@@ -161,9 +161,10 @@ enum CometOrbRenderer {
         drawArcSet(context: &frame, center: center, scale: scale, phase: phase,
                    tint: tint, level: energy, activity: activity, pointer: pointer,
                    front: false, contacts: true, depths: depths)
-        if activity != .offline {
-            let minimum = (demoRadius / CrystalGlassRig.plasmaClipFraction / 3) / 0.75
-            let core = (minimum + 3 + energy * 22 + (reduceMotion ? 0 : 3 * sin(phase * 5))) * scale
+        let minimum = (demoRadius / CrystalGlassRig.plasmaClipFraction / 3) / 0.75
+        let core: Double? = activity == .offline ? nil :
+            (minimum + 3 + energy * 22 + (reduceMotion ? 0 : 3 * sin(phase * 5))) * scale
+        if let core {
             frame.fill(disc(center, core * 0.8), with: .radialGradient(
                 Gradient(colors: [Color(red: 8 / 255, green: 11 / 255, blue: 15 / 255).opacity(0.7), .clear]),
                 center: center, startRadius: 0, endRadius: core * 0.8))
@@ -189,6 +190,21 @@ enum CometOrbRenderer {
                  depth: 5, seed: 4_241)
             frame.stroke(boltPath, with: .color(AppTheme.user.opacity(0.9)),
                          lineWidth: smallWidth(3, scale: scale))
+        }
+        if let core {
+            // C6's approved nucleus is white. Every front arc (and the
+            // barge-in bolt) starts at the centre, so their tinted halos were
+            // drawn over the core and left it 6-9% teal or rust. Re-light the
+            // core's inner white quarter after them; speaker colour stays in
+            // the arcs and in the core's outer ring.
+            let nucleus = core * 0.25
+            var white = frame
+            white.blendMode = .plusLighter
+            white.fill(disc(center, nucleus), with: .radialGradient(
+                Gradient(stops: [.init(color: .white.opacity(0.95), location: 0),
+                                 .init(color: .white.opacity(0.95), location: 0.4),
+                                 .init(color: .clear, location: 1)]),
+                center: center, startRadius: 0, endRadius: nucleus))
         }
         if ripple > 0 {
             frame.stroke(disc(center, inner * (0.35 + 0.65 * ripple)),
@@ -394,10 +410,17 @@ struct OrbFlashCap {
         let r = FrameRateIndependentEasing.ratio(dt: dt)
         reference = max(reference * pow(0.995, r), l, 0.000001)
         let step = 0.04 * reference * r
+        // Moving on in the current direction lands exactly on the target
+        // (each move is min(difference, step)), so every frame rate settles
+        // at the same anchor. Only a reversal keeps a dead band, and it is
+        // the fixed 60 Hz half-step (2% of Lref). The old band, step × 0.5,
+        // grew with dt and stopped a 15 Hz cap 0.004 short of 60 Hz.
+        let reversalBand = 0.02 * reference
         let difference = l - anchor
-        if abs(difference) > step * 0.5 {
+        if step > 0 && difference != 0 {
             let next = difference > 0 ? 1 : -1
-            if direction == next || now - lastReversal >= 0.220 {
+            if direction == next ||
+                (abs(difference) > reversalBand && now - lastReversal >= 0.220) {
                 if direction != next { lastReversal = now }
                 direction = next
                 anchor += Double(next) * min(abs(difference), step)
