@@ -1,0 +1,169 @@
+warning: '--skip-update' option is deprecated and will be removed in a future release
+Building for debugging...
+[Planning 1 / 98]
+[Creating build graph]
+[Starting]
+[28 / 46]
+[30 / 47] JarvisKitObjC
+[40 / 78]
+[45 / 78]
+[60 / 163]
+[72 / 163]
+[79 / 163]
+[84 / 163]
+[90 / 163]
+[95 / 163] JarvisKitObjC
+[98 / 163]
+[104 / 163]
+[109 / 163]
+[110 / 163]
+[124 / 163]
+[126 / 163]
+[134 / 163]
+[136 / 163]
+[137 / 163]
+[148 / 163] JarvisKit
+[149 / 163] JarvisKit
+[157 / 164] JarvisKit
+[157 / 164] MortimerHost-product
+[161 / 180]
+[175 / 180] MortimerHost-product
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/App/UICommandRouter.swift:224:44: warning: main actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode
+222 |     init(drawer: DrawerState, overlay: ConsoleOverlayState, windows: WindowActions,
+223 |          placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil,
+224 |          weatherMap: WeatherMapCommands = .shared, workspace: WorkspaceStore? = nil) {
+    |                                            `- warning: main actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode
+225 |         self.weatherMap = weatherMap
+226 |         self.workspace = workspace
+
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/Display/WeatherMapCommands.swift:13:16: note: static property declared here
+11 | @Observable
+12 | final class WeatherMapCommands {
+13 |     static let shared = WeatherMapCommands()
+   |                `- note: static property declared here
+14 |     static let actions: Set<String> = [
+15 |         "map_zoom_in", "map_zoom_out", "map_reset",
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:61:28: warning: 'CLGeocoder' was deprecated in macOS 26.0: Use MapKit [#DeprecatedDeclaration]
+ 59 | final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+ 60 |     private let manager = CLLocationManager()
+ 61 |     private let geocoder = CLGeocoder()
+    |                            `- warning: 'CLGeocoder' was deprecated in macOS 26.0: Use MapKit [#DeprecatedDeclaration]
+ 62 |     private var waiting: [(id: String, reply: (LocationResult) -> Void)] = []
+ 63 |     private var started = false
+
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:59:38: warning: conformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode [#ConformanceIsolation]
+ 57 | 
+ 58 | @MainActor
+ 59 | final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+    |                                      |- warning: conformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode [#ConformanceIsolation]
+    |                                      |- note: isolate this conformance to the main actor with '@MainActor'
+    |                                      `- note: turn data races into runtime errors with '@preconcurrency'
+ 60 |     private let manager = CLLocationManager()
+ 61 |     private let geocoder = CLGeocoder()
+    :
+107 |     // MARK: - CLLocationManagerDelegate
+108 | 
+109 |     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    |          |- note: main actor-isolated instance method 'locationManager(_:didUpdateLocations:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'locationManager(_:didUpdateLocations:)' 'nonisolated'
+110 |         guard let location = locations.last, !waiting.isEmpty else { return }
+111 |         geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, _ in
+    :
+121 |     }
+122 | 
+123 |     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    |          |- note: main actor-isolated instance method 'locationManager(_:didFailWithError:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'locationManager(_:didFailWithError:)' 'nonisolated'
+124 |         let failure = DeviceLocationReply.failure(for: error)
+125 |         locationLogger.error("fix failed: \(error.localizedDescription, privacy: .public)")
+
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/App/UICommandRouter.swift:224:44: warning: main actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode
+222 |     init(drawer: DrawerState, overlay: ConsoleOverlayState, windows: WindowActions,
+223 |          placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil,
+224 |          weatherMap: WeatherMapCommands = .shared, workspace: WorkspaceStore? = nil) {
+    |                                            `- warning: main actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode
+225 |         self.weatherMap = weatherMap
+226 |         self.workspace = workspace
+
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/Display/WeatherMapCommands.swift:13:16: note: static property declared here
+11 | @Observable
+12 | final class WeatherMapCommands {
+13 |     static let shared = WeatherMapCommands()
+   |                `- note: static property declared here
+14 |     static let actions: Set<String> = [
+15 |         "map_zoom_in", "map_zoom_out", "map_reset",
+
+[#ConformanceIsolation]: <https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation>
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[176 / 180] MortimerHost-product
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:61:28: warning: 'CLGeocoder' was deprecated in macOS 26.0: Use MapKit [#DeprecatedDeclaration]
+ 59 | final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+ 60 |     private let manager = CLLocationManager()
+ 61 |     private let geocoder = CLGeocoder()
+    |                            `- warning: 'CLGeocoder' was deprecated in macOS 26.0: Use MapKit [#DeprecatedDeclaration]
+ 62 |     private var waiting: [(id: String, reply: (LocationResult) -> Void)] = []
+ 63 |     private var started = false
+
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:59:38: warning: conformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode [#ConformanceIsolation]
+ 57 | 
+ 58 | @MainActor
+ 59 | final class DeviceLocator: NSObject, CLLocationManagerDelegate {
+    |                                      |- warning: conformance of 'DeviceLocator' to protocol 'CLLocationManagerDelegate' crosses into main actor-isolated code and can cause data races; this is an error in the Swift 6 language mode [#ConformanceIsolation]
+    |                                      |- note: isolate this conformance to the main actor with '@MainActor'
+    |                                      `- note: turn data races into runtime errors with '@preconcurrency'
+ 60 |     private let manager = CLLocationManager()
+ 61 |     private let geocoder = CLGeocoder()
+    :
+107 |     // MARK: - CLLocationManagerDelegate
+108 | 
+109 |     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    |          |- note: main actor-isolated instance method 'locationManager(_:didUpdateLocations:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'locationManager(_:didUpdateLocations:)' 'nonisolated'
+110 |         guard let location = locations.last, !waiting.isEmpty else { return }
+111 |         geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, _ in
+    :
+121 |     }
+122 | 
+123 |     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    |          |- note: main actor-isolated instance method 'locationManager(_:didFailWithError:)' cannot satisfy nonisolated requirement
+    |          `- note: mark instance method 'locationManager(_:didFailWithError:)' 'nonisolated'
+124 |         let failure = DeviceLocationReply.failure(for: error)
+125 |         locationLogger.error("fix failed: \(error.localizedDescription, privacy: .public)")
+
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/App/DeviceLocator.swift:111:18: warning: 'reverseGeocodeLocation(_:completionHandler:)' was deprecated in macOS 26.0: Use MKReverseGeocodingRequest [#DeprecatedDeclaration]
+109 |     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+110 |         guard let location = locations.last, !waiting.isEmpty else { return }
+111 |         geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, _ in
+    |                  `- warning: 'reverseGeocodeLocation(_:completionHandler:)' was deprecated in macOS 26.0: Use MKReverseGeocodingRequest [#DeprecatedDeclaration]
+112 |             let place = placemarks?.first
+113 |             let label = DeviceLocationReply.label(locality: place?.locality,
+
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/App/UICommandRouter.swift:224:44: warning: main actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode
+222 |     init(drawer: DrawerState, overlay: ConsoleOverlayState, windows: WindowActions,
+223 |          placement: WindowPlacement, displayWindow: DisplayWindowStore? = nil,
+224 |          weatherMap: WeatherMapCommands = .shared, workspace: WorkspaceStore? = nil) {
+    |                                            `- warning: main actor-isolated static property 'shared' can not be referenced from a nonisolated context; this is an error in the Swift 6 language mode
+225 |         self.weatherMap = weatherMap
+226 |         self.workspace = workspace
+
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/Display/WeatherMapCommands.swift:13:16: note: static property declared here
+11 | @Observable
+12 | final class WeatherMapCommands {
+13 |     static let shared = WeatherMapCommands()
+   |                `- note: static property declared here
+14 |     static let actions: Set<String> = [
+15 |         "map_zoom_in", "map_zoom_out", "map_reset",
+
+[#ConformanceIsolation]: <https://docs.swift.org/compiler/documentation/diagnostics/conformance-isolation>
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+/Users/larryfix/Documents/Codex/2026-11-16/task/ws35-c10-freeze/macos/MortimerHost/Sources/MortimerHost/Display/RadarMapView.swift:242:43: warning: 'placemark' was deprecated in macOS 26.0: Use location, address and addressRepresentations instead [#DeprecatedDeclaration]
+240 |                         return
+241 |                     }
+242 |                     let coordinate = item.placemark.coordinate
+    |                                           `- warning: 'placemark' was deprecated in macOS 26.0: Use location, address and addressRepresentations instead [#DeprecatedDeclaration]
+243 |                     radarLog.notice("map center: \(place, privacy: .public) -> \(coordinate.latitude, privacy: .public),\(coordinate.longitude, privacy: .public)")
+244 |                     let region = miles.map { WeatherMapZoom.region(center: coordinate, acrossMiles: $0, aspect: aspect) }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[178 / 180] MortimerHost-product
+Build complete! (16.54 sec)
