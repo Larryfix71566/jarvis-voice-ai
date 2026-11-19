@@ -11,30 +11,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {mode: clip, shard: 1}
-          - {mode: wheel, shard: 1}
-          - {mode: wheel, shard: 2}
-          - {mode: wheel, shard: 3}
+        shard: [1, 2, 3]
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
-      FLAKE_SCROLL_MODE: ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Build tests
         run: swift build --build-tests --package-path macos/MortimerHost
-      - name: Repeat the scroll test
+      - name: Repeat CC7aThreadAcceptanceTests
         shell: bash
         run: |
           pass=0; fail=0
-          for i in $(seq 1 40); do
-            if swift test --skip-build --package-path macos/MortimerHost --filter 'CC7aThreadAcceptanceTests/testActualScrollViewFollowsGrowingReplyOnlyWhileReadingTheEnd' > "run-$i.log" 2>&1; then
-              pass=$((pass+1)); echo "iter $i PASS"; grep -E "FLAKEDIAG (moved|wheel)" "run-$i.log" || true
+          for i in $(seq 1 25); do
+            if swift test --skip-build --package-path macos/MortimerHost --filter 'CC7aThreadAcceptanceTests' > "run-$i.log" 2>&1; then
+              pass=$((pass+1)); echo "iter $i PASS"
             else
               fail=$((fail+1)); echo "iter $i FAIL"
-              grep -E "FLAKEDIAG|unmet prerequisite|error:|failed \(" "run-$i.log" || true
+              grep -E "unmet prerequisite|error:|failed \(" "run-$i.log" || true
             fi
+            grep -E "put back to the end" "run-$i.log" || true
           done
-          echo "PROBE mode=$FLAKE_SCROLL_MODE pass=$pass fail=$fail"
+          echo "PROBE pass=$pass fail=$fail"

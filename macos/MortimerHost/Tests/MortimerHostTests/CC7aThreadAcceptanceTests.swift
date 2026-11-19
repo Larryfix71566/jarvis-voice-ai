@@ -198,6 +198,29 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
         scroll.reflectScrolledClipView(scroll.contentView)
     }
 
+    /// Moves the actual clip view up to `fraction` and returns once that
+    /// reader position has held for 250 ms. On hosted runners the thread's
+    /// scroll view was measured back at the end about 50 ms after this direct
+    /// clip-view move, with no content change, in 4 of 76 runs (PR #396
+    /// probe: offset 259.35 to 733.35). What moved it is not identified; the
+    /// move bypasses SwiftUI's scroll handling, unlike a reader's gesture.
+    /// The view then follows the next reply, as it should for a reader at the
+    /// end, so the arrival under test has to start from a held position.
+    private func scrollReaderUp(to fraction: CGFloat, in scroll: NSScrollView) async throws {
+        for attempt in 1...5 {
+            scrollToFraction(fraction, in: scroll)
+            var held = distanceFromEnd(scroll) > 100
+            let start = Date()
+            while held && Date().timeIntervalSince(start) < 0.25 {
+                try await Task.sleep(for: .milliseconds(10))
+                held = distanceFromEnd(scroll) > 100
+            }
+            if held { return }
+            print("CC7aThreadAcceptanceTests: reader position was put back to the end (attempt \(attempt)); scrolling again")
+        }
+        throw prerequisite("The reader position never held above the newest turn")
+    }
+
     private func accessibilityObjects(_ view: NSView) -> [NSObject] {
         var objects: [NSObject] = [], visited = Set<ObjectIdentifier>()
         func visit(_ value: Any) {
@@ -500,42 +523,10 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
             try await waitUntil("real view follows streaming growth") { self.distanceFromEnd(scroll) <= 26 }
         }
         try f.transport.emit("bot-llm-stopped")
-        func diag(_ tag: String) {
-            let d = scroll.documentView?.bounds.height ?? -1
-            print("FLAKEDIAG \(tag) t=\(Date().timeIntervalSince1970) dist=\(self.distanceFromEnd(scroll)) docH=\(d) visMinY=\(scroll.documentVisibleRect.minY) entries=\(f.conversation.entries.count) button=\(self.newTurnsButton(in: hosted.view) != nil)")
-        }
-        diag("afterStopped")
-        let mode = ProcessInfo.processInfo.environment["FLAKE_SCROLL_MODE"] ?? "clip"
-        if mode == "wheel" {
-            var steps = 0
-            while distanceFromEnd(scroll) < 400 && steps < 40 {
-                let cg = try XCTUnwrap(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: 40, wheel2: 0, wheel3: 0))
-                scroll.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: cg)))
-                steps += 1
-            }
-            print("FLAKEDIAG wheelSteps=\(steps)")
-        } else {
-            scrollToFraction(0.35, in: scroll)
-        }
-        diag("afterScroll-\(mode)")
-        try await waitUntil("reader is above newest turn") { self.distanceFromEnd(scroll) > 100 }
-        let sampleStart = Date(); var lastDist = distanceFromEnd(scroll)
-        while Date().timeIntervalSince(sampleStart) < 0.3 {
-            try await Task.sleep(for: .milliseconds(5))
-            let d = distanceFromEnd(scroll)
-            if abs(d - lastDist) > 0.5 { print("FLAKEDIAG moved at +\(Int(Date().timeIntervalSince(sampleStart) * 1000))ms from \(lastDist) to \(d)") ; lastDist = d }
-        }
-        diag("afterSample300")
+        try await scrollReaderUp(to: 0.35, in: scroll)
         let readingOffset = scroll.documentVisibleRect.minY
         try await emitPublicReply(f, user: "A new public question", answer: String(repeating: "Public answer arriving while reading history. ", count: 15))
-        diag("afterNewReply")
-        do {
-            try await waitUntil("real New conversation control") { self.newTurnsButton(in: hosted.view) != nil }
-        } catch {
-            diag("TIMEOUT")
-            throw error
-        }
-        diag("buttonSeen")
+        try await waitUntil("real New conversation control") { self.newTurnsButton(in: hosted.view) != nil }
         XCTAssertEqual(scroll.documentVisibleRect.minY, readingOffset, accuracy: 2,
                        "A new answer moved the actual reader viewport")
         let button = try XCTUnwrap(newTurnsButton(in: hosted.view))
