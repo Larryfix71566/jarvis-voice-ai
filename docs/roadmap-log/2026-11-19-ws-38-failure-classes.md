@@ -2,7 +2,7 @@
 date: 2026-11-19
 system: claude
 rows: [WS-38]
-prs: []
+prs: [403]
 ---
 
 # 2026-11-19 · WS-38 2A failure classes and reason codes
