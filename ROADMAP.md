@@ -172,6 +172,24 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 
 </details>
 
+<details id="ws-39">
+<summary>WS-39 — Mortimer's tone: dry humor and sarcasm with Larry · Claude</summary>
+
+**Workstream:** Larry asked in his Claude Duet channel on 2026-11-19 at 02:56:45 UTC: "I would also like mortimer to have the ability to be sarchastic when answering me, humor is fine for our interactions". No existing row covered the Supervisor persona, so this block is added with the PR that implements it; merging the PR approves the row (§0 rule 2). Under §0 rule 14 this block keeps systems from overlapping; it is not exclusive.
+
+- **Owner:** `claude`
+- **Status:** claimed 2026-11-19: one PR into `next`.
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** Larry: merge, redeploy the bot (no app rebuild), then talk to Mortimer and confirm the humor lands where it should and stays out of failures, approvals and facts. `JARVIS_PERSONALITY=formal` restores the earlier persona if it does not.
+- **Model version:** not recorded
+- **Where:** `claude/mortimer-playful-tone-20261119` into `next`
+- **Plan:** none (one PR); status in its `docs/roadmap-log/` file
+- **Scope:** `PERSONA_*`, `TONE_PLAYFUL`, `apply_personality` and the `personality` argument of `build_supervisor_prompt` in `jarvis/prompts.py`; `jarvis_personality` and its validator in `jarvis/config.py`; the one `personality=` argument at the `build_supervisor_prompt` calls in `jarvis/bot/pipeline.py` and `jarvis/agents/supervisor.py`; `JARVIS_PERSONALITY` in `.env.example`; directly related tests in `tests/unit/test_prompts.py` and `tests/unit/test_config.py`. No other Supervisor rule, addendum, tool, model or voice changes.
+- **Next step:** larry: merge, redeploy the bot, then try a few questions.
+- **Updated:** 11-19 (claim and PR)
+
+</details>
+
 <details id="ws-37">
 <summary>WS-37 — Interface cleanup: conversation in front, Inspect behind · Claude</summary>
 
@@ -1418,6 +1436,8 @@ projection, never hidden cards; protected results retain their existing limits.
 
 
 **Adopted typed phone-card wire reservation (2026-10-31, WS-04/17/30):** reserve closed operations `results.view`, `results.select`, `results.pin`, `results.unpin`, `results.close`, `results.reopen` in the existing `mortimer.phone-remote.v1` envelope, exactly as the independently accepted typed-card design specifies. Reuse `read`/`action` scopes and existing status/reason enums; add no port, launchd label, config key, migration, credential or general console-action permission. These identifiers serve only the injected synthetic offline slice until separate production claims.
+
+**Config key reserved for WS-39, 2026-11-19 (before implementation):** `JARVIS_PERSONALITY`, `playful` (default) or `formal`, case and surrounding spaces ignored; any other value is a startup error, like `JARVIS_UNITS`. Read once into `Settings.jarvis_personality` and passed to `build_supervisor_prompt`; `formal` reproduces the pre-WS-39 Supervisor prompt byte for byte. No migration, port, launchd label, allow-list row or wire field.
 
 ## 4. Conflict register
 
