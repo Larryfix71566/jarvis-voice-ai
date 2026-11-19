@@ -16,7 +16,7 @@ import JarvisKit
 /// shown) · Expand voice (only on the conversation). Sending content to the
 /// supporting display stays available with no result open: each menu offers
 /// it for its own content (Codex review of #147, 10-02). The row never wraps: when it does
-/// not fit it drops the "Command Console" title, then shows icons, keeping
+/// not fit it shows icons, keeping
 /// every control's accessibility label and tooltip.
 struct ConsoleActionBar: View {
     let coordinator: ConsoleActionCoordinator?
@@ -32,12 +32,11 @@ struct ConsoleActionBar: View {
         self.coordinator = coordinator
     }
 
-    enum Density { case full, untitled, icons }
+    enum Density { case full, icons }
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             row(.full)
-            row(.untitled)
             row(.icons)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -94,12 +93,6 @@ struct ConsoleActionBar: View {
     private func row(_ density: Density) -> some View {
         let icons = density == .icons
         HStack(spacing: 8) {
-            if density == .full {
-                Label("Command Console", systemImage: "command").font(.headline)
-            } else {
-                Image(systemName: "command").font(.headline)
-                    .accessibilityLabel("Command Console")
-            }
             viewButton("Conversation", icon: "bubble.left.and.bubble.right", target: "conversation",
                        active: mode == .conversation, icons: icons)
             resultsMenu(icons: icons)

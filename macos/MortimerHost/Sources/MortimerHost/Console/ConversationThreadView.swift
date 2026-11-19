@@ -268,6 +268,10 @@ struct ConversationThreadView: View {
     /// C7a: the Supervisor is thinking (JarvisClient.botIsThinking), passed
     /// in by the stage so this view needs no client.
     let thinking: Bool
+    /// Interface cleanup Phase 1: not connected, so the microphone cannot
+    /// work. The empty state then gives no prompt; the Connect action is
+    /// beside the orb (OrbStatusLine).
+    let offline: Bool
     @Environment(ConversationStore.self) private var conversation
     @Environment(WorkspaceStore.self) private var workspace
     /// C7a: optional, so fixtures that host the thread without them still
@@ -284,9 +288,16 @@ struct ConversationThreadView: View {
     @State private var readerRestoreTarget: CGFloat?
     private static let endID = "conversation-thread-end"
 
-    init(coordinator: ConsoleActionCoordinator? = nil, thinking: Bool = false) {
+    init(coordinator: ConsoleActionCoordinator? = nil, thinking: Bool = false, offline: Bool = false) {
         self.coordinator = coordinator
         self.thinking = thinking
+        self.offline = offline
+    }
+
+    /// The empty thread's one prompt. Nil while not connected: never direct
+    /// the user to a microphone that cannot work.
+    static func emptyStatePrompt(offline: Bool) -> String? {
+        offline ? nil : "Hold Space to talk, or type a request below."
     }
 
     var body: some View {
@@ -301,9 +312,10 @@ struct ConversationThreadView: View {
             ZStack(alignment: .bottom) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        if items.isEmpty && activity == nil {
+                        if items.isEmpty && activity == nil,
+                           let prompt = Self.emptyStatePrompt(offline: offline) {
                             ContentUnavailableView("Ready", systemImage: "waveform",
-                                description: Text("Use the microphone controls to start a conversation."))
+                                description: Text(prompt))
                                 .padding(.top, 40)
                         }
                         ForEach(items) { item in

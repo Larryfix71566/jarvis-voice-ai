@@ -6,7 +6,11 @@ import Foundation
 enum AdaptiveLayoutMetrics {
     static let resultContentWidth = 480.0
     static let workspacePadding = 16.0
-    static let voiceRailWidth = 200.0
+    static let voiceRailWidth = 260.0
+    /// Interface cleanup Phase 1: the rail's orb slot height. The orb's glass
+    /// diameter is 0.51 of the smaller slot side (CometOrbRenderer), so
+    /// 260 x 220 gives about 112 pt.
+    static let railOrbSlotHeight = 220.0
     static let dividerWidth = 1.0
     static let comparisonSpacing = 16.0
     static var minimumComparisonWidth: Double { 2 * resultContentWidth + 2 * comparisonSpacing + dividerWidth }

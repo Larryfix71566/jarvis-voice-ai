@@ -172,6 +172,24 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 
 </details>
 
+<details id="ws-37">
+<summary>WS-37 — Interface cleanup: conversation in front, Inspect behind · Claude</summary>
+
+**Workstream:** Larry approved the combined interface cleanup in his Claude Duet channel on 2026-11-18 at 16:13:45 UTC: "Plan it and start PR 1", answering the coordinator's comparison of the Fable and Astra visual reviews (`docs/reviews/2026-11-18-fable-visual-review.md` on `next`, `docs/reviews/2026-11-18-astra-visual-review.md` on `main`). Under §0 rule 14 this block keeps systems from overlapping; it is not exclusive.
+
+- **Owner:** `claude` (Phase 1). Phases 2 and 3 are open for any system to claim here first.
+- **Status:** claimed 2026-11-18: Phase 1 in progress as PR 1 into `next`.
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** Phase 1 (rail cleared, one status line under the orb, duplicates deleted, Connect beside the orb, Inspect label, bigger orb by size only), Phase 2 (one composer pill, mic in the orb, one top capsule, working line) and Phase 3 (orb centred at rest moving aside for the answer, Inspect opening to the current run), each as a PR into `next` with its tests. Mac acceptance checks are in the plan's §4.5, §5.4 and §6.4. Open decisions are the plan's §7.
+- **Model version:** not recorded
+- **Where:** `claude/interface-cleanup-phase1-20261118` into `next` (Phase 1).
+- **Plan:** `docs/plans/MORTIMER_INTERFACE_CLEANUP_PLAN_2026-11-18.md`; add only dated progress
+- **Scope:** Phase 1: `Console/AdaptiveStageView.swift`, `Console/AdaptiveLayoutMetrics.swift`, `Console/VoiceWaveView.swift`, `Console/ConversationThreadView.swift`, `Console/ConsoleActionBar.swift`, `Console/TopBarView.swift`, `Console/MicControlsView.swift`, `Console/AttachmentTrayView.swift`, `Display/ResultCarouselView.swift`, `App/AppMessageRouter.swift` (one comment), new `Console/OrbStatusLine.swift`, and their tests. Paths are under `macos/MortimerHost/Sources/MortimerHost/`. This takes over WS-36 C6's open item "the `AdaptiveStageView.swift` orb slots" (rule 14; no open PR held it). The orb renderer, shaders, `AppTheme.swift` and `ORB_SPEC.md` are not touched.
+- **Next step:** claude: open PR 1 into `next` and get its checks green. larry: merge, redeploy, then the plan's §4.5 checks.
+- **Updated:** 11-18 (claim)
+
+</details>
+
 <details id="ws-33">
 <summary>WS-33 — Acceptance unblock: code freeze, roadmap archive, CI gates · Claude</summary>
 

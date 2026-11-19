@@ -66,8 +66,8 @@ final class AppMessageRouter {
         }
         #if os(macOS)
         // 2026-09-05 — default output device changed under a live session
-        // (AirPods). JarvisClient only publishes; the chip with the
-        // Reconnect action is OrbFieldView's.
+        // (AirPods). JarvisClient only publishes; the line with the
+        // Reconnect action is OrbStatusLine's (AdaptiveStageView).
         audioOutputSink = client.$audioOutputChange.sink { change in
             Task { @MainActor in
                 guard let change else { return }
