@@ -553,7 +553,16 @@ class RunLogger:
         self._safe("tool_call", _do)
 
     def tool_result(self, tool: str, result: str, latency_ms: int, ok: bool,
-                    tool_call_id: str | None = None) -> None:
+                    tool_call_id: str | None = None, *,
+                    reason: str | None = None) -> None:
+        # WS-38 2A: a failed result keeps its closed reason code even when
+        # the result itself is redacted, so a private turn's log can still
+        # say why a call failed. Only REASON_CLASSES keys are stored; any
+        # other value becomes UNLISTED_REASON, never free text.
+        from jarvis.toolresult import closed_reason, failure_class_for
+
+        reason_code = closed_reason(reason) if (not ok and reason is not None) else None
+
         def _do() -> None:
             # D5: counted from the SAME `ok` the caller already derived via
             # jarvis.toolresult.classify_tool_result (D1) — not re-derived
@@ -564,10 +573,14 @@ class RunLogger:
                 self._tools_failed += 1
             seq = self._next_seq()
             stored = SENSITIVE_SENTINEL if self._redact(result) else result
+            record = {"type": "tool_result", "seq": seq, "tool": tool,
+                      "tool_call_id": tool_call_id, "ok": bool(ok),
+                      "latency_ms": latency_ms, "at": now_iso()}
+            if reason_code is not None:
+                record["reason"] = reason_code
+                record["failure_class"] = failure_class_for(reason_code)
             self._append(
-                {"type": "tool_result", "seq": seq, "tool": tool,
-                 "tool_call_id": tool_call_id, "ok": bool(ok),
-                 "latency_ms": latency_ms, "at": now_iso()},
+                record,
                 payload_key="result", payload_value=stored, size_str=stored,
             )
             self._execute(

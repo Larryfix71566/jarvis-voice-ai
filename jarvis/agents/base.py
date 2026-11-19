@@ -85,7 +85,12 @@ from jarvis.skill_resources import (
     SkillReferenceError,
     read_skill_reference,
 )
-from jarvis.toolresult import classify_tool_result
+from jarvis.toolresult import (
+    classify_tool_result,
+    UNLISTED_REASON,
+    failure_class_note,
+    failure_tag,
+)
 from jarvis.usage_ledger import (
     provider_from_base_url,
     record_completion,
@@ -1439,6 +1444,15 @@ class SubAgent:
         tools_attempted = 0
         tools_failed = 0
         last_error: str | None = None
+        # WS-38 2A: the class and closed reason of the last failure, for the
+        # tag on an all-failed reply, and every (tool, arguments) pair that
+        # failed with class approach or policy and a listed reason in this
+        # run. Repeating one of those exactly cannot succeed, so it is
+        # refused before dispatch. An unlisted reason is not blocked: the
+        # host cannot tell that it is deterministic.
+        last_failure_class: str | None = None
+        last_reason: str | None = None
+        refused_repeats: dict[tuple[str, str], str] = {}
         # P2 — counted across the WHOLE run, same reasoning as D4/D5 above:
         # a draft created in an early iteration and confirmed in a later
         # one must not be double-flagged.
@@ -1571,7 +1585,7 @@ class SubAgent:
             # F1: failures collected during the batch; the D3 constraint is
             # appended AFTER every tool response (protocol contiguity),
             # never between them.
-            batch_failures: list[tuple[str, str]] = []
+            batch_failures: list[tuple[str, str, str, str]] = []
             batch_has_pending_draft = False
             protected_result = False
             for tool_call in tool_calls:
@@ -1606,8 +1620,18 @@ class SubAgent:
                         arguments=arguments, input_policy=policy,
                     ) if resolved_route is not None else None
                 )
+                repeat_key = (tool_name, json.dumps(arguments, sort_keys=True, default=str))
+                repeat_reason = refused_repeats.get(repeat_key)
                 try:
-                    if skill_reference_tool_enabled and tool_name == "skill_reference_read":
+                    if repeat_reason is not None:
+                        # WS-38 2A identical-repeat block: not dispatched.
+                        # The body names the earlier closed reason, so the
+                        # classifier gives this the same class and reason.
+                        result = json.dumps(
+                            {"ok": False, "error": repeat_reason, "repeat_blocked": True},
+                            separators=(",", ":"),
+                        )
+                    elif skill_reference_tool_enabled and tool_name == "skill_reference_read":
                         reference_path = arguments.get("reference_path")
                         target_skill_id: str | None = None
                         target_revision: str | None = None
@@ -1795,7 +1819,7 @@ class SubAgent:
                     )
                     runlog.tool_result(
                         tool_name, observed_result, tool_latency_ms, outcome.ok,
-                        tool_call_id=tool_call.id,
+                        tool_call_id=tool_call.id, reason=outcome.reason,
                     )
                     self._emit(on_event, {
                         "type": "agent_tool_result",
@@ -1834,12 +1858,17 @@ class SubAgent:
                 )
                 runlog.tool_result(
                     tool_name, observed_result, tool_latency_ms, outcome.ok,
-                    tool_call_id=tool_call.id,
+                    tool_call_id=tool_call.id, reason=outcome.reason,
                 )
                 tools_attempted += 1
                 if not outcome.ok:
                     tools_failed += 1
                     last_error = outcome.error
+                    last_failure_class = outcome.failure_class
+                    last_reason = outcome.reason
+                    if (outcome.failure_class in {"approach", "policy"}
+                            and outcome.reason not in (None, UNLISTED_REASON)):
+                        refused_repeats[repeat_key] = outcome.reason
                 # P2 — mechanical draft accounting, independent of outcome.ok
                 # (a pending draft's transport call itself succeeded; it is
                 # the ACTION that is incomplete, not the tool call).
@@ -1869,7 +1898,9 @@ class SubAgent:
                     "content": result,
                 })
                 if not outcome.ok:
-                    batch_failures.append((tool_name, outcome.error or ""))
+                    batch_failures.append((tool_name, outcome.error or "",
+                                           outcome.failure_class or "approach",
+                                           outcome.reason or ""))
 
             if protected_result:
                 reply = (
@@ -1890,16 +1921,25 @@ class SubAgent:
                 # compliance, which is why D4 exists as the mechanical
                 # backstop below.
                 if len(batch_failures) == 1:
-                    name, error = batch_failures[0]
+                    name, error, failure_class, reason = batch_failures[0]
                     content = TOOL_FAILURE_CONSTRAINT_TEMPLATE.format(
                         tool_name=name, error=error,
-                    )
+                    ) + " " + failure_class_note(failure_class, reason)
                 else:
                     content = TOOL_FAILURES_BATCH_TEMPLATE.format(
                         failures="\n".join(
-                            f"- `{name}`: {error}"
-                            for name, error in batch_failures
+                            f"- `{name}`: {error} (class {failure_class}, reason `{reason}`)"
+                            for name, error, failure_class, reason in batch_failures
                         ),
+                    )
+                    # WS-38 2A: one note per class present, each naming the
+                    # first reason seen with that class.
+                    class_reasons: dict[str, str] = {}
+                    for _name, _error, failure_class, reason in batch_failures:
+                        class_reasons.setdefault(failure_class, reason)
+                    content += "".join(
+                        "\n" + failure_class_note(failure_class, reason)
+                        for failure_class, reason in class_reasons.items()
                     )
                 messages.append({"role": "system", "content": content})
 
@@ -1930,6 +1970,8 @@ class SubAgent:
                 failed=tools_failed, attempted=tools_attempted,
                 error=last_error or "unknown error",
             )
+            if last_failure_class and last_reason:
+                reply += "\n" + failure_tag(last_failure_class, last_reason)
 
         # P2 backstop — deliberately count-based and append-only, like D4:
         # it cannot be argued with by the model, and unlike a status flip

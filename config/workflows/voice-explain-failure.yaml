@@ -13,7 +13,8 @@ triggers:
   - failed
 steps:
 - Say what failed and the reason the result gave, in one or two sentences, without naming a specialist.
-- 'If the result gave no reason, or Larry asks why, delegate to developer: read the run log for the most recent run of that task and report the failing tool call and its exact error.'
+- 'If the result ends with a [failure class: ...; reason: ...] tag, that is the reason: say it in plain words. Class transient means one more try may work. Class approach means the same step will fail again, so a different way is needed. Class policy means a guard refused on purpose: say what was refused and do not ask any specialist to get around it or change the code that refused it.'
+- 'If the result gave no reason (no tag, or reason tool_reported_failure), or Larry asks why, delegate to developer: read the run log for the most recent run of that task and report the failing tool call and its exact error.'
 - Never guess a cause, and never ask Larry to describe an error the run log already holds.
 done_when:
 - The reply names the failing step and its logged error, or says the run log recorded no reason.
