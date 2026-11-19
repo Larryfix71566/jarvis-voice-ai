@@ -451,17 +451,13 @@ final class AppMessageRouter {
                             Self.presentRequestedMainFallback(result.id, in: workspace, display: displayWindow)
                         }
                         displayResults.apply(payload, workspaceID: result.id)
-                        // D31's three-case auto-open rule (App.tsx:247-254),
-                        // drawer-routed results only: closed → open on
-                        // Output; open elsewhere → dot; open on Output →
-                        // nothing extra, the item just appears.
-                        if let drawer {
-                            if !drawer.isOpen && !drawer.isPoppedOut {
-                                drawer.setTab("output")
-                                drawer.isOpen = true
-                            } else if drawer.activeTab != "output" {
-                                drawer.outputDot = true
-                            }
+                        // WS-37 (Larry, 2026-11-19: "light a dot"): a
+                        // result never opens the drawer. Unless the Output
+                        // tab is already on screen, it lights the dot on
+                        // Inspect and on the Output tab instead. This
+                        // replaces D31's auto-open (App.tsx:247-254).
+                        if let drawer, Self.drawerResultNeedsDot(drawer) {
+                            drawer.outputDot = true
                         }
                     }
                     consoleCoordinator?.publishInventory()
@@ -528,6 +524,15 @@ final class AppMessageRouter {
         // or changing the supporting owner; other readers remain untouched.
         let alreadySelected = workspace.activeID == id && !workspace.showsConversation
         if alreadySelected || (!presentation.main && !presentation.supporting) { workspace.select(id) }
+    }
+
+    /// WS-37: a drawer-routed result lights the Inspect/Output dot unless
+    /// the Output tab is already visible, docked or popped out. It never
+    /// changes whether the drawer is open, so the saved open state only
+    /// ever records the user's own choice.
+    static func drawerResultNeedsDot(_ drawer: DrawerState) -> Bool {
+        let visible = drawer.isOpen || drawer.isPoppedOut
+        return !(visible && drawer.activeTab == "output")
     }
 
     private static func isMemoryGraphPayload(_ payload: DisplayPayload) -> Bool {

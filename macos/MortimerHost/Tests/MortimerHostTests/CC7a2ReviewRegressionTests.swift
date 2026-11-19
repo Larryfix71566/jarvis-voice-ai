@@ -55,6 +55,7 @@ private final class ReviewTransport: RTVITransport {
                     let display = DisplayWindowStore()
                     let output = DisplayResultStore()
                     let drawer = DrawerState()
+                    let drawerWasOpen = drawer.isOpen, drawerTab = drawer.activeTab
                     let router = AppMessageRouter()
                     router.start(client: client, agentRuns: AgentRunStore(), displayResults: output, displayWindow: display, workspace: workspace, drawer: drawer)
                     try transport.emit(payload)
@@ -76,7 +77,12 @@ private final class ReviewTransport: RTVITransport {
                         XCTAssertEqual(workspace.activeID, oldID ?? result.id)
                     }
                     if payload["surface"] as? String == "drawer" {
-                        XCTAssertTrue(drawer.isOpen); XCTAssertEqual(drawer.activeTab, "output")
+                        // WS-37 (Larry, 2026-11-19: "light a dot"): a result
+                        // never opens or retabs the drawer; it lights the
+                        // Inspect/Output dot unless Output is already showing.
+                        XCTAssertEqual(drawer.isOpen, drawerWasOpen)
+                        XCTAssertEqual(drawer.activeTab, drawerTab)
+                        XCTAssertEqual(drawer.outputDot, !(drawerWasOpen && drawerTab == "output"))
                     }
                     if payload["data_policy"] as? String == "local_only" {
                         XCTAssertTrue(display.panels.isEmpty); XCTAssertNil(workspace.supportingContent)

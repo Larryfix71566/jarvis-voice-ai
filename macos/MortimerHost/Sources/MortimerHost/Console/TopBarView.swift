@@ -269,7 +269,7 @@ struct TopBarView: View {
         Button { toggleInspect() } label: {
             HStack(spacing: 6) {
                 Text(inspectTitle)
-                if !drawer.isOpen && !drawer.isPoppedOut && dotVisible {
+                if inspectDotShown {
                     Circle()
                         .fill(attention ? AppTheme.attn : AppTheme.accent)
                         .frame(width: 6, height: 6)
@@ -281,7 +281,22 @@ struct TopBarView: View {
               ? "Panels are on the display screen — click to focus/move"
               : "Inspect agents, runs, output and the log (Esc closes · T opens the Log)")
         .accessibilityLabel(inspectTitle)
+        .accessibilityValue(inspectDotDescription)
         .accessibilityIdentifier("console.inspect")
+    }
+
+    /// The dot only shows on the closed, docked drawer's button.
+    private var inspectDotShown: Bool {
+        !drawer.isOpen && !drawer.isPoppedOut && dotVisible
+    }
+
+    /// WS-37: the dot is the only sign a drawer result arrived, so it is
+    /// spoken too. Empty when no dot shows.
+    private var inspectDotDescription: String {
+        guard inspectDotShown else { return "" }
+        if attention { return "Needs attention" }
+        if drawer.outputDot { return "New output" }
+        return "Agent working"
     }
 
     private func toggleInspect() {
