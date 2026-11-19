@@ -574,7 +574,8 @@ async def test_roadmap_read_near_host_result_cap_is_attested_and_over_it_refused
     body = repo_logic.repo_read_file(path='ROADMAP.md')
     assert body['ok'] is True and len(json.dumps(body, sort_keys=True)) > 1_000_000
     envelope, content = await _scoped_read(project, body, {'path': 'ROADMAP.md'})
-    assert json.loads(content) == {'ok': False, 'error': 'tool_reported_failure'}
+    # WS-38 1A: the reduction keeps the closed reason the body named.
+    assert json.loads(content) == {'ok': False, 'error': 'invalid_tool_result_content'}
 
 
 async def test_canonical_roadmap_above_roadmap_limit_is_refused(project, monkeypatch):
@@ -711,3 +712,37 @@ async def test_aggregate_log_commitment_is_stable_and_changes_with_verified_meta
     assert changed != before
     entry.rename(logs / 'renamed.md')
     assert await refs() != changed
+
+
+async def test_listed_body_reason_survives_reduction_and_raw_text_is_dropped():
+    body = response({"ok": False, "error": CANARY, "reason": "upstream_auth_rejected"})
+    registry = registry_for("get_current_time", "mcp-time", Session(body), pinned=True)
+    scope = execution("get_current_time", {})
+    logger = memory_logger()
+    with run_logger_scope(logger):
+        envelope = await registry.call_classified("get_current_time", {}, execution_scope=scope)
+    _, content = validate_tool_result(scope, envelope)
+    assert json.loads(content) == {"ok": False, "error": "upstream_auth_rejected"}
+    assert CANARY not in repr(logger._buffer) + content
+    assert logger._buffer[-1]["error"] == "upstream_auth_rejected"
+
+
+async def test_served_by_reaches_mcp_call():
+    body = response({"results": [], "answer": "", "served_by": "tavily_rest",
+                     "fallback_after": "upstream_error"})
+    registry = registry_for("web_search", "mcp-web", Session(body))
+    logger = memory_logger()
+    with run_logger_scope(logger):
+        await registry.call("web_search", {})
+    rec = logger._buffer[-1]
+    assert rec["served_by"] == "tavily_rest"
+    assert rec["fallback_after"] == "upstream_error"
+
+
+async def test_unknown_served_by_is_not_recorded():
+    body = response({"results": [], "served_by": "made_up"})
+    registry = registry_for("web_search", "mcp-web", Session(body))
+    logger = memory_logger()
+    with run_logger_scope(logger):
+        await registry.call("web_search", {})
+    assert "served_by" not in logger._buffer[-1]

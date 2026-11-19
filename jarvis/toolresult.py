@@ -66,6 +66,18 @@ REASON_CLASSES: dict[str, str] = {
     "tool_source_scope_invalid": "policy",
     "protected_turn": "policy",
     "private_route_required": "policy",
+    # WS-38 1A upstream categories (jarvis/fallbacks.py; design note §5).
+    "upstream_timeout": "transient",
+    "upstream_unreachable": "transient",
+    "upstream_error": "transient",
+    "upstream_rate_limited": "transient",
+    "upstream_blocked": "approach",
+    "upstream_protocol_error": "approach",
+    "upstream_auth_rejected": "approach",
+    "upstream_quota_exhausted": "approach",
+    "upstream_rejected_request": "approach",
+    "tool_not_configured": "approach",
+    "invalid_arguments": "approach",
     # Whole-run outcomes a sub-agent reports without a tool reason.
     "agent_timeout": "transient",
     "iterations_exhausted": "approach",
@@ -217,6 +229,12 @@ def classify_tool_result(tool_name: str, result_str: str, *,
         if body_ok is False or body_error:
             error = str(body_error) if body_error else "tool reported ok: false"
             reason = failure_category
+            # WS-38 1A: a closed `reason` the tool itself put in its body
+            # decides, after failure_category and ahead of parsing `error`.
+            body_reason = parsed.get("reason")
+            if (reason not in REASON_CLASSES and isinstance(body_reason, str)
+                    and body_reason in REASON_CLASSES):
+                reason = body_reason
             if reason not in REASON_CLASSES and isinstance(body_error, str):
                 match = _CODE_RE.fullmatch(body_error.strip())
                 reason = match.group(0) if match else None

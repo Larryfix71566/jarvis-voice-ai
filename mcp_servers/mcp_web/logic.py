@@ -46,6 +46,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from jarvis.fallbacks import http_failure_reason, mark, may_fall_back, served
 from jarvis.weathergov import active_alerts as _wg_active_alerts
 from jarvis.weathergov import daily_forecast as _wg_daily_forecast
 from jarvis.weathergov import hourly_forecast as _wg_hourly_forecast
@@ -189,25 +190,42 @@ def _search_via_mcp(query: str, max_results: int, api_key: str) -> dict:
     return inner
 
 
+def _search_error_text(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"Web search failed (HTTP {exc.response.status_code})."
+    return f"Web search failed: {type(exc).__name__}."
+
+
 def web_search(query: str, max_results: int = 5) -> dict:
-    """Tavily web search. Degrades cleanly when TAVILY_API_KEY is unset."""
+    """Tavily web search. Degrades cleanly when TAVILY_API_KEY is unset.
+
+    WS-38 1A (design note §5): REST is tried only when may_fall_back() allows
+    it after the MCP failure. A rejected key, rate limit or exhausted quota
+    would fail the same way on REST, so those return at once. Every failure
+    carries a closed `reason`; a success says which path served.
+    """
     query = (query or "").strip()
     if not query:
-        return {"error": "A search query is required."}
+        return {"error": "A search query is required.", "reason": "invalid_arguments"}
     api_key = os.environ.get("TAVILY_API_KEY")
     if not api_key:
-        return {"error": "Web search is unavailable (no API key configured)."}
+        return {"error": "Web search is unavailable (no API key configured).",
+                "reason": "tool_not_configured"}
     max_results = max(1, min(int(max_results), 10))
+    path, after = "tavily_mcp", None
     try:
         data = _search_via_mcp(query, max_results, api_key)
-    except Exception:
-        # MCP endpoint unreachable/blocked/misbehaving -> classic REST.
+    except Exception as exc:
+        after = ("upstream_protocol_error" if isinstance(exc, _MCPTransportError)
+                 else http_failure_reason(exc))
+        if not may_fall_back(after):
+            return {"error": _search_error_text(exc), "reason": after}
         try:
             data = _search_via_rest(query, max_results, api_key)
-        except httpx.HTTPStatusError as exc:
-            return {"error": f"Web search failed (HTTP {exc.response.status_code})."}
-        except Exception as exc:
-            return {"error": f"Web search failed: {type(exc).__name__}."}
+        except Exception as rest_exc:
+            return {"error": _search_error_text(rest_exc),
+                    "reason": http_failure_reason(rest_exc)}
+        path = "tavily_rest"
     results = [
         {
             "title": r.get("title", ""),
@@ -216,7 +234,8 @@ def web_search(query: str, max_results: int = 5) -> dict:
         }
         for r in data.get("results", [])
     ]
-    return {"results": results, "answer": data.get("answer") or ""}
+    return mark({"results": results, "answer": data.get("answer") or ""},
+                served("web_search", path, after))
 
 
 def _weather_via_weathergov(lat: float, lon: float, days: int) -> dict | None:

@@ -1,5 +1,7 @@
 """Unit tests for mcp_servers/mcp_web/logic.py (plan Phase 1 Tests)."""
 
+import json
+
 import httpx
 import pytest
 
@@ -182,6 +184,77 @@ class TestWebSearchMCPTransport:
 
         monkeypatch.setattr(logic.httpx, "post", fake_post)
         assert logic.web_search("q")["error"] == "Web search failed (HTTP 403)."
+
+    def test_primary_reports_tavily_mcp(self, monkeypatch):
+        monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+        monkeypatch.setattr(logic.httpx, "post", lambda url, **kw: FakeMCPSearchResponse([]))
+        out = logic.web_search("q")
+        assert out["served_by"] == "tavily_mcp"
+        assert "fallback_after" not in out
+
+    @pytest.mark.parametrize("failure,after", [
+        ("connect", "upstream_unreachable"),
+        ("5xx", "upstream_error"),
+        ("jsonrpc", "upstream_protocol_error"),
+    ])
+    def test_fallback_records_rest_and_reason(self, monkeypatch, failure, after):
+        monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+
+        class ErrorBody(FakeResponse):
+            text = _sse({"jsonrpc": "2.0", "id": 1, "error": {"code": -1, "message": "m"}})
+
+        def fake_post(url, **kwargs):
+            if "mcp.tavily.com" in url:
+                if failure == "connect":
+                    raise httpx.ConnectError("down")
+                if failure == "5xx":
+                    return FakeResponse({}, 503)
+                return ErrorBody({})
+            return FakeResponse({"answer": "REST answer.", "results": []})
+
+        monkeypatch.setattr(logic.httpx, "post", fake_post)
+        out = logic.web_search("q")
+        assert out["served_by"] == "tavily_rest"
+        assert out["fallback_after"] == after
+
+    @pytest.mark.parametrize("status,reason", [
+        (401, "upstream_auth_rejected"), (429, "upstream_rate_limited"),
+    ])
+    def test_no_backup_statuses_make_one_call(self, monkeypatch, status, reason):
+        monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+        calls = []
+
+        def fake_post(url, **kwargs):
+            calls.append(url)
+            return FakeResponse({}, status)
+
+        monkeypatch.setattr(logic.httpx, "post", fake_post)
+        out = logic.web_search("q")
+        assert len(calls) == 1
+        assert out == {"error": f"Web search failed (HTTP {status}).", "reason": reason}
+
+    def test_both_down_carries_rest_reason(self, monkeypatch):
+        monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
+
+        def fake_post(url, **kwargs):
+            if "mcp.tavily.com" in url:
+                raise httpx.ConnectError("down")
+            return FakeResponse({}, 403)
+
+        monkeypatch.setattr(logic.httpx, "post", fake_post)
+        out = logic.web_search("q")
+        assert out == {"error": "Web search failed (HTTP 403).", "reason": "upstream_blocked"}
+
+    def test_missing_query_and_key_have_reasons(self, monkeypatch):
+        assert logic.web_search("  ")["reason"] == "invalid_arguments"
+        monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+        assert logic.web_search("q")["reason"] == "tool_not_configured"
+
+    def test_classifier_reads_the_reason(self):
+        from jarvis.toolresult import classify_tool_result
+        body = {"error": "Web search failed (HTTP 429).", "reason": "upstream_rate_limited"}
+        out = classify_tool_result("web_search", json.dumps(body))
+        assert (out.reason, out.failure_class) == ("upstream_rate_limited", "transient")
 
 
 GEO_PAYLOAD = {

@@ -264,6 +264,17 @@ class TestFullRun:
         payload = next(root.rglob("*.jsonl")).read_text()
         assert "PRIVATE_CANARY_midtask" not in payload
 
+    def test_mcp_call_payload_keeps_closed_path_codes(self, db_path, root):
+        rl = make_logger(db_path, root)
+        rl.start()
+        rl.mcp_call("web_search", "mcp_web", True, 5)
+        rl.mcp_call("web_search", "mcp_web", True, 5,
+                    served_by="tavily_rest", fallback_after="upstream_error")
+        plain, served = [r for r in rl._buffer if r["type"] == "mcp_call"]
+        assert "served_by" not in plain and "fallback_after" not in plain
+        assert served["served_by"] == "tavily_rest"
+        assert served["fallback_after"] == "upstream_error"
+
     def test_writes_one_agent_runs_row_and_expected_events(self, db_path, root):
         rl = make_logger(db_path, root)
         rl.start()
