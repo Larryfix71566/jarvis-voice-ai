@@ -172,8 +172,8 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 
 </details>
 
-<details id="ws-38">
-<summary>WS-38 — Mortimer's tone: dry humor and sarcasm with Larry · Claude</summary>
+<details id="ws-39">
+<summary>WS-39 — Mortimer's tone: dry humor and sarcasm with Larry · Claude</summary>
 
 **Workstream:** Larry asked in his Claude Duet channel on 2026-11-19 at 02:56:45 UTC: "I would also like mortimer to have the ability to be sarchastic when answering me, humor is fine for our interactions". No existing row covered the Supervisor persona, so this block is added with the PR that implements it; merging the PR approves the row (§0 rule 2). Under §0 rule 14 this block keeps systems from overlapping; it is not exclusive.
 
@@ -1437,7 +1437,7 @@ projection, never hidden cards; protected results retain their existing limits.
 
 **Adopted typed phone-card wire reservation (2026-10-31, WS-04/17/30):** reserve closed operations `results.view`, `results.select`, `results.pin`, `results.unpin`, `results.close`, `results.reopen` in the existing `mortimer.phone-remote.v1` envelope, exactly as the independently accepted typed-card design specifies. Reuse `read`/`action` scopes and existing status/reason enums; add no port, launchd label, config key, migration, credential or general console-action permission. These identifiers serve only the injected synthetic offline slice until separate production claims.
 
-**Config key reserved for WS-38, 2026-11-19 (before implementation):** `JARVIS_PERSONALITY`, `playful` (default) or `formal`, case and surrounding spaces ignored; any other value is a startup error, like `JARVIS_UNITS`. Read once into `Settings.jarvis_personality` and passed to `build_supervisor_prompt`; `formal` reproduces the pre-WS-38 Supervisor prompt byte for byte. No migration, port, launchd label, allow-list row or wire field.
+**Config key reserved for WS-39, 2026-11-19 (before implementation):** `JARVIS_PERSONALITY`, `playful` (default) or `formal`, case and surrounding spaces ignored; any other value is a startup error, like `JARVIS_UNITS`. Read once into `Settings.jarvis_personality` and passed to `build_supervisor_prompt`; `formal` reproduces the pre-WS-39 Supervisor prompt byte for byte. No migration, port, launchd label, allow-list row or wire field.
 
 ## 4. Conflict register
 

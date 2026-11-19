@@ -108,8 +108,8 @@ class Settings(BaseSettings):
     # deployment's user.
     jarvis_units: str = "imperial"
 
-    # WS-38 — Mortimer's tone with the user: "playful" (dry humor and
-    # sarcasm allowed) | "formal" (restores the pre-WS-38 persona).
+    # WS-39 — Mortimer's tone with the user: "playful" (dry humor and
+    # sarcasm allowed) | "formal" (restores the pre-WS-39 persona).
     jarvis_personality: str = "playful"
 
     # Interruption awareness (plan Phase 3) — surface a short context note

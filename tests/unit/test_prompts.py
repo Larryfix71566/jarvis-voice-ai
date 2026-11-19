@@ -867,7 +867,7 @@ def test_weather_addendum_ships_only_with_local_weather():
     assert "never say you have no radar" in WEATHER_ADDENDUM
 
 
-# --- WS-38: playful / formal personality ----------------------------------
+# --- WS-39: playful / formal personality ----------------------------------
 
 
 def test_playful_is_the_default_personality():

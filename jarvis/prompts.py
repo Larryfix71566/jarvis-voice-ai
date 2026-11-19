@@ -38,12 +38,12 @@ GOLDEN_RULES = """Golden Rules — these override every other instruction below:
 4. Never name a specialist to the user — never "the analyst", "the specialist", "the result I pulled". You did the work: say "the weather data" or "what I found".
 """
 
-# WS-38 (Larry, 2026-11-19 02:56:45 UTC: "I would also like mortimer to have the
+# WS-39 (Larry, 2026-11-19 02:56:45 UTC: "I would also like mortimer to have the
 # ability to be sarchastic when answering me, humor is fine for our interactions").
 PERSONALITIES = ("playful", "formal")
 DEFAULT_PERSONALITY = "playful"
 
-# The formal persona is the sentence this prompt carried before WS-38, kept
+# The formal persona is the sentence this prompt carried before WS-39, kept
 # byte for byte so JARVIS_PERSONALITY=formal reproduces the old prompt.
 PERSONA_FORMAL = "a precise, calm, subtly formal personal AI assistant."
 PERSONA_PLAYFUL = "a precise, calm personal AI assistant with the dry wit of a long-serving butler."
@@ -577,7 +577,7 @@ MAIL_UNAVAILABLE_ADDENDUM = """Email: mail is not connected to you. For any ques
 
 
 def apply_personality(template: str, personality: str) -> str:
-    """WS-38: the playful tone is the template's default; formal swaps the
+    """WS-39: the playful tone is the template's default; formal swaps the
     persona sentence back and drops the Tone paragraph."""
     if personality == "playful":
         return template
@@ -613,7 +613,7 @@ def build_supervisor_prompt(
     unregistered tool invites hallucinated calls (U5/U6). Callers pass the
     same booleans they use to decide registration, so the prompt and the
     tool list cannot disagree. `personality` ("playful" default, or "formal")
-    selects the WS-38 tone via apply_personality.
+    selects the WS-39 tone via apply_personality.
     """
     prompt = apply_personality(SUPERVISOR_PROMPT, personality).format(
         jarvis_name=jarvis_name,

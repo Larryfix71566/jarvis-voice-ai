@@ -101,7 +101,7 @@ def test_units_setting_accepts_metric(clean_env):
     assert settings.jarvis_units == "metric"
 
 
-# --- WS-38 personality ----------------------------------------------------
+# --- WS-39 personality ----------------------------------------------------
 
 
 def test_personality_defaults_to_playful(clean_env):
