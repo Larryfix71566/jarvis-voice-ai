@@ -29,7 +29,7 @@ import uuid
 from typing import Any, Callable
 
 from jarvis import keyhealth
-from jarvis.agents.base import EventCallback, SubAgent
+from jarvis.agents.base import TIMEOUT_MESSAGE, EventCallback, SubAgent
 from jarvis.agent_skills import (
     skill_selection_v2_enabled,
     skills_workspace_enabled,
@@ -37,6 +37,7 @@ from jarvis.agent_skills import (
 from jarvis.voice_sources import ClassifiedText, UNKNOWN, source_scope, source_tracking_active, text_policy
 from jarvis.bot.sensitive_turn import current_sensitive_turn
 from jarvis.procedures import _overlap_score, _tokens, learn_from_run
+from jarvis.toolresult import FAILURE_TAG_RE, failure_class_for, failure_tag
 
 logger = logging.getLogger(__name__)
 
@@ -215,6 +216,26 @@ MISSING_TOOL_NOTE = (
 # budget is an unfinished job, not a failed approach, so it must not arm
 # the retry guard.
 EXHAUSTED_PREFIX = "FAILED: ran out of tool-call rounds"
+
+# WS-38 2A: whole-run FAILED: replies that carry no tool reason, with the
+# closed reason each one means. A FAILED: reply that already carries a
+# failure tag (an all-failed run tags its last tool failure) keeps it.
+_RUN_FAILURE_REASONS: tuple[tuple[str, str], ...] = (
+    (EXHAUSTED_PREFIX, "iterations_exhausted"),
+    (TIMEOUT_MESSAGE, "agent_timeout"),
+    ("FAILED: this tool source requires a more private route", "private_route_required"),
+    ("FAILED: no verified local route", "private_route_required"),
+)
+
+
+def _tag_run_failure(result: str) -> str:
+    """Append the failure tag to a known whole-run FAILED: reply."""
+    if FAILURE_TAG_RE.search(result):
+        return result
+    for prefix, reason in _RUN_FAILURE_REASONS:
+        if result.startswith(prefix):
+            return result + "\n" + failure_tag(failure_class_for(reason), reason)
+    return result
 
 # H1.4 — after this many handoffs on one investigation, the agent is asked
 # to state where it stands before requesting anything more. Deliberately a
@@ -803,6 +824,8 @@ def build_delegate_tool(
                     "have established, what you still do not know, and "
                     "what information would settle it.]"
                 )
+            if failed:
+                result = _tag_run_failure(result)
             _emit_terminal(not failed)
             return ClassifiedText(result, result_sources.policy or UNKNOWN) if export_source else result
 

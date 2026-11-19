@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from jarvis.toolresult import FAILURE_TAG_RE, UNLISTED_REASON
 from jarvis.workflows import Workflow, load_workflows
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,7 @@ EXPLICIT_ASK_NEGATION_RE = re.compile(
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 SENTENCE_END_RE = re.compile(r"[.!?]\s")
 
-RESULT_KINDS = ("failed", "needs_input", "missing_tool", "limitation", "proposal")
+RESULT_KINDS = ("failed", "reasoned", "needs_input", "missing_tool", "limitation", "proposal")
 REPLY_KINDS = ("refusal", "handoff")
 NEEDS_INPUT_MARKER = "NEEDS-INPUT:"   # == jarvis.agents.delegate.HANDOFF_MARKER
 # W8 — a self-edit pull request that only PROPOSES a human-only change
@@ -135,6 +136,11 @@ def result_kinds(result: Any) -> list[str]:
     kinds = []
     if result.lstrip().startswith("FAILED"):
         kinds.append("failed")
+        # WS-38 2A: the failure names a closed reason, so the Supervisor can
+        # report it without asking a developer to read the run log.
+        tag = FAILURE_TAG_RE.search(result)
+        if tag and tag.group(2) != UNLISTED_REASON:
+            kinds.append("reasoned")
     if NEEDS_INPUT_MARKER in result:
         kinds.append("needs_input")
     if MISSING_TOOL_RE.search(result):

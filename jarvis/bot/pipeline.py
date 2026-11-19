@@ -1028,9 +1028,10 @@ def adapt_to_pipecat(
                 else json.dumps(result, default=str)
             )
             outcome = classify_tool_result(name, result_text)
+            # WS-38 2A: the closed reason survives this run's redaction.
             runlog.tool_result(
                 name, result_text, int((time.perf_counter() - started) * 1000),
-                outcome.ok, tool_call_id=tool_call_id,
+                outcome.ok, tool_call_id=tool_call_id, reason=outcome.reason,
             )
             result_known = True
             if name == "local_weather" and outcome.ok and weather_context is not None:

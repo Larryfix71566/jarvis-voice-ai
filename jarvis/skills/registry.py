@@ -718,7 +718,7 @@ class SkillRegistry:
                 execution_scope, content, DataPolicy("approved_external", "host-generated-tool-status"),
                 "host-generated-tool-status", (),
             )
-        outcome = classify_tool_result(tool_name, content)
+        outcome = classify_tool_result(tool_name, content, failure_category=failure_category)
         if envelope is None and contract is not None and server == 'mcp-apps' and tool_name == 'app_write_file':
             from mcp_servers.development_boundary import sandbox_required
             expected = sandbox_required(application=True)
@@ -804,11 +804,12 @@ class SkillRegistry:
             runlog, failure_category=failure_category,
         )
         observed = value.content if isinstance(value, ToolResultEnvelope) else value
-        outcome = classify_tool_result(tool_name, observed)
+        outcome = classify_tool_result(tool_name, observed, failure_category=failure_category)
         if runlog is not None:
             # No raw provider/MCP error is telemetry, even in legacy mode.
+            # WS-38 2A: outcome.reason is always a closed REASON_CLASSES key.
             runlog.mcp_call(tool_name, server, ok=outcome.ok, latency_ms=latency_ms,
-                            error=(failure_category or "tool_reported_failure") if not outcome.ok else None)
+                            error=outcome.reason if not outcome.ok else None)
         return value
 
     async def call(
