@@ -2,7 +2,7 @@
 date: 2026-11-19
 system: claude
 rows: [WS-15]
-prs: []
+prs: [398]
 ---
 
 # 2026-11-19: the weather chip names the device's city, not weather.gov's nearest place
@@ -24,7 +24,7 @@ The sidecar had no device fix on file (`/api/status/location` returned `source: 
 
 ## Evidence
 
-- Python, Linux, Python 3.12 with the CI lock installed: see the PR body for the `pytest tests/unit` and Pyflakes results at the pushed commit. New tests: `tests/unit/test_ambient_weather.py::TestDeviceLabelWins` (5).
+- Python, Linux, Python 3.12 with the CI lock installed, at `3ab8d92`: Pyflakes (ruff F) clean; `pytest tests/unit` 8,432 passed, 141 skipped, then one error in the untouched `tests/unit/test_ws_transport.py`, which passes 8/8 alone (order-dependent); `pytest tests/integration` 199 passed, 4 skipped. New tests: `tests/unit/test_ambient_weather.py::TestDeviceLabelWins` (5). CI's results on PR #398 are the record.
 - Swift: `ConnectLocationReporterTests` (8 tests) runs in CI's macOS `swift-tests` job; no Swift toolchain in this Linux session.
 
 ## Not verified
