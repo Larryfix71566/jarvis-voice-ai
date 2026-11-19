@@ -32,7 +32,6 @@ struct ResultCarouselView: View {
         VStack(spacing: 10) {
             ArrivalNoticeView(coordinator: coordinator)
             HStack {
-                Text("Results").font(.headline)
                 Spacer()
                 Button("Show all results") { setMode(all: true) }
                     .disabled(workspace.carouselResults.isEmpty)

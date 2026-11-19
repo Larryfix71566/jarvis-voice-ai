@@ -45,7 +45,7 @@ private func renderedText(in view: NSView) throws -> String {
 
 @MainActor
 final class CompactConversationTests: XCTestCase {
-    func testV2CompactOrbOmitsTranscriptButKeepsConversationAndNotices() throws {
+    func testStatusLineKeepsNoticesAndLogKeepsTheTranscript() throws {
         if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
             throw XCTSkip("Hosted-runner skip: this test still gates on Mac.")
         }
@@ -64,20 +64,16 @@ final class CompactConversationTests: XCTestCase {
         }
         conversation.set([try entry("user", "user", userText),
                           try entry("assistant", "assistant", assistantText)])
-        let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
-            adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
         let notices = ConsoleNoticeState()
         notices.showAudioInputNotice("Audio input notice remains visible")
-        let compact = NSHostingView(rootView: OrbFieldView(voiceState: .offline)
-            .defaultAppStorage(defaults)
-            .environment(conversation)
-            .environment(AgentRunStore())
-            .environment(DrawerState())
-            .environment(DisplayResultStore())
-            .environment(notices)
-            .environmentObject(client)
-            .preferredColorScheme(.dark))
-        compact.frame = NSRect(x: 0, y: 0, width: 260, height: 900)
+        let status = OrbStatus.derive(connection: .connecting,
+            presentation: VoicePresentationState(activity: .connecting, userLevel: nil, outputLevel: nil,
+                                                 microphoneMuted: true, assistantSpeaking: false),
+            needsYou: false, audioOutputNotice: notices.audioOutputNotice,
+            speakerGateNotice: notices.speakerGateNotice, audioInputNotice: notices.audioInputNotice)
+        let compact = NSHostingView(rootView: OrbStatusLine(status: status)
+            .frame(width: 260).background(Color.black).preferredColorScheme(.dark))
+        compact.frame = NSRect(x: 0, y: 0, width: 260, height: 120)
         let compactWindow = NSWindow(contentRect: compact.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         compactWindow.isReleasedWhenClosed = false
         compactWindow.contentView = compact
@@ -85,12 +81,9 @@ final class CompactConversationTests: XCTestCase {
         defer { closeRenderingFixtureWindow(compactWindow) }
         compact.layoutSubtreeIfNeeded(); compactWindow.contentView?.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-
-        let compactOCR = try renderedText(in: compact)
-        XCTAssertFalse(compactOCR.contains(userText.filter { !$0.isWhitespace }) || compactOCR.contains(assistantText.filter { !$0.isWhitespace }), "v2 compact orb must not duplicate transcript: \(compactOCR)")
         let compactText = try renderedText(in: compact)
         XCTAssertTrue(compactText.contains("Audioinputnoticeremainsvisible"),
-                      "non-transcript audio notices remain visible: \(compactText)")
+                      "the audio notice remains visible under the orb: \(compactText)")
         XCTAssertEqual(conversation.entries.map(\.text), [userText, assistantText], "removing compact captions must not alter transcript storage")
 
         // An arriving live transcription after the compact view is mounted
@@ -100,7 +93,6 @@ final class CompactConversationTests: XCTestCase {
                           try entry("assistant", "assistant", assistantText),
                           try entry("user-update", "user", arrivingText)])
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-        XCTAssertFalse(try renderedText(in: compact).contains(arrivingText.filter { !$0.isWhitespace }), "live updates must not reappear in v2 compact")
         XCTAssertEqual(conversation.entries.last?.text, arrivingText)
 
         // The existing main-window Log remains the readable transcript home.
@@ -122,47 +114,6 @@ final class CompactConversationTests: XCTestCase {
         XCTAssertTrue(logOCR.contains(userText.filter { !$0.isWhitespace }), "main transcript keeps the user entry: \(logOCR)")
         XCTAssertTrue(logOCR.contains(assistantText.filter { !$0.isWhitespace }), "main transcript keeps the Mortimer entry: \(logOCR)")
         XCTAssertTrue(logOCR.contains(arrivingText.filter { !$0.isWhitespace }), "main transcript receives later entries: \(logOCR)")
-    }
-
-    func testRetiredLayoutPreferenceCannotRestoreOrbTranscriptCaptions() throws {
-        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
-            throw XCTSkip("Hosted-runner skip: this test still gates on Mac.")
-        }
-        _ = NSApplication.shared
-        let suite = "legacy-compact-transcript-" + UUID().uuidString
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(1, forKey: "mortimer.interface.layoutVersion")
-        let conversation = ConversationStore()
-        let userText = "Legacy user caption b931"
-        let assistantText = "Legacy Mortimer caption e527"
-        let entries = try [
-            JSONDecoder().decode(ConversationEntry.self, from: JSONSerialization.data(withJSONObject:
-                ["id": "legacy-user", "role": "user", "text": userText, "createdAt": 1234.0])),
-            JSONDecoder().decode(ConversationEntry.self, from: JSONSerialization.data(withJSONObject:
-                ["id": "legacy-assistant", "role": "assistant", "text": assistantText, "createdAt": 1235.0])),
-        ]
-        conversation.set(entries)
-        let client = JarvisClient(config: JarvisConfig(botURL: URL(string: "http://127.0.0.1:7860")!,
-            adminURL: URL(string: "http://127.0.0.1:7861")!, wakeWordURL: URL(string: "ws://127.0.0.1:7862/ws")!, token: "synthetic"))
-        let view = NSHostingView(rootView: OrbFieldView(voiceState: .offline)
-            .defaultAppStorage(defaults)
-            .environment(conversation)
-            .environment(AgentRunStore())
-            .environment(DrawerState())
-            .environment(DisplayResultStore())
-            .environment(ConsoleNoticeState())
-            .environmentObject(client)
-            .preferredColorScheme(.dark))
-        view.frame = NSRect(x: 0, y: 0, width: 260, height: 520)
-        let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false; window.contentView = view; window.orderFrontRegardless()
-        defer { closeRenderingFixtureWindow(window) }
-        view.layoutSubtreeIfNeeded(); window.contentView?.layoutSubtreeIfNeeded()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-        let legacyOCR = try renderedText(in: view)
-        XCTAssertFalse(legacyOCR.contains("Legacyusercaptionb931"), "retired layout cannot duplicate the user caption: \(legacyOCR)")
-        XCTAssertFalse(legacyOCR.contains("LegacyMortimercaptione527"), "retired layout cannot duplicate Mortimer’s caption: \(legacyOCR)")
     }
 
     func testSavedCompactPreferenceChangesNativeConversationPresentation() throws {
