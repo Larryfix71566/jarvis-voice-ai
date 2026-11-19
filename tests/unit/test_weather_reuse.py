@@ -7,9 +7,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from jarvis.bot.weather_intent import WeatherIntent, current_weather_intent
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.bot.weather_reuse import (
-    MAX_DISPATCH_METADATA, WeatherReuseBridge, current_weather_reuse,
+    HARD_REFUSAL_CODES, MAX_DISPATCH_METADATA, WeatherReuseBridge, current_weather_reuse,
     local_weather_subject_key, named_weather_subject_key, valid_weather_source,
     weather_display_metadata, weather_reuse_scope,
 )
@@ -195,16 +196,19 @@ async def test_private_classified_path_performs_neither_native_query_nor_fetch(p
     hit(ts=True),
     hit(source={"weather": {"units": "imperial", "current": {}, "daily": []}}),
 ])
-async def test_refused_or_invalid_hit_never_falls_back_to_an_mcp_fetch(reply):
+async def test_soft_refused_or_invalid_hit_falls_back_to_the_original_mcp_fetch(reply, caplog):
     registry, session = registry_for()
+    arguments = {"city": "Atlanta", "days": 1}
 
     async def query(**_):
         return reply
 
+    caplog.set_level("INFO", logger="jarvis.skills.registry")
     with weather_reuse_scope(WeatherReuseBridge(query)):
-        policy, result = await classified(registry)
-    assert session.calls == [] and policy.level == "approved_external"
-    assert result["ok"] is False and result["error"].startswith("weather_reuse_")
+        policy, result = await classified(registry, arguments=arguments)
+    assert session.calls == [("get_weather", arguments)] and result == SOURCE["weather"]
+    assert policy.level == "approved_external"
+    assert "weather_reuse_fallback tool=get_weather" in caplog.text
 
 
 @pytest.mark.parametrize("code", ["no_matching_result", "cache_missing", "cache_expired", "cache_incomplete"])
@@ -225,15 +229,123 @@ async def test_genuine_native_miss_uses_original_fetch_and_original_arguments(co
     assert metadata["reused"] is False
 
 
-async def test_query_timeout_and_exception_are_closed_refusals_without_retry():
+async def test_query_timeout_and_exception_fall_back_to_one_live_fetch_each():
     registry, session = registry_for()
-    for error, category in [(asyncio.TimeoutError(), "timeout"), (ValueError("private error"), "query_failed")]:
+    for error in (asyncio.TimeoutError(), ValueError("private error")):
         async def query(**_):
             raise error
         with weather_reuse_scope(WeatherReuseBridge(query)):
             _, result = await classified(registry)
-        assert result == {"ok": False, "error": "weather_reuse_" + category}
-    assert session.calls == []
+        assert result == SOURCE["weather"]
+    assert session.calls == [("get_weather", {"city": "Atlanta", "days": 1})] * 2
+
+
+async def test_named_intent_mismatch_is_a_hard_refusal_with_no_mcp_call():
+    registry, session = registry_for()
+    queried = []
+
+    async def query(**request):
+        queried.append(request)
+        return hit()
+
+    token = current_weather_intent.set(WeatherIntent("named", "exampleburg"))
+    try:
+        with weather_reuse_scope(WeatherReuseBridge(query, is_protected=lambda: False)):
+            _, result = await classified(registry)
+    finally:
+        current_weather_intent.reset(token)
+    assert result == {"ok": False, "error": "weather_reuse_not_requested"}
+    assert session.calls == [] and queried == []
+    assert HARD_REFUSAL_CODES == {"protected_turn", "not_requested"}
+
+
+async def test_incident_unclear_intent_local_weather_asks_then_named_analyst_call_is_refused_honestly():
+    calls = []
+
+    async def locate(_):
+        calls.append("locate")
+        return DEVICE
+
+    async def query(**request):
+        calls.append(("query", request))
+        return hit()
+
+    def fetch(*_):
+        calls.append("fetch")
+
+    _, handler = build_local_weather_tool(locate=locate, fetch_weather=fetch, fetch_radar=fetch,
+                                         reuse=WeatherReuseBridge(query, is_protected=lambda: False),
+                                         is_protected=lambda: False)
+    registry, session = registry_for()
+    token = current_weather_intent.set(WeatherIntent("unclear"))
+    try:
+        text = await handler({})
+        with weather_reuse_scope(WeatherReuseBridge(query, is_protected=lambda: False)):
+            _, result = await classified(registry, arguments={"city": "Alpharetta, Georgia", "days": 1})
+    finally:
+        current_weather_intent.reset(token)
+    assert "Ask the user which place" in text and "Do not delegate" in text
+    assert calls == [] and session.calls == []
+    assert result == {"ok": False, "error": "weather_reuse_not_requested"}
+
+
+async def test_local_intent_refusal_text_names_the_place_for_a_named_intent():
+    async def locate(_):
+        pytest.fail("no location lookup on an intent refusal")
+    _, handler = build_local_weather_tool(locate=locate, is_protected=lambda: False,
+                                         fetch_weather=lambda *a: {}, fetch_radar=lambda *a: {})
+    token = current_weather_intent.set(WeatherIntent("named", "exampleburg"))
+    try:
+        text = await handler({})
+    finally:
+        current_weather_intent.reset(token)
+    assert "named a place (exampleburg)" in text and "Delegate to analyst with exactly that place" in text
+
+
+@pytest.mark.parametrize("code", ["invalid_request", "timeout", "stale_selection"])
+async def test_local_weather_soft_reuse_refusal_falls_through_to_a_live_fetch(code, caplog):
+    fetched = []
+
+    async def locate(_):
+        return DEVICE
+
+    async def query(**_):
+        return {"status": "refused", "code": code}
+
+    def weather(*_):
+        fetched.append("weather")
+        return SOURCE["weather"]
+
+    def radar(*_):
+        fetched.append("radar")
+        return SOURCE["radar"]
+
+    _, handler = build_local_weather_tool(locate=locate, fetch_weather=weather, fetch_radar=radar,
+                                         reuse=WeatherReuseBridge(query))
+    caplog.set_level("INFO", logger="jarvis.bot.weather_tool")
+    text = await handler({})
+    assert sorted(fetched) == ["radar", "weather"]
+    assert "weather_reuse_" not in text and "Atlanta, GA (this device's location)" in text
+    assert f"local_weather_result outcome=live_ok:after_reuse_{code}" in caplog.text
+    assert "33.75" not in caplog.text
+
+
+async def test_local_weather_protected_turn_reuse_refusal_still_refuses(caplog):
+    async def locate(_):
+        return DEVICE
+
+    async def query(**_):
+        return {"status": "refused", "code": "protected_turn"}
+
+    def fetch(*_):
+        pytest.fail("a hard refusal must not fetch")
+
+    _, handler = build_local_weather_tool(locate=locate, fetch_weather=fetch, fetch_radar=fetch,
+                                         reuse=WeatherReuseBridge(query))
+    caplog.set_level("INFO", logger="jarvis.bot.weather_tool")
+    text = await handler({})
+    assert "weather_reuse_protected_turn" in text
+    assert "local_weather_result outcome=reuse_refused:protected_turn" in caplog.text
 
 
 async def test_privacy_and_source_authority_are_rechecked_after_the_native_await():
@@ -353,7 +465,7 @@ async def test_local_hit_uses_new_device_fix_and_native_arrival_without_display_
     assert "Atlanta, GA (this device's location)" in text and "no new weather lookup" in text
 
 
-async def test_local_refusal_does_not_fetch_and_private_turn_does_not_locate_or_query():
+async def test_local_soft_refusal_fetches_live_and_private_turn_does_not_locate_or_query():
     calls = []
     async def locate(_):
         calls.append("locate")
@@ -366,11 +478,12 @@ async def test_local_refusal_does_not_fetch_and_private_turn_does_not_locate_or_
         return SOURCE["weather"]
     _, handler = build_local_weather_tool(locate=locate, fetch_weather=fetch, fetch_radar=fetch,
                                          reuse=WeatherReuseBridge(query))
-    assert "weather_reuse_stale_selection" in await handler({})
-    assert calls == ["locate", "query"]
+    text = await handler({})
+    assert "weather_reuse_" not in text and "Weather for Atlanta, GA" in text
+    assert calls == ["locate", "query", "fetch", "fetch"]
     current_sensitive_turn.get().arm("test", "weather-run")
     assert "protected turn" in await handler({})
-    assert calls == ["locate", "query"]
+    assert calls == ["locate", "query", "fetch", "fetch"]
 
 
 async def test_local_miss_fetches_at_current_fix_and_carries_fetch_not_radar_timing():
@@ -437,9 +550,14 @@ async def test_malformed_or_wrong_capability_native_reply_is_not_a_miss(reply):
     registry, session = registry_for()
     async def query(**_):
         return reply
-    with weather_reuse_scope(WeatherReuseBridge(query)):
+    bridge = WeatherReuseBridge(query)
+    assert (await bridge.lookup(subject_key="weather:named:atlanta", tool="get_weather", days=1,
+                                units="imperial")).code == "invalid_reply"
+    with weather_reuse_scope(bridge):
         _, result = await classified(registry)
-    assert result == {"ok": False, "error": "weather_reuse_invalid_reply"} and session.calls == []
+    # invalid_reply is a soft refusal: the retained card is unusable, so one live fetch answers.
+    assert result == SOURCE["weather"] and len(session.calls) == 1
+    assert bridge.take_dispatch_metadata(tool="get_weather", arguments={"city": "Atlanta", "days": 1})["reused"] is False
 
 
 async def test_bridge_without_an_ordinary_turn_context_refuses_before_native_query():

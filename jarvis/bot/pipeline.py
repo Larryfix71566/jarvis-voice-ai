@@ -425,6 +425,8 @@ class ForegroundRequests:
                 self.sequence += 1
                 intent = accepted_weather_intent(boundary["content"], self.previous_weather_intent,
                     location_asked=asked_for_location(messages, boundary))
+                if intent.kind != "not_weather":
+                    _logger.info("weather_intent kind=%s", intent.kind)
                 request = ForegroundRequest(str(uuid.uuid4()), self.sequence, *self.input_identity,
                     weather_intent=intent, task_stop=task_stop_command(boundary["content"]) is not None)
                 self.previous_weather_intent = intent

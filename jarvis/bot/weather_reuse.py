@@ -121,8 +121,11 @@ _MISS_CODES = frozenset({"no_matching_result", "cache_missing", "cache_expired",
 _REFUSAL_CODES = frozenset({
     "ambiguous_result", "stale_selection", "result_unavailable", "protected_result",
     "protected_turn", "not_ready", "disconnected", "not_confirmed", "timeout",
-    "invalid_request", "invalid_reply", "query_failed", "unsupported",
+    "invalid_request", "invalid_reply", "query_failed", "unsupported", "not_requested",
 })
+# These refuse the whole tool call; every other refusal only means the retained card could not be reused, and the
+# caller falls back to a live fetch (Larry, 2026-11-19: "we should add a backup service to avoid this issue in the future").
+HARD_REFUSAL_CODES = frozenset({"protected_turn", "not_requested"})
 
 
 class WeatherReuseBridge:
@@ -152,7 +155,7 @@ class WeatherReuseBridge:
             return WeatherReuseOutcome("refused", "invalid_request")
         intent = current_weather_intent.get()
         if intent is not None and not intent.permits(subject_key, tool):
-            return WeatherReuseOutcome("refused", "invalid_request")
+            return WeatherReuseOutcome("refused", "not_requested")
         try:
             reply = await asyncio.wait_for(self._query(subject_key=subject_key, tool=tool,
                 days=days, units=units, run_id=run_id), timeout=5.0)

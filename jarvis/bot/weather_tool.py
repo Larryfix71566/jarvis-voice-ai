@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from datetime import date
 from typing import Any, Awaitable, Callable
@@ -34,8 +35,10 @@ from jarvis.bot.display import build_display_payload
 from jarvis.bot.status_tool import _turn_is_protected
 from jarvis.bot.weather_intent import current_weather_intent
 from jarvis.bot.weather_reuse import (
-    WeatherReuseBridge, current_weather_reuse, local_weather_subject_key, weather_display_metadata,
+    HARD_REFUSAL_CODES, WeatherReuseBridge, current_weather_reuse, local_weather_subject_key, weather_display_metadata,
 )
+
+logger = logging.getLogger(__name__)
 
 LOCAL_WEATHER_SCHEMA = {
     "type": "function",
@@ -58,6 +61,10 @@ PROTECTED_TURN_REFUSAL = (
 )
 WET_WORDS = ("rain", "shower", "storm", "thunder", "snow", "sleet", "drizzle")
 WET_POP = 40
+
+
+def _log_result(outcome: str) -> None:
+    logger.info("local_weather_result outcome=%s", outcome)
 
 
 def _unavailable(result: dict) -> str:
@@ -181,22 +188,34 @@ def build_local_weather_tool(
         def blocked() -> bool:
             return protected_now() or (bridge is not None and bridge.is_protected())
 
-        if blocked():
+        def protected() -> str:
+            _log_result("protected_turn")
             return PROTECTED_TURN_REFUSAL
+
+        if blocked():
+            return protected()
         intent = current_weather_intent.get()
         if intent is not None and intent.kind != "local":
-            return ("local_weather failed: named or unclear weather target; device location is not the requested place. "
-                    "For a named city delegate to analyst with the exact city from the user's request; "
-                    "otherwise ask which place. No location lookup, fetch or display occurred.")
+            _log_result(f"intent_refused:{intent.kind}")
+            if intent.kind == "named" and intent.place:
+                return (f"local_weather failed: the user named a place ({intent.place}); device location is "
+                        "not the requested place. Delegate to analyst with exactly that place. "
+                        "No location lookup, fetch or display occurred.")
+            return ("local_weather failed: the request did not clearly name a place or ask for weather here. "
+                    "Ask the user which place, or whether they mean here. Do not delegate, and do not guess "
+                    "or recall a place. No location lookup, fetch or display occurred.")
         try:
             found = await locate(False)
         except Exception:  # noqa: BLE001 — never raised into the turn
             found = {"ok": False, "reason": "lookup_failed"}
         if not isinstance(found, dict) or not found.get("ok"):
-            return _unavailable(found if isinstance(found, dict) else {})
+            failure = found if isinstance(found, dict) else {}
+            _log_result(f"location_unavailable:{failure.get('reason') or 'lookup_failed'}")
+            return _unavailable(failure)
         try:
             lat, lon = float(found["lat"]), float(found["lon"])
         except (KeyError, TypeError, ValueError):
+            _log_result("location_unavailable:lookup_failed")
             return _unavailable({"reason": "lookup_failed"})
         label = str(found.get("label") or "").strip() or f"{lat:.3f}, {lon:.3f}"
         source = str(found.get("source") or "")
@@ -204,18 +223,24 @@ def build_local_weather_tool(
         approximate = source != "device" or accuracy > APPROXIMATE_ACCURACY_M
         subject_key = local_weather_subject_key(found)
         if blocked():
-            return PROTECTED_TURN_REFUSAL
+            return protected()
+        fallback = ""
         if bridge is not None and subject_key is not None:
             from mcp_servers.mcp_web.logic import _configured_units
 
             cached = await bridge.lookup(subject_key=subject_key, tool="local_weather", days=7,
                                          units=_configured_units())
             if blocked():
-                return PROTECTED_TURN_REFUSAL
+                return protected()
             if cached.status == "refused":
-                return (f"local_weather failed: weather_reuse_{cached.code}. "
-                        "The cached result could not be confirmed; say so, do not claim a new lookup.")
+                if cached.code in HARD_REFUSAL_CODES:
+                    _log_result(f"reuse_refused:{cached.code}")
+                    return (f"local_weather failed: weather_reuse_{cached.code}. "
+                            "The cached result could not be confirmed; say so, do not claim a new lookup.")
+                # Soft refusal: the retained card is unusable, so fetch live.
+                fallback = f":after_reuse_{cached.code}"
             if cached.status == "hit":
+                _log_result("reuse_hit")
                 # The native query already applies requested-result arrival
                 # and adds a reference. A replay would duplicate that direct
                 # tool reference, especially outside an originating agent run.
@@ -241,11 +266,13 @@ def build_local_weather_tool(
                 asyncio.to_thread(fetched, fetch_radar, lat, lon, label),
             )
         except Exception:  # noqa: BLE001
+            _log_result("live_failed:exception")
             return "local_weather failed: the weather lookup failed. Say so; do not guess."
         if blocked():
-            return PROTECTED_TURN_REFUSAL
+            return protected()
         if not isinstance(weather, dict) or weather.get("error"):
             why = weather.get("error") if isinstance(weather, dict) else ""
+            _log_result("live_failed:error")  # error text can carry a place name; never logged
             return f"local_weather failed: {why or 'no weather data'} Say so; do not guess."
         # The card and the speech name the place the DEVICE reported
         # (e.g. "Folly Beach, SC"), not weather.gov's nearest-city label.
@@ -280,6 +307,7 @@ def build_local_weather_tool(
                     card_sent = True
                 except Exception:  # noqa: BLE001 — the spoken answer still stands
                     card_sent = False
+        _log_result("live_ok" + fallback)
         return summarize_local_weather(
             weather, place=label, source=source, approximate=approximate,
             card_sent=card_sent, radar_ok=radar_ok,
