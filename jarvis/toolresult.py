@@ -103,6 +103,7 @@ REASON_CLASSES: dict[str, str] = {
 _TRANSPORT_PHRASES: tuple[tuple[str, str], ...] = (
     ("protected turn cannot call", "protected_turn"),
     ("device location is not the requested place", "weather_place_not_requested"),
+    ("did not clearly name a place", "weather_place_not_requested"),
     ("stopped and could not be restarted", "tool_transport_error"),
     ("timed out after", "tool_timeout"),
 )
