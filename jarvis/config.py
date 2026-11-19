@@ -108,6 +108,10 @@ class Settings(BaseSettings):
     # deployment's user.
     jarvis_units: str = "imperial"
 
+    # WS-38 — Mortimer's tone with the user: "playful" (dry humor and
+    # sarcasm allowed) | "formal" (restores the pre-WS-38 persona).
+    jarvis_personality: str = "playful"
+
     # Interruption awareness (plan Phase 3) — surface a short context note
     # to the Supervisor when the user genuinely barges in on a reply.
     jarvis_interruption_notice_enabled: bool = True
@@ -243,6 +247,16 @@ class Settings(BaseSettings):
         if v not in ("imperial", "metric"):
             raise ValueError(
                 f"JARVIS_UNITS must be 'imperial' or 'metric', got {v!r}"
+            )
+        return v
+
+    @field_validator("jarvis_personality")
+    @classmethod
+    def _personality_must_be_known(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in ("playful", "formal"):
+            raise ValueError(
+                f"JARVIS_PERSONALITY must be 'playful' or 'formal', got {v!r}"
             )
         return v
 

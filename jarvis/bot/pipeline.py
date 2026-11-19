@@ -1903,6 +1903,7 @@ def build_pipeline(
         model_catalog=render_model_catalog(),
         voice_catalog=catalog_summary(catalog),
         memory_context=str(memory_snapshot),  # U2.5; source binding retained below
+        personality=getattr(settings, "jarvis_personality", "playful"),
         voice=True,
         # U5/U6: the addendum ships only when the tool does — a prompt
         # describing an unregistered tool would invite hallucinated calls.

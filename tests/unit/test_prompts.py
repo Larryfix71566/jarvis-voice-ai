@@ -3,11 +3,15 @@
 import pytest
 
 from jarvis.prompts import (
+    GOLDEN_RULES,
     HANDOFF_ADDENDUM,
+    PERSONA_FORMAL,
+    PERSONA_PLAYFUL,
     SCREEN_VISION_ADDENDUM,
     STATUS_ADDENDUM,
     SUBAGENT_PROMPTS,
     SUPERVISOR_PROMPT,
+    TONE_PLAYFUL,
     UI_CONTROL_ADDENDUM,
     VOICE_ADDENDUM,
     build_supervisor_prompt,
@@ -861,3 +865,86 @@ def test_weather_addendum_ships_only_with_local_weather():
     assert with_it.endswith(WEATHER_ADDENDUM)
     assert "never use a remembered place" in WEATHER_ADDENDUM
     assert "never say you have no radar" in WEATHER_ADDENDUM
+
+
+# --- WS-38: playful / formal personality ----------------------------------
+
+
+def test_playful_is_the_default_personality():
+    p = build_supervisor_prompt(**_FMT)
+    assert PERSONA_PLAYFUL in p
+    assert TONE_PLAYFUL in p
+    assert PERSONA_FORMAL not in p
+
+
+def test_persona_and_tone_spans_occur_exactly_once():
+    assert SUPERVISOR_PROMPT.count(PERSONA_PLAYFUL) == 1
+    assert SUPERVISOR_PROMPT.count(TONE_PLAYFUL) == 1
+
+
+def test_formal_restores_the_original_persona_and_drops_the_tone():
+    p = build_supervisor_prompt(**_FMT, personality="formal")
+    assert (
+        "You are Mortimer, a precise, calm, subtly formal personal AI assistant. "
+        "You address the user"
+    ) in p
+    assert PERSONA_PLAYFUL not in p
+    assert TONE_PLAYFUL not in p
+    assert "Tone:" not in p
+    assert "sarcastic" not in p
+
+
+def test_formal_differs_from_playful_only_by_the_two_spans():
+    playful = build_supervisor_prompt(**_FMT)
+    formal = build_supervisor_prompt(**_FMT, personality="formal")
+    assert (
+        playful.replace(PERSONA_PLAYFUL, PERSONA_FORMAL, 1).replace(
+            "\n\n" + TONE_PLAYFUL, "", 1
+        )
+        == formal
+    )
+
+
+@pytest.mark.parametrize(
+    "needle",
+    [
+        "Answer first, joke second",
+        "Facts stay straight",
+        "No humor at all for failures and errors",
+        "spends, sends, deletes",
+        "stressed, upset or in a hurry",
+        "never the user themselves",
+        "no \"I can't\" quips (rule 10)",
+        "drop the jokes",
+        "user.style",
+    ],
+)
+def test_tone_guard_rails_are_present_in_the_playful_prompt(needle):
+    assert needle in build_supervisor_prompt(**_FMT)
+
+
+def test_tone_paragraph_sits_between_the_persona_and_the_specialists():
+    p = build_supervisor_prompt(**_FMT)
+    assert p.startswith(GOLDEN_RULES)
+    assert (
+        p.index("never re-convert those.")
+        < p.index(TONE_PLAYFUL)
+        < p.index("You act through a team")
+    )
+
+
+def test_unknown_personality_is_rejected():
+    with pytest.raises(ValueError, match="personality"):
+        build_supervisor_prompt(**_FMT, personality="sarcastic")
+
+
+def test_addenda_still_append_after_the_tone_change():
+    p = build_supervisor_prompt(**_FMT, personality="formal", voice=True)
+    assert p.endswith(VOICE_ADDENDUM)
+
+
+@pytest.mark.parametrize("personality", ["playful", "formal"])
+def test_no_stray_placeholders_in_either_personality(personality):
+    p = build_supervisor_prompt(**_FMT, personality=personality)
+    assert "{jarvis_name}" not in p and "{user_name}" not in p
+    assert "{units}" not in p and "{timezone}" not in p

@@ -157,6 +157,7 @@ class Orchestrator:
             voice_catalog=(voice_catalog if voice_catalog is not None
                            else "(none configured yet)"),
             memory_context=render_memory_context(),  # U2.5 persistent memory
+            personality=getattr(settings, "jarvis_personality", "playful"),
             voice=voice,
             ui_control=ui_control,
             screen=screen,

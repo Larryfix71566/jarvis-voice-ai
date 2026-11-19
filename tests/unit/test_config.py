@@ -101,6 +101,28 @@ def test_units_setting_accepts_metric(clean_env):
     assert settings.jarvis_units == "metric"
 
 
+# --- WS-38 personality ----------------------------------------------------
+
+
+def test_personality_defaults_to_playful(clean_env):
+    _set_required(clean_env)
+    assert load_settings(env_file=None).jarvis_personality == "playful"
+
+
+@pytest.mark.parametrize("raw", ["formal", " Formal "])
+def test_personality_accepts_formal_normalized(clean_env, raw):
+    _set_required(clean_env)
+    clean_env.setenv("JARVIS_PERSONALITY", raw)
+    assert load_settings(env_file=None).jarvis_personality == "formal"
+
+
+def test_personality_rejects_unknown_values(clean_env):
+    _set_required(clean_env)
+    clean_env.setenv("JARVIS_PERSONALITY", "sarcastic")
+    with pytest.raises(RuntimeError, match="JARVIS_PERSONALITY"):
+        load_settings(env_file=None)
+
+
 def test_units_bridged_to_child_env(clean_env):
     """W3: the same transport JARVIS_TIMEZONE already uses to reach MCP
     children — a real env var wins (setdefault precedence), matching every
