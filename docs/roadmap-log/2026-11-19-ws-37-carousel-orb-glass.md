@@ -2,7 +2,7 @@
 date: 2026-11-19
 system: claude
 rows: [WS-37]
-prs: [TBD]
+prs: [402]
 ---
 
 # 2026-11-19: WS-37 carousel cards in the orb's glass, follow glow, swipe (Claude)
