@@ -61,12 +61,12 @@ struct ResultCarouselView: View {
                         let neighbourWidth = min(180, (geometry.size.width - frontWidth) / 2 - 12)
                         ZStack {
                             if depth && index > 0 {
-                                neighbour(workspace.carouselResults[index - 1])
+                                neighbour(workspace.carouselResults[index - 1], leading: true)
                                     .frame(width: neighbourWidth, height: max(160, geometry.size.height * 0.72))
                                     .position(x: geometry.size.width / 2 - frontWidth / 2 - neighbourWidth / 2 - 8, y: geometry.size.height / 2)
                             }
                             if depth && index + 1 < workspace.carouselResults.count {
-                                neighbour(workspace.carouselResults[index + 1])
+                                neighbour(workspace.carouselResults[index + 1], leading: false)
                                     .frame(width: neighbourWidth, height: max(160, geometry.size.height * 0.72))
                                     .position(x: geometry.size.width / 2 + frontWidth / 2 + neighbourWidth / 2 + 8, y: geometry.size.height / 2)
                             }
@@ -107,13 +107,15 @@ struct ResultCarouselView: View {
         result.payload.layout?.title ?? result.payload.title ?? "Result"
     }
 
-    private func neighbour(_ result: WorkspaceResult) -> some View {
+    private func neighbour(_ result: WorkspaceResult, leading: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(Self.title(result)).font(.caption.weight(.semibold)).lineLimit(1)
             Text(ConversationThread.card(result).summary).font(.caption2).lineLimit(1).blur(radius: 3).drawingGroup()
         }
         .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .mortimerGlass(.card)
+        .orbGlassCard(lit: false, glowColor: AppTheme.mortimer, glowSuppressed: true)
+        .scaleEffect(0.94)
+        .rotation3DEffect(.degrees(leading ? 9 : -9), axis: (x: 0, y: 1, z: 0))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -139,6 +141,9 @@ private struct ResultCarouselFrontView: View {
     let coordinator: ConsoleActionCoordinator?
     let flat: Bool
     var showsActions = true
+    /// The orb's current colour and whether a drag is in progress.
+    var glowColor: Color = AppTheme.mortimer
+    var glowSuppressed = false
     @Environment(WorkspaceStore.self) private var workspace
     @State private var pinLimitNotice = false
 
@@ -174,7 +179,7 @@ private struct ResultCarouselFrontView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .modifier(CarouselSurface(flat: flat))
+        .modifier(CarouselSurface(flat: flat, glowColor: glowColor, glowSuppressed: glowSuppressed))
         .id(result.id)
         .alert("Pin limit reached", isPresented: $pinLimitNotice) { Button("OK", role: .cancel) {} }
         message: { Text("Unpin a result before pinning another. Your existing pins are preserved.") }
@@ -192,11 +197,13 @@ private struct ResultCarouselFrontView: View {
 
 private struct CarouselSurface: ViewModifier {
     let flat: Bool
+    let glowColor: Color
+    let glowSuppressed: Bool
     func body(content: Content) -> some View {
         if flat {
             content.background(AppTheme.panelSolid, in: RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.hairline))
-        } else { content.mortimerGlass(.card) }
+        } else { content.orbGlassCard(lit: true, glowColor: glowColor, glowSuppressed: glowSuppressed) }
     }
 }
 
