@@ -500,12 +500,26 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
             try await waitUntil("real view follows streaming growth") { self.distanceFromEnd(scroll) <= 26 }
         }
         try f.transport.emit("bot-llm-stopped")
+        func diag(_ tag: String) {
+            let d = scroll.documentView?.bounds.height ?? -1
+            print("FLAKEDIAG \(tag) t=\(Date().timeIntervalSince1970) dist=\(self.distanceFromEnd(scroll)) docH=\(d) visMinY=\(scroll.documentVisibleRect.minY) entries=\(f.conversation.entries.count) button=\(self.newTurnsButton(in: hosted.view) != nil)")
+        }
+        diag("afterStopped")
         scrollToFraction(0.35, in: scroll)
+        diag("afterScroll")
         try await waitUntil("reader is above newest turn") { self.distanceFromEnd(scroll) > 100 }
         try await Task.sleep(for: .milliseconds(50)) // Let the real geometry callback receive the reader's scroll.
+        diag("afterSleep50")
         let readingOffset = scroll.documentVisibleRect.minY
         try await emitPublicReply(f, user: "A new public question", answer: String(repeating: "Public answer arriving while reading history. ", count: 15))
-        try await waitUntil("real New conversation control") { self.newTurnsButton(in: hosted.view) != nil }
+        diag("afterNewReply")
+        do {
+            try await waitUntil("real New conversation control") { self.newTurnsButton(in: hosted.view) != nil }
+        } catch {
+            diag("TIMEOUT")
+            throw error
+        }
+        diag("buttonSeen")
         XCTAssertEqual(scroll.documentVisibleRect.minY, readingOffset, accuracy: 2,
                        "A new answer moved the actual reader viewport")
         let button = try XCTUnwrap(newTurnsButton(in: hosted.view))
