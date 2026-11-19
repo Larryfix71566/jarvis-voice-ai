@@ -72,7 +72,9 @@ struct ScrollSwipeCatcher: NSViewRepresentable {
             else if raw.contains(.ended) { phase = .ended }
             else if raw.contains(.began) || raw.contains(.mayBegin) { phase = .began }
             else { phase = .changed }
-            let out = accumulator.feed(deltaX: event.scrollingDeltaX, deltaY: event.scrollingDeltaY,
+            // Make the card follow the fingers whatever the natural-scrolling setting.
+            let sign: CGFloat = event.hasPreciseScrollingDeltas && !event.isDirectionInvertedFromDevice ? -1 : 1
+            let out = accumulator.feed(deltaX: event.scrollingDeltaX * sign, deltaY: event.scrollingDeltaY * sign,
                                        phase: phase, momentum: momentum,
                                        precise: event.hasPreciseScrollingDeltas,
                                        timestamp: event.timestamp,

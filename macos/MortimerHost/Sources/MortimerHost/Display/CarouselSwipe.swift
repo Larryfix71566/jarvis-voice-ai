@@ -68,6 +68,9 @@ struct ScrollSwipeAccumulator {
     private var claimed = false
     private var swallowMomentum = false
     private var lastWheelStep: TimeInterval = -.infinity
+    /// Smoothed horizontal speed in points per second, for the flick rule.
+    private(set) var velocity: CGFloat = 0
+    private var lastTimestamp: TimeInterval?
 
     mutating func feed(deltaX: CGFloat, deltaY: CGFloat, phase: ScrollSwipePhase,
                        momentum: Bool, precise: Bool, timestamp: TimeInterval,
@@ -86,7 +89,7 @@ struct ScrollSwipeAccumulator {
             return Output(claimed: was, finished: was)
         case .ended:
             guard claimed else { reset(); return Output() }
-            let step = CarouselSwipeModel.decision(translation: translation, predictedEnd: translation, velocity: 0,
+            let step = CarouselSwipeModel.decision(translation: translation, predictedEnd: translation, velocity: velocity,
                                                    index: index, count: count, width: width)
             reset()
             swallowMomentum = true
@@ -94,6 +97,11 @@ struct ScrollSwipeAccumulator {
         case .changed:
             break
         }
+        if let last = lastTimestamp, timestamp > last {
+            let instant = deltaX / CGFloat(timestamp - last)
+            velocity = velocity == 0 ? instant : velocity * 0.5 + instant * 0.5
+        }
+        lastTimestamp = timestamp
         if !decided {
             probeX += deltaX
             probeY += deltaY
@@ -126,5 +134,7 @@ struct ScrollSwipeAccumulator {
         probeY = 0
         decided = false
         claimed = false
+        velocity = 0
+        lastTimestamp = nil
     }
 }

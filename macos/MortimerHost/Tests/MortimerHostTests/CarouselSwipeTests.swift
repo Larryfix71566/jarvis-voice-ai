@@ -82,6 +82,33 @@ final class CarouselSwipeTests: XCTestCase {
         XCTAssertEqual(end.commit, 1)
     }
 
+    func testQuickShortTrackpadSwipeCommitsAsAFlick() {
+        var acc = ScrollSwipeAccumulator()
+        func feed(_ dx: CGFloat, _ phase: ScrollSwipePhase, _ t: TimeInterval) -> ScrollSwipeAccumulator.Output {
+            acc.feed(deltaX: dx, deltaY: 0, phase: phase, momentum: false, precise: true,
+                     timestamp: t, index: 1, count: 3, width: 600)
+        }
+        _ = feed(0, .began, 0)
+        _ = feed(-8, .changed, 0.008)
+        XCTAssertTrue(feed(-8, .changed, 0.016).claimed)
+        _ = feed(-10, .changed, 0.024)
+        let end = feed(0, .ended, 0.030)
+        XCTAssertEqual(end.commit, 1, "about 1,000 pt/s over 26 pt is a flick")
+    }
+
+    func testSlowShortTrackpadSwipeSpringsBack() {
+        var acc = ScrollSwipeAccumulator()
+        func feed(_ dx: CGFloat, _ phase: ScrollSwipePhase, _ t: TimeInterval) -> ScrollSwipeAccumulator.Output {
+            acc.feed(deltaX: dx, deltaY: 0, phase: phase, momentum: false, precise: true,
+                     timestamp: t, index: 1, count: 3, width: 600)
+        }
+        _ = feed(0, .began, 0)
+        _ = feed(-8, .changed, 0.1)
+        _ = feed(-8, .changed, 0.2)
+        _ = feed(-10, .changed, 0.3)
+        XCTAssertEqual(feed(0, .ended, 0.4).commit, 0, "100 pt/s over 26 pt is neither far nor fast")
+    }
+
     func testAccumulatorShortSwipeSpringsBack() {
         var acc = ScrollSwipeAccumulator()
         _ = trackpad(&acc, 0, 0, .began)
