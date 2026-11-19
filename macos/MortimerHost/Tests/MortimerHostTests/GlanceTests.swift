@@ -72,8 +72,8 @@ final class GlanceTests: XCTestCase {
     }
 
     func testReminderWeatherAndBatteryAppearWhenPresent() throws {
-        let content = Glance.lines(now: now, connected: true, ambient:
-            try ambient(reminderDue: now.addingTimeInterval(600), weather: true, battery: 12))
+        let busy = try ambient(reminderDue: now.addingTimeInterval(600), weather: true, battery: 12)
+        let content = Glance.lines(now: now, ambient: busy, connected: true)
         XCTAssertTrue(content.reminder?.contains("Call the plumber") ?? false)
         XCTAssertEqual(content.weather, "Clear 71° · Alpharetta")
         XCTAssertEqual(content.warning, "Battery 12%")
@@ -81,7 +81,8 @@ final class GlanceTests: XCTestCase {
     }
 
     func testHealthyBatteryAndNoReminderStaySilent() throws {
-        let content = Glance.lines(now: now, connected: true, ambient: try ambient(battery: 80, cpu: 30))
+        let calm = try ambient(battery: 80, cpu: 30)
+        let content = Glance.lines(now: now, ambient: calm, connected: true)
         XCTAssertNil(content.reminder)
         XCTAssertNil(content.weather)
         XCTAssertNil(content.warning)
@@ -97,8 +98,8 @@ final class GlanceTests: XCTestCase {
 
     func testLastSessionSummaryIsNeverShown() throws {
         let secret = "MEMORY-NOTE-SECRET raw note text"
-        let content = Glance.lines(now: now, connected: true, ambient:
-            try ambient(reminderDue: now.addingTimeInterval(600), weather: true, battery: 10, summary: secret))
+        let withSummary = try ambient(reminderDue: now.addingTimeInterval(600), weather: true, battery: 10, summary: secret)
+        let content = Glance.lines(now: now, ambient: withSummary, connected: true)
         let all = [content.time, content.date, content.reminder, content.weather, content.warning]
             .compactMap { $0 }.joined(separator: "|")
         XCTAssertFalse(all.contains("MEMORY-NOTE-SECRET"))
