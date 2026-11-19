@@ -93,17 +93,49 @@ enum FrameRateIndependentEasing {
     }
 }
 
-/// Ownership state for the orb's 350 ms hold. It uses MicControlsView's
-/// pttOwned rule: only the gesture that acquired PTT may finish it, and a
-/// cancelled/disappearing gesture restores the microphone's prior state.
+/// Interface cleanup Phase 2: the one owner of push-to-talk. Space (the
+/// NSEvent monitor) and the orb's 350 ms hold used to keep separate state, so
+/// both could own the mic at once. Whichever begins first owns it; the other
+/// is refused until release.
+@MainActor
+enum PushToTalkOwnership {
+    enum Owner: Equatable { case space, orb }
+    private(set) static var owner: Owner?
+
+    static var spaceOwned: Bool { owner == .space }
+
+    /// True when `candidate` now owns push-to-talk (or already did, for none else).
+    static func begin(_ candidate: Owner) -> Bool {
+        guard owner == nil else { return false }
+        owner = candidate
+        return true
+    }
+
+    /// Only the current owner can release. Returns whether it did.
+    @discardableResult
+    static func release(_ candidate: Owner) -> Bool {
+        guard owner == candidate else { return false }
+        owner = nil
+        return true
+    }
+
+    /// Test support: clears ownership between cases.
+    static func reset() { owner = nil }
+}
+
+/// Ownership state for the orb's 350 ms hold. Only the gesture that acquired
+/// PTT may finish it, and a cancelled/disappearing gesture restores the
+/// microphone's prior state. Acquisition goes through PushToTalkOwnership so
+/// Space and the orb can never both hold the mic.
 struct OrbPushToTalkGuard {
     static let holdSeconds: TimeInterval = 0.350
     private(set) var pttOwned = false
     private(set) var held = false
     private(set) var restoreMicEnabled = false
 
+    @MainActor
     mutating func begin(micEnabled: Bool) -> Bool {
-        guard !pttOwned else { return false }
+        guard !pttOwned, PushToTalkOwnership.begin(.orb) else { return false }
         pttOwned = true
         held = false
         restoreMicEnabled = micEnabled
@@ -116,11 +148,13 @@ struct OrbPushToTalkGuard {
         return true
     }
 
+    @MainActor
     mutating func finish() -> Bool? {
         guard pttOwned else { return nil }
         let restore = held ? restoreMicEnabled : nil
         pttOwned = false
         held = false
+        PushToTalkOwnership.release(.orb)
         return restore
     }
 }

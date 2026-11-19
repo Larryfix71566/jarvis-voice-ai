@@ -7,11 +7,14 @@ import JarvisKit
 /// small view, so tests need no JarvisClient.
 struct OrbStatus: Equatable {
     enum Tone: Equatable { case quiet, attention }
-    enum Action: Equatable { case connect, reconnectAudio }
+    enum Action: Equatable { case connect, retry, reconnectAudio }
 
     let text: String
     let tone: Tone
     let action: Action?
+    /// Raw failure reason, tooltip only (Interface cleanup Phase 2: the red
+    /// banner that showed it is gone).
+    var detail: String? = nil
 
     /// One line, highest priority first: not connected, the audio-output
     /// notice (it carries an action), needs-you, the speaker-gate notice, the
@@ -25,8 +28,10 @@ struct OrbStatus: Equatable {
         switch connection {
         case .offline:
             return OrbStatus(text: "Not connected", tone: .quiet, action: .connect)
-        case .failed:
-            return OrbStatus(text: "Couldn't connect", tone: .attention, action: .connect)
+        case .failed(let why):
+            let reason = why.trimmingCharacters(in: .whitespacesAndNewlines)
+            return OrbStatus(text: "Couldn't connect", tone: .attention, action: .retry,
+                             detail: reason.isEmpty ? nil : reason)
         case .connecting, .connected:
             break
         }
@@ -68,10 +73,15 @@ struct OrbStatusLine: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityLabel(status.text)
                 .accessibilityIdentifier("orb.status")
+                .help(status.detail ?? "")
             if status.action == .connect {
                 Button("Connect", action: onConnect)
                     .accessibilityLabel("Connect to Mortimer")
                     .accessibilityIdentifier("orb.connect")
+            } else if status.action == .retry {
+                Button("Retry", action: onConnect)
+                    .accessibilityLabel("Retry connecting")
+                    .accessibilityIdentifier("orb.retry")
             } else if status.action == .reconnectAudio {
                 HStack(spacing: 8) {
                     Button("Reconnect", action: onReconnectAudio)

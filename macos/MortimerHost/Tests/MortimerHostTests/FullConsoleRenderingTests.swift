@@ -22,7 +22,7 @@ final class FullConsoleRenderingTests: XCTestCase {
         }
     }
 
-    func testMinimumConsoleKeepsOutputAndMicrophoneControlsReachable() throws {
+    func testMinimumConsoleKeepsOutputVoiceAndComposerControlsReachable() throws {
         try checkConsole(tabTextSize: 11)
     }
 
@@ -103,7 +103,13 @@ final class FullConsoleRenderingTests: XCTestCase {
         }
         visit(view)
         let viewport = window.convertToScreen(view.convert(view.bounds, to: nil))
-        let required = ["OUTPUT", "Sidecar tab text size", "🔇 Mic off", "Wake word off"] + (startup ? ["Expand voice", "Knowledge", "Tools", "Paste content", "Choose content"] : [])
+        // Interface cleanup Phase 2: the mic bar and the content tray are
+        // gone. The fixture client is offline, so the orb's Connect is the
+        // reachable voice control (the mute button appears once connected);
+        // the composer pill and the top capsule must not clip at any size.
+        let required = ["OUTPUT", "Sidecar tab text size", "Connect to Mortimer",
+                        "Type a request", "Send request", "Attach content", "More", "Close Inspect"]
+            + (startup ? ["Expand voice", "Knowledge", "Tools"] : [])
         for label in required {
             let control = try XCTUnwrap(controls[label], "Missing \(label); labels: \(controls.keys.sorted())")
             let frame = try XCTUnwrap(control.value(forKey: "accessibilityFrame") as? NSValue).rectValue

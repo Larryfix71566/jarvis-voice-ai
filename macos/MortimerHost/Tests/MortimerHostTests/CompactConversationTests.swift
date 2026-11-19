@@ -194,7 +194,8 @@ final class CompactConversationTests: XCTestCase {
             XCTAssertTrue(stageOCR.contains(assistantTranscript.filter { !$0.isWhitespace }),
                           "C5 keeps Mortimer’s transcript for either retired preference at width \(width): \(stageOCR)")
             XCTAssertTrue(labels.contains(compact ? "Expand voice" : "Keep voice compact"), "Missing mode control: \(labels)")
-            XCTAssertTrue(labels.contains("Voice activity — user teal, Mortimer orange"),
+            // Interface cleanup Phase 2: the orb is the microphone control.
+            XCTAssertTrue(labels.contains("Microphone — tap to toggle, hold to talk"),
                           "compact voice display must remain discoverable to VoiceOver: \(labels)")
             XCTAssertTrue(workspace.showsConversation)
             XCTAssertEqual(defaults.bool(forKey: "mortimer.interface.compactConversation"), compact)

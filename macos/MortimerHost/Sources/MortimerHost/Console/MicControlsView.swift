@@ -2,70 +2,26 @@ import SwiftUI
 import AppKit
 import JarvisKit
 
-/// The bottombar (App.tsx:655-659, parity sweep 2026-08-30): MicControls
-/// (exact web labels + SPACE push-to-talk) · SoundToggle 🔊/🔇.
+/// Interface cleanup Phase 2: the bottom mic bar is gone (the orb is the mic,
+/// OrbMuteButton is the visible control). This file keeps the Space
+/// push-to-talk monitor, now a modifier on the console root.
 ///
-/// Mic semantics are the web's (MicControls.tsx): the mic button toggles;
-/// SPACE keydown unmutes and keyup ALWAYS mutes (pttOwned guard so a
-/// keyup from ordinary typing never mutes); there is deliberately no
-/// mic_unmute voice action (U7 — while muted the user cannot be heard;
-/// the wake word is the way back). The three ui commands
-/// (mic_mute/wake_on/wake_off) are applied by JarvisClient itself (CORE
-/// N11); this view binds to that state through the same setters.
-struct MicControlsView: View {
+/// Semantics are the web's (MicControls.tsx): SPACE keydown unmutes and keyup
+/// ALWAYS mutes (ownership guard so a keyup from ordinary typing never
+/// mutes); there is deliberately no mic_unmute voice action (U7). Ownership
+/// is shared with the orb's hold through PushToTalkOwnership.
+extension View {
+    func pushToTalkKeys() -> some View { modifier(PushToTalkKeysModifier()) }
+}
+
+struct PushToTalkKeysModifier: ViewModifier {
     @EnvironmentObject private var client: JarvisClient
-    @State private var pttHeld = false
-    @State private var pttOwned = false
     @State private var keyMonitor: Any?
-    @State private var soundsOn = Sounds.enabled
 
-    private var connected: Bool {
-        if case .connected = client.state { return true }
-        return false
-    }
-
-    private var live: Bool { connected && client.micEnabled }
-
-    var body: some View {
-        HStack(spacing: 14) {
-            // 🎙 Mic on / 🔇 Mic off (MicControls.tsx:147).
-            Button {
-                client.setMicEnabled(!client.micEnabled)
-            } label: {
-                Text(live ? "🎙 Mic on" : "🔇 Mic off")
-                    .foregroundStyle(live ? AppTheme.green : AppTheme.textDim)
-            }
-            .disabled(!connected)
-            .help("Hold Space to talk")
-
-            // 👂 Wake word on / Wake word off (MicControls.tsx:152-160).
-            Button {
-                Task { await client.setWakeWord(!client.wakeWordOn) }
-            } label: {
-                Text(client.wakeWordOn ? "👂 Wake word on" : "Wake word off")
-                    .foregroundStyle(client.wakeWordOn ? AppTheme.accent : AppTheme.textDim)
-            }
-            .disabled(!client.wakeWordAvailable)
-            .help("Say \"Mortimer\" to unmute (local openWakeWord sidecar)")
-
-            Spacer()
-
-            // SoundToggle (App.tsx:127 — turning sounds ON plays boot).
-            Button {
-                soundsOn.toggle()
-                Sounds.enabled = soundsOn
-                if soundsOn { Sounds.play(.boot) }
-            } label: {
-                Text(soundsOn ? "🔊" : "🔇")
-            }
-            .help(soundsOn ? "Sounds on" : "Sounds off")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .mortimerGlass(.panel)
-        .padding([.horizontal, .bottom], 12)
-        .onAppear(perform: installKeyMonitor)
-        .onDisappear(perform: removeKeyMonitor)
+    func body(content: Content) -> some View {
+        content
+            .onAppear(perform: installKeyMonitor)
+            .onDisappear(perform: removeKeyMonitor)
     }
 
     // SPACE push-to-talk (MicControls.tsx:37-60): keydown → unmute;
@@ -86,19 +42,17 @@ struct MicControlsView: View {
             switch SpaceKeyRoute.route(isKeyDown: event.type == .keyDown, isRepeat: event.isARepeat,
                                        typingTarget: isTypingTarget(),
                                        focusedControl: SpaceKeyClaims.isClaimed || isFocusedControl(),
-                                       connected: connected, owned: pttOwned) {
+                                       connected: connected, owned: PushToTalkOwnership.spaceOwned) {
             case .passThrough:
                 return event
             case .swallow:
                 return nil
             case .startTalking:
-                pttOwned = true
-                pttHeld = true
-                client.setMicEnabled(true)
+                // The orb may already own push-to-talk: refuse, key swallowed.
+                if PushToTalkOwnership.begin(.space) { client.setMicEnabled(true) }
                 return nil
             case .stopTalking:
-                pttOwned = false
-                pttHeld = false
+                PushToTalkOwnership.release(.space)
                 client.setMicEnabled(false)
                 return nil
             }
@@ -108,6 +62,8 @@ struct MicControlsView: View {
     private func removeKeyMonitor() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
+        // A held Space must not leave the mic stuck on if the window goes away.
+        if PushToTalkOwnership.release(.space) { client.setMicEnabled(false) }
     }
 }
 
