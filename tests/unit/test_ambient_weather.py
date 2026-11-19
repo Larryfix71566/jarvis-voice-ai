@@ -321,3 +321,45 @@ class TestWeatherGov:
             "relativeLocation": {"properties": {}}}}
         r = aw.get_weather(fetch=_wx_fetch(point=point))
         assert r["location"] == "Marietta"  # falls back to the geo label
+
+
+class TestDeviceLabelWins:
+    """The device's own reverse-geocoded city beats weather.gov's nearest
+    NWS place (a Buford, GA fix comes back as "Mulberry")."""
+
+    def test_device_label_beats_weathergov_place_name(self):
+        aw.set_device_location(34.12, -84.0, "Alpharetta, GA")
+        r = aw.get_weather(fetch=_wx_fetch())
+        assert r["source"] == "weather.gov"          # the weather.gov branch ran
+        assert r["location"] == "Alpharetta, GA"     # not "Spartanburg"
+
+    def test_device_label_is_stripped(self):
+        aw.set_device_location(34.12, -84.0, "  Alpharetta, GA \n")
+        assert aw.get_weather(fetch=_wx_fetch())["location"] == "Alpharetta, GA"
+
+    def test_empty_device_label_falls_back_to_weathergov_name(self):
+        aw.set_device_location(34.12, -84.0, "   ")
+        r = aw.get_weather(fetch=_wx_fetch())
+        assert r["source"] == "weather.gov"
+        assert r["location"] == "Spartanburg"
+
+    def test_ip_location_keeps_weathergov_name(self):
+        r = aw.get_weather(fetch=_wx_fetch())
+        assert r["source"] == "weather.gov"
+        assert r["location"] == "Spartanburg"        # not the IP "Marietta"
+
+    def test_label_change_without_a_move_invalidates_the_cache(self):
+        calls: list[str] = []
+        fetch = _wx_fetch(calls=calls)
+        aw.set_device_location(34.12, -84.0, "Mulberry")
+        assert aw.get_weather(fetch=fetch)["location"] == "Mulberry"
+        n = len(calls)
+        # Same label (even with whitespace/jitter): cache survives.
+        aw.set_device_location(34.121, -84.001, " Mulberry ")
+        aw.get_weather(fetch=fetch)
+        assert len(calls) == n
+        # New label at the same spot: must refetch and show it.
+        aw.set_device_location(34.121, -84.001, "Alpharetta, GA")
+        r = aw.get_weather(fetch=fetch)
+        assert len(calls) > n
+        assert r["location"] == "Alpharetta, GA"

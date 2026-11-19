@@ -10,7 +10,9 @@
 // channel, so the fix always comes from the client in this conversation.
 // Macs have no GPS receiver; CoreLocation resolves position from nearby
 // Wi-Fi networks. The fix also goes to the sidecar's POST /api/location so
-// the weather chip uses it (no coordinates are logged).
+// the weather chip uses it (no coordinates are logged). Since 2026-11-19 a
+// fix is also asked for when the app connects (ConnectLocationReporter), so
+// the chip names the device's city without waiting for a bot request.
 
 import CoreLocation
 import Foundation
@@ -61,6 +63,10 @@ final class DeviceLocator: NSObject, CLLocationManagerDelegate {
     private let geocoder = CLGeocoder()
     private var waiting: [(id: String, reply: (LocationResult) -> Void)] = []
     private var started = false
+    /// Called when Location Services moves to a status that allows a fix
+    /// (the first-run prompt was answered "Allow"), so the connect-time
+    /// fix for the chip doesn't wait for its next timer tick.
+    var onAuthorizationAllowed: (() -> Void)?
 
     override init() {
         super.init()
@@ -98,6 +104,26 @@ final class DeviceLocator: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    /// Whether a fix may be asked for now: the same rule `answer` uses for
+    /// a refusal, plus "not asked yet", where requestLocation would fail.
+    static func allowsFix(_ status: CLAuthorizationStatus) -> Bool {
+        switch status {
+        case .notDetermined, .denied, .restricted: return false
+        default: return true
+        }
+    }
+
+    /// One fix for the sidecar (ConnectLocationReporter), outside any bot
+    /// request: nil when Location Services hasn't allowed one, so no
+    /// prompt or request is made from here.
+    func connectFix() async -> LocationResult? {
+        guard Self.allowsFix(manager.authorizationStatus) else { return nil }
+        let request = LocationRequest(requestID: "connect-\(UUID().uuidString.prefix(8))")
+        return await withCheckedContinuation { continuation in
+            answer(request) { result in continuation.resume(returning: result) }
+        }
+    }
+
     private func finish(_ build: (String) -> LocationResult) {
         let pending = waiting
         waiting.removeAll()
@@ -118,6 +144,11 @@ final class DeviceLocator: NSObject, CLLocationManagerDelegate {
                 self.finish { id in DeviceLocationReply.result(requestID: id, location: location, label: label) }
             }
         }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        guard Self.allowsFix(manager.authorizationStatus) else { return }
+        onAuthorizationAllowed?()
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
