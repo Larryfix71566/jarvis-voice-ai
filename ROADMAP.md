@@ -190,6 +190,24 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 
 </details>
 
+<details id="ws-38">
+<summary>WS-38 — Request resolution: fallbacks, failure classes, bounded loop, done-check · Claude (design note)</summary>
+
+**Workstream:** Larry asked in his Claude Duet channel on 2026-11-19 at 03:04:04 UTC for "a workflow for requests that is persistent and works thru a loop to ensure he gets to resolution", then approved a design note with options before any code. Under §0 rule 13 this block covers the option write-up only; it claims no source paths.
+
+- **Owner:** `claude` (design note only). Implementation is unassigned until Larry picks options.
+- **Status:** proposed
+- **Implemented by:** not implemented; Claude wrote the design note
+- **Remaining work / acceptance:** Larry picks options in the note's §11 (recommended 1A, 2A, 3B, 4C). Implementation then needs its own claim with branch and scope, after checking the scope locks the note's §10 names (WS-34 holds `jarvis/bot/pipeline.py`).
+- **Model version:** Claude Opus 5.5 (design note)
+- **Where:** `claude/request-resolution-design-note-20261119` into `main`
+- **Plan:** `docs/reviews/2026-11-19-request-resolution-design-note.md` (design note with options, not yet a plan)
+- **Scope:** the design note and this PR's `docs/roadmap-log/` file only. No source paths are locked.
+- **Next step:** larry: pick options in the note's §11; then claude or another system claims implementation here.
+- **Updated:** 11-19 (proposed)
+
+</details>
+
 <details id="ws-33">
 <summary>WS-33 — Acceptance unblock: code freeze, roadmap archive, CI gates · Claude</summary>
 
