@@ -2,24 +2,31 @@ import XCTest
 import AppKit
 import SwiftUI
 import QuartzCore
+import Observation
 @testable import MortimerHost
 
 /// Frame cost of the carousel's orb glass against today's `.mortimerGlass(.card)`,
 /// measured the way OrbShellFrameTimeTests does: from the change until the
 /// render server runs the completion block of the transaction that carried it.
-/// Card 620 x 400 pt. The pointer is moved through `RimGlowPointer`, the
-/// glow's test hook, not through events. Gate: probe 3 (lit + follow glow)
-/// p50 and p95 each <= probe 1 x 1.10. Needs a logged-in graphical session.
+/// Card 620 x 400 pt. Every frame changes the card's text, so all three
+/// probes redraw the card; the pointer also moves through `RimGlowPointer`,
+/// the glow's test hook, so the follow probe redraws its glow too. Gate:
+/// probe 3 (lit + follow glow) p50 and p95 each <= probe 1 x 1.10, the same
+/// margin as the orb's C6 test. Needs a logged-in graphical session.
 @MainActor
 final class CarouselGlassFrameTimeTests: XCTestCase {
     enum Probe { case today, crystal, crystalFollow }
 
+    @MainActor @Observable
+    final class Tick { var frame = 0 }
+
     struct ProbeView: View {
         let probe: Probe
         let pointer: RimGlowPointer
+        let tick: Tick
         var body: some View {
             let card = VStack(alignment: .leading, spacing: 8) {
-                Text("Front answer").font(.headline)
+                Text("Front answer \(tick.frame)").font(.headline)
                 Text("Supplied synthetic evidence for the timing probe.").font(.callout)
                 Spacer()
             }
@@ -45,12 +52,17 @@ final class CarouselGlassFrameTimeTests: XCTestCase {
     @MainActor
     private final class Harness {
         final class Presented { var at: Double? }
-        let pointer = RimGlowPointer()
+        let pointer: RimGlowPointer
+        let tick: Tick
         let window: NSWindow
         var completions = 0
 
         init(probe: Probe) {
-            let hosted = NSHostingView(rootView: ProbeView(probe: probe, pointer: pointer))
+            let pointer = RimGlowPointer()
+            let tick = Tick()
+            self.pointer = pointer
+            self.tick = tick
+            let hosted = NSHostingView(rootView: ProbeView(probe: probe, pointer: pointer, tick: tick))
             hosted.frame = NSRect(x: 0, y: 0, width: 700, height: 460)
             let window = NSWindow(contentRect: hosted.frame, styleMask: [.borderless],
                                   backing: .buffered, defer: false)
@@ -71,6 +83,7 @@ final class CarouselGlassFrameTimeTests: XCTestCase {
             let start = CACurrentMediaTime()
             CATransaction.begin()
             CATransaction.setCompletionBlock { mark.at = CACurrentMediaTime() }
+            tick.frame = index
             pointer.update(point)
             RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.0005))
             CATransaction.commit()

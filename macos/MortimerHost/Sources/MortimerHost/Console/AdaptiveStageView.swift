@@ -172,7 +172,8 @@ struct AdaptiveStageView: View {
                         ConversationThreadView(coordinator: coordinator, thinking: client.botIsThinking, offline: notConnected)
                             .frame(minWidth: 280, maxWidth: .infinity)
                         Divider()
-                        ResultCarouselView(coordinator: coordinator, showsActions: false)
+                        ResultCarouselView(coordinator: coordinator, showsActions: false,
+                                           glowActivity: voicePresentation().activity)
                             .frame(minWidth: 480, maxWidth: .infinity)
                     }
                 } else {
@@ -180,7 +181,8 @@ struct AdaptiveStageView: View {
                         ConversationThreadView(coordinator: coordinator, thinking: client.botIsThinking, offline: notConnected)
                             .frame(maxHeight: max(120, geometry.size.height * 0.32))
                         Divider()
-                        ResultCarouselView(coordinator: coordinator, showsActions: false)
+                        ResultCarouselView(coordinator: coordinator, showsActions: false,
+                                           glowActivity: voicePresentation().activity)
                     }
                 }
             }
