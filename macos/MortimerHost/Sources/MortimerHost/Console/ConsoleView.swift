@@ -2,10 +2,15 @@ import SwiftUI
 import AppKit
 import JarvisKit
 
-/// The Command Console window: top bar, adaptive voice/workspace stage,
-/// docked resizable drawer, and microphone controls.
-/// Keyboard: T toggles the Log tab, Escape closes the drawer, and Space
-/// push-to-talk lives in MicControlsView.
+/// The Command Console window: one top capsule, the adaptive voice/workspace
+/// stage with its composer pill, and the docked resizable drawer.
+/// Keyboard: T toggles the Log tab, Escape closes the drawer, Space
+/// push-to-talk is `.pushToTalkKeys()` (MicControlsView.swift) and Command-K
+/// opens the command menu from the capsule.
+/// Interface cleanup Phase 2: the bottom mic bar is gone (the orb is the
+/// microphone, with a visible mute beside it), the raw red error banner is
+/// folded into the status line under the orb ("Couldn't connect" · Retry),
+/// and a file dropped anywhere on the window is staged, never sent.
 struct ConsoleView: View {
     /// App-scoped coordinator shared by the visual and voice console paths.
     /// Optional keeps previews usable before app
@@ -41,10 +46,7 @@ struct ConsoleView: View {
         ZStack {
             AppTheme.bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                TopBarView()
-                if case .failed(let why) = client.state {
-                    errorBanner(why)
-                }
+                TopBarView(coordinator: consoleCoordinator)
                 HStack(spacing: 0) {
                     ZStack {
                         CommandConsoleView(voiceState: voiceState,
@@ -69,9 +71,10 @@ struct ConsoleView: View {
                             .transition(.move(edge: .trailing))
                     }
                 }
-                MicControlsView()
             }
         }
+        .mortimerWindowDrop()
+        .pushToTalkKeys()
         .frame(minWidth: 900, minHeight: 600)
         .foregroundStyle(AppTheme.text)
         .onGeometryChange(for: CGSize.self) { proxy in
@@ -87,19 +90,6 @@ struct ConsoleView: View {
         }
         .onAppear(perform: installKeyMonitor)
         .onDisappear(perform: removeKeyMonitor)
-    }
-
-    private func errorBanner(_ why: String) -> some View {
-        Text(why)
-            .font(.system(size: 12, design: .monospaced))
-            .kerning(0.7)
-            .foregroundStyle(AppTheme.red)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(AppTheme.red.opacity(0.08))
-            .overlay(Rectangle().fill(AppTheme.red.opacity(0.35)).frame(height: 1),
-                     alignment: .bottom)
     }
 
     /// D11/D12 — the drawer's left-edge resize handle: drag to resize

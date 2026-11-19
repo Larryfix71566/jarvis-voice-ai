@@ -72,6 +72,17 @@ struct AdaptiveStageView: View {
             onDismissNotice: { notices?.clearAudioOutputNotice() })
     }
 
+    /// Interface cleanup Phase 2: the orb is the microphone (click toggles,
+    /// a 350 ms hold talks), so its slots pass `interactive: true`; the
+    /// visible mute sits under the one status line so mute never depends on
+    /// colour or animation alone. OrbMuteButton hides itself while offline.
+    private var orbControls: some View {
+        VStack(spacing: 4) {
+            orbStatusLine
+            OrbMuteButton()
+        }
+    }
+
     /// §4.1 (as amended by closure C2.5): the large wave is shown when the
     /// user has returned to conversation and has not chosen to keep the
     /// voice region compact. Returning to conversation does not discard the
@@ -96,17 +107,19 @@ struct AdaptiveStageView: View {
                         conversationAndResults
                         Divider()
                         VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
-                                      needsYou: needsYou, presentation: voicePresentation)
+                                      needsYou: needsYou, interactive: true,
+                                      presentation: voicePresentation)
                             .frame(minHeight: 150, maxHeight: 220)
-                        orbStatusLine
+                        orbControls
                     }
                 case .rail:
                     HStack(spacing: 0) {
                         VStack(spacing: 0) {
                             VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
-                                          needsYou: needsYou, presentation: voicePresentation)
+                                          needsYou: needsYou, interactive: true,
+                                      presentation: voicePresentation)
                                 .frame(height: AdaptiveLayoutMetrics.railOrbSlotHeight)
-                            orbStatusLine
+                            orbControls
                             Spacer(minLength: 0)
                         }.frame(width: AdaptiveLayoutMetrics.voiceRailWidth)
                         Divider()
@@ -118,12 +131,13 @@ struct AdaptiveStageView: View {
                         Divider()
                         HStack(spacing: 0) {
                             VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
-                                          needsYou: needsYou, presentation: voicePresentation)
+                                          needsYou: needsYou, interactive: true,
+                                      presentation: voicePresentation)
                                 // Keep the compact rail shallow while giving
                                 // the measured lobe enough horizontal travel
                                 // to remain legible at the default width.
                                 .frame(minWidth: 220, idealWidth: 240, maxWidth: 280)
-                            orbStatusLine
+                            orbControls
                         }.frame(height: 180)
                     }
                 }

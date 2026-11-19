@@ -171,11 +171,12 @@ enum ConversationThread {
     /// 4.1): it names the current step and updates in place. It is not a
     /// transcript line, is never stored, and never becomes a message.
     struct Activity: Equatable {
-        /// Who is working: an agent's display name, or "Mortimer".
+        /// Who is working: an agent's display name, or "Mortimer". Spoken
+        /// by VoiceOver, not shown (Interface cleanup Phase 2).
         let actor: String
-        /// The current step, in words.
+        /// The current step, as a plain current-tense phrase.
         let step: String
-        var text: String { "\(actor) · \(step)" }
+        var text: String { step }
         var accessibilityLabel: String { "\(actor) is working: \(step)" }
     }
 
@@ -186,20 +187,10 @@ enum ConversationThread {
     static func activity(runs: [AgentRun], thinking: Bool) -> Activity? {
         if let run = runs.filter({ $0.doneAt == nil }).max(by: { ($0.startedAt, $0.id) < ($1.startedAt, $1.id) }) {
             let actor = nonEmpty(run.displayName) ?? nonEmpty(run.name) ?? "Mortimer"
-            let step = run.tools.last.flatMap { stepName($0) } ?? "Starting"
+            let step = WorkingLine.phrase(tool: run.tools.last, agent: run.name)
             return Activity(actor: actor, step: step)
         }
-        return thinking ? Activity(actor: "Mortimer", step: "Thinking") : nil
-    }
-
-    /// "repo_read_file" → "Repo read file". Bounded; never empty.
-    static func stepName(_ tool: String) -> String? {
-        let words = tool.replacingOccurrences(of: "_", with: " ")
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !words.isEmpty else { return nil }
-        let clipped = words.count > 60 ? String(words.prefix(59)) + "…" : words
-        return clipped.prefix(1).uppercased() + clipped.dropFirst()
+        return thinking ? Activity(actor: "Mortimer", step: WorkingLine.thinking) : nil
     }
 
     /// New items between two snapshots of the thread: the identities in
@@ -698,8 +689,19 @@ struct ConversationThreadRowView: View {
 struct ConversationActivityRowView: View {
     let activity: ConversationThread.Activity
     let reduceMotion: Bool
+    /// Optional so fixtures without a drawer still render; without one the
+    /// row is plain text, not a button.
+    @Environment(DrawerState.self) private var drawer: DrawerState?
 
-    var body: some View {
+    /// Opens Inspect on the Agents tab. Run-level focus is not wired:
+    /// neither AgentsTab nor RunsTab takes a run id from outside.
+    @MainActor
+    static func openInspect(_ drawer: DrawerState) {
+        drawer.setTab("agents")
+        drawer.isOpen = true
+    }
+
+    private var line: some View {
         HStack(spacing: 8) {
             if reduceMotion {
                 Image(systemName: "ellipsis.circle")
@@ -716,10 +718,26 @@ struct ConversationActivityRowView: View {
         .foregroundStyle(AppTheme.textDim)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(activity.accessibilityLabel)
-        .accessibilityAddTraits(.updatesFrequently)
-        .accessibilityIdentifier("conversation-activity")
+        .contentShape(Rectangle())
+    }
+
+    var body: some View {
+        if let drawer {
+            Button { Self.openInspect(drawer) } label: { line }
+                .buttonStyle(.plain)
+                .help("Open Inspect on this run")
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(activity.accessibilityLabel)
+                .accessibilityHint("Opens Inspect on this run")
+                .accessibilityAddTraits(.updatesFrequently)
+                .accessibilityIdentifier("conversation-activity")
+        } else {
+            line
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(activity.accessibilityLabel)
+                .accessibilityAddTraits(.updatesFrequently)
+                .accessibilityIdentifier("conversation-activity")
+        }
     }
 }
 

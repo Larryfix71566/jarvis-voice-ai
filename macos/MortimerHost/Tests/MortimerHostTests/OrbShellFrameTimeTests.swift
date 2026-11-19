@@ -235,6 +235,8 @@ final class OrbShellFrameTimeTests: XCTestCase {
     }
 
     func testOrbHoldRestoresPriorMicAndTapDoesNotOwnPTT() {
+        PushToTalkOwnership.reset()
+        defer { PushToTalkOwnership.reset() }
         for initial in [false, true] {
             var guardState = OrbPushToTalkGuard()
             XCTAssertTrue(guardState.begin(micEnabled: initial))
@@ -247,6 +249,7 @@ final class OrbShellFrameTimeTests: XCTestCase {
         XCTAssertTrue(tap.begin(micEnabled: false))
         XCTAssertNil(tap.finish())
         XCTAssertFalse(tap.pttOwned)
+        XCTAssertNil(PushToTalkOwnership.owner, "a finished tap leaves the shared owner free")
     }
 
     func testRefractionUsesContinuousApprovedCurveAndBounds() {
