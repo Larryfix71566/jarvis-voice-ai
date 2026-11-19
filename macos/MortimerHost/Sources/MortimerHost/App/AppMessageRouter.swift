@@ -25,6 +25,9 @@ final class AppMessageRouter {
     private var lastState: JarvisClient.ConnectionState = .offline
     // Phase 2 D4 (D-L6): answers the bot's location/request for this session.
     private let locator = DeviceLocator()
+    // 2026-11-19: posts the device's fix to the sidecar on connect and every
+    // 30 minutes, so the weather chip names the device's city.
+    private var connectLocation: ConnectLocationReporter?
 
     func start(
         client: JarvisClient,
@@ -39,6 +42,13 @@ final class AppMessageRouter {
         consoleCoordinator: ConsoleActionCoordinator? = nil
     ) {
         guard task == nil else { return }
+        let connectLocation = ConnectLocationReporter(
+            fix: { [locator = self.locator] in await locator.connectFix() },
+            report: { lat, lon, label in
+                _ = try? await client.admin.reportDeviceLocation(lat: lat, lon: lon, label: label)
+            })
+        self.connectLocation = connectLocation
+        locator.onAuthorizationAllowed = { [weak connectLocation] in _ = connectLocation?.refreshNow() }
         // ConversationStore mirrors JarvisClient.transcript (P8/P16) —
         // now live: JarvisClient aggregates the bot's own RTVI
         // user-transcription / bot-llm-text frames (2026-08-30).
@@ -58,6 +68,8 @@ final class AppMessageRouter {
                 if case .connecting = prev, case .connected = next { Sounds.play(.boot) }
                 if case .failed = next { Sounds.play(.fail) }
                 if next == .offline || next == .connecting { self.currentRequests.reset() }
+                if next == .offline { self.connectLocation?.stop() }
+                if case .failed = next { self.connectLocation?.stop() }
                 if case .failed = next { self.currentRequests.reset() }
                 // A reconnect (ours or the user's) makes the audio-output
                 // notice moot — playout re-opens on the current device.
@@ -108,6 +120,9 @@ final class AppMessageRouter {
                     // location requests (the bot never asks otherwise).
                     locator.start()
                     client.send(.locationHello(LocationHello(authorization: locator.authorization)))
+                    // The chip's fix, once per connect and then on a timer
+                    // (ConnectLocationReporter); nothing when not allowed.
+                    connectLocation.start()
                 case .locationRequest(let request):
                     locator.answer(request) { result in
                         client.send(.locationResult(result))

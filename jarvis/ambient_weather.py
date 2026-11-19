@@ -147,8 +147,8 @@ _device_location: Optional[dict] = None  # {"lat","lon","label","at"(monotonic)}
 def set_device_location(lat: float, lon: float, label: str = "") -> None:
     """Record the device's own coordinates (called by the sidecar's
     POST /api/location). Invalidates the weather cache when the position
-    actually moved, so travelling refreshes the chip instead of showing
-    the old city's weather for up to 15 minutes."""
+    actually moved or the label changed, so travelling refreshes the chip
+    instead of showing the old city's weather for up to 15 minutes."""
     global _device_location, _cache
     prev = _device_location
     _device_location = {
@@ -162,7 +162,11 @@ def set_device_location(lat: float, lon: float, label: str = "") -> None:
         or abs(prev["lat"] - _device_location["lat"]) > 0.05
         or abs(prev["lon"] - _device_location["lon"]) > 0.05
     )
-    if moved:
+    relabelled = (
+        prev is not None
+        and prev["label"].strip() != _device_location["label"].strip()
+    )
+    if moved or relabelled:
         _cache = None
 
 
@@ -268,6 +272,12 @@ def get_weather(fetch: Callable[[str], Any] = _fetch_json) -> Optional[dict]:
             if result is not None:
                 if not result["location"]:
                     result["location"] = loc["label"]
+                # A device fix carries the user's own reverse-geocoded
+                # city, which beats weather.gov's *nearest* NWS place
+                # (a Buford, GA fix comes back as "Mulberry"). Mirrors
+                # jarvis/bot/weather_tool.py's device-label override.
+                if loc["source"] == "device" and loc["label"].strip():
+                    result["location"] = loc["label"].strip()
                 _cache = (now, result)
                 return result
             # Outside the US, or Weather.gov unavailable.
