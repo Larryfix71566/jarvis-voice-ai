@@ -21,11 +21,12 @@ Deployed incident 2026-11-18 21:51 ET. The turn's accepted `WeatherIntent` was n
 2. `weather_tool.py` (`local_weather`): a soft reuse refusal falls through to the live fetch instead of returning. The intent refusal text is split: a named place says to delegate with exactly that place; an unclear request says to ask the user and not to delegate or recall a place. One INFO line per exit, `local_weather_result outcome=...` (never coordinates, place, weather body or error text).
 3. `registry.py` (`get_weather` / `get_weather_radar` reuse block): soft refusals log `weather_reuse_fallback tool=... code=...` and fall through to the normal MCP fetch like a miss. `protected_turn`, `not_requested` and the replaced-session `stale_selection` check still refuse.
 4. `pipeline.py`: `weather_intent kind=...` INFO log for any weather intent (never the place).
-5. Tests updated and added in `test_weather_reuse.py` and `test_acceptance_weather_routing.py`, including a reproduction of the incident.
+5. `weather_intent.py` (separate commit): plain phrasing now reads as local, so the 21:51 ET request is no longer refused as non-local. A leading decline ("no thanks", "not right now, but") is stripped like a filler; "like", "looking (like)", "going to be (like)", "outside", "doing" between the weather word and the place are not places; "me" / "us" count as local. Earlier-sentence places still give `unclear`.
+6. Tests updated and added in `test_weather_reuse.py` and `test_acceptance_weather_routing.py`, including a reproduction of the incident.
 
 ## Not changed
 
-- The intent parser.
+- The intent parser's place extraction beyond item 5.
 - WS-17's "refuse without silently fetching" rule is reversed for soft refusals, at Larry's request.
 
 ## Next actor

@@ -168,3 +168,29 @@ async def test_pipeline_bare_place_without_a_question_is_not_weather():
                {"role": "assistant", "content": "It's 46 degrees and clear."}]
     second = await _turn(owner, history, "Alpharetta.", "t2")
     assert second.weather_intent.kind == "not_weather"
+
+
+# 2026-11-19: Larry's turn at 21:51 ET ("what is the weather like" style phrasing) was read as a
+# named place or unclear, so device weather was refused. These must read as local.
+@pytest.mark.parametrize("text", [
+    "what is the weather like", "What's the weather like today?", "How's the weather looking?",
+    "Can you check the weather for me?", "Could you pull up the weather forecast for me please",
+    "What's the weather looking like this week?", "What's the weather like outside right now?",
+    "Not right now, but what's the weather going to be like tomorrow?",
+    "No thanks. What's the weather like?", "No, not right now. Okay, show me the weather.",
+    "What's the weather?", "Okay. Show me the weather.", "Mortimer, what's the weather"])
+def test_plain_weather_phrasing_reads_as_local_2026_11_19(text):
+    assert accepted_weather_intent(text) == WeatherIntent("local")
+
+
+@pytest.mark.parametrize("text,place", [
+    ("What's the weather like in Denver?", "denver"),
+    ("How's the weather looking in Portland, Maine?", "portland, maine"),
+    ("What's the weather going to be like in Atlanta tomorrow?", "atlanta"),
+    ("Weather in Portland", "portland")])
+def test_non_place_words_do_not_hide_a_named_place_2026_11_19(text, place):
+    assert accepted_weather_intent(text) == WeatherIntent("named", place)
+
+
+def test_an_earlier_sentence_still_never_becomes_local_or_named_2026_11_19():
+    assert accepted_weather_intent("I'm going to Denver. Show me the weather.").kind == "unclear"

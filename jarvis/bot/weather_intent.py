@@ -41,18 +41,26 @@ current_weather_intent: ContextVar[WeatherIntent | None] = ContextVar("weather_i
 _WEATHER = re.compile(r"\b(?:weather|forecast|rain|umbrella)\b", re.I)
 _PREFIX = re.compile(r"^(?:(?:please|can you|could you|would you|show me|show|give me|tell me|"
     r"pull up|check|get|what is|what's|what’s|how is|how's|how’s|the)\s+)+", re.I)
-_AFTER = re.compile(r"\b(?:weather|forecast|rain|umbrella)(?:\s+(?:forecast|conditions))?(?:\s+(?:today|tonight|tomorrow|right now|now))*\s+(?:in|for|at)\s+([^?!;]+)", re.I)
+# Words that follow "weather" in plain phrasing and name no place:
+# "what's the weather like", "weather looking like this week" (2026-11-19).
+_NONPLACE_WORDS = (r"(?:is going to be|going to be|gonna be|will be|looking like|looks like|look like|"
+                   r"looking|looks|like|doing|outside|out there)")
+_NONPLACE_LEAD = re.compile(r"^(?:" + _NONPLACE_WORDS + r"(?:[\s,]+|$))+", re.I)
+_AFTER = re.compile(r"\b(?:weather|forecast|rain|umbrella)(?:\s+(?:forecast|conditions))?(?:\s+" + _NONPLACE_WORDS + r")*(?:\s+(?:today|tonight|tomorrow|right now|now))*\s+(?:in|for|at)\s+([^?!;]+)", re.I)
 _TAIL = re.compile(r"\s+(?:weather|forecast)\b.*$", re.I)
 _TIME = re.compile(r"(?:\s+(?:again|now|please|today|tonight|tomorrow|this week|this weekend|"
     r"for (?:today|tonight|tomorrow|the week)|right now))+$", re.I)
-_LOCAL = frozenset({"", "here", "local", "current", "my", "my location", "my area",
+_LOCAL = frozenset({"", "me", "us", "here", "local", "current", "my", "my location", "my area",
     "where i am", "where we are", "right here", "right now", "today", "tonight", "tomorrow", "this week", "this weekend", "the week"})
 _FOLLOWUP = re.compile(r"^(?:and|what about|how about)\s+(.+?)[?.!]*$", re.I)
 # Leading acknowledgements and the assistant's name are not part of a place:
 # "Okay. Show me the weather." once parsed as a place called "okay. show me the"
 # and refused device-local weather (Larry, 2026-11-17).
 _FILLER = re.compile(r"^(?:(?:okay|ok|o\.k\.|alright|all right|hey|hi|hello|so|um+|uh+|er|erm|hmm+|"
-    r"yes|yeah|yep|yup|sure|well|right|thanks|thank you|mortimer|jarvis)(?:[\s,.!?;:…—–-]+|$))+", re.I)
+    r"yes|yeah|yep|yup|sure|well|right|thanks|thank you|mortimer|jarvis|"
+    # A leading decline of the previous offer is not part of the request (2026-11-19).
+    r"no thanks|no thank you|not right now|not now|not yet|maybe later|later|nope|nah|no|but)"
+    r"(?:[\s,.!?;:…—–-]+|$))+", re.I)
 _SENTENCE_BREAK = re.compile(r"[.!?;]\s")
 # A bare answer to "which location?": letters, spaces and light punctuation,
 # at most one comma qualifier, a few words. Questions are not answers.
@@ -165,7 +173,7 @@ def accepted_weather_intent(text: str, previous: WeatherIntent | None = None, *,
     else:
         prefix = _PREFIX.sub("", text)
         if _WEATHER.match(prefix):
-            tail = _WEATHER.sub("", prefix, count=1).strip(" ,?!.")
+            tail = _NONPLACE_LEAD.sub("", _WEATHER.sub("", prefix, count=1).strip(" ,?!.")).strip(" ,?!.")
             if canonical_place(tail) == "again":
                 return previous if previous and previous.kind in {"local", "named"} else WeatherIntent("unclear")
             target = _place(tail) if tail else ""
