@@ -46,3 +46,4 @@ Also read:
 - `docs/plans/ALLOWLIST_SEQUENCE.md`: the self-edit allow-list, where every change is a human commit
 - `docs/plans/MORTIMER_RELEASE_CLOSURE_PLAN.md`: the release closure plan. Which system leads each piece of remaining work, the files each piece touches, the `next` branch used during the freeze, and the review pairs. The lanes are a guide that keeps the systems from editing the same files, not an exclusive claim; read it before picking up work
 - `docs/interface-research/orb-plasma/ORB_SPEC.md`: the approved interface direction, palette and orb spec that the plan's interface items build
+- `docs/plans/MORTIMER_INTERFACE_CLEANUP_PLAN_2026-11-18.md`: the approved interface cleanup (WS-37): conversation in front, Inspect behind, in three phases. Read it before touching the console's rail, top bar, composer, mic bar or drawer button

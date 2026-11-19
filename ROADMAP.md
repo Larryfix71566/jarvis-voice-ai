@@ -208,6 +208,24 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 
 </details>
 
+<details id="ws-38">
+<summary>WS-38 — Request resolution: fallbacks, failure classes, bounded loop, done-check · Claude</summary>
+
+**Workstream:** Larry asked in his Claude Duet channel on 2026-11-19 at 03:04:04 UTC for "a workflow for requests that is persistent and works thru a loop to ensure he gets to resolution", then approved a design note with options before any code (`docs/reviews/2026-11-19-request-resolution-design-note.md`, merged via #400 as `cb3f3f74`). At 03:28:05 UTC he answered "Should the failure classes be built first once you merge #400?" with "Yes, start there". This claim covers option 2A only. Fallbacks (1A), the attempt ledger (3B) and the done-check (4C) need their own claims here.
+
+- **Owner:** `claude` (2A)
+- **Status:** claimed 2026-11-19: 2A (failure classes and reason codes) as a PR into `next`
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** 2A: every failed tool result carries a class (`transient`, `approach`, `policy`) and a closed reason code; sub-agents are told the class and cannot repeat an identical call after an `approach` or `policy` failure; a delegated FAILED result names its class; a private turn's run log keeps the closed reason code, never content. Then 1A, 3B and 4C as separate claims.
+- **Model version:** Claude Opus 5.5
+- **Where:** `claude/ws38-failure-classes-20261119` into `next`
+- **Plan:** `docs/reviews/2026-11-19-request-resolution-design-note.md` (design note; §6 is 2A)
+- **Scope:** 2A: `jarvis/toolresult.py`; the tool-failure templates and the `_loop` tool-failure handling in `jarvis/agents/base.py`; the result notes in `_execute` in `jarvis/agents/delegate.py`; `_classified_result` and `_finish_invocation` in `jarvis/skills/registry.py`; the sensitive `tool_result` preview in `jarvis/runlog/store.py`; the Supervisor tool wrapper's `runlog.tool_result` call in `jarvis/bot/pipeline.py` (no registration lines, no display emit sites); `result_kinds` in `jarvis/voice_workflows.py`; `config/workflows/voice-explain-failure.yaml`; their tests. Not in scope: `jarvis/bot/weather_tool.py`, `jarvis/bot/weather_reuse.py` and the named-weather block of `_invoke` in `jarvis/skills/registry.py`, which the weather saved-card fix is changing; 2A maps that fix's reason codes rather than editing those files.
+- **Next step:** claude: open the 2A PR into `next` and get its checks green. larry: merge, redeploy.
+- **Updated:** 11-19 (claim)
+
+</details>
+
 <details id="ws-33">
 <summary>WS-33 — Acceptance unblock: code freeze, roadmap archive, CI gates · Claude</summary>
 
