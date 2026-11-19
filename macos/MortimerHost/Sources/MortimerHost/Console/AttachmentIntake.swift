@@ -53,7 +53,7 @@ enum AttachmentIntake {
                 guard let url, let data = try? Data(contentsOf: url) else {
                     DispatchQueue.main.async {
                         MainActor.assumeIsolated {
-                            store.stageError("The dropped file could not be read.", expectedGeneration: generation)
+                            _ = store.stageError("The dropped file could not be read.", expectedGeneration: generation)
                         }
                     }
                     return
@@ -63,8 +63,8 @@ enum AttachmentIntake {
                     fileExtension: url.pathExtension)
                 DispatchQueue.main.async {
                     MainActor.assumeIsolated {
-                        if let item { store.stage(item, expectedGeneration: generation) }
-                        else { store.stageError("The dropped file is not a supported text or image.", expectedGeneration: generation) }
+                        if let item { _ = store.stage(item, expectedGeneration: generation) }
+                        else { _ = store.stageError("The dropped file is not a supported text or image.", expectedGeneration: generation) }
                     }
                 }
             }
@@ -74,8 +74,8 @@ enum AttachmentIntake {
             let item = data.flatMap { Self.normalize(data: $0, typeIdentifier: typeIdentifier) }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    if let item { store.stage(item, expectedGeneration: generation) }
-                    else { store.stageError("The dropped item could not be normalized.", expectedGeneration: generation) }
+                    if let item { _ = store.stage(item, expectedGeneration: generation) }
+                    else { _ = store.stageError("The dropped item could not be normalized.", expectedGeneration: generation) }
                 }
             }
         }

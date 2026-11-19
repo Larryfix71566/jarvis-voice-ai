@@ -2,7 +2,7 @@
 date: 2026-11-19
 system: claude
 rows: [WS-37]
-prs: []
+prs: [397]
 ---
 
 # 2026-11-19: WS-37 interface cleanup, Phase 2 (Claude)
