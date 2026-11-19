@@ -19,6 +19,9 @@ final class DrawerState {
         "agents": "Agents", "output": "Output", "transcript": "Log", "costs": "Costs",
     ]
 
+    /// Set once the WS-37 reset of the saved open state has run.
+    static let openResetKey = "mortimer.drawer.openResetWS37"
+
     var activeTab: String = "repo" {
         didSet { persist(activeTab, forKey: "mortimer.drawer.tab") }
     }
@@ -37,10 +40,10 @@ final class DrawerState {
     var width: Double = AppTuning.drawerDefaultWidth {
         didSet { persist(String(width), forKey: "mortimer.drawer.width") }
     }
-    /// D31 — a drawer-routed result arrived while the drawer was open on
-    /// a tab other than Output. Set by AppMessageRouter (the auto-open
-    /// decision maker), cleared the moment the Output tab is actually
-    /// viewed. The topbar toggle and the Output tab's strip dot both
+    /// D31/WS-37 — a drawer-routed result arrived while the Output tab was
+    /// not on screen (drawer closed, or open on another tab). Set by
+    /// AppMessageRouter, which never opens the drawer itself; cleared the
+    /// moment the Output tab is actually viewed. The topbar toggle and the Output tab's strip dot both
     /// render from this one flag.
     var outputDot = false
     /// Monotonic request token for voice/keyboard tab-strip scrolling. The
@@ -62,7 +65,16 @@ final class DrawerState {
         if let tab = d.string(forKey: "mortimer.drawer.tab"), Self.tabKeys.contains(tab) {
             activeTab = tab
         }
-        isOpen = d.string(forKey: "mortimer.drawer.open") == "true"
+        if d.bool(forKey: Self.openResetKey) {
+            isOpen = d.string(forKey: "mortimer.drawer.open") == "true"
+        } else {
+            // WS-37 one-time reset: before this build a drawer-routed result
+            // opened the drawer by itself and that open state was saved, so a
+            // saved "true" may not be the user's choice. Start closed once;
+            // from here on only the user opens it, and that choice is kept.
+            d.set(true, forKey: Self.openResetKey)
+            d.removeObject(forKey: "mortimer.drawer.open")
+        }
         let storedWidth = d.double(forKey: "mortimer.drawer.width")
         if storedWidth >= AppTuning.drawerMinWidth {
             width = min(storedWidth, AppTuning.drawerMaxWidthCap)
