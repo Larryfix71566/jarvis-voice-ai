@@ -6,6 +6,8 @@ import JarvisKit
 struct ResultCarouselView: View {
     let coordinator: ConsoleActionCoordinator?
     var showsActions = true
+    /// Voice activity colour source for the front card's follow glow.
+    var glowActivity: VoicePresentationState.Activity = .assistant
     /// Test-only override; normal composition follows the system setting.
     var reduceTransparencyOverride: Bool? = nil
     @Environment(WorkspaceStore.self) private var workspace
@@ -13,6 +15,7 @@ struct ResultCarouselView: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
     @FocusState private var hasKeyboardFocus: Bool
+    @State private var dragOffset: CGFloat = 0
 
     static func usesFlatPresentation(reduceMotion: Bool, reduceTransparency: Bool,
                                      increasedContrast: Bool = false) -> Bool {
@@ -59,24 +62,54 @@ struct ResultCarouselView: View {
                         let depth = !flat && geometry.size.width >= 720
                         let frontWidth = depth ? min(620, geometry.size.width - 160) : geometry.size.width
                         let neighbourWidth = min(180, (geometry.size.width - frontWidth) / 2 - 12)
+                        let width = geometry.size.width
                         ZStack {
                             if depth && index > 0 {
-                                neighbour(workspace.carouselResults[index - 1])
+                                neighbour(workspace.carouselResults[index - 1], leading: true)
                                     .frame(width: neighbourWidth, height: max(160, geometry.size.height * 0.72))
                                     .position(x: geometry.size.width / 2 - frontWidth / 2 - neighbourWidth / 2 - 8, y: geometry.size.height / 2)
+                                    .offset(x: dragOffset)
                             }
                             if depth && index + 1 < workspace.carouselResults.count {
-                                neighbour(workspace.carouselResults[index + 1])
+                                neighbour(workspace.carouselResults[index + 1], leading: false)
                                     .frame(width: neighbourWidth, height: max(160, geometry.size.height * 0.72))
                                     .position(x: geometry.size.width / 2 + frontWidth / 2 + neighbourWidth / 2 + 8, y: geometry.size.height / 2)
+                                    .offset(x: dragOffset)
                             }
-                            ResultCarouselFrontView(result: front, coordinator: coordinator, flat: flat, showsActions: showsActions)
+                            ResultCarouselFrontView(result: front, coordinator: coordinator, flat: flat, showsActions: showsActions,
+                                                    glowColor: CometOrbRenderer.stateColor(glowActivity),
+                                                    glowSuppressed: dragOffset != 0)
                                 .frame(width: frontWidth, height: geometry.size.height)
                                 .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                                .offset(x: dragOffset)
                                 .accessibilityElement(children: .contain)
                                 .accessibilityLabel("Results, \(index + 1) of \(workspace.carouselResults.count), \(Self.title(front))")
                                 .accessibilityIdentifier("carousel-front")
+                                .accessibilityAdjustableAction { direction in
+                                    switch direction {
+                                    case .increment: step(1)
+                                    case .decrement: step(-1)
+                                    @unknown default: break
+                                    }
+                                }
                         }.frame(width: geometry.size.width, height: geometry.size.height)
+                            .background(ScrollSwipeCatcher(index: index, count: workspace.carouselResults.count,
+                                onChange: { translation in followDrag(translation, width: width) },
+                                onEnd: { amount in finishSwipe(amount) }))
+                            .contentShape(Rectangle())
+                            .simultaneousGesture(DragGesture(minimumDistance: 8)
+                                .onChanged { value in
+                                    guard abs(value.translation.width) > abs(value.translation.height) || dragOffset != 0 else { return }
+                                    followDrag(value.translation.width, width: width)
+                                }
+                                .onEnded { value in
+                                    let amount = CarouselSwipeModel.decision(
+                                        translation: value.translation.width,
+                                        predictedEnd: value.predictedEndTranslation.width,
+                                        velocity: value.velocity.width,
+                                        index: index, count: workspace.carouselResults.count, width: width)
+                                    finishSwipe(amount)
+                                })
                             .clipped()
                     }
 
@@ -107,15 +140,30 @@ struct ResultCarouselView: View {
         result.payload.layout?.title ?? result.payload.title ?? "Result"
     }
 
-    private func neighbour(_ result: WorkspaceResult) -> some View {
+    private func neighbour(_ result: WorkspaceResult, leading: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(Self.title(result)).font(.caption.weight(.semibold)).lineLimit(1)
             Text(ConversationThread.card(result).summary).font(.caption2).lineLimit(1).blur(radius: 3).drawingGroup()
         }
         .padding(12).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .mortimerGlass(.card)
+        .orbGlassCard(lit: false, glowColor: AppTheme.mortimer, glowSuppressed: true)
+        .scaleEffect(0.94)
+        .rotation3DEffect(.degrees(leading ? 9 : -9), axis: (x: 0, y: 1, z: 0))
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    /// Flat presentation keeps the card still; only the commit decision applies.
+    private func followDrag(_ translation: CGFloat, width: CGFloat) {
+        guard !flat else { return }
+        dragOffset = CarouselSwipeModel.offset(translation: translation, index: index,
+                                               count: workspace.carouselResults.count, width: width)
+    }
+
+    private func finishSwipe(_ amount: Int) {
+        if amount != 0 { step(amount) }
+        if flat { dragOffset = 0 }
+        else { withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { dragOffset = 0 } }
     }
 
     private func step(_ amount: Int) {
@@ -139,6 +187,9 @@ private struct ResultCarouselFrontView: View {
     let coordinator: ConsoleActionCoordinator?
     let flat: Bool
     var showsActions = true
+    /// The orb's current colour and whether a drag is in progress.
+    var glowColor: Color = AppTheme.mortimer
+    var glowSuppressed = false
     @Environment(WorkspaceStore.self) private var workspace
     @State private var pinLimitNotice = false
 
@@ -174,7 +225,7 @@ private struct ResultCarouselFrontView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .modifier(CarouselSurface(flat: flat))
+        .modifier(CarouselSurface(flat: flat, glowColor: glowColor, glowSuppressed: glowSuppressed))
         .id(result.id)
         .alert("Pin limit reached", isPresented: $pinLimitNotice) { Button("OK", role: .cancel) {} }
         message: { Text("Unpin a result before pinning another. Your existing pins are preserved.") }
@@ -192,11 +243,13 @@ private struct ResultCarouselFrontView: View {
 
 private struct CarouselSurface: ViewModifier {
     let flat: Bool
+    let glowColor: Color
+    let glowSuppressed: Bool
     func body(content: Content) -> some View {
         if flat {
             content.background(AppTheme.panelSolid, in: RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppTheme.hairline))
-        } else { content.mortimerGlass(.card) }
+        } else { content.orbGlassCard(lit: true, glowColor: glowColor, glowSuppressed: glowSuppressed) }
     }
 }
 
