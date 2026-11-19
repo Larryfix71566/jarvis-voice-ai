@@ -2,7 +2,7 @@
 date: 2026-11-19
 system: claude
 rows: [WS-37]
-prs: []
+prs: [401]
 ---
 
 # 2026-11-19: WS-37 drawer never opens itself; results light the Inspect dot (Claude)
