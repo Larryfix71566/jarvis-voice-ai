@@ -505,11 +505,27 @@ final class CC7aThreadAcceptanceTests: XCTestCase {
             print("FLAKEDIAG \(tag) t=\(Date().timeIntervalSince1970) dist=\(self.distanceFromEnd(scroll)) docH=\(d) visMinY=\(scroll.documentVisibleRect.minY) entries=\(f.conversation.entries.count) button=\(self.newTurnsButton(in: hosted.view) != nil)")
         }
         diag("afterStopped")
-        scrollToFraction(0.35, in: scroll)
-        diag("afterScroll")
+        let mode = ProcessInfo.processInfo.environment["FLAKE_SCROLL_MODE"] ?? "clip"
+        if mode == "wheel" {
+            var steps = 0
+            while distanceFromEnd(scroll) < 400 && steps < 40 {
+                let cg = try XCTUnwrap(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: 40, wheel2: 0, wheel3: 0))
+                scroll.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: cg)))
+                steps += 1
+            }
+            print("FLAKEDIAG wheelSteps=\(steps)")
+        } else {
+            scrollToFraction(0.35, in: scroll)
+        }
+        diag("afterScroll-\(mode)")
         try await waitUntil("reader is above newest turn") { self.distanceFromEnd(scroll) > 100 }
-        try await Task.sleep(for: .milliseconds(50)) // Let the real geometry callback receive the reader's scroll.
-        diag("afterSleep50")
+        let sampleStart = Date(); var lastDist = distanceFromEnd(scroll)
+        while Date().timeIntervalSince(sampleStart) < 0.3 {
+            try await Task.sleep(for: .milliseconds(5))
+            let d = distanceFromEnd(scroll)
+            if abs(d - lastDist) > 0.5 { print("FLAKEDIAG moved at +\(Int(Date().timeIntervalSince(sampleStart) * 1000))ms from \(lastDist) to \(d)") ; lastDist = d }
+        }
+        diag("afterSample300")
         let readingOffset = scroll.documentVisibleRect.minY
         try await emitPublicReply(f, user: "A new public question", answer: String(repeating: "Public answer arriving while reading history. ", count: 15))
         diag("afterNewReply")

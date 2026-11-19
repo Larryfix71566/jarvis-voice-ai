@@ -11,27 +11,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        include:
+          - {mode: clip, shard: 1}
+          - {mode: wheel, shard: 1}
+          - {mode: wheel, shard: 2}
+          - {mode: wheel, shard: 3}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      FLAKE_SCROLL_MODE: ${{ matrix.mode }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Build tests
         run: swift build --build-tests --package-path macos/MortimerHost
-      - name: Repeat CC7aThreadAcceptanceTests
+      - name: Repeat the scroll test
         shell: bash
         run: |
           pass=0; fail=0
-          for i in $(seq 1 25); do
-            if swift test --skip-build --package-path macos/MortimerHost --filter 'CC7aThreadAcceptanceTests' > "run-$i.log" 2>&1; then
-              pass=$((pass+1)); echo "iter $i PASS"
+          for i in $(seq 1 40); do
+            if swift test --skip-build --package-path macos/MortimerHost --filter 'CC7aThreadAcceptanceTests/testActualScrollViewFollowsGrowingReplyOnlyWhileReadingTheEnd' > "run-$i.log" 2>&1; then
+              pass=$((pass+1)); echo "iter $i PASS"; grep -E "FLAKEDIAG (moved|wheel)" "run-$i.log" || true
             else
               fail=$((fail+1)); echo "iter $i FAIL"
               grep -E "FLAKEDIAG|unmet prerequisite|error:|failed \(" "run-$i.log" || true
             fi
           done
-          echo "PROBE pass=$pass fail=$fail"
-          echo "--- diag lines from a passing iteration ---"
-          for f in run-*.log; do if ! grep -q " failed (" "$f"; then grep FLAKEDIAG "$f"; break; fi; done
+          echo "PROBE mode=$FLAKE_SCROLL_MODE pass=$pass fail=$fail"
