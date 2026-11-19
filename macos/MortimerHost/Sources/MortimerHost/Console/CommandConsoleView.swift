@@ -10,31 +10,23 @@ struct CommandConsoleView: View {
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(AttachmentStore.self) private var attachments
     @EnvironmentObject private var client: JarvisClient
-    @Environment(ConsoleNoticeState.self) private var notices
     @State private var transferTask: Task<Void, Never>?
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                // WS-17: the console's single control row (Larry, 09-30).
-                ConsoleActionBar(coordinator: coordinator)
-                if let result = notices.consoleResult {
-                    Text(result.summary)
-                        .font(.caption)
-                        .lineLimit(1)
-                        .foregroundStyle(result.status == "error" ? AppTheme.red : AppTheme.text.opacity(0.7))
-                        .layoutPriority(-1)   // the control row keeps its room
-                }
-            }
-            .padding(16)
-            .background(AppTheme.panel.opacity(0.55))
+            // Interface cleanup Phase 2: the console's one control row
+            // (WS-17) now lives inside the top capsule (TopBarView), so the
+            // stage starts directly under it.
             AdaptiveStageView(voiceState: voiceState, wideWindow: wideWindow,
                               coordinator: coordinator)
-            // Keep the first inbound-content affordance visible. Previously
-            // the tray appeared only after staging had already happened,
-            // leaving paste/choose/drop with no discoverable entry point.
-            AttachmentTrayView(onAsk: sendSharedContent,
-                                onApproveOffer: approveOffer,
-                                onDeclineOffer: declineOffer)
+            // One composer pill: typed field, paperclip menu (Paste, Choose)
+            // and Send. Staged items appear above it and still need explicit
+            // approval; dropping anywhere on the window stages content too.
+            ComposerPillView(onAsk: sendSharedContent,
+                             onApproveOffer: approveOffer,
+                             onDeclineOffer: declineOffer)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
         }
         .background(AppTheme.bg)
         .onChange(of: attachments.cancelRequest) { _, _ in

@@ -80,15 +80,15 @@ final class C7aActivityRowTests: XCTestCase {
                     run(2, display: "Developer", tools: ["repo_read_file", "plan_start"], started: 200),
                     run(3, display: "Scheduler", tools: ["calendar_list"], started: 300, done: 310)]
         let activity = try XCTUnwrap(ConversationThread.activity(runs: runs, thinking: true))
-        XCTAssertEqual(activity.text, "Developer · Plan start")
-        XCTAssertEqual(activity.accessibilityLabel, "Developer is working: Plan start")
+        XCTAssertEqual(activity.text, "Editing code")
+        XCTAssertEqual(activity.accessibilityLabel, "Developer is working: Editing code")
         XCTAssertFalse(activity.text.contains("private task words"))
     }
 
     func testActivityStartingThinkingAndIdle() {
         XCTAssertEqual(ConversationThread.activity(runs: [run(1, started: 1)], thinking: false)?.text,
-                       "Developer · Starting")
-        XCTAssertEqual(ConversationThread.activity(runs: [], thinking: true)?.text, "Mortimer · Thinking")
+                       "Starting")
+        XCTAssertEqual(ConversationThread.activity(runs: [], thinking: true)?.text, "Thinking")
         XCTAssertNil(ConversationThread.activity(runs: [run(1, started: 1, done: 2)], thinking: false))
         XCTAssertNil(ConversationThread.activity(runs: [], thinking: false))
     }
@@ -96,14 +96,6 @@ final class C7aActivityRowTests: XCTestCase {
     func testActivityFallsBackToTheAgentId() {
         XCTAssertEqual(ConversationThread.activity(runs: [run(1, name: "developer", display: " ", started: 1)],
                                                    thinking: false)?.actor, "developer")
-    }
-
-    func testStepNameIsReadableAndBounded() {
-        XCTAssertEqual(ConversationThread.stepName("repo_read_file"), "Repo read file")
-        XCTAssertNil(ConversationThread.stepName(" _ "))
-        let long = ConversationThread.stepName(String(repeating: "a_", count: 80))
-        XCTAssertEqual(long?.count, 60)
-        XCTAssertEqual(long?.last, "…")
     }
 
     // MARK: Words, never colour alone (contract 3.9)

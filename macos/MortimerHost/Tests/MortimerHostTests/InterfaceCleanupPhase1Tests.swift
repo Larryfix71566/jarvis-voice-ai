@@ -104,7 +104,9 @@ final class InterfaceCleanupPhase1Tests: XCTestCase {
         for connection in [JarvisClient.ConnectionState.offline, .failed("synthetic")] {
             let status = OrbStatus.derive(connection: connection, presentation: listening(), needsYou: true,
                 audioOutputNotice: "output moved", speakerGateNotice: "gate", audioInputNotice: "input")
-            XCTAssertEqual(status.action, .connect)
+            // Phase 2: a failed connection offers Retry (same closure), offline offers Connect.
+            let expected: OrbStatus.Action = (connection == .offline) ? .connect : .retry
+            XCTAssertEqual(status.action, expected)
             XCTAssertFalse(status.text.lowercased().contains("mic"))
         }
         XCTAssertEqual(OrbStatus.derive(connection: .offline, presentation: listening(), needsYou: false,
@@ -215,9 +217,12 @@ final class InterfaceCleanupPhase1Tests: XCTestCase {
         try withSavedDrawerDefaults {
             let drawer = DrawerState()
             drawer.isOpen = false
+            // Phase 2: the capsule embeds the workspace switcher, so it needs
+            // the stores the switcher reads.
             let (view, window) = host(TopBarView()
                 .environmentObject(client()).environment(AgentRunStore()).environment(DisplayResultStore())
                 .environment(drawer).environment(DisplayWindowStore())
+                .environment(WorkspaceStore()).environment(ShareCoordinator()).environment(ConsoleNoticeState())
                 .environment(\.mortimerReduceMotion, true).preferredColorScheme(.dark), width: 1280, height: 80)
             defer { closeRenderingFixtureWindow(window) }
             var found = accessible(view)
@@ -259,7 +264,10 @@ final class InterfaceCleanupPhase1Tests: XCTestCase {
             }
             XCTAssertEqual(text.filter { $0 == "id:console.knowledge" }.count, 1, "\(text)")
             XCTAssertEqual(text.filter { $0 == "id:console.inspect" }.count, 1, "\(text)")
-            for kept in ["Paste content", "Choose content", "Drop text or image files here", "Wake word off"] {
+            // Phase 2: one composer pill; paste/choose live in its closed paperclip menu and the
+            // drop zone only appears during a drag.
+            XCTAssertFalse(text.contains("Drop text or image files here"), "\(text)")
+            for kept in ["Attach content", "Type a request", "Send request", "More"] {
                 XCTAssertTrue(text.contains(kept), "console lost \(kept): \(text)")
             }
         }

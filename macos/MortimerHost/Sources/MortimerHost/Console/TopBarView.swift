@@ -1,25 +1,40 @@
 import SwiftUI
 import JarvisKit
 
-/// The console topbar, matched to the web's (App.tsx:534-623, parity
-/// sweep 2026-08-30): brand with breathing dot · ConnectButton · Voice picker (always visible; "(connect first)" when
-/// empty) · CapabilityChip (ONLY when an agent is degraded) · drawer
-/// toggle ◧/◨/◪ with the aggregate live/attention dot · ↩︎ pop-in
-/// buttons while popped · ⧉ Display.
+/// Interface cleanup Phase 2: the console's one floating capsule. Brand, the
+/// workspace switcher (the embedded ConsoleActionBar), the degraded-capability
+/// chip, the latest console result, Glance, Command-K, Inspect, pop-in buttons
+/// while popped, and an overflow menu for what is rarely needed (Disconnect,
+/// Voice, Wake word, Sounds, Open display). Connecting lives beside the orb on
+/// the disconnected screen, so the overflow never offers Connect.
 struct TopBarView: View {
     @EnvironmentObject private var client: JarvisClient
     @Environment(AgentRunStore.self) private var agentRuns
     @Environment(DisplayResultStore.self) private var displayResults
     @Environment(DrawerState.self) private var drawer
     @Environment(DisplayWindowStore.self) private var displayWindow
+    @Environment(WorkspaceStore.self) private var workspace
+    @Environment(ConsoleNoticeState.self) private var notices: ConsoleNoticeState?
+    @AppStorage("mortimer.interface.compactConversation") private var compactConversation = true
+    @State private var soundsOn = Sounds.enabled
+    @State private var showingPalette = false
+
+    let coordinator: ConsoleActionCoordinator?
+
+    init(coordinator: ConsoleActionCoordinator? = nil) {
+        self.coordinator = coordinator
+    }
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             brand
-            connectGroup
-            voicePicker
+            ConsoleActionBar(coordinator: coordinator, embedded: true)
+                .layoutPriority(1)
             capabilityChip
-            Spacer()
+            resultNotice
+            Spacer(minLength: 8)
+            GlanceButton()
+            paletteButton
             drawerToggle
             if displayWindow.isWindowOpen {
                 popInButton(help: "Bring the display back into this window") {
@@ -31,13 +46,46 @@ struct TopBarView: View {
                     drawer.placementRef?.popInDrawer()
                 }
             }
-            displayButton
+            overflowMenu
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .mortimerGlass(.panel)
         .padding([.horizontal, .top], 12)
+        .sheet(isPresented: $showingPalette) { paletteSheet }
     }
+
+    // MARK: Rules (pure, tested)
+
+    /// What the overflow offers. Connect is deliberately absent.
+    enum OverflowItem: Hashable {
+        case disconnect
+        case connecting
+        case voice
+        case wakeWord(on: Bool)
+        case sounds(on: Bool)
+        case openDisplay
+        case commandMenu
+    }
+
+    static func overflowItems(connection: JarvisClient.ConnectionState, hasVoices: Bool,
+                              wakeWordAvailable: Bool, wakeWordOn: Bool,
+                              soundsOn: Bool) -> [OverflowItem] {
+        var items: [OverflowItem] = []
+        switch connection {
+        case .connected: items.append(.disconnect)
+        case .connecting: items.append(.connecting)
+        default: break
+        }
+        if hasVoices { items.append(.voice) }
+        if wakeWordAvailable { items.append(.wakeWord(on: wakeWordOn)) }
+        items.append(.sounds(on: soundsOn))
+        items.append(.openDisplay)
+        items.append(.commandMenu)
+        return items
+    }
+
+    // MARK: Brand
 
     // .brand — mono, letterspaced, cyan, with the breathing dot
     // (App.css .brand::before, brand-breathe 3.2s).
@@ -50,75 +98,19 @@ struct TopBarView: View {
                 .foregroundStyle(AppTheme.accent)
                 .shadow(color: AppTheme.accentDim, radius: 6)
         }
+        .fixedSize()
     }
 
-    // ConnectButton.tsx — the Connect/Disconnect button.
-    private var connectGroup: some View {
-        HStack(spacing: 10) {
-            Button {
-                Task {
-                    if case .connected = client.state {
-                        await client.disconnect()
-                    } else {
-                        await client.connect()
-                    }
-                }
-            } label: {
-                Text(connectLabel)
-                    .foregroundStyle(connectColor)
-            }
-            .disabled(isConnecting)
-        }
-    }
+    // MARK: Console result summary (moved here from the old action row)
 
-    private var isConnecting: Bool {
-        if case .connecting = client.state { return true }
-        return false
-    }
-
-    private var connectLabel: String {
-        switch client.state {
-        case .offline: return "Connect"
-        case .connecting: return "Connecting…"
-        case .connected: return "Disconnect"
-        case .failed: return "Connect"
-        }
-    }
-
-    private var connectColor: Color {
-        switch client.state {
-        case .connected: return AppTheme.red       // .btn-danger
-        default: return AppTheme.accent            // .btn-primary
-        }
-    }
-
-    // VoicePicker.tsx — label + select, ALWAYS visible; disabled with
-    // "(connect first)" while the catalog is empty (never hidden).
-    private var voicePicker: some View {
-        HStack(spacing: 8) {
-            Text("VOICE")
-                .font(.system(size: 10, design: .monospaced))
-                .kerning(1.4)
-                .foregroundStyle(AppTheme.textDim)
-            if client.voices.isEmpty {
-                Picker("", selection: .constant("")) {
-                    Text("(connect first)").tag("")
-                }
-                .pickerStyle(.menu)
-                .disabled(true)
-                .frame(maxWidth: 160)
-            } else {
-                Picker("", selection: Binding(
-                    get: { client.currentVoice },
-                    set: { client.send(.voiceSet(voice: $0)) }
-                )) {
-                    ForEach(client.voices, id: \.id) { voice in
-                        Text(voice.label).tag(voice.id)
-                    }
-                }
-                .pickerStyle(.menu)
-                .frame(maxWidth: 180)
-            }
+    @ViewBuilder
+    private var resultNotice: some View {
+        if let result = notices?.consoleResult {
+            Text(result.summary)
+                .font(.caption)
+                .lineLimit(1)
+                .foregroundStyle(result.status == "error" ? AppTheme.red : AppTheme.text.opacity(0.7))
+                .layoutPriority(-1)   // the switcher keeps its room
         }
     }
 
@@ -141,20 +133,140 @@ struct TopBarView: View {
         }
     }
 
+    // MARK: Command-K
+
+    private var paletteButton: some View {
+        Button { showingPalette = true } label: {
+            Text("⌘K")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(AppTheme.textDim)
+        }
+        .keyboardShortcut("k", modifiers: .command)
+        .help("Command menu (⌘K)")
+        .accessibilityLabel("Command menu")
+        .accessibilityIdentifier("console.commandMenu")
+    }
+
+    private var paletteSheet: some View {
+        CommandPaletteView(commands: paletteCommands,
+                           onRun: { command in
+                               showingPalette = false
+                               run(command.action)
+                           },
+                           onClose: { showingPalette = false })
+    }
+
+    private var paletteCommands: [CommandPalette.Command] {
+        var connected = false
+        var connecting = false
+        switch client.state {
+        case .connected: connected = true
+        case .connecting: connecting = true
+        default: break
+        }
+        return CommandPalette.commands(connected: connected, connecting: connecting,
+                                       wakeWordAvailable: client.wakeWordAvailable,
+                                       wakeWordOn: client.wakeWordOn, soundsOn: soundsOn,
+                                       inspectOpen: drawer.isOpen,
+                                       compactConversation: compactConversation)
+    }
+
+    private func run(_ action: CommandPalette.Action) {
+        switch action {
+        case .view(let target): go(target)
+        case .toggleInspect: toggleInspect()
+        case .openLog:
+            drawer.isOpen = true
+            drawer.setTab("transcript")
+        case .openDisplay: drawer.placementRef?.openDisplay()
+        case .connect: Task { await client.connect() }
+        case .disconnect: Task { await client.disconnect() }
+        case .toggleWakeWord: Task { await client.setWakeWord(!client.wakeWordOn) }
+        case .toggleSounds: toggleSounds()
+        case .toggleExpandVoice: compactConversation.toggle()
+        }
+    }
+
+    // Same path ConsoleActionBar uses, with the same store fallbacks.
+    private func go(_ target: String) {
+        if let coordinator { _ = coordinator.executePointer(.viewSet, target: target); return }
+        switch target {
+        case "conversation": workspace.returnToConversation()
+        case "results": workspace.returnToWorkspace()
+        case "atlas": workspace.openAtlas()
+        case "memory": workspace.openMemoryGraph()
+        case "skills": workspace.openSkills()
+        case "workflows": workspace.openWorkflows()
+        default: break
+        }
+    }
+
+    // MARK: Overflow
+
+    private var overflowMenu: some View {
+        let items = Self.overflowItems(connection: client.state, hasVoices: !client.voices.isEmpty,
+                                       wakeWordAvailable: client.wakeWordAvailable,
+                                       wakeWordOn: client.wakeWordOn, soundsOn: soundsOn)
+        return Menu {
+            ForEach(items, id: \.self) { item in
+                overflowRow(item)
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("More")
+        .accessibilityLabel("More")
+        .accessibilityIdentifier("console.more")
+    }
+
+    @ViewBuilder
+    private func overflowRow(_ item: OverflowItem) -> some View {
+        switch item {
+        case .disconnect:
+            Button("Disconnect") { Task { await client.disconnect() } }
+        case .connecting:
+            Button("Connecting…") {}.disabled(true)
+        case .voice:
+            Menu("Voice") {
+                Picker("Voice", selection: Binding(
+                    get: { client.currentVoice },
+                    set: { client.send(.voiceSet(voice: $0)) }
+                )) {
+                    ForEach(client.voices, id: \.id) { voice in
+                        Text(voice.label).tag(voice.id)
+                    }
+                }
+                .pickerStyle(.inline)
+            }
+        case .wakeWord(let on):
+            Button(on ? "Wake word on" : "Wake word off") {
+                Task { await client.setWakeWord(!client.wakeWordOn) }
+            }
+        case .sounds(let on):
+            Button(on ? "Sounds on" : "Sounds off") { toggleSounds() }
+        case .openDisplay:
+            Button("Open display") { drawer.placementRef?.openDisplay() }
+        case .commandMenu:
+            Button("Command menu…  ⌘K") { showingPalette = true }
+        }
+    }
+
+    private func toggleSounds() {
+        soundsOn.toggle()
+        Sounds.enabled = soundsOn
+        if soundsOn { Sounds.play(.boot) }
+    }
+
+    // MARK: Inspect
+
     // The single drawer toggle (App.tsx:546-569): label changes with
     // state, aggregate dot while closed (attention amber outranks the
     // cyan live/new signal).
     private var drawerToggle: some View {
-        Button {
-            if drawer.isPoppedOut {
-                // DP5: while popped, the button refocuses/re-places the
-                // popped window rather than toggling the hidden in-page
-                // drawer.
-                drawer.placementRef?.popOutDrawer()
-            } else {
-                drawer.isOpen.toggle()
-            }
-        } label: {
+        Button { toggleInspect() } label: {
             HStack(spacing: 6) {
                 Text(inspectTitle)
                 if !drawer.isOpen && !drawer.isPoppedOut && dotVisible {
@@ -170,6 +282,16 @@ struct TopBarView: View {
               : "Inspect agents, runs, output and the log (Esc closes · T opens the Log)")
         .accessibilityLabel(inspectTitle)
         .accessibilityIdentifier("console.inspect")
+    }
+
+    private func toggleInspect() {
+        if drawer.isPoppedOut {
+            // DP5: while popped, refocus/re-place the popped window rather
+            // than toggling the hidden in-page drawer.
+            drawer.placementRef?.popOutDrawer()
+        } else {
+            drawer.isOpen.toggle()
+        }
     }
 
     /// Interface cleanup Phase 1: the drawer is the back room, behind a
@@ -189,20 +311,6 @@ struct TopBarView: View {
             Text("↩︎")
         }
         .help(help)
-    }
-
-    private var displayButton: some View {
-        Button {
-            // Same WindowPlacement path display_popout uses (C5); a click
-            // while open re-runs extended-screen placement (App.tsx:604-610).
-            drawer.placementRef?.openDisplay()
-        } label: {
-            Text("⧉ Display")
-                .foregroundStyle(displayWindow.isWindowOpen ? AppTheme.accent : AppTheme.textDim)
-        }
-        .help(displayWindow.isWindowOpen
-              ? "Display window is open — click to refocus / move it to the extra screen"
-              : "Open the display window (park it on a second monitor)")
     }
 }
 

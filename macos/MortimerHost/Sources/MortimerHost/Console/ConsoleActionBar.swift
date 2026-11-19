@@ -20,6 +20,9 @@ import JarvisKit
 /// every control's accessibility label and tooltip.
 struct ConsoleActionBar: View {
     let coordinator: ConsoleActionCoordinator?
+    /// Interface cleanup Phase 2: true when the bar lives inside the top
+    /// capsule (it sizes to its content and drops the trailing spacer).
+    let embedded: Bool
     @Environment(WorkspaceStore.self) private var workspace
     @Environment(DisplayWindowStore.self) private var display
     @Environment(DrawerState.self) private var drawer
@@ -28,8 +31,9 @@ struct ConsoleActionBar: View {
     @State private var pinLimitNotice = false
     @State private var showingSharePreview = false
 
-    init(coordinator: ConsoleActionCoordinator?) {
+    init(coordinator: ConsoleActionCoordinator?, embedded: Bool = false) {
         self.coordinator = coordinator
+        self.embedded = embedded
     }
 
     enum Density { case full, icons }
@@ -39,7 +43,7 @@ struct ConsoleActionBar: View {
             row(.full)
             row(.icons)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: embedded ? nil : .infinity, alignment: .leading)
         .alert("Pin limit reached", isPresented: $pinLimitNotice) {
             Button("OK", role: .cancel) {}
         } message: { Text("Unpin a result before pinning another. Your existing pins are preserved.") }
@@ -102,7 +106,7 @@ struct ConsoleActionBar: View {
                 Divider().frame(height: 18)
                 actionsMenu(icons: icons)
             }
-            Spacer(minLength: 8)
+            if !embedded { Spacer(minLength: 8) }
             if mode == .conversation {
                 expandVoiceButton(icons: icons)
             }

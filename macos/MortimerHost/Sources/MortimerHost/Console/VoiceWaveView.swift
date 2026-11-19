@@ -39,23 +39,23 @@ struct VoiceWaveView: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        Group {
-            if interactive {
-                VoiceWaveClientBridge(voiceState: voiceState, stageCenterX: stageCenterX,
-                    wakePulse: wakePulse, needsYou: needsYou, presentation: presentation,
-                    reduceMotion: reduceMotion, reduceTransparency: reduceTransparency)
-            } else {
-                VoiceWaveAnimation(voiceState: voiceState, stageCenterX: stageCenterX,
-                    wakePulse: wakePulse, needsYou: needsYou, presentation: presentation,
-                    reduceMotion: reduceMotion, reduceTransparency: reduceTransparency)
-            }
+        if interactive {
+            // Interface cleanup Phase 2: the orb is the microphone control.
+            VoiceWaveClientBridge(voiceState: voiceState, stageCenterX: stageCenterX,
+                wakePulse: wakePulse, needsYou: needsYou, presentation: presentation,
+                reduceMotion: reduceMotion, reduceTransparency: reduceTransparency,
+                accessibilityValue: accessibilityValue)
+        } else {
+            // Canvas is not consistently exposed as an accessibility node in
+            // compact macOS layouts. Keep one stable host element so the visual
+            // channel mapping and current voice state remain discoverable.
+            VoiceWaveAnimation(voiceState: voiceState, stageCenterX: stageCenterX,
+                wakePulse: wakePulse, needsYou: needsYou, presentation: presentation,
+                reduceMotion: reduceMotion, reduceTransparency: reduceTransparency)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Voice activity — user teal, Mortimer orange")
+                .accessibilityValue(accessibilityValue)
         }
-        // Canvas is not consistently exposed as an accessibility node in
-        // compact macOS layouts. Keep one stable host element so the visual
-        // channel mapping and current voice state remain discoverable.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Voice activity — user teal, Mortimer orange")
-        .accessibilityValue(accessibilityValue)
     }
 
     private var accessibilityValue: String {
@@ -76,6 +76,7 @@ private struct VoiceWaveClientBridge: View {
     var presentation: (() -> VoicePresentationState)? = nil
     let reduceMotion: Bool
     let reduceTransparency: Bool
+    let accessibilityValue: String
     @EnvironmentObject private var client: JarvisClient
 
     var body: some View {
@@ -83,6 +84,14 @@ private struct VoiceWaveClientBridge: View {
             wakePulse: wakePulse, needsYou: needsYou, presentation: presentation,
             reduceMotion: reduceMotion, reduceTransparency: reduceTransparency,
             micEnabled: { client.micEnabled }, setMicEnabled: { client.setMicEnabled($0) })
+            // One element that names the mic action; the outer ignore would
+            // otherwise hide the button trait and action set inside.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Microphone — tap to toggle, hold to talk")
+            .accessibilityValue(accessibilityValue)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Tap to toggle the microphone. Hold for 350 milliseconds to push to talk.")
+            .accessibilityAction { client.setMicEnabled(!client.micEnabled) }
     }
 }
 
