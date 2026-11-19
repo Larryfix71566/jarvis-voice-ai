@@ -2,7 +2,7 @@
 date: 2026-11-19
 system: claude
 rows: [WS-38]
-prs: []
+prs: [400]
 ---
 
 # 2026-11-19 · WS-38 request resolution design note
@@ -10,7 +10,7 @@ prs: []
 - **System:** Claude (Opus 5.5, Claude Code cloud session for Larry's Claude Duet channel).
 - **Row:** WS-38, added as `proposed` under §0 rule 13 for an option write-up. No source paths claimed.
 - **Larry's words (UTC, Claude Duet channel):** 03:04:04: "perhaps we need a workflow for requests that is persistent and works thru a loop to ensure he gets to resolution istead of giving up after a single try, thoughts". He then gave a thumbs-up to a design note with options before any code.
-- **PR:** the pull request that adds this log on `claude/request-resolution-design-note-20261119`.
+- **PR:** #400, on `claude/request-resolution-design-note-20261119`.
 
 ## Change
 
