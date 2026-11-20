@@ -63,11 +63,11 @@ final class OrbShellFrameTimeTests: XCTestCase {
         let window: NSWindow
         var completions = 0
 
-        init(probe: Probe) {
+        init(probe: Probe, size: CGSize = Harness.size) {
             let model = PhaseModel()
             let hosted = NSHostingView(rootView: ProbeView(model: model, probe: probe)
-                .frame(width: Harness.size.width, height: Harness.size.height))
-            hosted.frame = NSRect(origin: .zero, size: Harness.size)
+                .frame(width: size.width, height: size.height))
+            hosted.frame = NSRect(origin: .zero, size: size)
             let window = NSWindow(contentRect: hosted.frame, styleMask: [.borderless],
                                   backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
@@ -316,6 +316,59 @@ final class OrbShellFrameTimeTests: XCTestCase {
                 XCTAssertLessThanOrEqual(candidate["p95_ms"]!, crystal["p95_ms"]! * 1.10, "\(name) p95 regression")
                 XCTAssertLessThanOrEqual(candidate["p95_ms"]!, 16.7, "\(name) exceeds one 60 Hz frame")
             }
+        }
+    }
+
+    /// Interface cleanup Phase 3: the centred at-rest orb is a 440 x 440 slot
+    /// (about 224 pt glass), four times the area of the 1440 x 220 probe.
+    /// Gate: median p95 within one 60 Hz frame. The ratio to the same-session
+    /// 1440 x 220 figures is recorded, not gated (ORB_SPEC "Measure first").
+    func testCentredRestOrbFrameTime() throws {
+        if ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" {
+            throw XCTSkip("Hosted-runner skip: Larry runs the timing runs on his Mac.")
+        }
+        _ = NSApplication.shared
+        let restSize = CGSize(width: 440, height: 440)
+        func measure(_ size: CGSize) -> (frames: [Double], completions: Int) {
+            let harness = Harness(probe: .arcsRefraction, size: size)
+            defer { harness.close() }
+            let frames = harness.run(frames: 300)
+            return (frames, harness.completions)
+        }
+        var wide: [(frames: [Double], completions: Int)] = []
+        var rest: [(frames: [Double], completions: Int)] = []
+        for _ in 0..<5 {
+            wide.append(measure(Harness.size))
+            rest.append(measure(restSize))
+        }
+        for result in wide + rest {
+            XCTAssertEqual(result.completions, 310, "every frame must reach the render server")
+        }
+        func median(_ values: [Double]) -> Double {
+            let sorted = values.sorted()
+            return sorted[sorted.count / 2]
+        }
+        func summary(_ runs: [(frames: [Double], completions: Int)]) -> [String: Double] {
+            ["p50_ms": ms(median(runs.map { percentile($0.frames, 0.5) })),
+             "p95_ms": ms(median(runs.map { percentile($0.frames, 0.95) }))]
+        }
+        let wideSummary = summary(wide), restSummary = summary(rest)
+        let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent(".build/interface-fixtures")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let record: [String: Any] = [
+            "method": "five alternating same-session runs; median of run p50/p95; 300 frames per run; arcs+refraction",
+            "wide_1440x220": wideSummary, "rest_440x440": restSummary,
+            "p50_ratio_rest_to_wide": restSummary["p50_ms"]! / max(wideSummary["p50_ms"]!, 0.001),
+            "p95_ratio_rest_to_wide": restSummary["p95_ms"]! / max(wideSummary["p95_ms"]!, 0.001),
+            "recorded_at": ISO8601DateFormatter().string(from: Date()),
+        ]
+        try JSONSerialization.data(withJSONObject: record, options: [.prettyPrinted, .sortedKeys])
+            .write(to: directory.appendingPathComponent("orb-rest-frame-time.json"))
+        print("Rest orb median p50/p95: wide \(wideSummary), rest \(restSummary)")
+        let isSandboxGuest = ProcessInfo.processInfo.environment["MORTIMER_SANDBOX_GUEST"] == "1"
+        if !isSandboxGuest {
+            XCTAssertLessThanOrEqual(restSummary["p95_ms"]!, 16.7, "centred rest orb exceeds one 60 Hz frame")
         }
     }
 

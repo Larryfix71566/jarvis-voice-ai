@@ -165,6 +165,25 @@ enum ConversationThread {
         return items
     }
 
+    /// Interface cleanup Phase 3 (Fable change A): the transcript's reading width.
+    static let readingWidth = 680.0
+
+    /// Fable change B: ids of the rows that start a run of consecutive messages
+    /// by one speaker. Any non-row item between two rows starts a new run.
+    static func speakerRunStarts(_ items: [Item]) -> Set<String> {
+        var starts = Set<String>()
+        var previousIsUser: Bool?
+        for item in items {
+            if case .row(let row) = item {
+                if previousIsUser != row.isUser { starts.insert(row.id) }
+                previousIsUser = row.isUser
+            } else {
+                previousIsUser = nil
+            }
+        }
+        return starts
+    }
+
     // MARK: C7a activity row
 
     /// The one activity row under the current request (box 192; contract
@@ -176,6 +195,9 @@ enum ConversationThread {
         let actor: String
         /// The current step, as a plain current-tense phrase.
         let step: String
+        /// The run this line speaks for (`AgentRun.id`); nil while only the
+        /// Supervisor is thinking. Interface cleanup Phase 3.
+        var runID: Int? = nil
         var text: String { step }
         var accessibilityLabel: String { "\(actor) is working: \(step)" }
     }
@@ -188,7 +210,7 @@ enum ConversationThread {
         if let run = runs.filter({ $0.doneAt == nil }).max(by: { ($0.startedAt, $0.id) < ($1.startedAt, $1.id) }) {
             let actor = nonEmpty(run.displayName) ?? nonEmpty(run.name) ?? "Mortimer"
             let step = WorkingLine.phrase(tool: run.tools.last, agent: run.name)
-            return Activity(actor: actor, step: step)
+            return Activity(actor: actor, step: step, runID: run.id)
         }
         return thinking ? Activity(actor: "Mortimer", step: WorkingLine.thinking) : nil
     }
@@ -299,6 +321,7 @@ struct ConversationThreadView: View {
                                              approvals: approvals?.items ?? [],
                                              approvalNotes: approvals?.notes ?? [])
         let activity = ConversationThread.activity(runs: agentRuns?.runs ?? [], thinking: thinking)
+        let speakerStarts = ConversationThread.speakerRunStarts(items)
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
                 ScrollView {
@@ -313,7 +336,7 @@ struct ConversationThreadView: View {
                             Group {
                                 switch item {
                                 case .row(let row):
-                                    ConversationThreadRowView(row: row)
+                                    ConversationThreadRowView(row: row, showsSpeaker: speakerStarts.contains(row.id))
                                 case .card:
                                     EmptyView() // Historical item helper remains source-compatible.
                                 case .cachedReference(let reference):
@@ -350,9 +373,10 @@ struct ConversationThreadView: View {
                         }
                         Color.clear.frame(height: 1).id(Self.endID)
                     }
+                    .frame(maxWidth: ConversationThread.readingWidth, alignment: .leading)
                     .padding(.horizontal, AdaptiveLayoutMetrics.workspacePadding)
                     .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .coordinateSpace(name: contentSpace)
                     .scrollTargetLayout()
                 }
@@ -650,6 +674,13 @@ final class CurrentRequestArrivals {
 /// the full text at full width, one hairline between turns.
 struct ConversationThreadRowView: View {
     let row: ConversationThread.Row
+    /// Phase 3: the speaker word shows on the first row of a run only; it
+    /// stays in the layout (opacity 0) so row heights do not change.
+    var showsSpeaker: Bool = true
+    @State private var hovering = false
+
+    private var timeText: String { row.time.formatted(date: .omitted, time: .shortened) }
+    static func timeOpacity(hovering: Bool) -> Double { hovering ? 1 : 0 }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -660,9 +691,11 @@ struct ConversationThreadRowView: View {
                     // C2/C7a: the speaker tokens (user teal, Mortimer rust);
                     // the YOU / MORTIMER word, not the colour, says who.
                     .foregroundStyle(row.isUser ? AppTheme.user : AppTheme.mortimer)
-                Text(row.time.formatted(date: .omitted, time: .shortened))
+                    .opacity(showsSpeaker ? 1 : 0)
+                Text(timeText)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(AppTheme.textDim)
+                    .opacity(Self.timeOpacity(hovering: hovering))
             }
             .frame(width: 84, alignment: .leading)
             Text(row.text)
@@ -673,11 +706,11 @@ struct ConversationThreadRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 9)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(AppTheme.hairline.opacity(0.6)).frame(height: 1)
-        }
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(row.isUser ? "You" : "Mortimer"): \(row.text)")
+        .accessibilityValue(timeText)
     }
 }
 
@@ -693,12 +726,10 @@ struct ConversationActivityRowView: View {
     /// row is plain text, not a button.
     @Environment(DrawerState.self) private var drawer: DrawerState?
 
-    /// Opens Inspect on the Agents tab. Run-level focus is not wired:
-    /// neither AgentsTab nor RunsTab takes a run id from outside.
+    /// Opens Inspect on the Agents tab, focused on this line's run.
     @MainActor
-    static func openInspect(_ drawer: DrawerState) {
-        drawer.setTab("agents")
-        drawer.isOpen = true
+    static func openInspect(_ drawer: DrawerState, runID: Int? = nil) {
+        drawer.focusRun(runID)
     }
 
     private var line: some View {
@@ -723,7 +754,7 @@ struct ConversationActivityRowView: View {
 
     var body: some View {
         if let drawer {
-            Button { Self.openInspect(drawer) } label: { line }
+            Button { Self.openInspect(drawer, runID: activity.runID) } label: { line }
                 .buttonStyle(.plain)
                 .help("Open Inspect on this run")
                 .accessibilityElement(children: .ignore)

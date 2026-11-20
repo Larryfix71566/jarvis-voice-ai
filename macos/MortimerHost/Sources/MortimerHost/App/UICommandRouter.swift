@@ -46,6 +46,12 @@ final class DrawerState {
     /// moment the Output tab is actually viewed. The topbar toggle and the Output tab's strip dot both
     /// render from this one flag.
     var outputDot = false
+    /// Interface cleanup Phase 3: the run (AgentRun.id) the working line asked
+    /// Inspect to show. Session-local, not persisted. Only focusRun sets it.
+    private(set) var focusedRunID: Int?
+    /// Bumped by focusRun so a mounted Agents tab scrolls to the current run.
+    private(set) var runFocusRequest = 0
+    @ObservationIgnored private var runFocusHandled = 0
     /// Monotonic request token for voice/keyboard tab-strip scrolling. The
     /// strip consumes this event without changing the selected tab.
     private(set) var tabScrollRequest = 0
@@ -89,6 +95,22 @@ final class DrawerState {
         guard Self.tabKeys.contains(key) else { return }
         activeTab = key
         if key == "output" { outputDot = false }
+    }
+
+    /// The working line's one action: show the Agents tab on this run and
+    /// make the drawer visible. Called only from a click, never from a message.
+    func focusRun(_ id: Int?) {
+        focusedRunID = id
+        runFocusRequest &+= 1
+        setTab("agents")
+        if isPoppedOut { placementRef?.popOutDrawer() } else { isOpen = true }
+    }
+
+    /// One-shot: true once per focusRun call.
+    func consumeRunFocusScroll() -> Bool {
+        guard runFocusHandled != runFocusRequest else { return false }
+        runFocusHandled = runFocusRequest
+        return true
     }
 
     @discardableResult

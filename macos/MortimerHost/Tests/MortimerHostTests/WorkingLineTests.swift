@@ -71,6 +71,7 @@ final class WorkingLineTests: XCTestCase {
         XCTAssertEqual(activity.step, "Searching your notes")
         XCTAssertEqual(activity.text, "Searching your notes")
         XCTAssertEqual(activity.actor, "Librarian")
+        XCTAssertEqual(activity.runID, 1)
         XCTAssertEqual(activity.accessibilityLabel, "Librarian is working: Searching your notes")
         XCTAssertFalse(activity.text.contains("private task words"))
     }
@@ -141,6 +142,23 @@ final class WorkingLineTests: XCTestCase {
         ConversationActivityRowView.openInspect(drawer)
         XCTAssertEqual(drawer.activeTab, "agents")
         XCTAssertTrue(drawer.isOpen)
+        XCTAssertNil(drawer.focusedRunID)
+    }
+
+    func testPerformingTheRowActionFocusesItsRun() {
+        let drawer = DrawerState()
+        let saved = ["mortimer.drawer.tab", "mortimer.drawer.open"].map { ($0, UserDefaults.standard.object(forKey: $0)) }
+        defer {
+            for (key, value) in saved {
+                if let value { UserDefaults.standard.set(value, forKey: key) }
+                else { UserDefaults.standard.removeObject(forKey: key) }
+            }
+        }
+        drawer.setTab("repo"); drawer.isOpen = false
+        ConversationActivityRowView.openInspect(drawer, runID: 7)
+        XCTAssertEqual(drawer.activeTab, "agents")
+        XCTAssertTrue(drawer.isOpen)
+        XCTAssertEqual(drawer.focusedRunID, 7)
     }
 
     func testRowWithADrawerIsRenderedAsAControl() {
