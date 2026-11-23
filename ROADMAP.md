@@ -172,6 +172,24 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 
 </details>
 
+<details id="ws-42">
+<summary>WS-42 — Orchestration split: hand_off tool and text orchestrator · Claude</summary>
+
+**Workstream:** Larry asked in his Claude Duet channel on 2026-11-23 at 19:18 UTC: "splitting the orchastrator from the voice, is that feasible? I think if it is we get better orchastration by using different more capable models for decision making?" and at 19:19 UTC: "Write the design". The design's Option B was approved on the channel afterwards ("Option b approved") and the build was started ("run now"). No existing row covered moving routing decisions off the voice model, so this block is added with the PR that implements it; merging the PR approves the row (§0 rule 2). Under §0 rule 14 this block keeps systems from overlapping; it is not exclusive. The voice model calls a new `hand_off` tool with at most a one-line note; a text-only `orchestration` workload (Fable 5.2 on the subscription) picks the specialists and writes their tasks; each step then runs through the unchanged `delegate_task` handler, so every existing guard still applies. Off by default behind `JARVIS_ORCHESTRATOR_ENABLED`.
+
+- **Owner:** `claude`
+- **Status:** claimed 2026-11-23: one PR into `next`.
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** Larry: merge; check in `/model` that Fable 5.2 does not draw usage credits on his plan; confirm the installed `claude` CLI 2.1.291 runs `claude-fable-5-2`; set `JARVIS_ORCHESTRATOR_ENABLED=1` on the Mac and produce a voice tool receipt for the new hand_off menu (WS-40 receipt folder); time one hand-off on a real voice turn. Follow-up: `HANDOFF_ADDENDUM` still tells the voice model to delegate with `continuation`, which with the flag on is the orchestrator's call. Fable 5.2 routing latency, the routing eval through the orchestrator and the streaming/acknowledgement fix the design depends on are untested.
+- **Model version:** Claude Fable 5.2 (plan), Claude Sonnet 5.5 (implementation)
+- **Where:** `claude/orchestrator-handoff-20261123` into `next`
+- **Plan:** `docs/plans/MORTIMER_ORCHESTRATION_SPLIT_DESIGN_2026-11-23.md`
+- **Scope:** `jarvis/agents/orchestration.py` (new); the hand-off template, `ORCHESTRATOR_PROMPT`, `build_orchestrator_prompt` and the `orchestrator` argument of `build_supervisor_prompt` in `jarvis/prompts.py` (the `SUPERVISOR_PROMPT` literal is untouched); the six `orchestrator_*` reasons in `jarvis/toolresult.py`; the `orchestration` rung in `jarvis/usage_ledger.py`; the flag-gated hand-off block and the `hand_off` name checks in `jarvis/bot/pipeline.py` (not the voice LLM block or the lines PR #410 edits); the `orchestration` workload in `config/model_access.yaml`, the `claude-fable-5-2` profile in `config/model_profiles.yaml` and its seeded entry in `config/generated/model_catalog.claude-subscription.json`; `tests/unit/test_orchestration_*.py` (new). Not in scope: `jarvis/agents/delegate.py`, `jarvis/subscription_tools.py`, `jarvis/bot/subscription_llm.py`, `jarvis/model_routing.py`.
+- **Next step:** larry: merge, set the flag, check the CLI and one live hand-off.
+- **Updated:** 11-23 (claim and PR)
+
+</details>
+
 <details id="ws-41">
 <summary>WS-41 — Daily new-model check: detect, certify, propose by PR · Claude</summary>
 
@@ -1490,6 +1508,8 @@ projection, never hidden cards; protected results retain their existing limits.
 
 
 **Adopted typed phone-card wire reservation (2026-10-31, WS-04/17/30):** reserve closed operations `results.view`, `results.select`, `results.pin`, `results.unpin`, `results.close`, `results.reopen` in the existing `mortimer.phone-remote.v1` envelope, exactly as the independently accepted typed-card design specifies. Reuse `read`/`action` scopes and existing status/reason enums; add no port, launchd label, config key, migration, credential or general console-action permission. These identifiers serve only the injected synthetic offline slice until separate production claims.
+
+**Config key reserved for WS-42, 2026-11-23 (before implementation):** `JARVIS_ORCHESTRATOR_ENABLED`, `1`, `true` or `yes` (surrounding spaces and case ignored) turns the hand_off orchestrator on; unset, empty or any other value is off (default). New workload `orchestration` in `config/model_access.yaml`, new profile `claude-fable-5-2`. No migration, port, launchd label, allow-list row, runtime file or wire field.
 
 **Config keys reserved for WS-41, 2026-11-23 (before implementation):** `MORTIMER_MODEL_SYNC`, `MORTIMER_MODEL_SYNC_CERTIFY`, `MORTIMER_MODEL_SYNC_PROPOSE`, each `1` (default) or `0`; `0` skips the whole daily new-model check, its certification, or its pull requests. Runtime files `data/status/model-sync.json`, `model-sync-state.json`, `model-sync.lock` and `data/status/model-sync/` (receipts, proposals), all ignored. Route `GET /api/status/model-sync` on the admin sidecar. No migration, port, launchd label, allow-list row or wire field.
 

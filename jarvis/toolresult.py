@@ -88,6 +88,14 @@ REASON_CLASSES: dict[str, str] = {
     # weather_reuse_invalid_request; the weather saved-card fix splits it out.
     "weather_reuse_not_requested": "policy",
     "weather_place_not_requested": "policy",
+    # WS-42: the hand_off router (jarvis/agents/orchestration.py). Every one
+    # means no specialist work was started.
+    "orchestrator_unavailable": "transient",
+    "orchestrator_bad_output": "transient",
+    "orchestrator_invalid_decision": "approach",
+    "orchestrator_runtime_error": "approach",
+    "orchestrator_route_refused": "policy",
+    "orchestrator_quota": "policy",
 }
 
 # Fixed phrases in transport-shaped failure strings ("<tool> failed: ...")

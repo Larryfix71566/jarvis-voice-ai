@@ -105,6 +105,17 @@ profiles:
     vision: true
     streaming: true
 
+  - name: claude-fable-5-2
+    label: "Claude Fable 5.2 — orchestration (hand_off routing)"
+    endpoint: claude-subscription
+    model: claude-fable-5-2
+    identity: anthropic/claude-fable-5-2
+    # Same D-003 rule as claude-fable-5: omit temperature.
+    temperature: null
+    tier: frontier
+    vision: true
+    streaming: true
+
   - name: claude-sonnet-5
     label: "Claude Sonnet 5 — direct Anthropic; the agent floor / executor tier"
     endpoint: claude-subscription
