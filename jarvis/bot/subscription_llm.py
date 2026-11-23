@@ -31,6 +31,23 @@ from jarvis.subscription import SubscriptionCapabilityError
 from jarvis.usage_ledger import record_execution_result
 
 
+# Larry 2026-11-23 (WS-40): voice runs on the Claude subscription, and the
+# native tool route refuses every voice turn until a capability receipt matches
+# the EXACT menu this service sends (names, order, descriptions, schemas).
+# The menu depends on the live sub-agent roster and the kill switches, so it
+# is recorded when the pipeline is built, from the same conversion
+# _process_context uses (jarvis.subscription_tools.record_tool_menu).
+
+
+def voice_tool_references(raw_tools) -> tuple[ModelToolReference, ...]:
+    """The tool references a native voice request carries, in menu order."""
+    if not isinstance(raw_tools, list) or not raw_tools:
+        raise SubscriptionCapabilityError("subscription voice requires explicit registered tools")
+    return tuple(ModelToolReference(
+        tool["function"]["name"], tool["function"]["parameters"],
+        tool["function"].get("description", "")) for tool in raw_tools)
+
+
 class SubscriptionVoiceLLMService(LLMService):
     """Translate native replies into the existing Pipecat tool/speech loop.
 
@@ -71,6 +88,18 @@ class SubscriptionVoiceLLMService(LLMService):
         if self._native_client is None:
             self._native_client = make_route_client(resolved)
         return self._native_client
+
+    def tool_menu_references(self, context) -> tuple[ModelToolReference, ...]:
+        """The exact menu a turn in ``context`` would send."""
+        params = self.get_llm_adapter().get_llm_invocation_params(
+            context, convert_developer_to_user=False)
+        return voice_tool_references(params["tools"])
+
+    def record_tool_menu(self, context):
+        """Record this session's menu for the capability receipt (WS-40)."""
+        from jarvis.subscription_tools import record_tool_menu
+        return record_tool_menu("voice_supervisor", self.resolved.model,
+                                self.tool_menu_references(context))
 
     def _bound_messages(self, messages):
         """Restore native IDs only onto an exact, host-retained tool batch.
@@ -179,12 +208,7 @@ class SubscriptionVoiceLLMService(LLMService):
             policy = strictest(policy, self.sources.policy_for_projection(context, messages))
             assert_route_allowed(self.resolved.route, policy)
         native_messages = self._bound_messages(messages)
-        raw_tools = params["tools"]
-        if not isinstance(raw_tools, list) or not raw_tools:
-            raise SubscriptionCapabilityError("subscription voice requires explicit registered tools")
-        tools = tuple(ModelToolReference(
-            tool["function"]["name"], tool["function"]["parameters"],
-            tool["function"].get("description", "")) for tool in raw_tools)
+        tools = voice_tool_references(params["tools"])
         if any(tool.name not in self._functions for tool in tools):
             raise SubscriptionCapabilityError("voice advertised an unregistered handler")
         self._parent_id = self._parent_id or str(uuid.uuid4())

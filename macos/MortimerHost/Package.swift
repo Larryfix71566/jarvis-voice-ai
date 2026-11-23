@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     dependencies: [
         .package(path: "../JarvisKit"),
+        .package(path: "../../shared/MortimerOrbRendering"),
     ],
     targets: [
         .target(
@@ -24,7 +25,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "MortimerHost",
-            dependencies: ["JarvisKit"],
+            dependencies: ["JarvisKit", "MortimerOrbRendering"],
             // Swift 5 language mode, explicit — same reasoning as
             // JarvisKit's Package.swift (CORE review F5): tools 6.x
             // defaults to Swift 6 strict concurrency, which this tree

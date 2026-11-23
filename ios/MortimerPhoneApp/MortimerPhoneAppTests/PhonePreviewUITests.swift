@@ -92,4 +92,30 @@ final class PhonePreviewUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Selected on phone"].exists)
     }
 
+    func testSyntheticOrbStartsOnlyOnDemandAndStopsInBackground() {
+        let app = XCUIApplication()
+        app.launch()
+
+        let orb = app.staticTexts["preview.orb.status"]
+        let toggle = app.buttons["preview.orb.toggle"]
+        let disconnected = app.descendants(matching: .any)["preview.disconnected-notice"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertFalse(orb.exists)
+        XCTAssertTrue(disconnected.exists)
+        toggle.tap()
+        XCTAssertTrue(orb.waitForExistence(timeout: 5))
+        XCTAssertTrue(disconnected.exists)
+        toggle.tap()
+        XCTAssertFalse(orb.exists)
+
+        toggle.tap()
+        XCTAssertTrue(orb.waitForExistence(timeout: 5))
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        XCTAssertFalse(orb.exists)
+        XCTAssertTrue(disconnected.exists)
+        XCTAssertEqual(toggle.label, "Start synthetic orb")
+    }
+
 }
