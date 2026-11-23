@@ -76,25 +76,25 @@ workloads:
     priority: interactive
     fallback_routes: []
   scheduler:
-    profile: claude-sonnet-5
+    profile: claude-sonnet-5-5
     route: subscription
     privacy: approved_external
     priority: interactive
     fallback_routes: []
   librarian:
-    profile: claude-sonnet-5
+    profile: claude-sonnet-5-5
     route: subscription
     privacy: confidential
     priority: interactive
     fallback_routes: []
   analyst:
-    profile: claude-sonnet-5
+    profile: claude-sonnet-5-5
     route: subscription
     privacy: approved_external
     priority: interactive
     fallback_routes: []
   systems:
-    profile: claude-sonnet-5
+    profile: claude-sonnet-5-5
     route: subscription
     privacy: local_only
     priority: interactive
@@ -128,7 +128,7 @@ workloads:
     capabilities: [text]
     fallback_routes: []
   background:
-    profile: claude-sonnet-5
+    profile: claude-sonnet-5-5
     route: subscription
     privacy: confidential
     priority: background
