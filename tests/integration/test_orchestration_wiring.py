@@ -4,12 +4,13 @@ import pytest
 
 from jarvis.bot.pipeline import build_pipeline
 
-from tests.integration.test_bot_wiring import (  # noqa: F401  (pytest fixtures)
-    FakeTransport,
-    _system_prompt_of,
-    fakes,
-    runtime,
-)
+from tests.integration import test_bot_wiring as _bot_wiring
+from tests.integration.test_bot_wiring import FakeTransport, _system_prompt_of
+
+# Reuse test_bot_wiring's fixtures. Bound by assignment rather than imported by
+# name, so pyflakes does not read each test's fixture argument as a redefinition.
+fakes = _bot_wiring.fakes
+runtime = _bot_wiring.runtime
 
 
 def _tool_names(aggregators) -> list[str]:
