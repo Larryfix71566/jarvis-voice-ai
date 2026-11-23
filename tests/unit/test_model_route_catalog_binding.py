@@ -184,7 +184,10 @@ def test_confidential_catalog_cannot_satisfy_local_only(monkeypatch):
     with pytest.raises(ModelRouteError, match="requires local_only"):
         resolve_model_route_checked("systems", explicit_route="saygm", environ={"SAYGM_API_KEY": "fixture"})
     with pytest.raises(ModelRouteError, match="requires local_only"):
-        model_routing.resolve_model_route("systems", explicit_route="saygm",
+        # Pin the profile the fixture catalog serves, so this stays a test of the
+        # local_only floor rather than of the profile/catalog match (systems
+        # itself moved to claude-sonnet-5-5 on 2026-11-23).
+        model_routing.resolve_model_route("systems", explicit_route="saygm", explicit_profile="claude-sonnet-5",
                                          environ={"SAYGM_API_KEY": "fixture"}, saygm_model=catalog()[0])
     assert calls == []
 
