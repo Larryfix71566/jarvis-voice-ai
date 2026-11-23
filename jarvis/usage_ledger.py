@@ -59,6 +59,7 @@ RUNGS = frozenset({
     "memory_settle",  # W10 (MORTIMER_VOICE_WORKFLOWS_PLAN.md): the sweep's settle check
     "procedures_describe",
     "planning", "council",
+    "orchestration",  # WS-42: the hand_off router (jarvis/agents/orchestration.py)
     "selfedit_executor", "appbuild_executor", "skill_eval",
     "research",
     "tts", "stt",  # MORTIMER_SESSION_MISSES_PLAN.md S1 — voice transport

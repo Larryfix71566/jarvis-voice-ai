@@ -22,6 +22,10 @@ SOURCE_ROOTS = (ROOT / "jarvis", ROOT / "mcp_servers")
 FAMILY_BY_PATH = {
     "agents/supervisor.py": ("voice_exempt", "Supervisor remains on the existing Haiku route"),
     "agents/base.py": ("agent_routed", "SubAgent route resolution and policy redaction"),
+    "agents/orchestration.py": (
+        "orchestration_routed",
+        "WS-42 hand_off router: text-only orchestration workload through the shared execution boundary",
+    ),
     "agents/upgrade_agent.py": ("planner_routed", "Planner route resolution/failover"),
     "bot/shared_content.py": ("mixed_routed", "Shared text/image analysis uses the validated vision boundary"),
     "council/council.py": ("council_routed", "Council route and request-policy boundary"),

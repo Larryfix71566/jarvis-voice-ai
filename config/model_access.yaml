@@ -28,6 +28,7 @@ subscription_defaults:
   background: {route: subscription}
   council: {route: subscription}
   planning: {route: subscription}
+  orchestration: {route: subscription}
   research_synthesis: {route: subscription}
   vision: {route: subscription}
 
@@ -146,6 +147,16 @@ workloads:
   planning:
     minimum_quality_tier: frontier
     profile: claude-fable-5
+    route: subscription
+    privacy: approved_external
+    priority: interactive
+    capabilities: [text]
+    fallback_routes: []
+  # WS-42: the text router behind the voice model's hand_off tool. Text only,
+  # stated explicitly: the workload default is [text, tools], and tools would
+  # select the native tool adapter instead of the subscription text adapter.
+  orchestration:
+    profile: claude-fable-5-2
     route: subscription
     privacy: approved_external
     priority: interactive

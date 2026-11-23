@@ -80,6 +80,7 @@ from jarvis.bot.voice_guidance import (
     rtvi_observer_params,
     is_real_user_message,
 )
+from jarvis.agents.orchestration import build_hand_off_tool, orchestrator_enabled
 from jarvis.bot.sensitive_turn import is_sensitive as _voice_is_sensitive
 from jarvis.voice_workflows import wrap_delegate_handler
 from jarvis.bot.follow_up import (
@@ -203,6 +204,7 @@ from jarvis.memory_automation_eval import ConfiguredMemoryClassifier
 from jarvis.model_catalog import render_model_catalog
 from jarvis.model_routing import ModelRouteError
 from jarvis.prompts import (
+    build_orchestrator_prompt,
     build_supervisor_prompt,
     render_agent_catalog,
 )
@@ -743,7 +745,10 @@ class WeatherContextMinimizer(FrameProcessor):
                 if not isinstance(tool_call, dict) or tool_call.get("id") not in self.ready_calls:
                     continue
                 function = tool_call.get("function")
-                if isinstance(function, dict) and function.get("name") == "delegate_task":
+                if isinstance(function, dict) and function.get("name") == "hand_off":
+                    # WS-42: hand_off carries only a one-line note, never a task.
+                    function["arguments"] = json.dumps({"note": _WEATHER_CONTEXT_NOTE})
+                elif isinstance(function, dict) and function.get("name") == "delegate_task":
                     try:
                         arguments = json.loads(function.get("arguments") or "{}")
                     except (ValueError, TypeError):
@@ -1003,7 +1008,7 @@ def adapt_to_pipecat(
                             if sources is not None and sources.context is not None else UNKNOWN)
             with source_scope(input_policy) as result_sources:
                 with run_logger_scope(runlog):
-                    if name == "delegate_task" and request is not None and request.task_stop:
+                    if name in {"delegate_task", "hand_off"} and request is not None and request.task_stop:
                         result = "REFUSED: this is an explicit task cancellation turn. No new delegated work was started."
                     else:
                         result = await dict_handler(params.arguments)
@@ -1547,6 +1552,10 @@ def build_pipeline(
     reply_guard_mode = getattr(settings, "jarvis_reply_guard_mode", "log")
     # D9 — wrap the regular delegation tool. The creator bridge stays attached
     # to the original dispatcher so the server uses the same Developer run.
+    # WS-42: hand_off calls the unwrapped handler per step and is wrapped once
+    # itself below, so the voice-workflow hook never runs twice on one result.
+    raw_delegate_handler = delegate_handler
+    orchestrator_on = orchestrator_enabled()
     delegate_handler = wrap_delegate_handler(
         delegate_handler,
         gate=runtime.handoff_gate,
@@ -1880,6 +1889,44 @@ def build_pipeline(
          "description": a.description}
         for a in sub_agents.values()
     ])
+    hand_off_schema = None
+    hand_off_handler = None
+    if orchestrator_on:
+        # WS-42 (Option B): the router sees the specialist and model catalogs
+        # the voice prompt used to carry for task writing.
+        orchestrator_prompt = build_orchestrator_prompt(
+            jarvis_name=settings.jarvis_name,
+            timezone=settings.jarvis_timezone,
+            agent_catalog=agent_catalog,
+            model_catalog=render_model_catalog(),
+        )
+        hand_off_schema, _raw_hand_off_handler = build_hand_off_tool(
+            raw_delegate_handler,
+            agent_names=list(sub_agents),
+            system_prompt=orchestrator_prompt,
+            user_text=lambda: runtime.voice_state.user_text,
+            conversation=lambda: (runtime.voice_sources.context.get_messages()
+                                  if runtime.voice_sources.context is not None else []),
+            context_policy=lambda: runtime.voice_sources.policy_for_context(
+                runtime.voice_sources.context),
+            session_id=runtime.session_id,
+        )
+        hand_off_handler = wrap_delegate_handler(
+            _raw_hand_off_handler,
+            gate=runtime.handoff_gate,
+            session_id=runtime.session_id,
+            enabled=lambda: voice_workflows_on,
+            is_sensitive=_voice_is_sensitive,
+        )
+        if command_console_enabled:
+            _plain_hand_off_handler = hand_off_handler
+
+            async def hand_off_handler(arguments: dict) -> Any:
+                # Same request-owned scope weather_delegate_handler gives
+                # delegate_task; each step runs inside it.
+                with weather_reuse_scope(WeatherReuseBridge(_query_native_weather)):
+                    return await _plain_hand_off_handler(arguments)
+
     # MORTIMER_OPTIMIZATION_PLAN.md Phase 4 Rev 3.4 Stage A2: the memory
     # block is the one part of this prompt that grows on its own, and since
     # Phase 1 the whole prompt is a cached prefix — so its size is now
@@ -1914,6 +1961,7 @@ def build_pipeline(
         follow_up=follow_up_enabled,
         weather=local_weather_on,
         brief=brief_on,
+        orchestrator=orchestrator_on,
     )
 
     # Phase 4 Rev 3.4 Stage A2 — see memory_stats above. Logged with the
@@ -1972,11 +2020,14 @@ def build_pipeline(
             llm, name, handler,
             runlog_enabled=bool(getattr(settings, "jarvis_runlog_enabled", False)),
             session_id=runtime.session_id,
-            weather_context=runtime.weather_context if name in {"delegate_task", "local_weather"} else None,
+            weather_context=runtime.weather_context if name in {"delegate_task", "hand_off", "local_weather"} else None,
             foreground_requests=runtime.foreground_requests, sources=runtime.voice_sources,
         )
 
-    register_voice_tool("delegate_task", weather_delegate_handler if command_console_enabled else delegate_handler)
+    if orchestrator_on:
+        register_voice_tool("hand_off", hand_off_handler)
+    else:
+        register_voice_tool("delegate_task", weather_delegate_handler if command_console_enabled else delegate_handler)
     register_voice_tool("set_voice", set_voice_handler)
     register_voice_tool("remember", remember_handler)
     register_voice_tool("cost_summary", cost_summary_handler)
@@ -2044,7 +2095,7 @@ def build_pipeline(
     standard_tools = [
         to_function_schema(schema)
         for schema in supervisor_tool_schemas(
-            delegate_schema,
+            hand_off_schema if orchestrator_on else delegate_schema,
             ui_control=ui_control_enabled,
             screen=screen_enabled,
             clipboard=clipboard_enabled,
