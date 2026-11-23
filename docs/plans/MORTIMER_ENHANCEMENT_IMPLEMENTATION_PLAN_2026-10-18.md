@@ -183,6 +183,106 @@ from answer distributions, not a permission or correctness guarantee.
 ZDR: verify the exact account/endpoint terms before any pilot. No such account
 configuration is established here. Official documentation checked 2026-10-18.
 
+### 3.4 Bitcoin research, then a native workspace
+
+This public-market research track takes **Option 2 → Option 3** under this
+plan. It follows existing acceptance priorities and requires fresh, scoped
+dispatches for implementation. It is not part of WS-35 C9 or the active
+WS-37 interface and WS-38 request-resolution work.
+
+#### Option 2: Read-only research skill and chart-first result
+
+- Start offline with a pinned, independently reproducible BTC/USD daily
+  snapshot. Use one deterministic local calculator and a dated output shared
+  by the card, exports, Daily Brief and future workspace. Record the provider,
+  licensing, input checksum, price fixing time, acquisition time and method
+  version. Use synthetic fixtures in source control unless redistribution is
+  cleared. Carry both the provider date label and UTC fixing time; Coin Metrics
+  daily `PriceUSD` labeled D fixes at the following UTC midnight.
+- One explicit voice or typed request returns one result in the existing
+  carousel. Put the daily price chart first, with the preceding 84-day closing
+  high and low lines, 200-day moving average, provisional low, retest and
+  reversed-signal markers. Give the cutoff, stance and next condition in text
+  alongside an accessible chart summary. Reuse the existing graph/media result
+  and authenticated asset path described by the
+  [interface contract](https://github.com/Larryfix71566/jarvis-voice-ai/blob/00af821c18819bd6735240f2b588c8f521c908f1/docs/contracts/MORTIMER_INTERFACE_CONTRACTS.md);
+  verify asset loading rather than assuming local file URLs work. Do not change the
+  bar-only v1 chart contract. If the image cannot display, return the same
+  figures and stance as text. No new permanent navigation.
+- The rolling band excludes the current close. Use 200 consecutive closes
+  through the current fix for the average. A recovery trigger requires both
+  a close above the prior 84-day closing high and seven consecutive closes
+  above their respective 200-day averages. Missing dates or insufficient
+  warm-up make the affected signal unavailable. Track a provisional low and
+  any later lower close; distinguish a partial recovery, a qualifying signal
+  and a reversal. Historical lows are retrospective, and halving midpoints are
+  context, not signals. Show historical misses and sample size, not an implied
+  probability. Secondary ETF, macro, on-chain and sentiment evidence stays
+  separately dated; social posts are leads, not indicators.
+- **Exit:** Validate calculations against frozen reference values, including a
+  later reversal and no look-ahead. On the identified Mac app and bot build,
+  verify voice/typed parity, chart-without-Inspect, accessibility, text fallback,
+  stale/missing data and intact approval and protected-content behavior. Larry
+  records the gate before Option 3 starts.
+
+#### Daily Brief: One Bitcoin recommendation
+
+After the Option 2 card, add a separately gated section to the **existing**
+Daily Brief; it does not wait for Option 3. Use the same local calculation
+from public data. Give a concise market stance (**Wait for confirmation**,
+**Watch the recovery**, or **Recovery rule met**), the main reason, one
+condition that would change it, and the UTC cutoff. Lead with a change,
+broken provisional low, or reversal; otherwise label the stance unchanged.
+A trigger is not proof of a bull market. Do not use holdings, suggest position
+sizes or prices to trade at, or place orders. If spoken, read the stance and
+one next check under the existing protected-output rules.
+
+Enable only after testing a current-data path and setting a provider-specific
+grace window. A missed daily fix beyond that window yields **No fresh call**
+and the last verified cutoff, not a recycled recommendation. Delayed secondary
+feeds can be omitted or labeled with their own cutoff. Bitcoin failure must not
+hold up mail, calendar, or the rest of the brief. Keep confidential brief
+inputs and outputs on their existing path; the market tool receives no mail or
+calendar payload, no cloud model gets the combined brief, and the public
+composed-answer path cannot carry confidential results. Reuse the existing
+cadence, with no separate notifications or schedule. Verify all stances,
+reversals, unchanged and missing data, card/brief parity for the same fix,
+and isolation from other brief sections.
+
+**Frozen acceptance example (not a current recommendation):** “Wait for
+confirmation. The July low is still provisional. Watch for seven closes
+above the 200-day average and a close above the prior 84-day high. Data:
+November 23, 2026, 00:00 UTC.” The frozen fix is $61,103.71; its 200-day
+average is $72,319.11 and prior 84-day closing high is $86,520.80.
+
+#### Option 3: Native Mac workspace
+
+Open from the Bitcoin result first; a command-palette entry can follow. Put
+charts above the evidence and sources:
+
+1. **Current bear:** Default view, with toggles for price, closing-high and
+   closing-low lines, and the moving average. Surface the provisional low,
+   retests, prior signal reversals and current rule state.
+2. **Past recoveries:** Separate historical lows from first qualifying signals;
+   show delay, price difference and available 180-day outcomes, including
+   failures. Do not grade an unfinished horizon.
+3. **Halving cycles:** Compare cycles at the same age. Label observed versus
+   estimated calendar midpoints and distinguish them from the mined halfway
+   block. Do not use either midpoint as a trading signal.
+
+Review and separately claim a bounded, versioned, read-only native series
+payload. Keep v1 bar charts unchanged and fall back to the Option 2 card and
+text for older clients. Verify keyboard and VoiceOver access, large text,
+contrast, narrow windows, and performance against the existing Mac gates.
+iPhone follows separately after its result transport and device acceptance.
+
+Use fresh owner/branch/scope claims before code, including any shared renderer
+or routing handoff. A separately scoped public refresh may atomically replace
+a validated local snapshot; on failure retain the last known good snapshot
+and show its age. Keep rollback independent of other routing and preserve the
+card fallback. No accounts, exchange credentials, orders, background
+monitoring, deployment or harness-controller changes are part of this design.
+
 ## 4. Durable task, evidence and proactive follow-through contract
 
 The proposed WS-24 record is the overall-task authority; agent runs, attempts,
