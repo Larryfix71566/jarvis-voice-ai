@@ -96,12 +96,12 @@ def _resolve_model_profile(registry: dict[str, Any], requested: str, *,
             and requested in {"claude-haiku", "claude-haiku-4-5"}):
         return {
             "name": "claude-haiku",
-            "label": "Claude Haiku 4.5 — voice supervisor (direct API)",
+            "label": "Claude Haiku 4.5 — voice supervisor (Claude subscription)",
             "provider": "anthropic",
             "model": "claude-haiku-4-5",
             "identity": "anthropic/claude-haiku-4-5",
-            "base_url": "https://api.anthropic.com/v1/",
-            "api_key_env": "ANTHROPIC_API_KEY",
+            # Larry 2026-11-23: no API endpoint or key; subscription route only.
+            "kind": "subscription",
             "temperature": None,
             "tier": "economy",
         }
@@ -743,6 +743,14 @@ def _resolved_route(policy: WorkloadPolicy, profile: dict[str, Any], route: Acce
         route, model = _bind_saygm_model(profile, route, saygm_model)
     if route.name == "saygm" and model is None and policy.privacy != "local_only":
         raise ModelRouteError("SAYGM catalog verification is required before execution")
+    if route.adapter in {"subscription_runtime", "codex_subscription_runtime"}:
+        # One subscription route serves text and tool workloads. Carry only
+        # what this workload needs, so a text workload never demands the
+        # native tool adapter (and its capability receipt) and a tool
+        # workload never silently loses its tools.
+        route = replace(route, capabilities=tuple(
+            capability for capability in route.capabilities
+            if capability in policy.required_capabilities))
     _assert_policy_route(policy, route)
     if route.credential_env and not env.get(route.credential_env):
         raise ModelRouteError(

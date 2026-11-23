@@ -1,10 +1,14 @@
 # Workload access policies for Model Use Enhancements.
+# Larry 2026-11-23: every workload runs on a subscription route. The paid
+# Anthropic/OpenAI/Kimi/DeepSeek APIs are retired (jarvis.provider_access
+# refuses them in every mode), so `direct_api` is only for other vendors'
+# gateways chosen explicitly, never a default or a fallback.
 # Profile names refer to config/model_profiles.yaml; this file does not define
 # models. Routes are explicit so subscription exhaustion cannot become a paid
 # API fallback by accident.
 defaults:
   minimum_quality_tier: mid
-  route: direct_api
+  route: subscription
   fallback_routes: []
   capabilities: [text, tools]
 
@@ -33,7 +37,10 @@ routes:
     billing: subscription
     provider: claude
     privacy: approved_external
-    capabilities: [text]
+    # A resolved route carries only what its workload needs (model_routing
+    # ._resolved_route), so text workloads use the text adapter and tool
+    # workloads the native tool adapter with its capability receipt.
+    capabilities: [text, tools]
   codex_subscription:
     adapter: codex_subscription_runtime
     billing: subscription
@@ -56,49 +63,49 @@ workloads:
   voice_supervisor:
     minimum_quality_tier: economy
     profile: claude-haiku-4-5
-    route: direct_api
+    route: subscription
     privacy: approved_external
     priority: interactive
     fallback_routes: []
   scheduler:
     profile: claude-sonnet-5
-    route: direct_api
+    route: subscription
     privacy: approved_external
     priority: interactive
     fallback_routes: []
   librarian:
     profile: claude-sonnet-5
-    route: direct_api
+    route: subscription
     privacy: confidential
     priority: interactive
     fallback_routes: []
   analyst:
     profile: claude-sonnet-5
-    route: direct_api
+    route: subscription
     privacy: approved_external
     priority: interactive
     fallback_routes: []
   systems:
     profile: claude-sonnet-5
-    route: direct_api
+    route: subscription
     privacy: local_only
     priority: interactive
     fallback_routes: []
   developer:
     profile: claude-opus
-    route: direct_api
+    route: subscription
     privacy: approved_external
     priority: interactive
     fallback_routes: []
   app_builder:
     profile: claude-opus
-    route: direct_api
+    route: subscription
     privacy: approved_external
     priority: interactive
     fallback_routes: []
   memory:
     profile: claude-sonnet-5
-    route: direct_api
+    route: subscription
     privacy: confidential
     priority: background
     capabilities: [text]
@@ -107,14 +114,14 @@ workloads:
   # adapter on synthetic, approved-external data without weakening live memory.
   memory_shadow:
     profile: claude-sonnet-5
-    route: direct_api
+    route: subscription
     privacy: approved_external
     priority: background
     capabilities: [text]
     fallback_routes: []
   background:
     profile: claude-sonnet-5
-    route: direct_api
+    route: subscription
     privacy: confidential
     priority: background
     capabilities: [text]
@@ -122,7 +129,7 @@ workloads:
   council:
     minimum_quality_tier: economy
     profile: claude-sonnet-5
-    route: direct_api
+    route: subscription
     privacy: approved_external
     priority: background
     capabilities: [text]
@@ -131,21 +138,21 @@ workloads:
   planning:
     minimum_quality_tier: frontier
     profile: claude-fable-5
-    route: direct_api
+    route: subscription
     privacy: approved_external
     priority: interactive
     capabilities: [text]
     fallback_routes: []
   research_synthesis:
     profile: claude-sonnet-5
-    route: direct_api
+    route: subscription
     privacy: approved_external
     priority: interactive
     capabilities: [text]
     fallback_routes: []
   vision:
     profile: claude-opus
-    route: direct_api
+    route: subscription
     privacy: approved_external
     priority: interactive
     capabilities: [text, images]
