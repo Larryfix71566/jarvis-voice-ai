@@ -2,7 +2,7 @@
 date: 2026-11-23
 system: codex
 rows: [WS-35]
-prs: []
+prs: [411]
 ---
 
 ## C9: disconnected iPhone orb preview
