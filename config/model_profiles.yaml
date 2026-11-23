@@ -147,6 +147,21 @@ profiles:
     tier: mid
     streaming: true
 
+  # 2026-11-23 (WS-43): voice latency candidate. Profile only; no workload in
+  # config/model_access.yaml points at it. Exact model id, never an alias. No
+  # Haiku profile: Larry's 2026-09-01 floor (tests/unit/test_model_floor.py)
+  # keeps Haiku out of this registry, because a registry profile can be named
+  # for a delegated task, and only the voice agent may use Haiku.
+  - name: claude-opus-5-5
+    label: "Claude Opus 5.5 — voice latency candidate"
+    endpoint: claude-subscription
+    model: claude-opus-5-5
+    identity: anthropic/claude-opus-5-5
+    temperature: null
+    tier: frontier
+    vision: true
+    streaming: true
+
   - name: codex-subscription
     label: "Codex subscription default — authenticated ChatGPT subscription runtime"
     endpoint: codex-subscription

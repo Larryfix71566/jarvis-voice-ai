@@ -1,17 +1,23 @@
-"""Buffered native-subscription voice adapter; no API client or tool executor.
+"""Native-subscription voice adapter; no API client or tool executor.
 
-The pinned Claude gateway publishes complete assistant messages, not verified
-token deltas. This service preserves Pipecat's speech/tool frame protocol but
-does not claim token streaming. Production activation stays separately gated.
-Unclassified voice context is confidential and cannot enter a subscription.
+Buffered by default: the pinned Claude gateway publishes complete assistant
+messages, and this service preserves Pipecat's speech/tool frame protocol
+without claiming token streaming. With JARVIS_VOICE_STREAMING_ENABLED=1
+(WS-43) the resolved route carries ``streaming``, text deltas from the Claude
+CLI are pushed as LLMTextFrames as they arrive, and the next turn's CLI
+process is pre-started while the user is still speaking. Production activation
+stays separately gated. Unclassified voice context is confidential and cannot
+enter a subscription.
 """
 from __future__ import annotations
 
 import asyncio
 import copy
 import json
+import logging
 import uuid
 from collections.abc import Callable
+from types import SimpleNamespace
 
 from pipecat.frames.frames import (
     Frame, InterruptionFrame, LLMContextFrame, LLMFullResponseEndFrame,
@@ -28,7 +34,10 @@ from jarvis.model_execution import (
 from jarvis.model_routing import ModelRouteError, ResolvedModelRoute, make_route_client
 from jarvis.privacy_policy import DataPolicy, assert_route_allowed, strictest
 from jarvis.subscription import SubscriptionCapabilityError
+from jarvis.subscription_tools import voice_effort, voice_prestart_enabled
 from jarvis.usage_ledger import record_execution_result
+
+_logger = logging.getLogger(__name__)
 
 
 # Larry 2026-11-23 (WS-40): voice runs on the Claude subscription, and the
@@ -80,6 +89,21 @@ class SubscriptionVoiceLLMService(LLMService):
         self._turn_generation = 0
         self._context_lock = asyncio.Lock()
         self._cleanup_failed = False
+        # 2026-11-23 (WS-43): streaming and pre-start state. All inert unless
+        # the route carries "streaming" (JARVIS_VOICE_STREAMING_ENABLED=1).
+        self._streaming = "streaming" in resolved.route.capabilities
+        self._prestart = self._streaming and voice_prestart_enabled()
+        try:
+            self._effort = voice_effort()
+        except ValueError:
+            raise ModelRouteError("JARVIS_VOICE_EFFORT must be low, medium or high") from None
+        self._next_parent_id = None
+        self._next_task_id = None
+        self._prestart_context = None
+        self._last_policy = None
+        self._streamed = []
+        self._streamed_meta = None
+        self._first_delta = False
 
     def can_generate_metrics(self):
         return True
@@ -98,8 +122,10 @@ class SubscriptionVoiceLLMService(LLMService):
     def record_tool_menu(self, context):
         """Record this session's menu for the capability receipt (WS-40)."""
         from jarvis.subscription_tools import record_tool_menu
+        self._prestart_context = context
         return record_tool_menu("voice_supervisor", self.resolved.model,
-                                self.tool_menu_references(context))
+                                self.tool_menu_references(context),
+                                stream=self._streaming, effort=self._effort)
 
     def _bound_messages(self, messages):
         """Restore native IDs only onto an exact, host-retained tool batch.
@@ -170,7 +196,65 @@ class SubscriptionVoiceLLMService(LLMService):
         return copy.deepcopy(self._native_history + [expected]
                              + [replies[call["id"]] for call in wanted])
 
+    async def _schedule_prestart(self):
+        """Pre-start the next turn's CLI (WS-43). Never raises; a miss runs cold."""
+        context = self._prestart_context
+        if (not self._prestart or self._cleanup_failed or context is None
+                or self._next_parent_id is not None):
+            return
+        try:
+            client = self._client(self.resolved)
+            if getattr(client, "has_spare", lambda: False)():
+                # No ids are pending here, so any spare the client still holds
+                # belongs to a turn that failed before reaching it; close it so
+                # it cannot block every later pre-start.
+                await self._discard_spare()
+            tools = self.tool_menu_references(context)
+            params = self.get_llm_adapter().get_llm_invocation_params(
+                context, convert_developer_to_user=False)
+            system_messages = [copy.deepcopy(message) for message in params["messages"]
+                               if message.get("role") == "system"]
+            parent, task = str(uuid.uuid4()), str(uuid.uuid4())
+            request = ModelExecutionRequest(
+                workload="voice_supervisor", task_id=task, parent_request_id=parent,
+                instructions="", context=(), tools=tools,
+                data_policy=self._last_policy or DataPolicy(
+                    "approved_external", "voice-prestart"),
+                timeout_s=120.0,
+            )
+            client.prestart(request, self.resolved, {
+                "model": self.resolved.model, "messages": system_messages, "stream": True})
+            self._next_parent_id, self._next_task_id = parent, task
+        except Exception as exc:  # noqa: BLE001 - the turn simply runs cold
+            self._next_parent_id = self._next_task_id = None
+            _logger.info("voice_prestart_unavailable error=%s", type(exc).__name__)
+
+    async def _discard_spare(self):
+        self._next_parent_id = self._next_task_id = None
+        if not self._prestart:
+            return
+        discard = getattr(self._native_client, "discard_spares", None)
+        if discard is None:
+            return
+        try:
+            await discard()
+        except BaseException:
+            self._cleanup_failed = True
+            raise
+
     async def _close_turn(self):
+        # 2026-11-23 (WS-43): register the text already spoken so Pipecat's
+        # partial assistant message is classified (VoiceSources.added matches
+        # by prefix); otherwise an interrupted streamed reply re-enters the
+        # next turn's context as UNKNOWN and the subscription route refuses it.
+        streamed, meta = self._streamed, self._streamed_meta
+        self._streamed, self._streamed_meta = [], None
+        if streamed and meta is not None and self.sources is not None:
+            try:
+                self.sources.model_output(meta[0], SimpleNamespace(
+                    text="".join(streamed), tool_calls=()), meta[1])
+            except Exception:  # noqa: BLE001
+                _logger.info("voice_stream_register_failed")
         self._turn_generation += 1
         active = self._active_inference
         if active is not None and not active.done():
@@ -211,18 +295,44 @@ class SubscriptionVoiceLLMService(LLMService):
         tools = voice_tool_references(params["tools"])
         if any(tool.name not in self._functions for tool in tools):
             raise SubscriptionCapabilityError("voice advertised an unregistered handler")
+        task_id = str(uuid.uuid4())
+        if self._parent_id is None and self._next_parent_id is not None:
+            # The pre-started CLI is keyed by these ids (WS-43).
+            self._parent_id = self._next_parent_id
+            task_id = self._next_task_id
+            self._next_parent_id = self._next_task_id = None
         self._parent_id = self._parent_id or str(uuid.uuid4())
         self._turn_policy = policy
+        self._last_policy = policy
+        self._prestart_context = context
         request = ModelExecutionRequest(
-            workload="voice_supervisor", task_id=str(uuid.uuid4()),
+            workload="voice_supervisor", task_id=task_id,
             parent_request_id=self._parent_id, instructions="",
             context=_model_context_messages(native_messages, policy), tools=tools,
             data_policy=policy, timeout_s=120.0,
+            stream_text=self._streaming,
         )
         generation = self._turn_generation
         await self.start_ttfb_metrics()
-        self._active_inference = asyncio.create_task(execute_chat(
-            request, self.resolved, client_factory=self._client))
+        if self._streaming:
+            self._streamed, self._streamed_meta = [], (context, policy)
+            self._first_delta = False
+
+            async def sink(event):
+                if (event.event_type != "text_delta" or not event.text_delta
+                        or generation != self._turn_generation):
+                    return
+                self._streamed.append(event.text_delta)
+                if not self._first_delta:
+                    self._first_delta = True
+                    await self.stop_ttfb_metrics()  # TTFB ends at the first text
+                await self.push_frame(LLMTextFrame(event.text_delta))
+            self._active_inference = asyncio.create_task(execute_chat(
+                request, self.resolved, client_factory=self._client,
+                event_sink=sink, event_sink_policy=policy))
+        else:
+            self._active_inference = asyncio.create_task(execute_chat(
+                request, self.resolved, client_factory=self._client))
         try:
             result = await self._active_inference
         finally:
@@ -234,8 +344,13 @@ class SubscriptionVoiceLLMService(LLMService):
         record_execution_result("supervisor", result, session_id=self.session_id)
         if generation != self._turn_generation:
             return  # Interruption/disconnect cannot publish a late response.
+        spoken = "".join(self._streamed)
         if self.sources is not None:
             self.sources.model_output(context, result, policy)
+            if spoken and spoken != result.text:
+                self.sources.model_output(context, SimpleNamespace(
+                    text=spoken, tool_calls=()), policy)
+        self._streamed, self._streamed_meta = [], None
         self._input_messages = copy.deepcopy(messages)
         self._native_history = copy.deepcopy(native_messages)
         if result.tool_calls:
@@ -248,7 +363,10 @@ class SubscriptionVoiceLLMService(LLMService):
             }
         else:
             await self._close_turn()
-        if result.text:
+            await self._schedule_prestart()
+        # Streamed text was already pushed delta by delta; push the full text
+        # only when nothing streamed (fallback), never twice.
+        if result.text and not spoken:
             await self.push_frame(LLMTextFrame(result.text))
         if result.tool_calls and generation == self._turn_generation:
             await self.run_function_calls([FunctionCallFromLLM(
@@ -259,6 +377,7 @@ class SubscriptionVoiceLLMService(LLMService):
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         if isinstance(frame, InterruptionFrame):
             await self._close_turn()
+            await self._schedule_prestart()
         await super().process_frame(frame, direction)
         if not isinstance(frame, LLMContextFrame):
             await self.push_frame(frame, direction)
@@ -279,14 +398,20 @@ class SubscriptionVoiceLLMService(LLMService):
                 await self.stop_processing_metrics()
                 await self.push_frame(LLMFullResponseEndFrame())
 
+    async def _close_all(self):
+        try:
+            await self._close_turn()
+        finally:
+            await self._discard_spare()
+
     async def stop(self, frame):
-        await self._close_turn()
+        await self._close_all()
         await super().stop(frame)
 
     async def cancel(self, frame):
-        await self._close_turn()
+        await self._close_all()
         await super().cancel(frame)
 
     async def cleanup(self):
-        await self._close_turn()
+        await self._close_all()
         await super().cleanup()
