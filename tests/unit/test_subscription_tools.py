@@ -215,6 +215,72 @@ async def test_native_assistant_publication_cannot_be_changed_before_results(mut
         await s.close()
 
 
+def _assistant_event(message_id, *blocks):
+    return (json.dumps({"type": "assistant", "message": {"id": message_id, "content": list(blocks)}})
+            + "\n").encode()
+
+
+async def _published(*events):
+    s = session()
+    stream = asyncio.StreamReader()
+    for event in events:
+        stream.feed_data(event)
+    stream.feed_eof()
+    s.process = SimpleNamespace(stdout=stream)
+    try:
+        await s._stdout()
+        return await s.queue.get(), s.published_assistant
+    finally:
+        s.process = None
+        await s.close()
+
+
+async def test_spoken_line_before_a_tool_call_is_published_with_the_batch():
+    # 2026-11-23: the pinned CLI sends "One moment..." and the tool call as two
+    # assistant events with one message id; the line used to be dropped.
+    response, published = await _published(
+        _assistant_event("msg_1", {"type": "text", "text": "One moment, checking."}),
+        _assistant_event("msg_1", {"type": "tool_use", "id": "call", "name": "mcp__mortimer__fixture",
+                                   "input": {}}))
+    message = response.choices[0].message
+    assert message.content == "One moment, checking."
+    assert [call.function.name for call in message.tool_calls] == ["fixture"]
+    assert published["content"] == "One moment, checking."
+
+
+async def test_text_of_another_native_message_is_not_attached_to_a_batch():
+    response, published = await _published(
+        _assistant_event("msg_0", {"type": "text", "text": "earlier message"}),
+        _assistant_event("msg_1", {"type": "tool_use", "id": "call", "name": "mcp__mortimer__fixture",
+                                   "input": {}}))
+    assert response.choices[0].message.content == ""
+    assert published["content"] is None
+
+
+async def test_combined_text_and_tool_event_is_unchanged():
+    response, published = await _published(_assistant_event("msg_1",
+        {"type": "text", "text": "One moment."},
+        {"type": "tool_use", "id": "call", "name": "mcp__mortimer__fixture", "input": {}}))
+    assert response.choices[0].message.content == "One moment."
+    assert published["content"] == "One moment."
+
+
+async def test_published_spoken_line_is_accepted_on_continuation():
+    s = session()
+    pending = T._Pending("call", "fixture", {}, asyncio.get_running_loop().create_future(), "task:0")
+    s.pending["call"] = pending
+    s.suspended = True
+    messages = continuation(s)
+    messages[len(s.messages)]["content"] = "One moment, checking."
+    s.published_assistant = messages[len(s.messages)]
+    await s.queue.put(final_response())
+    try:
+        await s.next_completion(request(task="task:1"), {"messages": messages})
+        assert pending.result.result() == "result"
+    finally:
+        await s.close()
+
+
 async def test_duplicate_identical_native_calls_rejected_before_any_publication():
     s = session()
     stream = asyncio.StreamReader()

@@ -854,7 +854,8 @@ def make_route_client(resolved: ResolvedModelRoute, *, timeout: float | None = 6
             if os.environ.get(TOOLS_ENABLED_ENV) != "1":
                 raise ModelRouteError("subscription native tool adapter is disabled")
             receipt_path = os.environ.get(TOOL_CAPABILITY_RECEIPT_ENV)
-            if not receipt_path or not Path(receipt_path).is_file():
+            # A receipt file, or a folder of receipts (one per model and menu).
+            if not receipt_path or not (Path(receipt_path).is_file() or Path(receipt_path).is_dir()):
                 raise ModelRouteError("native tool capability acceptance receipt is required")
             # The request's exact tool set is available only at execute_chat.
             # execute_request validates that receipt against model, executable,
