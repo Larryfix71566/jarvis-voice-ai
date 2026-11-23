@@ -251,10 +251,10 @@ async def test_actual_timed_out_pilot_resolver_drains_real_sql_before_cleanup(tm
         finally:
             finished.set()
     monkeypatch.setattr(pilot, 'isolated_state', isolation)
-    monkeypatch.setenv('ANTHROPIC_API_KEY', 'synthetic-unused')
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'synthetic-unused')
     monkeypatch.setattr(model_routing, 'resolve_model_route_checked', resolve)
     monkeypatch.setattr(model_routing, 'make_route_client', lambda *a, **k: pytest.fail('late route inference'))
-    operation = asyncio.create_task(pilot.run_pilot(mode='live', profile='claude-sonnet-5', timeout_s=.01))
+    operation = asyncio.create_task(pilot.run_pilot(mode='live', profile='or-grok-4.3', timeout_s=.01))
     try:
         assert await asyncio.to_thread(entered.wait, 2)
         await asyncio.wait_for(closing_scope.wait(), 2)

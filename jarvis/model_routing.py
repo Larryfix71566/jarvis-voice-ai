@@ -87,24 +87,10 @@ def _load_model_registry(path: str | os.PathLike[str] | None = None) -> dict[str
 
 def _resolve_model_profile(registry: dict[str, Any], requested: str, *,
                            workload: str | None = None) -> dict[str, Any]:
+    # Larry 2026-11-23: voice runs on the newest Sonnet (claude-sonnet-5-5).
+    # The old voice-only Claude Haiku 4.5 builtin is gone, so a saved or env
+    # selection of it fails loudly instead of quietly using an older model.
     profile = (registry.get("profiles") or {}).get(requested)
-    # Haiku is intentionally not a general registry profile: the model-floor
-    # contract keeps it exclusive to the latency-critical voice supervisor.
-    # Keep that preserved route resolvable without advertising it to the
-    # non-voice model picker or weakening the floor test for background work.
-    if (not profile and workload == "voice_supervisor"
-            and requested in {"claude-haiku", "claude-haiku-4-5"}):
-        return {
-            "name": "claude-haiku",
-            "label": "Claude Haiku 4.5 — voice supervisor (Claude subscription)",
-            "provider": "anthropic",
-            "model": "claude-haiku-4-5",
-            "identity": "anthropic/claude-haiku-4-5",
-            # Larry 2026-11-23: no API endpoint or key; subscription route only.
-            "kind": "subscription",
-            "temperature": None,
-            "tier": "economy",
-        }
     if not profile:
         raise ModelRouteError(f"unknown model profile {requested!r}")
     return profile
@@ -112,14 +98,9 @@ def _resolve_model_profile(registry: dict[str, Any], requested: str, *,
 
 def model_profile_exists(profile: str, *, workload: str | None = None,
                          path: str | os.PathLike[str] | None = None) -> bool:
-    """Return whether a profile is available without probing credentials.
-
-    Haiku is deliberately exposed only when the caller identifies the voice
-    supervisor workload; it is never added to the general registry picker.
-    """
-    if profile in (_load_model_registry(path).get("profiles") or {}):
-        return True
-    return workload == "voice_supervisor" and profile in {"claude-haiku", "claude-haiku-4-5"}
+    """Return whether a registry profile exists, without probing credentials."""
+    del workload  # kept for callers; no profile is workload-exclusive now
+    return profile in (_load_model_registry(path).get("profiles") or {})
 
 
 def model_profile_for_workload(workload: str, *,
@@ -128,8 +109,8 @@ def model_profile_for_workload(workload: str, *,
                                ) -> dict[str, Any]:
     """Return the metadata record selected for a workload.
 
-    This is a read-only catalog operation: it applies the same voice-only
-    built-in exception as route resolution but does not inspect credentials or
+    This is a read-only catalog operation: it resolves the same registry
+    profile as route resolution but does not inspect credentials or
     contact a provider. Readiness/reporting surfaces should use this instead
     of reading the raw registry directly.
     """
@@ -692,8 +673,11 @@ def describe_route_choice(workload: str, profile_name: str, route_name: str, *,
             result["capabilities"] = []
             result["reason"] = "Exact model and capabilities require catalog verification"
             return result
+        # Only a tool workload needs the native tool adapter's acceptance;
+        # a text workload on the same route uses the text adapter.
         if (route.adapter in {"subscription_runtime", "codex_subscription_runtime"}
-                and "tools" in route.capabilities):
+                and "tools" in route.capabilities
+                and "tools" in policy.required_capabilities):
             result.update({
                 "verification_required": True, "status": "runtime_verification_required",
                 "reason": "Exact runtime and tool contract require capability acceptance",

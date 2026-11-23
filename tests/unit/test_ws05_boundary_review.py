@@ -5,9 +5,7 @@ import json
 import math
 import sqlite3
 from types import SimpleNamespace
-from unittest.mock import patch
 
-import anthropic
 import httpx
 import openai
 import pytest
@@ -16,7 +14,6 @@ from jarvis import usage_ledger
 from jarvis import model_budget
 from jarvis.agents import base
 from jarvis.agents.base import SubAgent
-from jarvis.anthropic_shim import AsyncAnthropicChatShim
 from jarvis.bot.sensitive_turn import SensitiveTurn, current_sensitive_turn
 from jarvis.model_budget import (
     ModelBudgetUnavailable, TaskBudget, begin_model_task_budget, remaining_seconds,
@@ -171,36 +168,6 @@ async def test_unknown_client_retry_attribute_does_not_establish_supported_admis
     assert called == []
 
 
-async def test_actual_anthropic_sdk_keeps_cap_and_failed_attempt_without_hidden_retries(isolation):
-    sent = []
-
-    def reject(req):
-        sent.append(json.loads(req.content))
-        return httpx.Response(500, json={"type": "error", "error": {
-            "type": "api_error", "message": "synthetic transient refusal",
-        }})
-
-    http = httpx.AsyncClient(transport=httpx.MockTransport(reject))
-    sdk_class = anthropic.AsyncAnthropic
-    # Scope the constructor seam narrowly; admission sees the real SDK type
-    # and retry configuration after the patch has been removed.
-    with patch("jarvis.anthropic_shim.anthropic.AsyncAnthropic", side_effect=lambda **kwargs:
-               sdk_class(**kwargs, http_client=http)):
-        client = AsyncAnthropicChatShim(api_key="synthetic-unused-key", max_retries=0)
-    try:
-        resolved = route(WorkloadLimits(31, None, .003), anthropic=True)
-        with pytest.raises(openai.APIStatusError):
-            await execute_chat(request(), resolved, client_factory=lambda _route: client)
-        with pytest.raises(ModelBudgetUnavailable, match="^budget_spend_exhausted$"):
-            await execute_chat(request(task="next-review-task"), resolved, client_factory=lambda _route: client)
-    finally:
-        await http.aclose()
-    assert len(sent) == 1
-    assert sent[0]["max_tokens"] == 31
-    with sqlite3.connect(isolation) as conn:
-        assert conn.execute("SELECT count(*) FROM model_call_budget_reservations").fetchone()[0] == 1
-
-
 def settings():
     return SimpleNamespace(openai_model="unused-fallback", openai_api_key="synthetic-unused",
                            openai_base_url="https://unused.invalid", jarvis_timezone="UTC",
@@ -319,11 +286,10 @@ async def test_expired_run_association_never_calls_factory_or_creates_client(iso
 async def test_confirmed_saved_selection_is_used_after_agent_creation_with_actual_sdk_transport(isolation, monkeypatch):
     monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "1")
     monkeypatch.setenv("JARVIS_MODEL_PREFERENCES_ENABLED", "1")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "synthetic-unused-key")
     monkeypatch.setattr("jarvis.agents.base.record_execution_result", lambda *_args, **_kwargs: None)
 
     def save(profile):
-        draft = stage_preference("developer", profile, "direct_api")
+        draft = stage_preference("developer", profile, "subscription")
         confirm_preference(draft["draft_id"])
 
     sent, clients = [], []

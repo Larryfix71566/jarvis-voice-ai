@@ -195,7 +195,7 @@ def test_catalog_route_has_no_key_material(client, monkeypatch):
     _assert_no_key(res)
     body = res.json()
     assert body["ok"] is True
-    assert {r["provider"] for r in body["results"]} >= {"anthropic", "openrouter", "moonshot"}
+    assert {r["provider"] for r in body["results"]} >= {"claude-subscription", "openrouter"}
     assert all(not r["ok"] for r in body["results"])
     C.clear_cache_for_tests()
 

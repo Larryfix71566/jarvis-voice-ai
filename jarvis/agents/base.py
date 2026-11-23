@@ -465,7 +465,12 @@ class SubAgent:
                 else:
                     registry_data = load_model_registry()
                     profile = resolve_profile(registry_data, model_profile)
-                    key_env = profile.get("api_key_env", "OPENAI_API_KEY")
+                    key_env = profile.get("api_key_env", "")
+                    if not key_env or not profile.get("base_url"):
+                        raise UnknownModelProfileError(
+                            f"model profile {model_profile!r} runs only on its subscription "
+                            "route; set JARVIS_MODEL_ROUTING_ENABLED=1"
+                        )
                     if configured_private:
                         # A protected workload cannot use this direct profile.
                         # Avoid constructing its external client at startup;
@@ -506,18 +511,13 @@ class SubAgent:
                     "subagent_model_profile_fallback agent=%s profile=%s mode=%s",
                     name, model_profile, on_profile_fallback,
                 )
-                if routing_enabled or configured_private:
-                    self._client = None
-                else:
-                    self._client = llm_client.make_async_client(
-                        api_key=settings.openai_api_key, base_url=settings.openai_base_url,
-                    )
+                # Larry 2026-11-23: there is no settings/API client to fall
+                # back to; an unresolved agent fails closed at run time.
+                self._client = None
         else:
-            self._client = (
-                None if configured_private else llm_client.make_async_client(
-                    api_key=settings.openai_api_key, base_url=settings.openai_base_url,
-                )
-            )
+            # Larry 2026-11-23: unrouted agents have no model. The routed
+            # path above (JARVIS_MODEL_ROUTING_ENABLED=1) is the only one.
+            self._client = None
         self._system_prompt = SUBAGENT_PROMPTS[name].format(
             timezone=settings.jarvis_timezone
         )
@@ -720,7 +720,12 @@ class SubAgent:
                 )
             registry_data = load_model_registry()
             profile = resolve_profile(registry_data, profile_name)
-            key_env = profile.get("api_key_env", "OPENAI_API_KEY")
+            key_env = profile.get("api_key_env", "")
+            if not key_env or not profile.get("base_url"):
+                raise UnknownModelProfileError(
+                    f"model profile {profile_name!r} runs only on its subscription "
+                    "route; set JARVIS_MODEL_ROUTING_ENABLED=1"
+                )
             if not os.environ.get(key_env):
                 raise UnknownModelProfileError(
                     f"model profile {profile_name!r} needs {key_env}, which is unset"
@@ -818,6 +823,12 @@ class SubAgent:
                 return f"REFUSED: {refused_reason}"
             run_client, run_model = override_client, override_model
             run_resolved_route = override_route
+
+        if run_client is None and run_resolved_route is None:
+            # Larry 2026-11-23: no API fallback exists any more.
+            logger.warning("subagent_no_subscription_route agent=%s", self.name)
+            return ("REFUSED: this agent has no model route. Mortimer runs models only on "
+                    "the Claude/ChatGPT subscriptions; set JARVIS_MODEL_ROUTING_ENABLED=1.")
 
         routing_enabled = bool(
             getattr(self._settings, "jarvis_model_routing_enabled", False)

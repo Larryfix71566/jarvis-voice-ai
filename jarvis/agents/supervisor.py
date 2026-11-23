@@ -7,9 +7,8 @@ Two modes (constructor param ``mode``):
   delegate_task, backed by the sub-agent roster from config/agents.yaml.
 
 Locked behavior:
-- temperature omitted by default (provider default applies; D-003 —
-  kimi-k2.x rejects any temperature other than 1). Pass explicitly to
-  override on providers that support it.
+- temperature omitted by default (provider default applies; D-003). Pass
+  explicitly to override on providers that support it.
 - Hard cap of 6 tool iterations; on cap the reply is STUCK_MESSAGE.
 - History persisted to the conversations table (user/assistant rows),
   trimmed to the last 40 messages; orphaned leading tool messages after a
@@ -27,7 +26,6 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Literal, Sequence
 
-from openai import AsyncOpenAI
 
 from jarvis.agents.base import SubAgent, load_sub_agents
 from jarvis.agents.base import _assistant_message as _base_assistant_message
@@ -116,10 +114,14 @@ class Orchestrator:
         if client_factory is not None:
             self._client = client_factory(settings)
         else:
-            from jarvis.provider_access import require_api_access
-            require_api_access(getattr(settings, "jarvis_llm_access_mode", None))
-            self._client = AsyncOpenAI(
-                api_key=settings.openai_api_key, base_url=settings.openai_base_url
+            # Larry 2026-11-23: this text-mode Orchestrator used the paid
+            # OpenAI-compatible API (OPENAI_BASE_URL), which is retired. The
+            # voice path runs on the Claude subscription; the text CLI has no
+            # subscription client yet, so it refuses rather than buy tokens.
+            from jarvis.provider_access import ProviderAccessError
+            raise ProviderAccessError(
+                "the text Orchestrator has no subscription model client yet; the paid "
+                "Anthropic/OpenAI APIs are retired. No paid API call was made."
             )
         if mode == "delegating":
             if sub_agents is None:

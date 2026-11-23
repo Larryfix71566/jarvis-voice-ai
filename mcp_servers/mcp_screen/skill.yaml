@@ -18,7 +18,7 @@ optional_env: [JARVIS_SCREEN_ENABLED, JARVIS_VISION_PROFILE, JARVIS_SCREEN_RETEN
 # The joined model registry reads credentials from config/model_endpoints.yaml;
 # JARVIS_UPGRADE_MODELS remains its registry-path override for compatibility.
 # (api_key_env:), chosen at call time by JARVIS_VISION_PROFILE — see
-# mcp_screen/logic.py:283. A static list would go stale the day a profile
+# mcp_screen/logic.py's _resolve_vision_profile. A static list would go stale the day a profile
 # is added, so the registry resolves it from that file at spawn time.
 requires_env_dynamic:
   - source: upgrade_models_api_keys

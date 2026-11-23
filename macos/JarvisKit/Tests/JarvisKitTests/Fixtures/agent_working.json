@@ -9,7 +9,7 @@
     "state": "working",
     "run_id": "r-1",
     "task": "compare hosts",
-    "model": "moonshotai/kimi-k2.5-instruct",
+    "model": "claude-sonnet-5",
     "model_fallback": false,
     "model_unusable": false,
     "model_unusable_detail": ""

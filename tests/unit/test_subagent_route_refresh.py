@@ -29,7 +29,7 @@ def setup_routes(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "preferences.db"))
     monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "1")
     monkeypatch.setenv("JARVIS_MODEL_PREFERENCES_ENABLED", "1")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "synthetic-key-before")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic-key-before")
     token = current_sensitive_turn.set(SensitiveTurn())
     created = []
     gate_by_model = {}
@@ -54,14 +54,14 @@ def setup_routes(tmp_path, monkeypatch):
         current_sensitive_turn.reset(token)
 
 
-def save(profile):
-    draft = stage_preference("developer", profile, "direct_api")
+def save(profile, route="subscription"):
+    draft = stage_preference("developer", profile, route)
     confirm_preference(draft["draft_id"])
 
 
-def agent(settings):
+def agent(settings, profile="claude-opus"):
     return SubAgent("developer", "Developer", "fixture", [], settings,
-                    SimpleNamespace(), model_profile="claude-opus",
+                    SimpleNamespace(), model_profile=profile,
                     on_profile_fallback="refuse")
 
 
@@ -108,12 +108,20 @@ async def test_concurrent_runs_keep_their_own_snapshot(setup_routes):
     assert subject._model == "claude-opus-5"  # no per-run instance mutation
 
 
+def save_api(profile="or-grok-4.3"):
+    # 2026-11-23: the Claude profiles have no API route any more, so the
+    # API-credential behaviours are exercised on the OpenRouter profile.
+    save(profile, "direct_api")
+
+
 async def test_next_api_run_reads_rotated_credential(setup_routes, monkeypatch):
     settings, created, _ = setup_routes
+    save_api()
     subject = agent(settings)
     await run(subject)
     before = created[-1]
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "synthetic-key-after")
+    assert before.key == "synthetic-key-before"
+    monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic-key-after")
     await run(subject)
     assert created[-1] is not before
     assert created[-1].key == "synthetic-key-after"
@@ -121,20 +129,22 @@ async def test_next_api_run_reads_rotated_credential(setup_routes, monkeypatch):
 
 async def test_repaired_startup_selection_can_run_without_fallback(setup_routes, monkeypatch):
     settings, created, _ = setup_routes
-    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    monkeypatch.delenv("OPENROUTER_API_KEY")
+    save_api()
     subject = agent(settings)
     assert (await run(subject)).startswith("REFUSED:")
     assert created == []
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "synthetic-repaired-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic-repaired-key")
     save("claude-sonnet-5")
     assert await run(subject) == "claude-sonnet-5"
 
 
 async def test_unavailable_saved_choice_does_not_use_old_client(setup_routes, monkeypatch):
     settings, created, _ = setup_routes
+    save_api()
     subject = agent(settings)
     await run(subject)
-    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    monkeypatch.delenv("OPENROUTER_API_KEY")
     assert (await run(subject)).startswith("REFUSED:")
     assert len([client for client in created if client.calls]) == 1
 
@@ -182,7 +192,10 @@ def test_model_disclosure_reads_current_choice_without_client(setup_routes):
     subject = agent(settings)
     save("claude-sonnet-5")
     assert subject.model == "claude-sonnet-5"
-    assert subject.api_key_env == "ANTHROPIC_API_KEY"
+    assert subject.api_key_env == ""  # subscription route: no API key
+    save_api()
+    assert subject.model == "x-ai/grok-4.3"
+    assert subject.api_key_env == "OPENROUTER_API_KEY"
     assert subject.refuses == ""
     assert subject.model_is_fallback is False
     assert created == []

@@ -27,10 +27,10 @@ git -c user.name='Mortimer Sandbox' -c user.email=sandbox@example.invalid commit
 # for deterministic tests; they cannot authenticate to any provider.
 cat > "$ROOT/development.env" <<'ENV'
 export PATH=/opt/homebrew/opt/node@22/bin:/opt/homebrew/opt/python@3.12/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
-export OPENAI_API_KEY=sandbox-placeholder
 export DEEPGRAM_API_KEY=sandbox-placeholder
 export ELEVENLABS_API_KEY=sandbox-placeholder
-export ANTHROPIC_API_KEY=sandbox-placeholder
+export JARVIS_MODEL_ROUTING_ENABLED=1
+export JARVIS_SUBSCRIPTION_TEXT_ENABLED=1
 export JARVIS_VAULT_ENABLED=false
 export JARVIS_DB_PATH=/Users/admin/mortimer/state/jarvis.db
 export JARVIS_COSTS_DB=/Users/admin/mortimer/state/costs.db

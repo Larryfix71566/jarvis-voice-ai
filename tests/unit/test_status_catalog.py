@@ -21,13 +21,13 @@ def _ref(id, adapter, base_url=None, credential_env=None, profiles=(), kind="llm
                        credential_env=credential_env, sources=(), profiles=tuple(profiles))
 
 
-ANTHROPIC = _ref("anthropic", "anthropic_models", "https://api.anthropic.com/v1/",
-                 "ANTHROPIC_API_KEY", ("claude-opus",))
+OTHER2 = _ref("other2", "openai_models", "https://other2.example.com/v1/",
+              "OTHER2_API_KEY", ("o2",))
 OPENROUTER = _ref("openrouter", "openai_models", "https://openrouter.ai/api/v1",
                   "OPENROUTER_API_KEY", ("or-a",))
-MOONSHOT = _ref("moonshot", "openai_models", "https://api.moonshot.ai/v1", "MOONSHOT_API_KEY")
-ENV = {"ANTHROPIC_API_KEY": KEY, "OPENROUTER_API_KEY": KEY, "MOONSHOT_API_KEY": KEY,
-       "OPENAI_API_KEY": KEY, "SAYGM_API_KEY": KEY}
+OTHER = _ref("other", "openai_models", "https://other.example.com/v1", "OTHER_API_KEY")
+ENV = {"OTHER2_API_KEY": KEY, "OPENROUTER_API_KEY": KEY, "OTHER_API_KEY": KEY,
+       "SAYGM_API_KEY": KEY}
 
 # Trimmed real OpenRouter item shape (GET /api/v1/models, captured 2026-09-23):
 # top-level data, total_count, links; items carry id, name, created (epoch s).
@@ -73,43 +73,6 @@ def _clean_cache():
     C.clear_cache_for_tests()
 
 
-def test_anthropic_uses_x_api_key_not_bearer():
-    http = FakeHTTP(default=(200, {"data": [{"id": "claude-opus-5", "display_name": "Claude Opus 5",
-                                             "created_at": "2026-08-01T00:00:00Z"}],
-                                   "has_more": False}))
-    res = C.fetch_catalog(ANTHROPIC, http=http, env=ENV)
-    assert res.ok and res.error_category is None
-    assert len(http.calls) == 1
-    url, headers = http.calls[0]
-    assert url == "https://api.anthropic.com/v1/models?limit=1000"
-    assert headers["x-api-key"] == KEY
-    assert headers["anthropic-version"] == "2023-06-01"
-    assert "Authorization" not in headers
-    assert not any("bearer" in str(v).lower() for v in headers.values())
-    assert res.models == ({"id": "claude-opus-5", "display_name": "Claude Opus 5",
-                           "created": "2026-08-01T00:00:00Z"},)
-    assert res.source == "anthropic:/v1/models"
-
-
-def test_anthropic_pagination():
-    base = "https://api.anthropic.com/v1/models?limit=1000"
-    http = FakeHTTP({
-        base: (200, {"data": [{"id": "a"}], "has_more": True, "last_id": "a"}),
-        base + "&after_id=a": (200, {"data": [{"id": "b"}], "has_more": True, "last_id": "b"}),
-        base + "&after_id=b": (200, {"data": [{"id": "c"}], "has_more": False, "last_id": "c"}),
-    })
-    res = C.fetch_catalog(ANTHROPIC, http=http, env=ENV)
-    assert [m["id"] for m in res.models] == ["a", "b", "c"]
-    assert len(http.calls) == 3
-
-
-def test_anthropic_pagination_is_capped_at_ten_pages():
-    http = FakeHTTP(default=(200, {"data": [{"id": "x"}], "has_more": True, "last_id": "x"}))
-    res = C.fetch_catalog(ANTHROPIC, http=http, env=ENV)
-    assert res.ok
-    assert len(http.calls) == C.MAX_PAGES == 10
-
-
 def test_openai_compatible_parse():
     http = FakeHTTP({"https://openrouter.ai/api/v1/models": (200, OPENROUTER_PAGE)})
     res = C.fetch_catalog(OPENROUTER, http=http, env=ENV)
@@ -124,7 +87,7 @@ def test_openai_compatible_parse():
     # A plain OpenAI-shaped item has no name: display_name is None.
     http2 = FakeHTTP(default=(200, {"object": "list", "data": [{"id": "kimi-k3", "object": "model",
                                                                "created": 1760000000}]}))
-    res2 = C.fetch_catalog(MOONSHOT, http=http2, env=ENV)
+    res2 = C.fetch_catalog(OTHER, http=http2, env=ENV)
     assert res2.models == ({"id": "kimi-k3", "display_name": None,
                             "created": "2025-10-09T08:53:20+00:00"},)
 
@@ -180,13 +143,13 @@ def test_timeout_and_non_json_are_unreachable():
     res = C.fetch_catalog(OPENROUTER, http=FakeHTTP(default=TimeoutError("timed out")), env=ENV)
     assert res.error_category == "unreachable"
     assert "TimeoutError" in res.error
-    res2 = C.fetch_catalog(MOONSHOT, http=FakeHTTP(default=(200, b"<html>")), env=ENV)
+    res2 = C.fetch_catalog(OTHER, http=FakeHTTP(default=(200, b"<html>")), env=ENV)
     assert res2.error_category == "unreachable"
 
 
 def test_no_credential_makes_no_request():
     http = FakeHTTP()
-    for ref in (ANTHROPIC, OPENROUTER, MOONSHOT):
+    for ref in (OTHER2, OPENROUTER, OTHER):
         res = C.fetch_catalog(ref, http=http, env={})
         assert res.error_category == "no_credential"
         assert res.error == f"{ref.credential_env} is not set"
@@ -242,12 +205,12 @@ def test_one_provider_failure_does_not_stop_others():
         raise ConnectionError("refused")
 
     http = FakeHTTP({
-        "https://api.anthropic.com/v1/models?limit=1000": (200, {"data": [{"id": "claude-opus-5"}]}),
+        "https://other2.example.com/v1/models": (200, {"data": [{"id": "m1"}]}),
         "https://openrouter.ai/api/v1/models": boom,
-        "https://api.moonshot.ai/v1/models": (401, b""),
+        "https://other.example.com/v1/models": (401, b""),
     })
-    out = C.fetch_all([ANTHROPIC, OPENROUTER, MOONSHOT], http=http, env=ENV)
-    assert [r.provider for r in out] == ["anthropic", "openrouter", "moonshot"]
+    out = C.fetch_all([OTHER2, OPENROUTER, OTHER], http=http, env=ENV)
+    assert [r.provider for r in out] == ["other2", "openrouter", "other"]
     assert [r.ok for r in out] == [True, False, False]
     assert [r.error_category for r in out] == [None, "unreachable", "rejected"]
 
@@ -262,7 +225,7 @@ def test_fetch_all_total_timeout_reports_timed_out():
     http = FakeHTTP({"https://openrouter.ai/api/v1/models": slow},
                     default=(200, {"data": [{"id": "ok"}]}))
     try:
-        out = C.fetch_all([ANTHROPIC, OPENROUTER], http=http, env=ENV, total_timeout=0.3)
+        out = C.fetch_all([OTHER2, OPENROUTER], http=http, env=ENV, total_timeout=0.3)
     finally:
         release.set()
     assert out[0].ok
@@ -270,12 +233,12 @@ def test_fetch_all_total_timeout_reports_timed_out():
 
 
 REGISTRY = {
-    "default": "claude-opus",
+    "default": "or-gemini",
     "profiles": {
-        "claude-opus": {"provider": "anthropic", "model": "claude-opus-5",
-                        "base_url": "https://api.anthropic.com/v1/", "api_key_env": "ANTHROPIC_API_KEY"},
-        "claude-fable": {"provider": "anthropic", "model": "claude-fable-5-1",
-                         "base_url": "https://api.anthropic.com/v1/", "api_key_env": "ANTHROPIC_API_KEY"},
+        "or-gemini": {"provider": "openrouter", "model": "google/gemini-3.7-flash",
+                      "base_url": "https://openrouter.ai/api/v1", "api_key_env": "OPENROUTER_API_KEY"},
+        "or-grok-old": {"provider": "openrouter", "model": "x-ai/grok-4",
+                        "base_url": "https://openrouter.ai/api/v1", "api_key_env": "OPENROUTER_API_KEY"},
         "or-grok": {"provider": "openrouter", "model": "x-ai/grok-5",
                     "base_url": "https://openrouter.ai/api/v1", "api_key_env": "OPENROUTER_API_KEY"},
     },
@@ -290,29 +253,21 @@ def _ok(provider, models):
 
 def test_compare_to_registry():
     results = [
-        _ok("anthropic", [{"id": "claude-opus-5", "display_name": None, "created": "2026-08-01"},
-                          {"id": "claude-haiku-4-5", "display_name": None, "created": "2025-10-01"},
-                          {"id": "claude-new-6", "display_name": None, "created": "2026-09-20"}]),
         _ok("openrouter", [{"id": "x-ai/grok-5", "display_name": "G", "created": None},
+                           {"id": "google/gemini-3.7-flash", "display_name": None, "created": None},
                            {"id": "b/old", "display_name": None, "created": None},
                            {"id": "a/old", "display_name": None, "created": None},
                            {"id": "z/new", "display_name": None, "created": "2026-09-01"}]),
-        _ok("voice", [{"id": "claude-haiku-4-5", "display_name": None, "created": None}]),
-        C.CatalogResult("moonshot", False, "t", "moonshot:/v1/models", (), "rejected", "HTTP 401"),
+        C.CatalogResult("other", False, "t", "other:/v1/models", (), "rejected", "HTTP 401"),
     ]
-    out = C.compare_to_registry(results, REGISTRY, env={"OPENAI_MODEL": "claude-haiku-4-5"})
-    assert out["anthropic"] == {
-        "configured_available": ["claude-opus"],
-        "configured_missing": ["claude-fable"],
-        "offered_not_configured_count": 2,
-        "offered_not_configured_sample": ["claude-new-6", "claude-haiku-4-5"],
+    out = C.compare_to_registry(results, REGISTRY, env={})
+    assert out["openrouter"] == {
+        "configured_available": ["or-gemini", "or-grok"],
+        "configured_missing": ["or-grok-old"],
+        "offered_not_configured_count": 3,
+        "offered_not_configured_sample": ["z/new", "a/old", "b/old"],
     }
-    assert out["openrouter"]["configured_available"] == ["or-grok"]
-    assert out["openrouter"]["offered_not_configured_sample"] == ["z/new", "a/old", "b/old"]
-    assert out["voice"] == {"configured_available": ["voice:claude-haiku-4-5"],
-                            "configured_missing": [], "offered_not_configured_count": 0,
-                            "offered_not_configured_sample": []}
-    assert "moonshot" not in out
+    assert "other" not in out
 
 
 def test_compare_sample_is_capped():
@@ -324,10 +279,10 @@ def test_compare_sample_is_capped():
 
 def test_cache_and_force():
     http = FakeHTTP(default=(200, {"data": [{"id": "m"}]}))
-    first = C.fetch_catalog(MOONSHOT, http=http, env=ENV)
-    again = C.fetch_catalog(MOONSHOT, http=http, env=ENV)
+    first = C.fetch_catalog(OTHER, http=http, env=ENV)
+    again = C.fetch_catalog(OTHER, http=http, env=ENV)
     assert again is first and len(http.calls) == 1
-    C.fetch_catalog(MOONSHOT, http=http, env=ENV, force=True)
+    C.fetch_catalog(OTHER, http=http, env=ENV, force=True)
     assert len(http.calls) == 2
     # A failure is not cached: the next request tries again.
     bad = FakeHTTP(default=(500, b""))
@@ -340,9 +295,9 @@ def test_cache_expires(monkeypatch):
     http = FakeHTTP(default=(200, {"data": [{"id": "m"}]}))
     clock = [1000.0]
     monkeypatch.setattr(C.time, "monotonic", lambda: clock[0])
-    C.fetch_catalog(MOONSHOT, http=http, env=ENV)
+    C.fetch_catalog(OTHER, http=http, env=ENV)
     clock[0] += C.CACHE_TTL_S + 1
-    C.fetch_catalog(MOONSHOT, http=http, env=ENV)
+    C.fetch_catalog(OTHER, http=http, env=ENV)
     assert len(http.calls) == 2
 
 
@@ -350,14 +305,14 @@ def test_error_text_never_contains_key():
     def echo_key(url):
         raise OSError(f"proxy said: Authorization: Bearer {KEY} x-api-key={KEY} {KEY}")
 
-    for ref in (ANTHROPIC, OPENROUTER):
+    for ref in (OTHER2, OPENROUTER):
         res = C.fetch_catalog(ref, http=FakeHTTP(default=echo_key), env=ENV)
         blob = json.dumps(asdict(res))
         assert KEY not in blob
         assert "FIXTURE-SECRET" not in blob
         assert len(res.error) <= 200
     for code in (401, 402, 403, 500):
-        res = C.fetch_catalog(MOONSHOT, http=FakeHTTP(default=(code, KEY.encode())), env=ENV)
+        res = C.fetch_catalog(OTHER, http=FakeHTTP(default=(code, KEY.encode())), env=ENV)
         assert KEY not in json.dumps(asdict(res))
 
 
@@ -377,17 +332,17 @@ def test_every_configured_provider_gets_an_adapter_or_an_explicit_result(monkeyp
     saygm_calls = []
     monkeypatch.setattr(saygm, "fetch_catalog",
                         lambda **kw: saygm_calls.append(kw) or [])
-    fetching = {"anthropic_models", "openai_models", "saygm_catalog"}
+    fetching = {"openai_models", "saygm_catalog"}
     assert set(ADAPTERS) >= fetching
     ids = {r.id for r in refs}
     # The providers Larry named are all discovered from configuration.
-    assert {"anthropic", "openrouter", "moonshot", "saygm", "voice",
-            "codex-subscription", "claude-subscription"} <= ids
+    assert {"openrouter", "saygm", "codex-subscription", "claude-subscription"} <= ids
+    assert not ids & {"anthropic", "moonshot", "voice"}
     for ref in refs:
         http = FakeHTTP(default=(200, {"data": [{"id": "m"}]}))
         res = C.fetch_catalog(ref, http=http, env=env, force=True)
         assert res.provider == ref.id
-        if ref.adapter in ("anthropic_models", "openai_models"):
+        if ref.adapter == "openai_models":
             assert res.ok, ref
             assert http.calls and http.calls[0][0].startswith(ref.base_url.rstrip("/")), ref
         elif ref.adapter == "saygm_catalog":
@@ -410,8 +365,8 @@ def test_catalog_status_payload_and_unknown_provider():
     access = {"routes": {"local": {}}}
     out = C.catalog_status("all", registry=REGISTRY, access=access, env=ENV, http=http)
     assert out["ok"] and out["source"] == "catalog"
-    assert [r["provider"] for r in out["results"]] == ["anthropic", "local", "openrouter", "voice"]
-    assert out["comparison"]["anthropic"]["configured_available"] == ["claude-opus"]
+    assert [r["provider"] for r in out["results"]] == ["local", "openrouter"]
+    assert out["comparison"]["openrouter"]["configured_available"] == []
     one = C.catalog_status("openrouter", registry=REGISTRY, access=access, env=ENV, http=http)
     assert [r["provider"] for r in one["results"]] == ["openrouter"]
     assert C.catalog_status("nope", registry=REGISTRY, access=access, env=ENV, http=http) == {
@@ -437,4 +392,4 @@ def test_published_prices_ride_in_facts_not_in_the_model_entries():
                                       "error_category", "error"}
     # Nothing published, nothing carried.
     http2 = FakeHTTP(default=(200, {"data": [{"id": "kimi-k3", "created": 1760000000}]}))
-    assert C.fetch_catalog(MOONSHOT, http=http2, env=ENV).facts == {}
+    assert C.fetch_catalog(OTHER, http=http2, env=ENV).facts == {}

@@ -27,16 +27,17 @@ through the checked resolver; only an original explicit ``profile`` argument
 overrides its profile choice. Selection remains fixed for that run.
 Legacy selection order: an explicit per-session ``profile`` argument >
 ``JARVIS_UPGRADE_PROFILE`` env > the registry's ``default`` key, which
-``supervisor:`` pins in the endpoints file. Profiles are OpenAI-compatible
-endpoints; the API key comes from the endpoint's ``api_key_env`` — keys
-live in the environment, never in config. A profile
-with ``temperature: null`` OMITS the parameter entirely (DEVIATIONS.md D-003:
-kimi-k2.x rejects any value other than 1).
+``supervisor:`` pins in the endpoints file. Subscription profiles (no
+``api_key_env``) run only on the routed path (JARVIS_MODEL_ROUTING_ENABLED=1);
+the unrouted legacy path builds an OpenAI-compatible client only for a profile
+that names an ``api_key_env`` (OpenRouter / SAYGM) — keys live in the
+environment, never in config. A profile with ``temperature: null`` OMITS the
+parameter entirely (DEVIATIONS.md D-003).
 
 If no registry file exists, the agent falls back to the legacy single-slot
 config in ``config/upgrade_agent.yaml`` (provider/model/base_url/temperature,
-with JARVIS_UPGRADE_MODEL / JARVIS_UPGRADE_BASE_URL env overrides) —
-byte-identical behavior to before the registry existed.
+with JARVIS_UPGRADE_MODEL / JARVIS_UPGRADE_BASE_URL env overrides). Larry
+2026-11-23: that slot has no API endpoint any more, so it fails closed.
 
 The client factory is injectable for tests.
 """
@@ -122,13 +123,9 @@ PROFILE_ENV = "JARVIS_UPGRADE_PROFILE"
 # 120s matches COUNCIL_MEMBER_TIMEOUT_S deliberately: the council already
 # solved this exact problem (bound the call, drop the member, keep going)
 # and one number is better than two that drift. Calibration note from the
-# same day: a measured kimi-k3 planner call took 112.2s for a two-sentence
-# answer (always-on thinking, 1,369 completion tokens), so kimi-k3 sits
-# just inside this bound and WILL trip it under any additional load. That
-# is the correct outcome, not a mis-set threshold — a planner that needs
-# ~2 minutes per round cannot finish a 25-round session inside
-# max_session_minutes anyway, so failing over is strictly better than
-# spinning.
+# same day: a planner that needs ~2 minutes per round cannot finish a
+# 25-round session inside max_session_minutes anyway, so failing over is
+# strictly better than spinning.
 PLANNER_CALL_TIMEOUT_S = 120.0
 
 # At most two failovers per session: three distinct models failing
@@ -288,11 +285,11 @@ def load_agent_config(path: str | Path | None = None, section: str | None = None
     if not isinstance(bounds, dict):
         bounds = {}
     return {
-        "provider": data.get("provider", "openai"),
+        "provider": data.get("provider", ""),
         "model": os.environ.get("JARVIS_UPGRADE_MODEL")
-                 or data.get("model", "gpt-4.1-mini"),
+                 or data.get("model", ""),
         "base_url": os.environ.get("JARVIS_UPGRADE_BASE_URL")
-                    or data.get("base_url", "https://api.openai.com/v1"),
+                    or data.get("base_url", ""),
         "temperature": float(data.get("temperature", 0.2)),
         "max_iterations": int(bounds.get("max_iterations", data.get("max_iterations", 10))),
         "max_session_minutes": int(
@@ -320,7 +317,6 @@ class ModelRegistryIdentityError(ModelRegistryError, ModelRouteError):
 
 
 _CANONICAL_IDENTITY = re.compile(r"[a-z0-9][a-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9_./:-]{0,255}\Z")
-_PROVIDER_NAMESPACE = {"moonshot": "moonshotai"}
 
 
 def _wire_model_identity(profile: dict[str, Any]) -> str:
@@ -333,15 +329,14 @@ def _wire_model_identity(profile: dict[str, Any]) -> str:
             host = urlsplit(base_url).hostname
         except ValueError:
             host = None
-        if host not in {"api.openai.com", "api.anthropic.com", "api.moonshot.ai",
-                        "api.moonshot.cn", "openrouter.ai", "api.saygm.com"}:
+        if host not in {"openrouter.ai", "api.saygm.com"}:
             raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
         provider = provider_from_base_url(base_url)
     model = profile.get("model")
     if (not isinstance(provider, str) or provider != provider.strip()
             or not isinstance(model, str) or model != model.strip()):
         raise ModelRegistryIdentityError("model registry has an unavailable canonical identity")
-    namespace = _PROVIDER_NAMESPACE.get(provider, provider)
+    namespace = provider
     if namespace in {"openrouter", "saygm"}:
         # A gateway is a route, not the vendor whose model casts the vote.
         # Its qualified wire model is sufficient; a bare gateway model is
@@ -858,7 +853,7 @@ class UpgradeAgent:
         except (ModelRouteError, ValueError, OSError):
             self._configured_policy_floor = None
         self._system_prompt = system_prompt or SYSTEM_PROMPT
-        # Cooperative cancel (Larry 2026-08-30/31: a kimi-k3 planner sat
+        # Cooperative cancel (Larry 2026-08-30/31: a planner sat
         # "still running" for the caption goal and nothing could stop it —
         # selfedit_revert refuses while busy, and there was no cancel at
         # all). POST /api/selfedit/cancel sets this; the edit loop checks
@@ -912,7 +907,7 @@ class UpgradeAgent:
             # entry with no `effort:` field.
             if "effort" in prof:
                 self.cfg["effort"] = prof["effort"]
-            self._api_key_env = prof.get("api_key_env", "OPENAI_API_KEY")
+            self._api_key_env = prof.get("api_key_env", "")
             self._resolved_route = None
             if not self._client_factory_injected and os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":
                 try:
@@ -926,7 +921,7 @@ class UpgradeAgent:
                 except ModelRouteError as exc:
                     self._resolved_route = exc
         else:
-            self._api_key_env = "OPENAI_API_KEY"
+            self._api_key_env = ""
             self._resolved_route = None
 
         # Uniform attribute view for status lines and tests.
@@ -971,12 +966,12 @@ class UpgradeAgent:
               and not isinstance(self._resolved_route, ModelRouteError)
               and not route_is_subscription
               and (not self._api_key_env or not os.environ.get(self._api_key_env))):
-            self._missing_access_reason = f"{self._api_key_env or 'route credential'} is not set"
+            self._missing_access_reason = self._no_credential_reason()
         elif isinstance(self._resolved_route, ModelRouteError):
             self._missing_access_reason = str(self._resolved_route)
         elif (self._resolved_route is None
               and (not self._api_key_env or not os.environ.get(self._api_key_env))):
-            self._missing_access_reason = f"{self._api_key_env or 'route credential'} is not set"
+            self._missing_access_reason = self._no_credential_reason()
         self._key_missing = self._missing_access_reason is not None
         # Failover state (Larry 2026-08-22: "spin on a dead model is not a
         # great look"). Profiles that have already failed UNREACHABLY this
@@ -1069,7 +1064,7 @@ class UpgradeAgent:
         self.cfg.update(self._legacy_base_cfg)
         registry = load_model_registry(self._registry_path)
         self.profile_name = None
-        self._api_key_env = "OPENAI_API_KEY"
+        self._api_key_env = ""
         if registry.get("profiles"):
             requested = self._explicit_profile
             if requested is None and self._workload == "app_builder":
@@ -1080,11 +1075,11 @@ class UpgradeAgent:
                 if key in profile:
                     self.cfg[key] = profile[key]
             self.cfg["base_url"] = profile.get("base_url") or self.cfg["base_url"]
-            self._api_key_env = profile.get("api_key_env", "OPENAI_API_KEY")
+            self._api_key_env = profile.get("api_key_env", "")
         self._resolved_route = None
         self.model, self.base_url = self.cfg["model"], self.cfg["base_url"]
         self._key_missing = not self._api_key_env or not os.environ.get(self._api_key_env)
-        self._missing_access_reason = f"{self._api_key_env or 'route credential'} is not set" if self._key_missing else None
+        self._missing_access_reason = self._no_credential_reason() if self._key_missing else None
         self._client = None if self._key_missing else self._build_client(
             self._api_key_env, self.cfg["base_url"], self.cfg.get("provider"))
 
@@ -1191,25 +1186,20 @@ class UpgradeAgent:
                       provider: str | None = None) -> Any:
         """Construct the planner client with a BOUNDED call timeout.
 
-        Before 2026-08-22 this passed no `timeout`, so the openai SDK's
-        default applied: a 600-second read timeout. `max_session_minutes`
-        could not save it — that bound is checked BETWEEN iterations, and a
-        hung call blocks inside the HTTP read where the loop never regains
-        control. One unreachable kimi-k3 call therefore spun for up to ten
-        minutes. `max_retries=0` is deliberate and load-bearing: the SDK's
-        default of 2 would silently turn a 120s bound into a 360s one, and
-        retrying a model that just proved unreachable is strictly worse
-        than failing over to one that answers.
+        The SDK default is a 600-second read timeout that `max_session_minutes`
+        cannot interrupt (it is checked BETWEEN iterations), so the call is
+        bounded here. `max_retries=0` is deliberate: the SDK's default of 2
+        would turn a 120s bound into 360s, and retrying a model that just
+        proved unreachable is worse than failing over.
 
-        `provider` (MORTIMER_OPTIMIZATION_PLAN.md Phase 1, Rev 3.2, landing
-        step (ii), 2026-09-02): optional so every existing caller and test
-        that only ever passed two positional args keeps working — falls
-        back to base_url-detection inside llm_client.make_sync_client
-        itself when omitted. Routes to jarvis/anthropic_shim.py (prompt
-        caching) instead of the plain OpenAI-compat client when the
-        resolved provider is "anthropic" and JARVIS_ANTHROPIC_NATIVE is
-        not "0".
+        Larry 2026-11-23: only OpenRouter / SAYGM profiles reach here; a
+        profile without a credential is a subscription profile and fails
+        closed, and retired vendors are refused by require_not_retired.
         """
+        from jarvis.provider_access import require_not_retired
+        if not api_key_env or not base_url:
+            raise ModelRouteError(self._no_credential_reason_for(api_key_env))
+        require_not_retired(provider=provider, base_url=base_url, model=self.cfg.get("model"))
         return llm_client.make_sync_client(
             api_key=os.environ[api_key_env],
             base_url=base_url,
@@ -1217,6 +1207,16 @@ class UpgradeAgent:
             timeout=PLANNER_CALL_TIMEOUT_S,
             max_retries=0,
         )
+
+    @staticmethod
+    def _no_credential_reason_for(key_env: str) -> str:
+        if key_env:
+            return f"{key_env} is not set"
+        return ("this profile has no API credential (it is a subscription profile); "
+                "set JARVIS_MODEL_ROUTING_ENABLED=1 to run it on the subscription route")
+
+    def _no_credential_reason(self) -> str:
+        return self._no_credential_reason_for(self._api_key_env)
 
     def model_label(self) -> str:
         """Human-readable 'profile (model)' for status lines and TTS summaries."""
@@ -1375,21 +1375,15 @@ class UpgradeAgent:
                 self.cfg["model"] = nxt.get("model", self.cfg["model"])
                 self.cfg["base_url"] = nxt.get("base_url") or self.cfg["base_url"]
                 self.cfg["temperature"] = nxt.get("temperature")
-                # Phase 1 Rev 3.2 fix (2026-09-02): this line's four
-                # siblings above already refresh from `nxt` on every
-                # failover; `provider` was the one field nothing consumed
-                # until now, so it went stale silently. A native-vs-compat
-                # client-construction decision now reads it, and a
-                # failover FROM an Anthropic profile TO a differently-
-                # provided one (or vice versa) must not build the wrong
-                # kind of client on the new profile's base_url.
+                # Refresh provider with the other fields so a stale value never
+                # selects the wrong client.
                 self.cfg["provider"] = nxt.get("provider", self.cfg["provider"])
                 # Phase 1b -- mirrors the provider refresh immediately
                 # above: a failover profile's own effort setting (or its
                 # absence) must replace the old profile's, not linger.
                 if "effort" in nxt:
                     self.cfg["effort"] = nxt["effort"]
-                self._api_key_env = nxt.get("api_key_env", "OPENAI_API_KEY")
+                self._api_key_env = nxt.get("api_key_env", "")
                 self.model = self.cfg["model"]
                 self.base_url = self.cfg["base_url"]
                 if os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1":

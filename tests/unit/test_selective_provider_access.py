@@ -21,7 +21,7 @@ URL = 'https://openrouter.ai/api/v1'
 
 
 def route():
-    return ResolvedModelRoute('developer', 'synthetic', 'openai/synthetic', 'openrouter',
+    return ResolvedModelRoute('developer', 'synthetic', 'x-ai/synthetic', 'openrouter',
         URL, AccessRoute('direct_api', 'openai_compatible', 'provider_api',
         'OPENROUTER_API_KEY', 'approved_external', base_url=URL),
         'OPENROUTER_API_KEY', 'synthetic/fixture')
@@ -107,7 +107,7 @@ async def test_real_sdk_mock_transport_allows_only_validated_public_openrouter(m
     async def respond(request):
         seen.append(request.url.host)
         return httpx.Response(200,json={'id':'synthetic','object':'chat.completion',
-            'created':0,'model':'openai/synthetic','choices':[{'index':0,
+            'created':0,'model':'x-ai/synthetic','choices':[{'index':0,
             'message':{'role':'assistant','content':'synthetic result'},'finish_reason':'stop'}]})
     original=openai.AsyncOpenAI
     def make(**kwargs):
@@ -123,7 +123,7 @@ async def test_real_sdk_mock_transport_allows_only_validated_public_openrouter(m
         assert seen==['openrouter.ai']
         with pytest.raises(ProviderAccessError):
             await client.chat.completions.create(model='synthetic',messages=[])
-        client._client.base_url='https://api.openai.com/v1'
+        client.base_url='https://api.openai.com/v1'
         with pytest.raises(ProviderAccessError):
             await execute_chat(req,route(),client_factory=lambda _:client)
         assert seen==['openrouter.ai']
@@ -164,6 +164,20 @@ async def test_local_history_cannot_fallback_from_public_current_turn():
     ctor.assert_not_called()
 
 
+@pytest.mark.parametrize('provider,url', [
+    ('moonshot', 'https://api.moonshot.ai/v1'), ('deepseek', 'https://api.deepseek.com/v1'),
+    ('anthropic', 'https://api.anthropic.com/v1'), ('openai', 'https://api.openai.com/v1'),
+])
+def test_retired_vendor_refused_in_legacy_mode(monkeypatch, provider, url):
+    # Larry 2026-11-23: these are subscriptions or retired; no mode reaches them.
+    monkeypatch.setenv('JARVIS_LLM_ACCESS_MODE','legacy')
+    ctor=Mock(side_effect=AssertionError('retired API constructed'))
+    monkeypatch.setattr(openai,'OpenAI',ctor)
+    with pytest.raises(ProviderAccessError, match='retired'):
+        llm_client.make_sync_client(api_key='synthetic', base_url=url, provider=provider)
+    ctor.assert_not_called()
+
+
 def test_policy_from_settings_cannot_be_relaxed_by_legacy_environment(monkeypatch):
     monkeypatch.setenv('JARVIS_LLM_ACCESS_MODE','legacy')
     with pytest.raises(ProviderAccessError):
@@ -187,7 +201,6 @@ def test_selective_diagnostics_cannot_make_paid_probe(monkeypatch):
 
 
 @pytest.mark.parametrize('provider,url', [
-    ('moonshot', 'https://api.moonshot.ai/v1'),
     ('saygm', 'https://api.saygm.com/v1'),
 ])
 @pytest.mark.parametrize('asynchronous', [False, True])

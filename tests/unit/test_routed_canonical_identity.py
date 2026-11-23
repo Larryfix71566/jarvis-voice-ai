@@ -46,6 +46,7 @@ def split_registry(tmp_path, monkeypatch, request):
     monkeypatch.setenv("JARVIS_UPGRADE_MODELS", str(profile_path))
     monkeypatch.setenv("JARVIS_MODEL_PREFERENCES_ENABLED", "0")
     monkeypatch.setenv("OPENROUTER_API_KEY", "SYNTHETIC_KEY_ONLY")
+    monkeypatch.setenv("JARVIS_MODEL_ROUTE_COUNCIL", "direct_api")
     return profile_path
 
 
@@ -124,7 +125,8 @@ async def test_real_economy_council_profile_still_executes_with_unique_registry(
     monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "1")
     monkeypatch.setenv("JARVIS_MODEL_PREFERENCES_ENABLED", "0")
     monkeypatch.setenv("OPENROUTER_API_KEY", "SYNTHETIC_KEY_ONLY")
-    profile = load_model_registry()["profiles"]["or-gpt-5-mini"]
+    monkeypatch.setenv("JARVIS_MODEL_ROUTE_COUNCIL", "direct_api")
+    profile = load_model_registry()["profiles"]["or-gemini-flash"]
     selected = {"economy": [profile["name"]]}
     assert council_config.resolve_members(1, "proposers", selected=selected) == [profile["name"]]
     observed = []
@@ -138,4 +140,4 @@ async def test_real_economy_council_profile_still_executes_with_unique_registry(
     text, usage = await council._call_profile(profile, "public system", "public fixture", 1,
                                             rung="council", data_policy=DataPolicy("approved_external", "public-fixture"))
     assert text == "public fixture" and usage is None
-    assert observed == ["openai/gpt-5-mini"]
+    assert observed == ["google/gemini-3.7-flash"]

@@ -77,7 +77,7 @@ def test_model_routes_exposes_policy_without_secret_values(client, monkeypatch):
 def test_model_routes_stage_and_confirm(client):
     c, _ = client
     draft = c.post("/api/model-routes/stage", json={
-        "workload": "developer", "profile": "claude-opus", "route": "direct_api",
+        "workload": "developer", "profile": "or-grok-4.6", "route": "direct_api",
     }).json()
     assert draft["ok"] is True
     confirmed = c.post("/api/model-routes/confirm", json={
@@ -87,21 +87,27 @@ def test_model_routes_stage_and_confirm(client):
     assert any(item["workload"] == "developer" for item in c.get("/api/model-routes").json()["preferences"])
 
 
-def test_model_routes_has_profile_specific_direct_api_and_voice_only_haiku(client, monkeypatch):
+def test_model_routes_has_profile_specific_direct_api_and_subscription_voice_profile(client, monkeypatch):
     c, _ = client
     monkeypatch.setenv("ANTHROPIC_API_KEY", "private-api-key-canary")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "private-openrouter-canary")
     body = c.get("/api/model-routes").json()
     assert body["ok"] is True
     assert body["routes"]["direct_api"]["per_profile"] is True
-    voice = next(p for p in body["profiles"] if p["name"] == "claude-haiku-4-5")
-    assert voice["supported_workloads"] == ["voice_supervisor"]
-    assert "claude-haiku-4-5" not in body["choices"]["developer"]
-    direct = body["choices"]["developer"]["claude-opus"]["direct_api"]
-    assert direct["credential_env"] == "ANTHROPIC_API_KEY"
-    assert direct["key_present"] is True
-    assert "images" in direct["capabilities"]
+    # Voice supervisor runs claude-sonnet-5-5 on the subscription route; the
+    # old voice-only Haiku API profile is not advertised.
+    assert body["workloads"]["voice_supervisor"]["profile"] == "claude-sonnet-5-5"
+    assert all(p["name"] != "claude-haiku-4-5" for p in body["profiles"])
+    voice = next(p for p in body["profiles"] if p["name"] == "claude-sonnet-5-5")
+    assert "subscription" in voice["routes"] and "direct_api" not in voice["routes"]
+    assert "direct_api" not in body["choices"]["developer"]["claude-opus"]
     assert "subscription" in next(p for p in body["profiles"] if p["name"] == "claude-opus")["routes"]
+    # Remaining paid gateway profile stays profile-specific direct_api.
+    direct = body["choices"]["developer"]["or-grok-4.6"]["direct_api"]
+    assert direct["credential_env"] == "OPENROUTER_API_KEY"
+    assert direct["key_present"] is True
     assert "private-api-key-canary" not in str(body)
+    assert "private-openrouter-canary" not in str(body)
 
 
 def test_model_routes_is_local_catalog_and_does_not_claim_bot_activation(client, monkeypatch):

@@ -481,7 +481,7 @@ def test_public_live_entry_uses_fresh_exec_and_refuses_unbound_terminal_receipt(
         return SimpleNamespace(returncode=0, stdout=b'{"status":"substrate_passed"}')
     monkeypatch.setattr(pilot.subprocess, 'run', child)
     report = pilot.run_development_pilot(mode='live', source_ref='HEAD', image_id='a' * 64,
-        image_home=tmp_path, profile='claude-opus', route='direct_api', limits=WorkloadLimits(deadline_seconds=60))
+        image_home=tmp_path, profile='or-grok-4.6', route='direct_api', limits=WorkloadLimits(deadline_seconds=60))
     assert len(observed) == 1 and dict(os.environ) == original
     assert report['status'] == 'cleanup_unverified' and report['reason'] == 'pilot_worker_receipt_invalid'
     assert not report['substrate_passed'] and not report['cleanup']['verified']

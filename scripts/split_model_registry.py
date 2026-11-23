@@ -106,9 +106,8 @@ PROFILES_HEADER = """\
 #   3. the `default` below — pinned by `supervisor:` in
 #      config/model_endpoints.yaml; changing it is a human PR there.
 #
-# temperature: set to null to OMIT the parameter entirely. Moonshot's
-# kimi-k2.x family rejects any temperature other than 1 (DEVIATIONS.md
-# D-003), so all Moonshot profiles omit it.
+# temperature: set to null to OMIT the parameter entirely, for a model that
+# rejects any caller-chosen temperature (DEVIATIONS.md D-003).
 #
 # vision: true — MORTIMER_SHELL_FIX_AND_SCREEN_VISION_PLAN.md V2. Marks a
 # profile whose model can read IMAGES, making it eligible to answer
@@ -128,9 +127,9 @@ PROFILES_HEADER = """\
 # distinct from `name` (this profile) or `model` (the string this endpoint
 # wants). It is also the join key into the generated catalogue. Two
 # profiles may legitimately differ in name, endpoint and model string while
-# being the same underlying model: `openai/gpt-5.1` reached through
-# OpenRouter and a direct OpenAI `gpt-5.1` are one model wearing two
-# profile names.
+# being the same underlying model: one model reached through two endpoints
+# is one model wearing two profile names. (Larry 2026-11-23: the direct
+# Anthropic/OpenAI/Moonshot endpoints are retired.)
 #
 # That is a correctness problem, not tidiness. The council's founding rule
 # is that a model never scores its own proposal, and resolve_members'

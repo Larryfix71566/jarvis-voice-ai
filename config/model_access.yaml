@@ -62,7 +62,15 @@ routes:
 workloads:
   voice_supervisor:
     minimum_quality_tier: economy
-    profile: claude-haiku-4-5
+    # Larry 2026-11-23: the most capable current Claude that should hold voice
+    # latency, on the subscription. Sonnet over Haiku: the 2026-08-20 bench
+    # measured Sonnet 4.5 TTFT at parity with Haiku 4.5 (2345 vs 2399 ms) with
+    # better routing. Sonnet 5.5 is the current Sonnet (Sonnet 4.5 retires
+    # 2026-11-30) and the pinned claude CLI (2.1.290/2.1.291) is reported to
+    # know it; Haiku 5.5 and Fable 5.2 would need a CLI bump. The subscription
+    # path is not yet latency-measured live; scripts/latency_probe.py --budget
+    # on a 15-turn session decides.
+    profile: claude-sonnet-5-5
     route: subscription
     privacy: approved_external
     priority: interactive

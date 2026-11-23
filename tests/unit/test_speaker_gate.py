@@ -589,7 +589,9 @@ class _FakeSTT(FrameProcessor):
 
 
 class _FakeLLM:
-    def __init__(self, api_key, base_url, model):
+    """Stands in for SubscriptionVoiceLLMService (same keyword constructor)."""
+
+    def __init__(self, *args, resolved=None, sources=None, session_id=None, **kwargs):
         self.functions = {}
 
     def register_function(self, name, handler):
@@ -651,7 +653,10 @@ def wiring_runtime(monkeypatch, tmp_path):
         jarvis_max_parallel_delegations=3,
     )
     monkeypatch.setattr(bp, "DeepgramFluxSTTService", _FakeSTT)
-    monkeypatch.setattr(bp, "OpenAILLMService", _FakeLLM)
+    monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "1")
+    monkeypatch.setenv("JARVIS_SUBSCRIPTION_TEXT_ENABLED", "1")
+    monkeypatch.setattr(
+        "jarvis.bot.subscription_llm.SubscriptionVoiceLLMService", _FakeLLM)
     monkeypatch.setattr(bp, "ElevenLabsTTSService", _FakeTTS)
     monkeypatch.setattr(bp, "ElevenLabsTTSSettings", _FakeTTS.Settings)
     monkeypatch.setattr(bp, "Pipeline", _FakePipeline)

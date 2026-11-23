@@ -124,6 +124,18 @@ profiles:
     # the Phase 3 executor tier (JARVIS_UPGRADE_PROFILE / JARVIS_APPBUILD_
     # PROFILE point here once the baseline is taken).
 
+  - name: claude-sonnet-5-5
+    label: "Claude Sonnet 5.5 — current Sonnet; the voice Supervisor"
+    endpoint: claude-subscription
+    model: claude-sonnet-5-5
+    identity: anthropic/claude-sonnet-5-5
+    # Larry 2026-11-23: added for voice (config/model_access.yaml
+    # voice_supervisor). Exact model id, never an alias. temperature null,
+    # same D-003 family rule as the Claude profiles above.
+    temperature: null
+    tier: mid
+    streaming: true
+
   - name: codex-subscription
     label: "Codex subscription default — authenticated ChatGPT subscription runtime"
     endpoint: codex-subscription

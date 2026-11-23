@@ -61,7 +61,7 @@ def log_search(source: str, query: str = "", since_minutes: int = 60, limit: int
 def status_catalog(provider: str = "all", force: bool = False) -> dict:
     """Mortimer status (read-only): what each configured model provider's
     account offers RIGHT NOW, read live from its model list (PROVIDER is a
-    provider id such as anthropic, openrouter, moonshot, saygm, voice, or
+    provider id such as anthropic, openrouter, saygm, voice, or
     'all'), compared with the registry: configured models missing from the
     catalog and models offered but not configured. Cached for an hour;
     FORCE refreshes. Subscriptions have no list — use status_subscription."""

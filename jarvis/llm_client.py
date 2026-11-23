@@ -105,7 +105,12 @@ def _pin_api_transport(client: Any) -> None:
 
 
 def _resolve_provider(provider: str | None, base_url: str | None) -> str:
-    return provider or provider_from_base_url(base_url or "")
+    # No base_url would let the openai SDK fall back to OPENAI_BASE_URL or
+    # api.openai.com: a paid API this module never reaches (Larry 2026-11-23).
+    if not base_url:
+        raise ProviderAccessError(
+            "an API client needs an explicit non-retired endpoint; no paid API call was made")
+    return provider or provider_from_base_url(base_url)
 
 
 def _client_kwargs(api_key: str, base_url: str | None,

@@ -471,7 +471,7 @@ def build_delegate_tool(
                             "Set ONLY when the user EXPLICITLY named a "
                             "specific model for this task (e.g. 'use "
                             "Fable', 'have the developer check with Opus', "
-                            "'use Kimi for this'). Use the exact profile "
+                            "'use Grok for this'). Use the exact profile "
                             "name from the model list in your system "
                             "prompt — 2026-09-05: this description used to "
                             "restate that mapping and had drifted from the "

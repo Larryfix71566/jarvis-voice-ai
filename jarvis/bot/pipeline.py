@@ -6,10 +6,7 @@ Locked processor order (Phase 5):
       -> DeepgramFluxSTTService (flux-general-en) # should_interrupt=False; interruptions come from the turn-start strategy
       -> context_aggregator.user()
       -> VoiceWorkflowInjector               # MORTIMER_VOICE_WORKFLOWS_PLAN.md D5
-      -> OpenAILLMService (or GoogleLLMService / AnthropicLLMService --
-         provider-routed off settings.openai_base_url, see the LLM
-         service block below; MORTIMER_OPTIMIZATION_PLAN.md Phase 1 Path
-         A wires AnthropicLLMService with native prompt caching on)
+      -> SubscriptionVoiceLLMService         # Claude subscription only (2026-11-23)
       -> ReplyGuard                          # MORTIMER_VOICE_WORKFLOWS_PLAN.md D6
       -> TranscriptLogger
       -> ElevenLabsTTSService (eleven_flash_v2_5)
@@ -62,12 +59,11 @@ from pipecat.services.elevenlabs.tts import (
     ElevenLabsTTSService,
     ElevenLabsTTSSettings,
 )
-from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.turns.user_start import MinWordsUserTurnStartStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.utils.text.markdown_text_filter import MarkdownTextFilter
 
-from jarvis import llm_client, speaker
+from jarvis import speaker
 from jarvis.agents.base import load_sub_agents
 from jarvis.agents.delegate import (
     DETACHED_DRAIN_TIMEOUT_S,
@@ -76,7 +72,6 @@ from jarvis.agents.delegate import (
     foreground_delegation_count,
     task_stop_command,
 )
-from jarvis.anthropic_shim import native_base_url
 from jarvis.bot.connect_greeting import ConnectGreeting  # noqa: E402
 from jarvis.bot.voice_guidance import (
     ReplyGuard,
@@ -223,7 +218,7 @@ from jarvis import notices
 # plan's draft API (Flux under services.deepgram.flux.stt, ToolsSchema
 # under adapters.schemas, FunctionSchema instead of raw OpenAI dicts,
 # VAD as VADProcessor, interruptions via the turn-start strategy).
-from jarvis.usage_ledger import provider_from_base_url, record_call
+from jarvis.usage_ledger import record_call
 from jarvis.vision import execution_route_summary, resolve_vision_execution_route
 
 _logger = logging.getLogger(__name__)
@@ -1452,10 +1447,11 @@ def build_pipeline(
     WebRTC case passes None and keeps its connection-level handler.
     """
     settings = runtime.settings
-    # This adapter has no verified native subscription streaming/tool path.
-    # Refuse before constructing any voice resource, without an API fallback.
-    from jarvis.provider_access import require_voice_readiness
-    require_voice_readiness(getattr(settings, "jarvis_llm_access_mode", None))
+    # Larry 2026-11-23: models run only on the subscriptions. Refuse loudly,
+    # before constructing any voice resource, when the subscription runtime
+    # is switched off; there is no API to fall back to.
+    from jarvis.provider_access import require_subscription_runtime
+    require_subscription_runtime()
     if runtime.voice_sources.context is not None:
         runtime.voice_sources = runtime.voice_sources.for_new_context()
     pusher = pusher or FramePusher()
@@ -1957,76 +1953,20 @@ def build_pipeline(
         # than a verified one that arrives half a second later.
         should_interrupt=False,
     )
-    # MORTIMER_VOICE_MODEL_BENCH_PLAN.md V3 — provider-aware Supervisor
-    # service. Google's OpenAI-compat endpoint CANNOT carry the voice loop:
-    # Gemini 3 requires thought signatures echoed back on history replay,
-    # and pipecat's OpenAI streaming aggregation (base_llm._process_context)
-    # coalesces tool calls down to id/name/arguments, destroying the
-    # signature before anything downstream could preserve it. Pipecat's
-    # NATIVE GoogleLLMService handles signatures completely (capture,
-    # bookmark, re-apply on replay — services/google/llm.py), so a Google
-    # base_url routes there. Everything else keeps OpenAILLMService
-    # unchanged. Lazy import: google-genai is an optional dependency and a
-    # non-Google deployment must not need it installed.
-    from jarvis.provider_access import subscription_only
-    if subscription_only() or getattr(settings, "jarvis_llm_access_mode", None) == "subscription_only":
-        # Candidate integration only: the early readiness guard still blocks
-        # activation. No ordinary-turn boolean may authorize the full context.
-        from jarvis.bot.subscription_llm import SubscriptionVoiceLLMService
-        from jarvis.model_routing import resolve_model_route
-        llm = request_bound_service(SubscriptionVoiceLLMService, runtime.foreground_requests)(
-            resolved=resolve_model_route("voice_supervisor"),
-            sources=runtime.voice_sources, session_id=runtime.session_id,
-        )
-    elif "generativelanguage.googleapis.com" in (settings.openai_base_url or ""):
-        from pipecat.services.google.llm import GoogleLLMService
-        llm = request_bound_service(GoogleLLMService, runtime.foreground_requests)(
-            api_key=settings.openai_api_key,
-            model=settings.openai_model,
-        )
-        _logger.info("supervisor_llm_service service=google model=%s",
-                     settings.openai_model)
-    elif ("api.anthropic.com" in (settings.openai_base_url or "")
-          and llm_client.native_enabled()):
-        # MORTIMER_OPTIMIZATION_PLAN.md Phase 1 (Rev 3.2), Path A, landing
-        # step (iii): pipecat's OWN native AnthropicLLMService -- not
-        # jarvis/anthropic_shim.py, which exists to make Path B's
-        # OpenAI-shaped call sites work against the native Messages API.
-        # This service already speaks the native API directly and expects
-        # a real anthropic.AsyncAnthropic client, a different thing
-        # entirely. Lazy import, same reason the Google branch above is:
-        # a non-Anthropic deployment shouldn't need this import to
-        # succeed at module load time.
-        from anthropic import AsyncAnthropic
-        from pipecat.services.anthropic.llm import AnthropicLLMService
-        # Built explicitly rather than letting AnthropicLLMService's own
-        # `client or AsyncAnthropic(api_key=api_key)` default (no
-        # base_url kwarg on this constructor at all) silently ignore
-        # whatever's configured -- reuses the exact stripped-"/v1" helper
-        # Path B's shim already ships and tests (jarvis/anthropic_shim.py
-        # -- the same /v1/v1/messages doubling bug step (ii) found and
-        # fixed there applies here too), so a future non-default
-        # Anthropic-compatible base_url is honoured on Path A the same
-        # way it already is on Path B, not by accident.
-        llm = request_bound_service(AnthropicLLMService, runtime.foreground_requests)(
-            api_key=settings.openai_api_key,
-            client=AsyncAnthropic(
-                api_key=settings.openai_api_key,
-                base_url=native_base_url(settings.openai_base_url),
-            ),
-            settings=AnthropicLLMService.Settings(
-                model=settings.openai_model,
-                enable_prompt_caching=True,
-            ),
-        )
-        _logger.info("supervisor_llm_service service=anthropic model=%s prompt_caching=on",
-                     settings.openai_model)
-    else:
-        llm = request_bound_service(OpenAILLMService, runtime.foreground_requests)(
-            api_key=settings.openai_api_key,
-            base_url=settings.openai_base_url,
-            model=settings.openai_model,
-        )
+    # Larry 2026-11-23: the Supervisor runs ONLY on the Claude subscription
+    # (native tool route through the claude CLI). The OpenAI-compatible,
+    # Google and native-Anthropic API voice services are gone, and with them
+    # OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL. There is no API
+    # fallback: if the subscription route cannot serve a turn, the turn fails.
+    from jarvis.bot.subscription_llm import SubscriptionVoiceLLMService
+    from jarvis.model_routing import resolve_model_route
+    voice_route = resolve_model_route("voice_supervisor")
+    llm = request_bound_service(SubscriptionVoiceLLMService, runtime.foreground_requests)(
+        resolved=voice_route,
+        sources=runtime.voice_sources, session_id=runtime.session_id,
+    )
+    _logger.info("supervisor_llm_service service=claude_subscription model=%s",
+                 voice_route.model)
     def register_voice_tool(name: str, handler: Any) -> None:
         register_supervisor_tool(
             llm, name, handler,
@@ -2617,9 +2557,11 @@ async def run_session(transport: Any, webrtc_connection: Any = None,
             # on OpenAILLMService/Orchestrator directly.
             UsageMetricsObserver(
                 rung="supervisor",
-                provider=provider_from_base_url(settings.openai_base_url or ""),
+                # The subscription voice service records its own LLM usage
+                # (record_execution_result); this observer keeps TTS usage.
+                provider="subscription",
                 session_id=runtime.session_id,
-                default_model=settings.openai_model,
+                default_model=getattr(llm, "resolved", None) and llm.resolved.model or "",
                 # S2 — the same literals the TTS service is built with
                 # (ElevenLabsTTSService(...) above); one place would be
                 # better, but the TTS model string is inline there today.
