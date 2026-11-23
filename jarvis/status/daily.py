@@ -519,6 +519,11 @@ def main() -> int:
         run_passive(status_dir=STATUS_DIR)
     except Exception as exc:  # noqa: BLE001 — independent passive addition
         logger.warning("status_harness_brief_failed error=%s", type(exc).__name__)
+    try:  # WS-41: daily new-model check (no API keys; proposes, never switches)
+        from jarvis.model_sync.run import run_daily
+        run_daily(STATUS_DIR)
+    except Exception as exc:  # noqa: BLE001 — independent addition
+        logger.warning("status_model_sync_failed error=%s", type(exc).__name__)
     return 0
 
 

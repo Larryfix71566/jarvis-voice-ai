@@ -126,6 +126,15 @@ def status_harness_models() -> dict:
     return srv._status_call("harness-models", lambda: read_report(STATUS_DIR))
 
 
+@app.get("/api/status/model-sync")
+def status_model_sync() -> dict:
+    """WS-41: the daily new-model check's latest report. Read-only: never
+    probes, certifies, opens a PR or changes a model."""
+    from jarvis.model_sync.run import read_report as read_model_sync
+    from jarvis.status.daily import STATUS_DIR
+    return srv._status_call("model-sync", lambda: read_model_sync(STATUS_DIR))
+
+
 @app.get("/api/status/models")
 def status_models() -> dict:
     from jarvis.status import models as _m
