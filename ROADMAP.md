@@ -172,6 +172,24 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 
 </details>
 
+<details id="ws-41">
+<summary>WS-41 — Daily new-model check: detect, certify, propose by PR · Claude</summary>
+
+**Workstream:** Larry asked in his Claude Duet channel on 2026-11-23 at 17:48:09 UTC: "We need to add a process to automatically keep in sync with new models when they come out as far as what we use for orchestration not sure how often we need to check so review and make recommendations". After the review he said at 18:01:48 UTC: "Build the daily check". No existing row covered model discovery without API keys, so this block is added with the PR that implements it; merging the PR approves the row (§0 rule 2). Under §0 rule 14 this block keeps systems from overlapping; it is not exclusive. The parallel paid-API removal work owns the model registry, endpoints, `upgrade_agent` and the catalogs; this row only reads them.
+
+- **Owner:** `claude`
+- **Status:** claimed 2026-11-23: one PR into `next`.
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** Larry: merge, redeploy, then run the Mac commands in the PR (one `--detect-only` run, one full run) and confirm the report and the spoken notice. Live Claude alias probe, Codex `model/list` on the ChatGPT login, the voice bench and PR creation with the Mac's GitHub token are untested until then.
+- **Model version:** Claude Opus 5.5 (plan, detector, runner), Claude Sonnet 5.5 (parsers, subscription lists, certify, propose, tests)
+- **Where:** `claude/ws41-model-sync-20261123` into `next`
+- **Plan:** `docs/plans/MORTIMER_MODEL_SYNC_PLAN_2026-11-23.md`
+- **Scope:** `jarvis/model_sync/` (new); `scripts/sync_models.py` (new); the WS-41 block at the end of `main()` in `jarvis/status/daily.py`; the `GET /api/status/model-sync` route in `jarvis/admin/routes/status.py`; `tests/unit/test_model_sync_*.py` and `tests/fixtures/model_sync/` (new). Not in scope: `config/*.yaml`, `jarvis/provider_access.py`, `jarvis/agents/upgrade_agent.py`, `jarvis/status/catalog.py`, `jarvis/subscription*.py` (the paid-API removal work and the subscription routes); the check only reads them.
+- **Next step:** larry: merge, redeploy, run the Mac commands in the PR.
+- **Updated:** 11-23 (claim and PR)
+
+</details>
+
 <details id="ws-40">
 <summary>WS-40 — No pay-per-token Anthropic, OpenAI, Kimi or DeepSeek API calls · Claude</summary>
 
@@ -1472,6 +1490,8 @@ projection, never hidden cards; protected results retain their existing limits.
 
 
 **Adopted typed phone-card wire reservation (2026-10-31, WS-04/17/30):** reserve closed operations `results.view`, `results.select`, `results.pin`, `results.unpin`, `results.close`, `results.reopen` in the existing `mortimer.phone-remote.v1` envelope, exactly as the independently accepted typed-card design specifies. Reuse `read`/`action` scopes and existing status/reason enums; add no port, launchd label, config key, migration, credential or general console-action permission. These identifiers serve only the injected synthetic offline slice until separate production claims.
+
+**Config keys reserved for WS-41, 2026-11-23 (before implementation):** `MORTIMER_MODEL_SYNC`, `MORTIMER_MODEL_SYNC_CERTIFY`, `MORTIMER_MODEL_SYNC_PROPOSE`, each `1` (default) or `0`; `0` skips the whole daily new-model check, its certification, or its pull requests. Runtime files `data/status/model-sync.json`, `model-sync-state.json`, `model-sync.lock` and `data/status/model-sync/` (receipts, proposals), all ignored. Route `GET /api/status/model-sync` on the admin sidecar. No migration, port, launchd label, allow-list row or wire field.
 
 **Config key reserved for WS-39, 2026-11-19 (before implementation):** `JARVIS_PERSONALITY`, `playful` (default) or `formal`, case and surrounding spaces ignored; any other value is a startup error, like `JARVIS_UNITS`. Read once into `Settings.jarvis_personality` and passed to `build_supervisor_prompt`; `formal` reproduces the pre-WS-39 Supervisor prompt byte for byte. No migration, port, launchd label, allow-list row or wire field.
 

@@ -1,0 +1,5 @@
+{
+  "name": "@anthropic-ai/claude-code",
+  "version": "2.1.330",
+  "description": "Use Claude, Anthropic's AI assistant, right from your terminal. Claude can understand your codebase, edit files, run terminal commands, and handle entire workflows for you."
+}
