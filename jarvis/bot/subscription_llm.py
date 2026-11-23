@@ -10,8 +10,11 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import os
+import tempfile
 import uuid
 from collections.abc import Callable
+from pathlib import Path
 
 from pipecat.frames.frames import (
     Frame, InterruptionFrame, LLMContextFrame, LLMFullResponseEndFrame,
@@ -29,6 +32,59 @@ from jarvis.model_routing import ModelRouteError, ResolvedModelRoute, make_route
 from jarvis.privacy_policy import DataPolicy, assert_route_allowed, strictest
 from jarvis.subscription import SubscriptionCapabilityError
 from jarvis.usage_ledger import record_execution_result
+
+
+# Larry 2026-11-23 (WS-40): voice runs on the Claude subscription, and the
+# native tool route refuses every request until a capability receipt matches
+# the EXACT menu this service sends (names, order, descriptions, schemas).
+# The menu depends on the live sub-agent roster and the kill switches, so it
+# is written here, from the same conversion _process_context uses, when the
+# pipeline is built. scripts/verify_claude_voice_capability.py reads it.
+# Tool schemas only: no conversation, memory or user text goes in this file.
+VOICE_TOOL_MENU_ENV = "JARVIS_VOICE_TOOL_MENU_PATH"
+DEFAULT_VOICE_TOOL_MENU_PATH = "logs/voice-tool-menu.json"
+VOICE_TOOL_MENU_KIND = "mortimer_voice_tool_menu"
+
+
+def voice_tool_references(raw_tools) -> tuple[ModelToolReference, ...]:
+    """The tool references a native voice request carries, in menu order."""
+    if not isinstance(raw_tools, list) or not raw_tools:
+        raise SubscriptionCapabilityError("subscription voice requires explicit registered tools")
+    return tuple(ModelToolReference(
+        tool["function"]["name"], tool["function"]["parameters"],
+        tool["function"].get("description", "")) for tool in raw_tools)
+
+
+def voice_tool_menu_record(model: str, tools) -> dict:
+    return {"record_kind": VOICE_TOOL_MENU_KIND, "schema_version": 1,
+            "workload": "voice_supervisor", "model": model,
+            "tools": [{"name": tool.name, "description": tool.description,
+                       "parameters": dict(tool.parameters)} for tool in tools]}
+
+
+def write_voice_tool_menu(path, record: dict) -> bool:
+    """Atomically replace the menu file when it changed; owner-only."""
+    target = Path(path)
+    text = json.dumps(record, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    try:
+        if target.is_file() and target.read_text(encoding="utf-8") == text:
+            return False
+    except (OSError, UnicodeError):
+        pass
+    target.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(prefix=".voice-tool-menu-", dir=str(target.parent))
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            stream.write(text)
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, target)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+    return True
 
 
 class SubscriptionVoiceLLMService(LLMService):
@@ -71,6 +127,12 @@ class SubscriptionVoiceLLMService(LLMService):
         if self._native_client is None:
             self._native_client = make_route_client(resolved)
         return self._native_client
+
+    def tool_menu_record(self, context) -> dict:
+        """The exact menu a turn in ``context`` would send, as a record."""
+        params = self.get_llm_adapter().get_llm_invocation_params(
+            context, convert_developer_to_user=False)
+        return voice_tool_menu_record(self.resolved.model, voice_tool_references(params["tools"]))
 
     def _bound_messages(self, messages):
         """Restore native IDs only onto an exact, host-retained tool batch.
@@ -179,12 +241,7 @@ class SubscriptionVoiceLLMService(LLMService):
             policy = strictest(policy, self.sources.policy_for_projection(context, messages))
             assert_route_allowed(self.resolved.route, policy)
         native_messages = self._bound_messages(messages)
-        raw_tools = params["tools"]
-        if not isinstance(raw_tools, list) or not raw_tools:
-            raise SubscriptionCapabilityError("subscription voice requires explicit registered tools")
-        tools = tuple(ModelToolReference(
-            tool["function"]["name"], tool["function"]["parameters"],
-            tool["function"].get("description", "")) for tool in raw_tools)
+        tools = voice_tool_references(params["tools"])
         if any(tool.name not in self._functions for tool in tools):
             raise SubscriptionCapabilityError("voice advertised an unregistered handler")
         self._parent_id = self._parent_id or str(uuid.uuid4())

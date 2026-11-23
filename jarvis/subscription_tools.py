@@ -211,6 +211,9 @@ class _ClaudeNativeSession:
         self.initialized: asyncio.Future[None] = asyncio.get_running_loop().create_future()
         self.messages = copy.deepcopy(completion_args["messages"])
         self.published_assistant: dict[str, Any] | None = None
+        # Text blocks of the current native message, kept until its tool batch.
+        self.text_message_id: Any = None
+        self.message_text: list[str] = []
         self.queue: asyncio.Queue[Any] = asyncio.Queue()
         self.pending_ready = asyncio.Condition()
         self.closed = False
@@ -328,11 +331,21 @@ class _ClaudeNativeSession:
                 elif event.get("type") == "control_request":
                     await self._post_tool_hook(event)
                 elif event.get("type") == "assistant":
-                    content = event.get("message", {}).get("content", [])
+                    message = event.get("message", {})
+                    content = message.get("content", []) if isinstance(message, dict) else None
                     if not isinstance(content, list):
                         raise SubscriptionRuntimeError("native assistant content is malformed")
+                    # The CLI emits one assistant event per content block, so
+                    # "One moment..." and the tool call it introduces arrive as
+                    # two events with the same message id. Keep that text and
+                    # publish it with the batch (2026-11-23); text of any other
+                    # message is not this batch's and is dropped as before.
+                    message_id = message.get("id")
+                    if not isinstance(message_id, str) or message_id != self.text_message_id:
+                        self.text_message_id = message_id
+                        self.message_text = []
                     calls = []
-                    text = []
+                    text = self.message_text
                     staged: list[_Pending] = []
                     for block in content:
                         if block.get("type") == "text":
@@ -361,6 +374,8 @@ class _ClaudeNativeSession:
                                 name=name, arguments=json.dumps(arguments)), model_extra={
                                 "mortimer_parent_id": self.parent_id, "mortimer_task_id": self.task_id}))
                     if calls:
+                        self.text_message_id = None
+                        self.message_text = []
                         # Stdio MCP lacks the originating tool_use_id. Refuse
                         # identical calls before publication, so Mortimer's
                         # executor never acts on an ambiguous native batch.

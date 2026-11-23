@@ -1063,6 +1063,24 @@ def adapt_to_pipecat(
     return wrapper
 
 
+def _record_voice_tool_menu(llm: Any, context: Any) -> None:
+    """Write the voice tool menu the capability receipt must match (WS-40)."""
+    if not hasattr(llm, "tool_menu_record"):
+        return  # A test double or a non-subscription service has no native menu.
+    from jarvis.bot.subscription_llm import (
+        DEFAULT_VOICE_TOOL_MENU_PATH, VOICE_TOOL_MENU_ENV, write_voice_tool_menu,
+    )
+    path = os.environ.get(VOICE_TOOL_MENU_ENV) or DEFAULT_VOICE_TOOL_MENU_PATH
+    try:
+        record = llm.tool_menu_record(context)
+        changed = write_voice_tool_menu(path, record)
+    except Exception as exc:  # noqa: BLE001 - diagnostic only; never blocks a session
+        _logger.info("voice_tool_menu_unrecorded error=%s", type(exc).__name__)
+        return
+    _logger.info("voice_tool_menu_recorded tools=%d changed=%s path=%s",
+                 len(record["tools"]), changed, path)
+
+
 def register_supervisor_tool(
     llm, name: str, dict_handler, *, runlog_enabled: bool = False,
     session_id: str | None = None, weather_context: WeatherContextMinimizer | None = None,
@@ -2064,6 +2082,10 @@ def build_pipeline(
         sources=runtime.voice_sources, messages=[system_message],
         tools=ToolsSchema(standard_tools=standard_tools),
     )
+    # WS-40: record the exact voice tool menu for the capability receipt
+    # (scripts/verify_claude_voice_capability.py). Schemas only. A failure
+    # here never blocks the session; the receipt check refuses on its own.
+    _record_voice_tool_menu(llm, context)
     # Tier 2 (MORTIMER_VOICE_ISOLATION_TIER12_PLAN.md §4.3) — a local
     # speaker-verification gate on final transcripts. Inserted ONLY when
     # all three hold: the kill switch is on, a profile is enrolled, and the
