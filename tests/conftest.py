@@ -96,6 +96,19 @@ def _stub_procedures_learning(monkeypatch):
     )
 
 
+@pytest.fixture(scope="session")
+def _tool_menu_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("tool-menus")
+
+
+@pytest.fixture(autouse=True)
+def _tool_menus_in_tmp(monkeypatch, _tool_menu_dir):
+    """WS-40: native tool requests record their menu (for the capability
+    receipt) under logs/tool-menus by default. Keep test runs out of the
+    real checkout's logs folder."""
+    monkeypatch.setenv("JARVIS_TOOL_MENU_DIR", str(_tool_menu_dir))
+
+
 @pytest.fixture(autouse=True)
 def _auth_disabled_by_default(monkeypatch):
     """Keep unrelated tests focused on their behavior; auth tests opt in."""

@@ -1,28 +1,32 @@
 #!/usr/bin/env python3
-"""Write the voice tool capability receipt the subscription route requires.
+"""Write the native tool receipts the Claude subscription route requires.
 
-Larry 2026-11-23 (WS-40): voice runs only on the Claude subscription. The
-native tool route (jarvis.subscription_tools) refuses every voice turn until
-JARVIS_SUBSCRIPTION_TOOL_CAPABILITY_RECEIPT names a receipt that matches the
-installed claude CLI, the voice model and the EXACT voice tool menu.
+Larry 2026-11-23 (WS-40): voice and every tool-using agent run only on the
+Claude subscription. The native tool route (jarvis.subscription_tools) refuses
+a request until JARVIS_SUBSCRIPTION_TOOL_CAPABILITY_RECEIPT names a receipt, or
+a folder of receipts, matching the installed claude CLI, the model and the
+EXACT tool menu of that request.
 
-The menu depends on the live sub-agent roster and the kill switches, so the
-bot writes it when it builds a session (logs/voice-tool-menu.json, see
-jarvis.bot.subscription_llm). This script reads that file and proves, against
-the installed CLI:
+Menus depend on the live sub-agent roster, kill switches and skills, so the
+bot records each one when a native session starts (logs/tool-menus/, see
+jarvis.subscription_tools.record_tool_menu; voice records its menu as soon as
+a session is built). This script reads those files and, for each menu without
+a valid receipt, proves against the installed CLI:
 
-* live: one real subscription turn where the model calls ``cost_summary``
-  through the native gateway and then answers with a fixed word. The host
-  answers the call with a synthetic result; no voice handler runs;
+* live: one real subscription turn where the model calls one argument-free
+  tool from the menu through the native gateway and then answers with a fixed
+  word. The host answers the call with a synthetic result; no handler runs;
 * isolated: the same CLI against a local fake provider with planted
   CLAUDE.md, skills, hooks and settings canaries, which must not reach the
-  provider, and a tool menu that must be exactly the voice menu;
+  provider, and a tool menu that must be exactly the recorded menu;
 * negative: the fake provider asks for the built-in Bash tool, which must be
   refused before any host call, with its side effect absent.
 
-Dry by default: ``--live`` runs the proofs and ``--output`` writes the
-receipt. The live turn uses the subscription login of the user running it;
-the script never reads or sends an API key. Exit 0 on success, 2 on refusal.
+Dry by default: ``--live`` runs the proofs and writes one receipt per menu into
+``--output`` (a folder). The live turns use the subscription login of the user
+running the script; it never reads or sends an API key. With ``--live`` it
+exits 0 when every current menu has a receipt the route accepts, 2 otherwise;
+a dry run exits 0 unless it cannot run at all.
 """
 from __future__ import annotations
 
@@ -37,6 +41,7 @@ import sys
 import tempfile
 import threading
 from types import SimpleNamespace
+from dataclasses import dataclass
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,57 +52,89 @@ from scripts.verify_claude_developer_capability import (  # noqa: E402
     tool_menu_observation, unknown_request, wire_tool_names,
 )
 
-DEFAULT_MENU = 'logs/voice-tool-menu.json'
-PROBE_TOOL = 'cost_summary'
+PREFERRED_PROBE_TOOL = 'cost_summary'
 PROBE_RESULT = json.dumps({'ok': True, 'note': 'synthetic capability-probe result; no handler ran'})
-DONE = 'MORTIMER_VOICE_PROTOCOL_OK'
-CONSTRAINT = ('This voice protocol diagnostic answered its one tool call with a synthetic host '
-              'result. No voice handler ran and nothing was spoken, sent or changed.')
+DONE = 'MORTIMER_NATIVE_TOOL_PROTOCOL_OK'
+CONSTRAINT = ('This tool protocol diagnostic answered its one tool call with a synthetic host '
+              'result. No handler ran and nothing was spoken, sent or changed.')
 MENU_BYTES = 500_000
-WORKLOAD = 'voice_supervisor'
+
+
+@dataclass(frozen=True)
+class Menu:
+    path: Path
+    workload: str
+    model: str
+    refs: tuple
+    probe: str
+
+
+def probe_tool(refs):
+    """A menu tool that accepts no arguments; the host never runs it."""
+    from jsonschema import Draft202012Validator
+    from jsonschema.exceptions import SchemaError, ValidationError
+    def accepts_empty(ref):
+        try:
+            Draft202012Validator(dict(ref.parameters)).validate({})
+            return True
+        except (SchemaError, ValidationError):
+            return False
+    ordered = sorted(refs, key=lambda ref: ref.name != PREFERRED_PROBE_TOOL)
+    for ref in ordered:
+        if accepts_empty(ref):
+            return ref.name
+    raise CapabilityUnavailable('no_argument_free_probe_tool')
 
 
 def load_menu(path):
-    """The recorded voice menu, as the ModelToolReference tuple voice sends."""
-    from jarvis.bot.subscription_llm import VOICE_TOOL_MENU_KIND
+    """A recorded menu, as the ModelToolReference tuple its requests send."""
     from jarvis.model_execution import ModelToolReference
+    from jarvis.subscription_tools import TOOL_MENU_KIND
     source = Path(path)
     try:
         if not source.is_file() or source.stat().st_size > MENU_BYTES:
-            raise CapabilityUnavailable('voice_tool_menu_missing')
+            raise CapabilityUnavailable('tool_menu_missing')
         record = json.loads(source.read_text(encoding='utf-8'))
     except (OSError, ValueError) as exc:
-        raise CapabilityUnavailable('voice_tool_menu_unreadable') from exc
+        raise CapabilityUnavailable('tool_menu_unreadable') from exc
     tools = record.get('tools') if type(record) is dict else None
-    if (record.get('record_kind') != VOICE_TOOL_MENU_KIND or record.get('schema_version') != 1
-            or record.get('workload') != WORKLOAD or type(record.get('model')) is not str
-            or not record['model'].startswith('claude-') or type(tools) is not list or not tools):
-        raise CapabilityUnavailable('voice_tool_menu_invalid')
+    if (record.get('record_kind') != TOOL_MENU_KIND or record.get('schema_version') != 1
+            or type(record.get('workload')) is not str or not record['workload']
+            or type(record.get('model')) is not str or not record['model'].startswith('claude-')
+            or type(tools) is not list or not tools):
+        raise CapabilityUnavailable('tool_menu_invalid')
     refs = []
     for tool in tools:
         if (type(tool) is not dict or set(tool) != {'name', 'description', 'parameters'}
                 or type(tool['name']) is not str or not tool['name']
                 or type(tool['description']) is not str or type(tool['parameters']) is not dict):
-            raise CapabilityUnavailable('voice_tool_menu_invalid')
+            raise CapabilityUnavailable('tool_menu_invalid')
         refs.append(ModelToolReference(tool['name'], tool['parameters'], tool['description']))
     names = [ref.name for ref in refs]
     if len(set(names)) != len(names):
-        raise CapabilityUnavailable('voice_tool_menu_invalid')
-    if PROBE_TOOL not in names:
-        raise CapabilityUnavailable('voice_probe_tool_missing')
-    return record['model'], tuple(refs)
+        raise CapabilityUnavailable('tool_menu_invalid')
+    return Menu(source, record['workload'], record['model'], tuple(refs), probe_tool(refs))
 
 
-def route_model():
-    """The model the bot's voice route resolves to in this environment."""
+def menu_files(path):
+    source = Path(path)
+    if source.is_file():
+        return [source]
+    if not source.is_dir():
+        raise CapabilityUnavailable('tool_menus_missing')
+    return sorted(item for item in source.glob('*.json') if item.is_file())
+
+
+def route_model(workload):
+    """The model the bot's route for ``workload`` resolves to here."""
     from jarvis.config import bridge_settings_to_env
     from jarvis.model_routing import resolve_model_route
     bridge_settings_to_env()
-    resolved = resolve_model_route(WORKLOAD)
+    resolved = resolve_model_route(workload)
     route = resolved.route
     if (route.name != 'subscription' or route.adapter != 'subscription_runtime'
             or 'tools' not in route.capabilities or route.credential_env or route.base_url):
-        raise CapabilityUnavailable('voice_subscription_route_required')
+        raise CapabilityUnavailable('subscription_tool_route_required')
     return resolved.model
 
 
@@ -114,22 +151,23 @@ def runtime_identity():
         raise CapabilityUnavailable('claude_cli_unavailable') from exc
 
 
-def _request(parent, index, refs, timeout):
+def _request(menu, parent, index, timeout):
     from jarvis.model_execution import ModelExecutionRequest
     from jarvis.privacy_policy import DataPolicy
-    return ModelExecutionRequest(WORKLOAD, f'voice-capability:{parent}:{index}', parent, '',
-        tools=refs, data_policy=DataPolicy('approved_external', 'voice-capability-probe'),
+    return ModelExecutionRequest(menu.workload, f'tool-capability:{parent}:{index}', parent, '',
+        tools=menu.refs, data_policy=DataPolicy('approved_external', 'tool-capability-probe'),
         timeout_s=timeout)
 
 
-async def protocol_round(identity, model, refs, timeout, *, environment=None, expect_bash=False):
+async def protocol_round(identity, menu, timeout, *, environment=None, expect_bash=False):
     """One native session: the probe tool once, then the fixed reply."""
     from jarvis.subscription import SubscriptionCapabilityError
     parent = str(uuid.uuid4())
     messages = [{'role': 'system', 'content': CONSTRAINT}, {'role': 'user', 'content':
-        f'Call {PROBE_TOOL} once with no arguments, then reply exactly {DONE}. '
+        f'Call {menu.probe} once with no arguments, then reply exactly {DONE}. '
         'Use no other operation.'}]
-    first = _request(parent, 0, refs, timeout)
+    model = menu.model
+    first = _request(menu, parent, 0, timeout)
     Session = observed_session_type()
     session = Session(first, SimpleNamespace(model=model), {'messages': messages}, identity['path'],
                       max_tool_calls=2, environment=environment)
@@ -142,7 +180,7 @@ async def protocol_round(identity, model, refs, timeout, *, environment=None, ex
             await session.start()
             result['unknown_tool_rejected'] = await unknown_request(session)
             for index in range(3):
-                current = _request(parent, index, refs, timeout)
+                current = _request(menu, parent, index, timeout)
                 try:
                     completion = await session.next_completion(current, {'messages': messages})
                 except SubscriptionCapabilityError as exc:
@@ -162,8 +200,8 @@ async def protocol_round(identity, model, refs, timeout, *, environment=None, ex
                 replies = []
                 for call in calls:
                     arguments = json.loads(call.function.arguments or '{}')
-                    if call.function.name != PROBE_TOOL or type(arguments) is not dict or host_calls:
-                        raise CapabilityUnavailable('voice_probe_called_another_operation')
+                    if call.function.name != menu.probe or type(arguments) is not dict or host_calls:
+                        raise CapabilityUnavailable('probe_called_another_operation')
                     host_calls += 1
                     result['native_tool_call_observed'] = True
                     assistant['tool_calls'].append({'id': call.id, 'type': 'function',
@@ -209,9 +247,10 @@ def _stream_events(message, block, use_tool, arguments):
 
 
 @asynccontextmanager
-async def loopback_fixture(directory, model, refs, *, bash=False):
+async def loopback_fixture(directory, menu, *, bash=False):
     """The installed CLI against a local fake provider; never a paid endpoint."""
-    marker = 'VOICE40_CUSTOMIZATION_' + uuid.uuid4().hex
+    model, refs = menu.model, menu.refs
+    marker = 'TOOL40_CUSTOMIZATION_' + uuid.uuid4().hex
     home = Path(directory) / ('negative-home' if bash else 'isolation-home')
     config = home / '.claude'
     config.mkdir(parents=True, mode=0o700)
@@ -221,7 +260,7 @@ async def loopback_fixture(directory, model, refs, *, bash=False):
         target = config / name
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(marker)
-    (config / 'settings.json').write_text(json.dumps({'env': {'VOICE40_CANARY': marker},
+    (config / 'settings.json').write_text(json.dumps({'env': {'TOOL40_CANARY': marker},
         'hooks': {'UserPromptSubmit': [{'hooks': [{'type': 'command', 'command': 'printf ' + marker}]}]}}))
     canary = home / 'forbidden-bash-side-effect'
     observations = []
@@ -254,18 +293,18 @@ async def loopback_fixture(directory, model, refs, *, bash=False):
             observations.append({**tool_menu_observation(packet.get('tools', []), refs),
                 'model': packet.get('model'), 'canary_absent': marker not in json.dumps(packet),
                 'constraint_present': CONSTRAINT in json.dumps(packet),
-                'synthetic_auth_only': self.headers.get('x-api-key') == 'voice40-synthetic-not-a-key'
+                'synthetic_auth_only': self.headers.get('x-api-key') == 'tool40-synthetic-not-a-key'
                     and self.headers.get('Authorization') is None})
             index = len(observations)
             if index > 2:
                 self.send_error(409)
                 return
             use_tool = index == 1
-            tool_name = 'Bash' if bash else 'mcp__mortimer__' + PROBE_TOOL
+            tool_name = 'Bash' if bash else 'mcp__mortimer__' + menu.probe
             arguments = {'command': 'touch ' + str(canary)} if bash else {}
-            block = ({'type': 'tool_use', 'id': 'toolu_voice40_' + str(index), 'name': tool_name,
+            block = ({'type': 'tool_use', 'id': 'toolu_tool40_' + str(index), 'name': tool_name,
                       'input': arguments} if use_tool else {'type': 'text', 'text': DONE})
-            message = {'id': 'msg_voice40_' + str(index), 'type': 'message', 'role': 'assistant',
+            message = {'id': 'msg_tool40_' + str(index), 'type': 'message', 'role': 'assistant',
                 'model': model, 'content': [block], 'stop_reason': 'tool_use' if use_tool else 'end_turn',
                 'stop_sequence': None, 'usage': {'input_tokens': 8, 'output_tokens': 8}}
             self.send_response(200)
@@ -280,10 +319,10 @@ async def loopback_fixture(directory, model, refs, *, bash=False):
 
     server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
     thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=.05),
-                              name='voice40-loopback', daemon=True)
+                              name='tool40-loopback', daemon=True)
     thread.start()
     value = {'environment': {'HOME': str(home), 'CLAUDE_CONFIG_DIR': str(config),
-        'ANTHROPIC_API_KEY': 'voice40-synthetic-not-a-key',
+        'ANTHROPIC_API_KEY': 'tool40-synthetic-not-a-key',
         'ANTHROPIC_BASE_URL': 'http://127.0.0.1:' + str(server.server_port),
         'CLAUDE_CODE_MAX_RETRIES': '0', 'API_TIMEOUT_MS': '10000'},
         'observations': observations, 'expected_names': wire_tool_names(refs),
@@ -319,12 +358,13 @@ def loopback_failures(value, model):
     return failures
 
 
-def build_receipt(identity, model, refs, live, isolation, negative, isolated, refused):
+def build_receipt(identity, menu, live, isolation, negative, isolated, refused):
     from jarvis.subscription import _json_digest, _subscription_env
     from jarvis.subscription_tools import (
         NATIVE_CONTROL_CONTRACT, NATIVE_ISOLATION_ENV, NATIVE_PROTOCOL_SOURCE, PROTOCOL,
         _claude_tool_argv,
     )
+    model, refs = menu.model, menu.refs
     names = [ref.name for ref in refs]
     isolated_ok = not loopback_failures(isolated, model)
     negative_ok = not loopback_failures(refused, model)
@@ -356,28 +396,27 @@ def build_receipt(identity, model, refs, live, isolation, negative, isolated, re
         'protocol_source': NATIVE_PROTOCOL_SOURCE,
         'api_credentials_absent': not any('API_KEY' in key or 'BASE_URL' in key
                                           for key in _subscription_env()),
-        **proof, 'native_cleanup_verified': cleanup, 'workload': WORKLOAD,
-        'probe_tool': PROBE_TOOL, 'runner_sha256': digest(Path(__file__).read_bytes()),
+        **proof, 'native_cleanup_verified': cleanup, 'workload': menu.workload,
+        'probe_tool': menu.probe, 'menu_file': menu.path.name, 'runner_sha256': digest(Path(__file__).read_bytes()),
         'observations': {'live': live, 'isolation': isolation, 'negative': negative,
             'isolation_http': isolated['observations'], 'negative_http': refused['observations'],
             'isolation_failures': loopback_failures(isolated, model),
             'negative_failures': loopback_failures(refused, model)},
-        'record_kind': 'voice_native_tool_capability_receipt', 'runtime_receipt': True}
+        'record_kind': 'native_tool_capability_receipt', 'runtime_receipt': True}
 
 
-async def acquire(model, refs, timeout):
+async def acquire(menu, timeout):
     identity = await asyncio.to_thread(runtime_identity)
-    live = await protocol_round(identity, model, refs, timeout)
-    with tempfile.TemporaryDirectory(prefix='mortimer-voice40-', dir='/tmp') as directory:
-        async with loopback_fixture(directory, model, refs) as isolated:
-            isolation = await protocol_round(identity, model, refs, timeout,
-                                             environment=isolated['environment'])
-        async with loopback_fixture(directory, model, refs, bash=True) as refused:
-            negative = await protocol_round(identity, model, refs, timeout,
+    live = await protocol_round(identity, menu, timeout)
+    with tempfile.TemporaryDirectory(prefix='mortimer-tool40-', dir='/tmp') as directory:
+        async with loopback_fixture(directory, menu) as isolated:
+            isolation = await protocol_round(identity, menu, timeout, environment=isolated['environment'])
+        async with loopback_fixture(directory, menu, bash=True) as refused:
+            negative = await protocol_round(identity, menu, timeout,
                                             environment=refused['environment'], expect_bash=True)
         if await asyncio.to_thread(runtime_identity) != identity:
             raise CapabilityUnavailable('native_runtime_changed')
-        receipt = build_receipt(identity, model, refs, live, isolation, negative, isolated, refused)
+        receipt = build_receipt(identity, menu, live, isolation, negative, isolated, refused)
     return receipt
 
 
@@ -395,7 +434,7 @@ def publish(path, receipt):
     """Write owner-only, then confirm the route's own validator accepts it."""
     target = Path(path).expanduser()
     target.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary = tempfile.mkstemp(prefix='.voice-receipt-', dir=str(target.parent))
+    handle, temporary = tempfile.mkstemp(prefix='.tool-receipt-', dir=str(target.parent))
     try:
         with os.fdopen(handle, 'wb') as stream:
             stream.write(canonical(receipt))
@@ -410,15 +449,20 @@ def publish(path, receipt):
     return target.resolve()
 
 
-def validate_published(path, model, refs):
+def accepted(store, menu):
+    """Whether the route's own validator accepts ``store`` for ``menu``."""
+    from jarvis.subscription import SubscriptionCapabilityError
     from jarvis.subscription_tools import (
         TOOL_CAPABILITY_RECEIPT_ENV, TOOLS_ENABLED_ENV, _validate_native_receipt,
     )
     saved = {name: os.environ.get(name) for name in (TOOLS_ENABLED_ENV, TOOL_CAPABILITY_RECEIPT_ENV)}
     os.environ[TOOLS_ENABLED_ENV] = '1'
-    os.environ[TOOL_CAPABILITY_RECEIPT_ENV] = str(path)
+    os.environ[TOOL_CAPABILITY_RECEIPT_ENV] = str(store)
     try:
-        _validate_native_receipt(model, [ref.name for ref in refs], refs)
+        _validate_native_receipt(menu.model, [ref.name for ref in menu.refs], menu.refs)
+        return True
+    except SubscriptionCapabilityError:
+        return False
     finally:
         for name, value in saved.items():
             if value is None:
@@ -427,48 +471,75 @@ def validate_published(path, model, refs):
                 os.environ[name] = value
 
 
+def prove(menu, store, timeout):
+    """Write one receipt for ``menu`` into ``store``; the route must accept it."""
+    receipt = asyncio.run(acquire(menu, timeout))
+    failures = failed_checks(receipt)
+    if failures:
+        return {'failed': failures, 'isolation': receipt['observations']['isolation_failures'],
+                'negative': receipt['observations']['negative_failures']}
+    path = publish(Path(store) / menu.path.name, receipt)
+    if not accepted(store, menu):
+        raise CapabilityUnavailable('receipt_not_accepted_by_route')
+    return {'receipt': str(path)}
+
+
 def main(argv=None):
+    from jarvis.subscription_tools import DEFAULT_TOOL_MENU_DIR
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--menu', type=Path, default=Path(DEFAULT_MENU),
-                        help=f'voice tool menu the bot recorded (default {DEFAULT_MENU})')
-    parser.add_argument('--live', action='store_true', help='run the proofs (one subscription turn)')
+    parser.add_argument('--menus', type=Path, default=Path(DEFAULT_TOOL_MENU_DIR),
+                        help=f'recorded menu file or folder (default {DEFAULT_TOOL_MENU_DIR})')
+    parser.add_argument('--workload', help='only menus of this workload, e.g. voice_supervisor')
+    parser.add_argument('--live', action='store_true',
+                        help='run the proofs (one subscription turn per menu without a receipt)')
     parser.add_argument('--timeout', type=float, default=90, help='seconds per proof round')
-    parser.add_argument('--output', type=Path, help='where to write the receipt (with --live)')
+    parser.add_argument('--output', type=Path, help='receipt folder (with --live)')
     args = parser.parse_args(argv)
     try:
         if not 5 <= args.timeout <= 300:
             raise CapabilityUnavailable('invalid_timeout')
-        model, refs = load_menu(args.menu)
-        routed = route_model()
-        if routed != model:
-            raise CapabilityUnavailable(f'menu_model_{model}_differs_from_voice_route_{routed}')
-        summary = {'mode': 'live' if args.live else 'dry', 'model': model, 'tools': len(refs),
-                   'menu_sha256': digest(canonical([[ref.name, ref.description, dict(ref.parameters)]
-                                                    for ref in refs]))}
-        if not args.live:
-            summary['claude_cli'] = runtime_identity()['version']
-            summary['next'] = 'rerun with --live --output PATH to write the receipt'
-            print(json.dumps(summary, sort_keys=True))
-            return 0
-        if args.output is None:
-            raise CapabilityUnavailable('output_path_required')
-        receipt = asyncio.run(acquire(model, refs, args.timeout))
-        failures = failed_checks(receipt)
-        if failures:
-            summary.update(failed=failures,
-                           isolation=receipt['observations']['isolation_failures'],
-                           negative=receipt['observations']['negative_failures'])
-            print(json.dumps(summary, sort_keys=True))
-            raise CapabilityUnavailable('voice_protocol_proof_incomplete')
-        path = publish(args.output, receipt)
-        validate_published(path, model, refs)
-        summary.update(receipt=str(path), accepted_by_route=True)
-        print(json.dumps(summary, sort_keys=True))
-        return 0
+        if args.live and args.output is None:
+            raise CapabilityUnavailable('output_folder_required')
+        store = args.output.expanduser().resolve() if args.output is not None else None
+        if store is not None:
+            if store.exists() and not store.is_dir():
+                raise CapabilityUnavailable('output_must_be_a_folder')
+            store.mkdir(parents=True, exist_ok=True, mode=0o700)
+        cli = runtime_identity()['version']
+        rows, ok = [], True
+        for path in menu_files(args.menus):
+            try:
+                menu = load_menu(path)
+            except CapabilityUnavailable as exc:
+                rows.append({'menu': path.name, 'status': 'skipped', 'reason': str(exc)})
+                continue
+            if args.workload and menu.workload != args.workload:
+                continue
+            row = {'menu': path.name, 'workload': menu.workload, 'model': menu.model,
+                   'tools': len(menu.refs), 'probe_tool': menu.probe}
+            routed = route_model(menu.workload)
+            if routed != menu.model:
+                row.update(status='stale', reason=f'route now uses {routed}')
+            elif store is not None and accepted(store, menu):
+                row['status'] = 'has_receipt'
+            elif not args.live:
+                row['status'] = 'needs_receipt'
+                ok = False
+            else:
+                result = prove(menu, store, args.timeout)
+                row.update(result, status='receipt_written' if 'receipt' in result else 'refused')
+                ok = ok and 'receipt' in result
+            rows.append(row)
+        if not any('workload' in row for row in rows):
+            raise CapabilityUnavailable('no_tool_menus_recorded')
+        print(json.dumps({'mode': 'live' if args.live else 'dry', 'claude_cli': cli,
+                          'receipt_folder': str(store) if store else None, 'menus': rows},
+                         sort_keys=True, indent=1))
+        return 0 if ok or not args.live else 2
     except (Exception, asyncio.CancelledError) as exc:
         reason = str(exc) if isinstance(exc, CapabilityUnavailable) else type(exc).__name__
-        print(f'voice_capability_refused: {reason}', file=sys.stderr)
+        print(f'tool_receipt_refused: {reason}', file=sys.stderr)
         return 2
 
 

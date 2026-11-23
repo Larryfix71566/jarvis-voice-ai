@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import logging
 import os
 import secrets
 import shutil
@@ -130,6 +131,117 @@ def claude_tool_runtime_identity() -> dict[str, str]:
         raise SubscriptionCapabilityError("Claude native tool identity could not be checked") from exc
 
 
+_logger = logging.getLogger(__name__)
+
+# 2026-11-23 (WS-40): every native tool request needs a receipt for its EXACT
+# model and tool menu, and the menus depend on the live roster, kill switches
+# and skills. Each new native session records its menu here (schemas only, no
+# conversation) so scripts/verify_claude_tool_receipts.py can prove it.
+TOOL_MENU_DIR_ENV = "JARVIS_TOOL_MENU_DIR"
+DEFAULT_TOOL_MENU_DIR = "logs/tool-menus"
+TOOL_MENU_KIND = "mortimer_tool_menu"
+
+
+def tool_menu_record(workload: str, model: str, tools: Any) -> dict[str, Any]:
+    return {"record_kind": TOOL_MENU_KIND, "schema_version": 1, "workload": workload,
+            "model": model, "tools": [{"name": tool.name, "description": tool.description,
+                                       "parameters": dict(tool.parameters)} for tool in tools]}
+
+
+def tool_menu_path(directory: str | Path, record: dict[str, Any]) -> Path:
+    """One file per workload, model and exact menu."""
+    key = _json_digest([record["model"], record["tools"]])[:12]
+    workload = "".join(ch for ch in str(record["workload"]) if ch.isalnum() or ch in "_-") or "workload"
+    return Path(directory) / f"{workload}-{key}.json"
+
+
+def write_tool_menu(path: str | Path, record: dict[str, Any]) -> bool:
+    """Atomically replace the menu file when it changed; owner-only."""
+    target = Path(path)
+    text = json.dumps(record, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    try:
+        if target.is_file() and target.read_text(encoding="utf-8") == text:
+            return False
+    except (OSError, UnicodeError):
+        pass
+    target.parent.mkdir(parents=True, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(prefix=".tool-menu-", dir=str(target.parent))
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            stream.write(text)
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, target)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+    return True
+
+
+def record_tool_menu(workload: str, model: str, tools: Any) -> Path | None:
+    """Best effort: a failure is logged and never blocks a request."""
+    try:
+        record = tool_menu_record(workload, model, tools)
+        path = tool_menu_path(os.environ.get(TOOL_MENU_DIR_ENV) or DEFAULT_TOOL_MENU_DIR, record)
+        if write_tool_menu(path, record):
+            _logger.info("tool_menu_recorded workload=%s tools=%d path=%s",
+                         workload, len(record["tools"]), path)
+        return path
+    except Exception as exc:  # noqa: BLE001 - diagnostic only
+        _logger.info("tool_menu_unrecorded workload=%s error=%s", workload, type(exc).__name__)
+        return None
+
+
+MAX_RECEIPT_BYTES = 500_000
+# 2026-11-23 (WS-40): voice and every tool-using agent run in one process with
+# different models and tool menus, and a receipt matches exactly one of them.
+# The receipt variable may therefore name a folder; any receipt in it that
+# matches this request's model, executable and exact menu is accepted.
+MAX_RECEIPTS_IN_STORE = 128
+
+
+def _receipt_matches(receipt: Any, identity: dict[str, str], model: str,
+                     names: list[str], tools: Any) -> bool:
+    invocation = _claude_tool_argv(identity["path"], model, "<mcp-config>", "<system-prompt>", names)
+    return not (type(receipt) is not dict
+            or type(receipt.get("schema_version")) is not int or receipt.get("schema_version") != 1
+            or receipt.get("provider") != "claude"
+            or receipt.get("model") != model or receipt.get("executable") != identity
+            or receipt.get("protocol") != PROTOCOL
+            or receipt.get("invocation_sha256") != _json_digest(invocation)
+            or receipt.get("tool_names") != names
+            or receipt.get("tool_schema_sha256") != _json_digest([
+                {"name": tool.name, "description": tool.description,
+                 "parameters": dict(tool.parameters)} for tool in tools])
+            or receipt.get("native_tool_call_observed") is not True
+            or receipt.get("unknown_tool_rejected") is not True
+            or receipt.get("unadvertised_host_tool_rejected") is not True
+            or receipt.get("unadvertised_host_tool_side_effect_absent") is not True
+            or receipt.get("builtins_disabled") is not True
+            or receipt.get("customization_canaries_absent") is not True
+            or receipt.get("system_constraints_observed") is not True
+            or receipt.get("control_protocol_sha256") != _json_digest(NATIVE_CONTROL_CONTRACT)
+            or receipt.get("protocol_source") != NATIVE_PROTOCOL_SOURCE
+            or receipt.get("isolation_env_sha256") != _json_digest(NATIVE_ISOLATION_ENV)
+            or receipt.get("api_credentials_absent") is not True
+            or receipt.get("terminal_success_without_error_items") is not True)
+
+
+def _receipt_candidates(source: Path) -> list[Path]:
+    if source.is_file():
+        return [source]
+    if not source.is_dir():
+        raise ValueError("receipt unavailable")
+    files = sorted(path for path in source.iterdir()
+                   if path.suffix == ".json" and not path.name.startswith(".")
+                   and path.is_file() and not path.is_symlink())
+    if len(files) > MAX_RECEIPTS_IN_STORE:
+        raise ValueError("receipt store too large")
+    return files
+
+
 def _validate_native_receipt(model: str, names: list[str], tools: Any = ()) -> dict[str, str]:
     if os.environ.get(TOOLS_ENABLED_ENV) != "1":
         raise SubscriptionCapabilityError("subscription native tools are disabled")
@@ -137,39 +249,22 @@ def _validate_native_receipt(model: str, names: list[str], tools: Any = ()) -> d
     if not path:
         raise SubscriptionCapabilityError("native tool capability acceptance receipt is required")
     try:
-        source = Path(path)
-        if not source.is_file() or source.stat().st_size > 500_000:
-            raise ValueError("receipt unavailable")
-        receipt = json.loads(source.read_text(encoding="utf-8"))
+        candidates = _receipt_candidates(Path(path))
         identity = claude_tool_runtime_identity()
-        invocation = _claude_tool_argv(identity["path"], model, "<mcp-config>", "<system-prompt>", names)
-        if (type(receipt.get("schema_version")) is not int or receipt.get("schema_version") != 1
-                or receipt.get("provider") != "claude"
-                or receipt.get("model") != model or receipt.get("executable") != identity
-                or receipt.get("protocol") != PROTOCOL
-                or receipt.get("invocation_sha256") != _json_digest(invocation)
-                or receipt.get("tool_names") != names
-                or receipt.get("tool_schema_sha256") != _json_digest([
-                    {"name": tool.name, "description": tool.description,
-                     "parameters": dict(tool.parameters)} for tool in tools])
-                or receipt.get("native_tool_call_observed") is not True
-                or receipt.get("unknown_tool_rejected") is not True
-                or receipt.get("unadvertised_host_tool_rejected") is not True
-                or receipt.get("unadvertised_host_tool_side_effect_absent") is not True
-                or receipt.get("builtins_disabled") is not True
-                or receipt.get("customization_canaries_absent") is not True
-                or receipt.get("system_constraints_observed") is not True
-                or receipt.get("control_protocol_sha256") != _json_digest(NATIVE_CONTROL_CONTRACT)
-                or receipt.get("protocol_source") != NATIVE_PROTOCOL_SOURCE
-                or receipt.get("isolation_env_sha256") != _json_digest(NATIVE_ISOLATION_ENV)
-                or receipt.get("api_credentials_absent") is not True
-                or receipt.get("terminal_success_without_error_items") is not True):
-            raise ValueError("receipt mismatch")
+        for candidate in candidates:
+            if candidate.stat().st_size > MAX_RECEIPT_BYTES:
+                continue
+            try:
+                receipt = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, ValueError, UnicodeError):
+                continue
+            if _receipt_matches(receipt, identity, model, names, tools):
+                return identity
+        raise ValueError("receipt mismatch")
     except SubscriptionCapabilityError:
         raise
     except (OSError, ValueError, TypeError, AttributeError) as exc:
         raise SubscriptionCapabilityError("native tool acceptance does not match this request") from exc
-    return identity
 
 
 @dataclass
@@ -601,6 +696,7 @@ class ClaudeSubscriptionToolClient:
                 session = self.sessions.get(parent)
                 if session is None:
                     names = [tool.name for tool in request.tools]
+                    await asyncio.to_thread(record_tool_menu, request.workload, self.model, request.tools)
                     identity = await asyncio.to_thread(_validate_native_receipt, self.model, names, request.tools)
                     if self.cleanup_unverified:
                         raise SubscriptionRuntimeError("native provider cleanup is unverified; launch refused",
