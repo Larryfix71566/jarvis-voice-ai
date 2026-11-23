@@ -11,14 +11,14 @@ from sandbox import artifacts, control
 
 ROOT = Path(__file__).resolve().parents[2]
 FROZEN_FIXTURES = {
-    'tests/unit/test_admin_status.py': 'fd0bc1f3a204c2d6baf8995f3b01785955b599309df321775597dcd1b80610e2',
+    'tests/unit/test_admin_status.py': '8871fe3f0f4f091a762df392be510b0a9bcb3280d0c5ad57d50a0e79cdf4703d',
     'tests/unit/test_mcp_apps_github.py': 'e284f44537e596f49f7c6a7e3b711c8d810cb7874ff07562aa3f84a6eaed0f62',
     'tests/unit/test_memory.py': '43647f889b835169f3bd8defb618d81b8fcf24001a55e8ad6c925a6611efba10',
-    'tests/unit/test_status_catalog.py': 'f6dbf4db8bb1806dbf7c92e4e636875cf7cd9eefd44dc1d728796567e96c49ac',
-    'tests/unit/test_status_daily.py': '2dd60a76e8628e8364d9609b38a887ed4fb305f2d5ffd9788eed0340135d4be4',
+    'tests/unit/test_status_catalog.py': 'b47dc4eb56748d7e64ee53c8d31b3cc1b5b5fb434d5c80c015dc238dd306ca4b',
+    'tests/unit/test_status_daily.py': '59bf0ed277c4dd0453a4f7aea3175a7852e86c487461e42a48f281c9f4e03315',
     'tests/unit/test_status_logs.py': '7155b12e72ca71e2f1f22bee12608868db52ef51df6ef46a086314600cdcb43c',
-    'tests/unit/test_status_models.py': '0f18478d9d27763edd055df760b4a6840e33995f0515608b1bdd4e90b1e894a3',
-    'tests/unit/test_status_providers.py': '68eb01078156221de31ea83ea8b3588bfbc634a9fa78ca4ff04c47b08daa3caf',
+    'tests/unit/test_status_models.py': '3f784168198e6a974fb7a5100c95f09d14e4e33d78b911997752a59b3e76d94b',
+    'tests/unit/test_status_providers.py': '1c92bfa5401a6ee43bda6c5274a2bab350ef7116da7514d8010489328dcee05a',
     'tests/unit/test_status_subscriptions.py': 'd858ce77c07280591ce2b2f1405308834edc9e26e3c35d266c741099201d3979',
     'tests/unit/test_status_summaries.py': '17fa5cae14825cbe0a6ec6e8e6fa7e903377e32bf2f0121ead63b01f27e2a266',
 }

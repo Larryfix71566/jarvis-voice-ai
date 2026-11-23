@@ -56,9 +56,8 @@ DEFAULT_PATH = Path("data") / "secrets.vault"
 # S5 — what `migrate` moves out of .env: this explicit list plus the
 # name patterns below. Names, not guesses.
 MIGRATE_NAMES = frozenset({
-    "OPENAI_API_KEY", "DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY",
-    "TAVILY_API_KEY", "GITHUB_TOKEN", "MOONSHOT_API_KEY",
-    "ANTHROPIC_API_KEY", "JARVIS_GITHUB_TOKEN",
+    "DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY",
+    "TAVILY_API_KEY", "GITHUB_TOKEN", "JARVIS_GITHUB_TOKEN",
     "SAYGM_API_KEY",
 })
 MIGRATE_SUFFIXES = ("_API_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
@@ -413,7 +412,7 @@ def _cmd_verify(_args: argparse.Namespace) -> int:
 
     `status` and `list` answer "is it there", which is the same presence
     test every other check in this repo performs and which reported a dead
-    ANTHROPIC_API_KEY as fine for as long as it sat in the vault. This is
+    key as fine for as long as it sat in the vault. This is
     the only vault verb that asks the provider.
 
     Read-only: writes nothing, and prints names, endpoints and verdicts —
@@ -450,7 +449,9 @@ def _cmd_verify(_args: argparse.Namespace) -> int:
     for prof in (registry.get("profiles") or {}).values():
         if not isinstance(prof, dict):
             continue
-        key_env = str(prof.get("api_key_env", "OPENAI_API_KEY"))
+        key_env = str(prof.get("api_key_env") or "")
+        if not key_env:
+            continue  # subscription profile: no API credential to verify
         base = str(prof.get("base_url", ""))
         g = groups.setdefault((key_env, base),
                               {"model": str(prof.get("model", "")), "names": []})

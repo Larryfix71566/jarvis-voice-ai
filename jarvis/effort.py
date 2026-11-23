@@ -1,5 +1,7 @@
 """jarvis/effort.py — output_config.effort control for Path B (native
-Anthropic) call sites.
+Anthropic) call sites. Larry 2026-11-23: the Anthropic API is retired; this
+now only shapes requests on the Claude subscription route (provider
+"anthropic").
 
 MORTIMER_OPTIMIZATION_PLAN.md Phase 1b (Rev 3.2, "gate mostly resolved
 by documentation"), landing after Phase 1 (i)/(ii)/(iii).
@@ -18,14 +20,9 @@ Phase 1b section for the full citation):
     400 on the voice path is the one failure mode this phase cannot
     afford to discover live, so extra_body_for() refuses to emit
     anything for a Haiku model regardless of what's configured.
-  - Through the OpenAI-compatibility layer `reasoning_effort` is
-    IGNORED (not merely unsupported — silently dropped), so effort only
-    ever takes effect on the native path: provider == "anthropic" AND
-    JARVIS_ANTHROPIC_NATIVE != "0" (jarvis/llm_client.py's own gate).
-    This module does not re-check the native-enabled flag itself —
-    that's llm_client's job; extra_body_for() only ever gates on
-    `provider`, the one thing every caller has already resolved through
-    the same authoritative source llm_client.py's factory uses.
+  - Effort only takes effect for provider == "anthropic" (the Claude
+    subscription route); extra_body_for() gates on `provider`, which every
+    caller has already resolved.
   - **Cache rule, a requirement, not a preference:** changing
     output_config.effort between requests on the SAME cacheable prefix
     invalidates the prompt cache (documented, not inferred). Every call
@@ -35,10 +32,7 @@ Phase 1b section for the full citation):
     session to test or roll back a rung, never toggled request to
     request.
 
-Usage (mirrors jarvis/anthropic_shim.py's S8 passthrough rule — the shim
-merges `extra_body`'s keys as top-level native-request fields; the real
-openai client spreads `extra_body` into the request body the same way,
-so this module needs no Path-B-specific branch):
+Usage:
 
     extra_body = effort.extra_body_for(
         rung=self.name, provider=provider, explicit=self._effort, model=model,
@@ -66,8 +60,8 @@ def extra_body_for(rung: str, provider: str, explicit: str | None = None,
     authoritative source jarvis/llm_client.py's factory takes —
     typically `profile.get("provider")` or an equivalent already-known
     value, never re-derived here). `output_config` only exists on
-    Anthropic's native Messages API, so any other provider (moonshot,
-    openrouter, plain openai) always gets `{}` regardless of `explicit`.
+    Anthropic's Messages API, so any other provider (openrouter, saygm)
+    always gets `{}` regardless of `explicit`.
     This is deliberately stricter than the plan's literal guard text
     (which names only the Haiku case): sending `output_config` to a
     non-Anthropic endpoint as an unrecognized top-level field risks the
@@ -88,13 +82,12 @@ def extra_body_for(rung: str, provider: str, explicit: str | None = None,
     Phase 1b task 2). A `JARVIS_EFFORT_<RUNG>` environment variable,
     when set, overrides it — a live, no-restart way to test or roll
     back a single rung's effort level without touching config (same
-    pattern as `JARVIS_ANTHROPIC_NATIVE`, `JARVIS_UI_CONTROL_ENABLED`,
-    etc. elsewhere in this repo). Read fresh on every call, never
+    pattern as `JARVIS_UI_CONTROL_ENABLED`, etc. elsewhere in this repo).
+    Read fresh on every call, never
     cached at import time.
 
     Raises ValueError on an unrecognized level — the same "never drop
-    an unexpected value silently" discipline jarvis/anthropic_shim.py's
-    S8 rule already applies to unknown kwargs: a typo in agents.yaml or
+    an unexpected value silently" discipline: a typo in agents.yaml or
     an env var should fail loudly at the first call, not produce a
     mysterious 400 from the API three layers away.
     """

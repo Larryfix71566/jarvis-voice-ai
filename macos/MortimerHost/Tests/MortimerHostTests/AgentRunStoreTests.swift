@@ -13,7 +13,7 @@ final class AgentRunStoreTests: XCTestCase {
     }
 
     private func working(name: String = "analyst", runId: String = "r1",
-                         task: String = "compare hosts", model: String = "kimi-k2.5") throws -> AppMessage {
+                         task: String = "compare hosts", model: String = "claude-sonnet-5") throws -> AppMessage {
         try message("""
         {"type":"agent","name":"\(name)","display_name":"\(name.capitalized)","state":"working",
          "run_id":"\(runId)","task":"\(task)","model":"\(model)","model_fallback":false}
@@ -26,7 +26,7 @@ final class AgentRunStoreTests: XCTestCase {
         XCTAssertEqual(store.runs.count, 1)
         let run = try XCTUnwrap(store.runs.first)
         XCTAssertNil(run.doneAt)
-        XCTAssertEqual(run.model, "kimi-k2.5")
+        XCTAssertEqual(run.model, "claude-sonnet-5")
         XCTAssertFalse(run.modelFallback)
     }
 

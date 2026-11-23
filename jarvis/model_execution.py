@@ -1245,15 +1245,8 @@ def _estimated_text_input_tokens(messages: list[dict[str, Any]], tools: list[dic
 def _api_adapter_has_no_retries(client: Any) -> bool:
     """Prove retry configuration from supported SDKs, never a foreign flag."""
     import openai
-    import anthropic
-    from jarvis.anthropic_shim import AsyncAnthropicChatShim
-    from jarvis.llm_client import _OpenRouterCachingClient
 
-    if type(client) is _OpenRouterCachingClient:
-        client = client._client
-    if type(client) is AsyncAnthropicChatShim:
-        client = client._anthropic
-    return (type(client) in {openai.AsyncOpenAI, anthropic.AsyncAnthropic}
+    return (type(client) is openai.AsyncOpenAI
             and type(client.max_retries) is int and client.max_retries == 0)
 
 

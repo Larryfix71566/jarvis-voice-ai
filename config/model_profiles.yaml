@@ -62,47 +62,22 @@
 # edit loop, the planning pathway, the site-research writer and the Edit
 # panel picker — so it is set to planning quality; the EXECUTOR tier is
 # selected by JARVIS_UPGRADE_PROFILE / JARVIS_APPBUILD_PROFILE (Phase 3),
-# never by pointing this at a cheaper model. K3 stays in the registry and
-# the council pool.
+# never by pointing this at a cheaper model. (2026-11-23: K3 and every
+# Kimi profile left the registry with the Moonshot API; the Claude profiles
+# below run only on the Claude subscription route.)
 default: claude-fable-5
 
 profiles:
-  # ---- DIRECT PROVIDER PROFILES -------------------------------------
-  # Reached with that vendor's own key. The developer agent and the voice
-  # model both live here deliberately: voice is latency-critical and wants
-  # no proxy hop, and the developer lives on tool calling, where a known-good
-  # direct route beats a proxy that may route the same slug to upstreams of
-  # differing tool fidelity.
-
-  - name: kimi-k3
-    label: "Kimi K3 — flagship, 1M context, always-on thinking"
-    endpoint: moonshot
-    model: kimi-k3
-    identity: moonshotai/kimi-k3
-    temperature: null
-    tier: mid
-    # 2026-09-01 — K3 is always-on thinking: probed 39 completion tokens to
-    # answer "OK", 36s on a 2.3K-token judge task; real judge workloads
-    # (8-15K tokens) project to 90-180s+ against COUNCIL_MEMBER_TIMEOUT_S
-    # (120s). Round e48cfbe1: all four K3 judge calls timed out
-    # (asyncio.TimeoutError stringifies empty, hence the blank abstain
-    # reasons). Per-profile rope honoured by council._call_profile as
-    # max(caller floor, this) — a profile can buy MORE time, never less, and
-    # other members do not inflate every round's wall time. Accepted trade:
-    # an escalation round with K3 judging can run ~4 min.
-    timeout_s: 240
-
-  - name: kimi-k2
-    label: "Kimi K2.7 Code — coding-tuned K2 family, 256K context"
-    endpoint: moonshot
-    model: kimi-k2.7-code
-    identity: moonshotai/kimi-k2.7-code
-    temperature: null
-    tier: economy
+  # ---- SUBSCRIPTION PROFILES ----------------------------------------
+  # Larry 2026-11-23: no API key. Claude profiles run through the Claude
+  # subscription CLI (route `subscription`), Codex through the ChatGPT
+  # subscription CLI (route `codex_subscription`). Their `vision` and
+  # `streaming` flags describe the model; the subscription routes do not
+  # carry images or streaming yet.
 
   - name: claude-opus
     label: "Claude Opus 5 — Anthropic Opus tier, 1M context"
-    endpoint: anthropic
+    endpoint: claude-subscription
     model: claude-opus-5
     identity: anthropic/claude-opus-5
     # temperature: null (D-003) — claude-opus-5 REJECTS the parameter
@@ -118,7 +93,7 @@ profiles:
 
   - name: claude-fable-5
     label: "Claude Fable 5 — Anthropic Mythos-class, above Opus"
-    endpoint: anthropic
+    endpoint: claude-subscription
     model: claude-fable-5
     identity: anthropic/claude-fable-5
     # Same D-003 fix as claude-opus above: a current-generation Anthropic
@@ -132,7 +107,7 @@ profiles:
 
   - name: claude-sonnet-5
     label: "Claude Sonnet 5 — direct Anthropic; the agent floor / executor tier"
-    endpoint: anthropic
+    endpoint: claude-subscription
     model: claude-sonnet-5
     identity: anthropic/claude-sonnet-5
     # D-003, same family as claude-opus/claude-fable-5 above: omit
@@ -149,6 +124,18 @@ profiles:
     # the Phase 3 executor tier (JARVIS_UPGRADE_PROFILE / JARVIS_APPBUILD_
     # PROFILE point here once the baseline is taken).
 
+  - name: claude-sonnet-5-5
+    label: "Claude Sonnet 5.5 — current Sonnet; the voice Supervisor"
+    endpoint: claude-subscription
+    model: claude-sonnet-5-5
+    identity: anthropic/claude-sonnet-5-5
+    # Larry 2026-11-23: added for voice (config/model_access.yaml
+    # voice_supervisor). Exact model id, never an alias. temperature null,
+    # same D-003 family rule as the Claude profiles above.
+    temperature: null
+    tier: mid
+    streaming: true
+
   - name: codex-subscription
     label: "Codex subscription default — authenticated ChatGPT subscription runtime"
     endpoint: codex-subscription
@@ -159,6 +146,11 @@ profiles:
     tier: frontier
 
   # ---- OPENROUTER PROFILES ------------------------------------------
+  # Larry 2026-11-23: OpenAI, DeepSeek and Kimi models are never reached
+  # through OpenRouter (jarvis.provider_access refuses their slugs); OpenAI
+  # and Claude run only on their subscription routes. Only other vendors'
+  # models remain here, and they are still pay-per-token.
+  #
   # Larry 2026-08-19. One key, many vendors. Added for the COUNCIL and
   # PLANNER tiers only — diversity of proposers and judges is the council's
   # entire product, and before this every tier was thin: economy had one
@@ -180,14 +172,6 @@ profiles:
   # Verify a candidate before flagging it — screen vision depending on a
   # single Anthropic key is a real gap, but an unverified flag is worse.
 
-  - name: or-gpt-5-mini
-    label: "GPT-5 mini (OpenRouter) — cheap OpenAI-family proposer, 400K"
-    endpoint: openrouter
-    model: openai/gpt-5-mini
-    identity: openai/gpt-5-mini
-    temperature: null
-    tier: economy
-
   - name: or-gemini-flash
     label: "Gemini 3.7 Flash (OpenRouter) — Google-family proposer, 1M"
     endpoint: openrouter
@@ -195,22 +179,6 @@ profiles:
     identity: google/gemini-3.7-flash
     temperature: null
     tier: economy
-
-  - name: or-deepseek
-    label: "DeepSeek V3.2 (OpenRouter) — independent lineage, 163K"
-    endpoint: openrouter
-    model: deepseek/deepseek-v3.2
-    identity: deepseek/deepseek-v3.2
-    temperature: null
-    tier: economy
-
-  - name: or-gpt-5.1
-    label: "GPT-5.1 (OpenRouter) — mid-tier judge, 400K"
-    endpoint: openrouter
-    model: openai/gpt-5.1
-    identity: openai/gpt-5.1
-    temperature: null
-    tier: mid
 
   - name: or-grok-4.3
     label: "Grok 4.3 (OpenRouter) — mid-tier judge, separate lineage, 1M"
@@ -220,32 +188,10 @@ profiles:
     temperature: null
     tier: mid
 
-  # Larry 2026-08-19 — the developer's build model, and a frontier council
-  # proposer. Chosen over a general frontier model (gpt-5.2) rather than
-  # alongside it: a coding-tuned model is exactly what an E1 escalation
-  # wants proposing, since that council convenes only after a self-edit's
-  # validation has already failed twice. Keeping ONE profile per vendor
-  # family also keeps tier-2's fan-out from doubling up on OpenAI.
-  - name: or-codex-max
-    label: "GPT-5.1 Codex Max (OpenRouter) — coding-tuned frontier, 400K"
-    endpoint: openrouter
-    model: openai/gpt-5.1-codex-max
-    identity: openai/gpt-5.1-codex-max
-    temperature: null
-    tier: frontier
-
   - name: or-grok-4.6
     label: "Grok 4.6 (OpenRouter) — frontier, 500K"
     endpoint: openrouter
     model: x-ai/grok-4.6
     identity: x-ai/grok-4.6
-    temperature: null
-    tier: frontier
-
-  - name: or-deepseek-v4-pro
-    label: "DeepSeek V4 Pro (OpenRouter) — frontier, 1M"
-    endpoint: openrouter
-    model: deepseek/deepseek-v4-pro
-    identity: deepseek/deepseek-v4-pro
     temperature: null
     tier: frontier

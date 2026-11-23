@@ -11,26 +11,52 @@ class Settings:
     openai_base_url = "https://supervisor.invalid/v1"
 
 
-def test_memory_route_is_independent_of_supervisor_settings(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "memory-key")
+@pytest.mark.parametrize("purpose", ["memory", "background"])
+def test_legacy_route_fails_closed_and_ignores_supervisor_and_vendor_keys(monkeypatch, purpose):
+    # The legacy (routing-disabled) path used to read ANTHROPIC_API_KEY for the
+    # Claude profile. Claude is subscription-only now: the profile has no
+    # api_key_env/base_url, so no paid route exists, whatever keys are set.
+    monkeypatch.delenv("JARVIS_MODEL_ROUTING_ENABLED", raising=False)
+    for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"):
+        monkeypatch.setenv(key, "present-but-unusable")
     monkeypatch.setenv("OPENAI_MODEL", "supervisor-haiku")
-    route = memory_model.resolve_memory_route(Settings())
-    assert route.profile == "claude-sonnet-5"
-    assert route.model == "claude-sonnet-5"
-    assert route.provider == "anthropic"
-    assert route.api_key_env == "ANTHROPIC_API_KEY"
+    resolver = memory_model.resolve_memory_route if purpose == "memory" else memory_model.resolve_background_route
+    with pytest.raises(memory_model.MemoryModelUnavailable, match=f"{purpose} model profile 'claude-sonnet-5' is incomplete") as caught:
+        resolver(Settings())
+    for secret in ("present-but-unusable", Settings.openai_api_key, Settings.openai_base_url):
+        assert secret not in str(caught.value)
+
+
+@pytest.mark.parametrize("purpose", ["memory", "background"])
+def test_legacy_client_factory_builds_no_client_for_subscription_only_profile(monkeypatch, purpose):
+    monkeypatch.delenv("JARVIS_MODEL_ROUTING_ENABLED", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "memory-key")
+    monkeypatch.setattr(memory_model, "make_async_client", lambda **_: pytest.fail("a paid API client was constructed"))
+    monkeypatch.setattr(memory_model, "make_route_client", lambda *a, **k: pytest.fail("a routed client was constructed"))
+    factory = memory_model.make_memory_async_client if purpose == "memory" else memory_model.make_background_async_client
+    with pytest.raises(memory_model.MemoryModelUnavailable, match="is incomplete"):
+        factory(Settings())
+
+
+def test_legacy_route_requires_credential_of_a_non_retired_profile(monkeypatch):
+    monkeypatch.delenv("JARVIS_MODEL_ROUTING_ENABLED", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    settings = Settings()
+    settings.jarvis_memory_profile = "or-grok-4.6"
+    with pytest.raises(memory_model.MemoryModelUnavailable, match="OPENROUTER_API_KEY"):
+        memory_model.resolve_memory_route(settings)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "memory-key")
+    route = memory_model.resolve_memory_route(settings)
+    assert route.profile == "or-grok-4.6"
+    assert route.api_key_env == "OPENROUTER_API_KEY"
+    assert route.base_url == "https://openrouter.ai/api/v1"
     assert route.model != Settings.openai_model
     assert route.base_url != Settings.openai_base_url
 
 
-def test_memory_route_fails_closed_when_its_credential_is_missing(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    with pytest.raises(memory_model.MemoryModelUnavailable, match="ANTHROPIC_API_KEY"):
-        memory_model.resolve_memory_route(Settings())
-
-
-def test_memory_client_factory_uses_resolved_route(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "memory-key")
+def test_legacy_client_factory_uses_resolved_non_retired_route(monkeypatch):
+    monkeypatch.delenv("JARVIS_MODEL_ROUTING_ENABLED", raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "memory-key")
     seen = {}
 
     def fake_factory(**kwargs):
@@ -38,32 +64,16 @@ def test_memory_client_factory_uses_resolved_route(monkeypatch):
         return object()
 
     monkeypatch.setattr(memory_model, "make_async_client", fake_factory)
-    client, route = memory_model.make_memory_async_client(Settings())
+    settings = Settings()
+    settings.jarvis_memory_profile = "or-grok-4.6"
+    client, route = memory_model.make_memory_async_client(settings)
     assert client is not None
-    assert seen == {
-        "api_key": "memory-key",
-        "base_url": "https://api.anthropic.com/v1/",
-        "provider": "anthropic",
-        "model": "claude-sonnet-5",
-        "timeout": 60,
-        "max_retries": 0,
-    }
-    assert route.profile == "claude-sonnet-5"
-
-
-def test_background_route_is_independent_of_supervisor_settings(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "background-key")
-    route = memory_model.resolve_background_route(Settings())
-    assert route.profile == "claude-sonnet-5"
-    assert route.model == "claude-sonnet-5"
-    assert route.model != Settings.openai_model
-    assert route.api_key_env == "ANTHROPIC_API_KEY"
-
-
-def test_background_route_fails_closed_when_its_credential_is_missing(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    with pytest.raises(memory_model.MemoryModelUnavailable, match="background model profile"):
-        memory_model.resolve_background_route(Settings())
+    assert seen["api_key"] == "memory-key"
+    assert seen["base_url"] == "https://openrouter.ai/api/v1"
+    assert seen["provider"] == route.provider
+    assert seen["model"] == route.model
+    assert (seen["timeout"], seen["max_retries"]) == (60, 0)
+    assert route.profile == "or-grok-4.6"
 
 
 @pytest.mark.parametrize("purpose", ["memory", "background"])

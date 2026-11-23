@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import urllib.request
 
-import pytest
 
 from jarvis.status import providers as P
 from jarvis.status.providers import ADAPTERS, coverage_gaps, discover_providers
@@ -21,7 +20,7 @@ def test_real_config_has_no_coverage_gaps():
     assert coverage_gaps(refs) == []
     ids = {r.id for r in refs}
     # Everything §3.2 lists is discovered from the real config.
-    for expected in ("anthropic", "moonshot", "openrouter", "voice",
+    for expected in ("openrouter",
                      "claude-subscription", "codex-subscription", "saygm",
                      "local", "deepgram", "elevenlabs", "tavily", "github",
                      "github-selfedit"):
@@ -51,8 +50,10 @@ def test_real_config_is_the_split_registry_and_has_no_coverage_gaps(monkeypatch)
         if endpoint.get("base_url"):
             assert ref.base_url == endpoint["base_url"], prof["name"]
             assert ref.credential_env == endpoint["api_key_env"], prof["name"]
-        else:  # A1: the credential-less subscription endpoint
-            assert (ref.id, ref.adapter) == ("codex-subscription", "subscription_probe")
+        else:  # the credential-less subscription endpoints
+            want = ("claude-subscription" if endpoint["provider"] == "anthropic"
+                    else "codex-subscription")
+            assert (ref.id, ref.adapter) == (want, "subscription_probe")
 
 
 def test_unknown_provider_is_reported_as_gap():
@@ -111,18 +112,14 @@ def test_access_routes_map_to_adapters():
     assert "route:direct_api" not in refs
 
 
-def test_voice_ref_follows_openai_base_url():
-    refs = _by_id(discover_providers(
-        registry={"profiles": {}}, access={"routes": {}},
-        env={"OPENAI_BASE_URL": "https://api.anthropic.com/v1"}))
-    voice = refs["voice"]
-    assert voice.adapter == "anthropic_models"
-    assert voice.credential_env == "OPENAI_API_KEY"
-    assert voice.sources == ("settings:OPENAI_BASE_URL",)
-    default = _by_id(discover_providers(registry={"profiles": {}},
-                                        access={"routes": {}}, env={}))["voice"]
-    assert default.base_url == "https://api.openai.com/v1"
-    assert default.adapter == "openai_models"
+def test_claude_profile_attaches_to_the_subscription_route():
+    registry = {"profiles": {"claude-opus": {
+        "name": "claude-opus", "provider": "anthropic", "model": "claude-opus-5"}}}
+    refs = _by_id(discover_providers(registry=registry, access={"routes": {}}, env={}))
+    assert refs["claude-subscription"].adapter == "subscription_probe"
+    assert refs["claude-subscription"].profiles == ("claude-opus",)
+    assert "voice" not in refs
+    assert "profile:claude-opus" not in refs
 
 
 def test_services_always_emitted():
@@ -150,24 +147,22 @@ def test_no_network(monkeypatch):
 
 
 def test_discovery_is_deterministic():
-    a = discover_providers(env={"OPENAI_BASE_URL": "https://api.anthropic.com/v1"})
-    b = discover_providers(env={"OPENAI_BASE_URL": "https://api.anthropic.com/v1"})
+    a = discover_providers(env={})
+    b = discover_providers(env={})
     assert a == b
     assert [r.id for r in a] == sorted(r.id for r in a)
 
 
 def test_registry_profiles_group_by_provider():
     refs = _by_id(discover_providers(env={}))
-    assert refs["anthropic"].adapter == "anthropic_models"
-    assert refs["anthropic"].credential_env == "ANTHROPIC_API_KEY"
-    assert "claude-opus" in refs["anthropic"].profiles
+    assert refs["claude-subscription"].adapter == "subscription_probe"
+    assert "claude-opus" in refs["claude-subscription"].profiles
     assert refs["openrouter"].adapter == "openai_models"
-    assert refs["moonshot"].adapter == "openai_models"
+    assert "anthropic" not in refs and "moonshot" not in refs
 
 
 def test_no_key_values(monkeypatch):
-    secret = "sk-ant-FIXTURE-SECRET-1234567890"
-    env = {"ANTHROPIC_API_KEY": secret, "OPENAI_API_KEY": secret,
-           "OPENAI_BASE_URL": "https://api.anthropic.com/v1"}
+    secret = "sk-or-FIXTURE-SECRET-1234567890"
+    env = {"OPENROUTER_API_KEY": secret}
     refs = discover_providers(env=env)
     assert secret not in repr(refs)

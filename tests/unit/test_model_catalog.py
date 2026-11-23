@@ -72,7 +72,7 @@ def test_every_profile_appears_in_the_catalog():
 
 def test_a_profile_without_a_spoken_name_is_still_listed():
     rendered = render_model_catalog()
-    assert "kimi-k2 (no spoken name)" in rendered
+    assert "or-grok-4.3 (no spoken name)" in rendered
 
 
 def test_tier_and_provider_are_rendered_not_aliased():
@@ -100,9 +100,7 @@ def test_an_alias_naming_a_missing_profile_is_reported():
     ("Opus", "claude-opus"),
     ("Fable", "claude-fable-5"),
     ("Sonnet", "claude-sonnet-5"),
-    ("Kimi", "kimi-k3"),
     ("Grok", "or-grok-4.6"),
-    ("DeepSeek", "or-deepseek-v4-pro"),
 ])
 def test_each_family_resolves_to_the_member_that_was_chosen(spoken, profile):
     # Bare names map to a family with more than one member; which one is a

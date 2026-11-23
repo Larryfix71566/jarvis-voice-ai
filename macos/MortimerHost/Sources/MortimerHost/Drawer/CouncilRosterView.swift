@@ -7,7 +7,7 @@ import JarvisKit
 /// Agent Card". The council's own lineup, rendered under the live agent
 /// cards in the Agents tab: proposers with the means that chose the
 /// winner, judges listed separately, and abstentions VISIBLE WITH THEIR
-/// REASONS — `kimi-k3 ✗ judge call failed` four times on last night's
+/// REASONS — `claude-opus ✗ judge call failed` four times on last night's
 /// card would have surfaced the timeout bug at a glance. Silent pool
 /// degradation is the same failure class the launcher work fixed for
 /// services.

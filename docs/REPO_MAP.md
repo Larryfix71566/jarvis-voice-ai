@@ -88,7 +88,7 @@ review and human release workflow for changes; a status request is read-only.
   Consult its plan/status before changing semantics.
 - Model execution: `model_routing.py`, `model_execution.py`,
   `privacy_policy.py`, `model_preferences.py`, `saygm.py`,
-  `subscription.py`, `anthropic_shim.py`, `effort.py`.
+  `subscription.py`, `llm_client.py`, `provider_access.py`, `effort.py`.
 - Privacy/session results: `jarvis/sensitive.py`, `jarvis/bot/sensitive_turn.py`,
   `jarvis/bot/late_result.py` (late-result wrapper handling).
 - Host operations: `scripts/backup_db.py` (nightly backups: databases, KB, encrypted

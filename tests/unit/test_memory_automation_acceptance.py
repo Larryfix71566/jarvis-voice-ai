@@ -229,14 +229,20 @@ def test_route_aware_classifier_rejects_approved_external_for_confidential_memor
 
 def test_memory_shadow_route_is_public_fixture_only_and_live_memory_stays_confidential():
     shadow = resolve_model_route(
-        "memory_shadow", explicit_profile="kimi-k3", explicit_route="direct_api",
-        environ={"MOONSHOT_API_KEY": "test-only"},
+        "memory_shadow", explicit_profile="or-grok-4.3", explicit_route="direct_api",
+        environ={"OPENROUTER_API_KEY": "test-only"},
     )
     assert shadow.route.privacy == "approved_external"
     assert shadow.priority == "background"
     with pytest.raises(Exception, match="requires confidential"):
         resolve_model_route(
-            "memory", explicit_profile="claude-sonnet-5", explicit_route="direct_api",
+            "memory", explicit_profile="or-grok-4.3", explicit_route="direct_api",
+            environ={"OPENROUTER_API_KEY": "test-only"},
+        )
+    # Claude is subscription-only: no direct API route exists to be offered.
+    with pytest.raises(Exception, match="does not offer route 'direct_api'"):
+        resolve_model_route(
+            "memory_shadow", explicit_profile="claude-sonnet-5", explicit_route="direct_api",
             environ={"ANTHROPIC_API_KEY": "test-only"},
         )
 
@@ -682,11 +688,11 @@ def test_shadow_cli_requires_explicit_route_and_dry_run_never_loads_secrets(monk
     with pytest.raises(SystemExit) as missing:
         main()
     assert missing.value.code == 2
-    monkeypatch.setattr(sys, "argv", [str(script), "--profile", "kimi-k3", "--dry-run"])
+    monkeypatch.setattr(sys, "argv", [str(script), "--profile", "or-grok-4.3", "--dry-run"])
     assert main() == 0
     route = json.loads(capsys.readouterr().out)
-    assert route["provider"] == "moonshot"
-    assert route["api_key_env"] == "MOONSHOT_API_KEY"
+    assert route["provider"] == "openrouter"
+    assert route["api_key_env"] == "OPENROUTER_API_KEY"
     assert route["model"] != "supervisor-only"
     assert route["base_url"] != "https://wrong.example/v1"
     assert route["provider_called"] is False

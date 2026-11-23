@@ -11,9 +11,8 @@ renders it in normal styling while every call 401s or 402s — the chip is
 capable of lying, and this module is what stops it.
 
 Two real states from that day make the case:
-  - ANTHROPIC_API_KEY was reported dead by a probe that used the wrong
-    endpoint, while voice worked fine. A false "dead" is as harmful as a
-    missed one, which is why `unreachable` below is NEVER rendered as dead.
+  - A key was reported dead by a probe that used the wrong endpoint, while
+    voice worked fine. A false "dead" is as harmful as a missed one, which is why `unreachable` below is NEVER rendered as dead.
   - OPENROUTER_API_KEY authenticated but returned 402 Payment Required. The
     key was genuinely valid; nine profiles behind it were genuinely
     unusable. "Valid" and "usable" are different claims.
@@ -178,7 +177,9 @@ def _targets(registry: dict[str, Any]) -> dict[str, tuple[str, str]]:
     for prof in values:
         if not isinstance(prof, dict):
             continue
-        key_env = str(prof.get("api_key_env", "OPENAI_API_KEY"))
+        key_env = str(prof.get("api_key_env") or "")
+        if not key_env:
+            continue  # subscription profile: no API credential to probe
         if key_env not in out:
             out[key_env] = (str(prof.get("base_url", "")),
                             str(prof.get("model", "")))

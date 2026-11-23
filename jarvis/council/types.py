@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class Proposal:
     label: str            # "Proposal A" — assigned by council.py, never by a model
-    profile: str           # registry profile name, e.g. "kimi-k2"
+    profile: str           # registry profile name, e.g. "claude-sonnet-5"
     content: str            # the proposed approach, prose only, never file contents
 
 

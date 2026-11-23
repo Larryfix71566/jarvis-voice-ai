@@ -570,7 +570,7 @@ def test_status_and_child_exit_must_match_exact_success_flag(passed, status, rc)
         pilot.validate_child_control(child, rc, expected, request)
 
 
-def backed_success(tmp_path, registry):
+def backed_success(tmp_path, registry, profile_name='or-grok-4.6', route_name='direct_api'):
     """Complete offline evidence with real host encoders/SQL, inert guest logs.
 
     This proves the parent's validation path accepts a complete, consistent
@@ -597,9 +597,9 @@ def backed_success(tmp_path, registry):
     source_ref = 'c' * 40
     declarations = helper.inspect_live_developer_registry(registry)
     schemas = registry.openai_tools(list(pilot.SERVERS))
-    record, selection_sha = pilot.selection_contract('claude-opus', 'direct_api')
+    record, selection_sha = pilot.selection_contract(profile_name, route_name)
     profile, route, policy = record['model'], record['route'], record['policy']
-    resolved = {'workload': 'developer', 'profile_name': 'claude-opus', 'model': profile['model'],
+    resolved = {'workload': 'developer', 'profile_name': profile_name, 'model': profile['model'],
                 'provider': profile['provider'], 'base_url': route['base_url'], 'route': route,
                 'api_key_env': route['credential_env'], 'identity': profile['identity'],
                 'priority': policy['priority'], 'limits': policy['limits']}
@@ -710,7 +710,7 @@ def backed_success(tmp_path, registry):
     expected = {'target_path': case['target_path'], 'source_dependency_sha256': MORTIMER.dependency_key(baseline),
                 'target_baseline_sha256': pilot.digest(b'public original fixture\n'),
                 'selection': {'model': profile['model']}}
-    request = {'run_id': run_id, 'directory': str(directory), 'image_home': str(home), 'profile': 'claude-opus',
+    request = {'run_id': run_id, 'directory': str(directory), 'image_home': str(home), 'profile': profile_name,
                'image_id': image, 'source_ref': source_ref, 'external_holdout': str(holdout),
                'external_holdout_sha256': pilot.digest(holdout.read_bytes()), 'service_auth_db': str(operator)}
     value = {'actual_selection_verified': True, 'independent_holdout_verified': True,
@@ -947,7 +947,10 @@ async def test_actual_full40_native_order_is_bound_at_all_pilot_boundaries(
     from jarvis.privacy_policy import DataPolicy
     from jarvis.subscription import SubscriptionCapabilityError
     agent, registry, _calls = actual_developer_sdk_unit
-    value, expected, request, _api_contract = backed_success(tmp_path, registry)
+    # The native-order proof is the Claude subscription route; the OpenRouter
+    # direct_api default is not used here.
+    value, expected, request, _api_contract = backed_success(
+        tmp_path, registry, 'claude-opus', 'subscription')
     schemas = registry.openai_tools(list(pilot.SERVERS))
     names = [schema['function']['name'] for schema in schemas]
     manifest = value['full_registry']['declared_tool_names']

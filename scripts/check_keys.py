@@ -67,74 +67,53 @@ except Exception as exc:                                  # noqa: BLE001
 
 try:
     from jarvis.agents.upgrade_agent import load_model_registry
-    from jarvis.config import load_settings
     from openai import OpenAI
 except Exception as exc:                                  # noqa: BLE001
     print(f"cannot import Mortimer modules: {exc}")
     print("run this from the repo root with the venv active")
     sys.exit(1)
 
-# 2. Group profiles by their api_key_env: probe once per KEY, not per
-#    profile, so one dead Moonshot key reads as one problem not two.
-# The joined registry, through the ONE loader: after the registry split the
-# key names and endpoints live in config/model_endpoints.yaml, not in the
-# profile file (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md step 3).
+# 2. Group profiles by (api_key_env, base_url): probe once per KEY and
+#    endpoint, so one dead key reads as one problem not two. Subscription
+#    profiles carry no api_key_env/base_url and are skipped (not reachable
+#    by API). Larry 2026-11-23: the Anthropic, OpenAI and Moonshot keys are
+#    retired and never probed.
 registry = load_model_registry()
-# Keyed by (api_key_env, base_url) — NOT by env name alone. One key env can
-# legitimately be used against two different endpoints: .env.example
-# documents pointing OPENAI_BASE_URL at Anthropic and running Haiku as the
-# voice model, in which case OPENAI_API_KEY holds an ANTHROPIC key. Probing
-# that key against api.openai.com returns 401 and means only "this is not an
-# OpenAI key" — which would read as "renew it" and send you to rotate a
-# perfectly good credential. The endpoint is part of the question.
+RETIRED_KEYS = {"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "MOONSHOT_API_KEY"}
 groups = {}
 for prof in registry["profiles"].values():
     if not isinstance(prof, dict):
         continue
-    env_name = str(prof.get("api_key_env", "OPENAI_API_KEY"))
-    base_url = str(prof.get("base_url", ""))
+    env_name = str(prof.get("api_key_env") or "")
+    base_url = str(prof.get("base_url") or "")
+    if not env_name or not base_url or env_name in RETIRED_KEYS:
+        continue
     g = groups.setdefault((env_name, base_url),
                           {"model": str(prof.get("model", "")), "profiles": []})
     g["profiles"].append(str(prof.get("name", "?")))
 
-try:
-    settings = load_settings()
-    voice_base, voice_model = settings.openai_base_url, settings.openai_model
-except Exception:                                         # noqa: BLE001
-    voice_base = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-    voice_model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
-voice = groups.setdefault(("OPENAI_API_KEY", voice_base),
-                          {"model": voice_model, "profiles": []})
-voice["profiles"].append("(voice model + fallback client)")
+for name in sorted(RETIRED_KEYS):
+    if os.environ.get(name, "").strip():
+        print(f"WARNING: {name} is still set. It is retired; remove it from "
+              "the .env / vault and revoke it in the provider console.")
 
 
 def probe(base_url, key, model):
     """-> (outcome, detail). Never returns OK for something not reached, and
     never returns REJECTED for something production never calls.
 
-    WHY THIS USES chat/completions AND NOT GET /models
-    --------------------------------------------------
-    The first version of this script probed `GET /v1/models`, because it is
-    free and read-only. Measured 2026-08-19 on Larry's machine, it reported
-    ANTHROPIC_API_KEY and OPENAI_API_KEY as REJECTED (HTTP 401) while
-    Mortimer was answering questions by voice on that very key. Anthropic's
-    OpenAI-compatibility layer authenticates `/chat/completions` with a
-    Bearer token but does NOT serve `/models` the same way, so it returns
-    401 for a perfectly valid credential.
+    WHY THIS USES chat/completions AND NOT GET /models: a 401 from an
+    endpoint production never calls is not evidence about the key. The
+    probe must exercise the SAME call the consumers make.
 
-    A 401 from an endpoint production never calls is not evidence about the
-    key. The probe must exercise the SAME call the consumers make -
-    `chat.completions.create`, which is what SubAgent, UpgradeAgent and the
-    council all issue - or its verdict describes a different question than
-    the one being asked. Cost is a few tokens per key; a false "renew this"
-    costs a working credential.
-
-    Auth is evaluated before request validity on every provider here, so any
+    Auth is evaluated before request validity on the provider here, so any
     status that is NOT 401/403 means the key was accepted - even a 400 for a
     malformed request. That is reported as OK with the reason attached,
     rather than as a failure.
     """
     require_model_api_access()
+    from jarvis.provider_access import require_not_retired
+    require_not_retired(base_url=base_url, model=model)
     client = OpenAI(api_key=key, base_url=base_url, timeout=30.0, max_retries=0)
     try:
         client.chat.completions.create(

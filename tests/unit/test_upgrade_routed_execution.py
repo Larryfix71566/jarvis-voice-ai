@@ -128,7 +128,7 @@ def fixture_issuer(monkeypatch):
     return module
 
 
-def prefer(workload, profile, access="direct_api"):
+def prefer(workload, profile, access="subscription"):
     return confirm_preference(stage_preference(workload, profile, access)["draft_id"])
 
 
@@ -647,8 +647,12 @@ def test_global_off_reused_agent_restores_legacy_contract_without_budget_or_sour
     async def execute(*args, **kwargs):
         return result()
     monkeypatch.setattr(ua, "execute_chat", execute)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "synthetic-unused-key")
     assert agent.run("public goal")["ok"]
     workspace.branch = None
+    # Larry 2026-11-23: only an API-credentialed (OpenRouter) profile has a
+    # legacy unrouted path; subscription profiles fail closed there.
+    agent._explicit_profile = "or-grok-4.3"
     monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "0")
     monkeypatch.setattr(ua, "begin_model_task_budget", lambda *args, **kwargs: pytest.fail("off budget authority"))
     monkeypatch.setattr(ua, "resolve_model_route_checked", lambda *args, **kwargs: pytest.fail("off route resolver"))

@@ -27,13 +27,16 @@ Usage (from repo root, keys in .env or vault):
                                                          # system prompt and
                                                          # schema, verifies
                                                          # wiring for free
-    python scripts/voice_model_bench.py --only haiku-baseline,sonnet-4-5
+    python scripts/voice_model_bench.py --only gemini-3.7-flash
 
 Never edits .env or the model registry (config/model_profiles.yaml,
 config/model_endpoints.yaml) — every candidate is reached
-by overriding OPENAI_MODEL/OPENAI_BASE_URL/the relevant key env in this
-process only (same "environment override, never a file edit" rule the plan
+by an in-process candidate table (same "never a file edit" rule the plan
 states for the accuracy runs in §4). Never prints a key value.
+
+Larry 2026-11-23: the Anthropic, OpenAI and Kimi APIs are retired, so this
+bench can only measure OpenRouter candidates. Claude voice models run on
+the subscription and must be measured through the subscription route.
 
 Output: one table on stdout, plus machine-readable JSON at
 logs/bench/voice-model-<date>.json so the run is auditable later without
@@ -77,46 +80,14 @@ FIDELITY_CASES: list[dict[str, Any]] = [
 ]
 CANONICAL_UTTERANCE = FIDELITY_CASES[0]["input"]
 
-# Plan §2. Edit freely — this is taste as much as analysis. `api_key_env`
-# for the two direct-Anthropic rows is OPENAI_API_KEY, not ANTHROPIC_API_KEY:
-# .env.example documents that in this deployment shape, OPENAI_BASE_URL
-# points at Anthropic and OPENAI_API_KEY holds the Anthropic credential —
-# the same (key, endpoint) pairing check_keys.py/check_env.py already probe.
-# Frontier models (Opus/Fable/GPT-5.2) are deliberately excluded from round
-# one per the plan's §2 reasoning.
+# Plan §2. Larry 2026-11-23: the direct-Anthropic rows and the OpenRouter
+# gpt-5-mini / kimi-k2.5 rows are retired (pay-per-token APIs of subscription
+# vendors); only the OpenRouter Gemini row remains.
 CANDIDATES: list[dict[str, str]] = [
-    {
-        "name": "haiku-baseline",
-        "route": "direct (current)",
-        "model": "claude-haiku-4-5",
-        "base_url": "https://api.anthropic.com/v1/",
-        "api_key_env": "OPENAI_API_KEY",
-    },
-    {
-        "name": "sonnet-4-5",
-        "route": "direct",
-        "model": "claude-sonnet-4-5",
-        "base_url": "https://api.anthropic.com/v1/",
-        "api_key_env": "OPENAI_API_KEY",
-    },
     {
         "name": "gemini-3.7-flash",
         "route": "openrouter",
         "model": "google/gemini-3.7-flash",
-        "base_url": "https://openrouter.ai/api/v1",
-        "api_key_env": "OPENROUTER_API_KEY",
-    },
-    {
-        "name": "gpt-5-mini",
-        "route": "openrouter",
-        "model": "openai/gpt-5-mini",
-        "base_url": "https://openrouter.ai/api/v1",
-        "api_key_env": "OPENROUTER_API_KEY",
-    },
-    {
-        "name": "kimi-k2.5",
-        "route": "openrouter",
-        "model": "moonshotai/kimi-k2.5",
         "base_url": "https://openrouter.ai/api/v1",
         "api_key_env": "OPENROUTER_API_KEY",
     },
@@ -269,6 +240,8 @@ async def bench_candidate(candidate: dict, system_prompt: str, schema: dict,
                            known_agents: set[str]) -> dict:
     from scripts.check_env import require_model_api_access
     require_model_api_access()
+    from jarvis.provider_access import require_not_retired
+    require_not_retired(base_url=candidate["base_url"], model=candidate["model"])
     from openai import AsyncOpenAI
 
     key = os.environ.get(candidate["api_key_env"], "").strip()

@@ -155,9 +155,9 @@ PLANNING_DEFAULT_JUDGE_LIMIT = 2
 
 # Which tiers that capped default draws from, in preference order. Mid-tier
 # judges scoring frontier drafts is the plan's own "third-lineage judge via
-# the V8 backfill (or-gpt-5.1, mid)" shape; a frontier profile that is not
-# proposing is the next best; economy last — a flash model scoring fable/
-# deepseek drafts is mostly noise, but still better than no advisory score
+# the V8 backfill (mid)" shape; a frontier profile that is not
+# proposing is the next best; economy last — a flash model scoring fable
+# drafts is mostly noise, but still better than no advisory score
 # when that is all that has a key. Within a tier, registry order. Profiles
 # with no `tier:` never judge by default (they never propose by default
 # either, per PLANNING_DEFAULT_PROPOSER_TIERS).

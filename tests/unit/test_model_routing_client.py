@@ -11,9 +11,11 @@ def test_subscription_adapter_does_not_fall_back_to_api(monkeypatch):
 
 
 def test_tool_workload_cannot_select_text_only_subscription(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    # The Claude subscription route now carries tools, so the text-only
+    # route that must still be refused for a tool workload is the Codex one.
     with pytest.raises(ModelRouteError, match="lacks required capabilities"):
-        resolve_model_route("developer", explicit_route="subscription")
+        resolve_model_route("developer", explicit_profile="codex-subscription",
+                            explicit_route="codex_subscription")
 
 
 def test_saygm_route_uses_saygm_credential_and_endpoint(monkeypatch):

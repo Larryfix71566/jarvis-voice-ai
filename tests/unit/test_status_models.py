@@ -11,15 +11,14 @@ import pytest
 from jarvis import keyhealth
 from jarvis.status.models import model_access_status
 
-SECRET = "sk-ant-FIXTURE-KEY-0123456789abcdef"
+SECRET = "sk-or-FIXTURE-KEY-0123456789abcdef"
 
 REGISTRY = {
     "default": "claude-opus",
     "profiles": {
         "claude-opus": {"name": "claude-opus", "provider": "anthropic",
                         "model": "claude-opus-5", "identity": "anthropic/claude-opus-5",
-                        "base_url": "https://api.anthropic.com/v1/",
-                        "api_key_env": "ANTHROPIC_API_KEY", "tier": "frontier"},
+                        "tier": "frontier"},
         "or-x": {"name": "or-x", "provider": "openrouter", "model": "x/y",
                  "identity": "x/y", "base_url": "https://openrouter.ai/api/v1",
                  "api_key_env": "OPENROUTER_API_KEY", "tier": "mid"},
@@ -45,15 +44,14 @@ def _reset_keyhealth():
 
 
 def _status():
-    env = {"ANTHROPIC_API_KEY": SECRET, "OPENAI_API_KEY": SECRET,
-           "OPENAI_BASE_URL": "https://api.anthropic.com/v1"}
+    env = {"OPENROUTER_API_KEY": SECRET}
     return model_access_status(registry=REGISTRY, access=ACCESS, env=env)
 
 
 def test_payload_shape():
     with keyhealth._lock:
-        keyhealth._verdicts["ANTHROPIC_API_KEY"] = "ok"
-        keyhealth._details["ANTHROPIC_API_KEY"] = "200 from /models"
+        keyhealth._verdicts["OPENROUTER_API_KEY"] = "ok"
+        keyhealth._details["OPENROUTER_API_KEY"] = "200 from /models"
     payload = _status()
     assert payload["ok"] is True
     assert payload["source"] == "registry"
@@ -61,21 +59,22 @@ def test_payload_shape():
     assert payload["generated_at"].endswith("+00:00")
     by_name = {p["name"]: p for p in payload["profiles"]}
     assert set(by_name) == {"claude-opus", "or-x", "codex-subscription"}
-    opus = by_name["claude-opus"]
+    opus = by_name["or-x"]
     assert set(opus) == {"name", "provider", "model", "identity", "tier", "routes",
                          "key_env", "key_present", "key_health", "key_health_detail"}
     assert opus["key_present"] is True
     assert opus["key_health"] == "ok"
     assert opus["key_health_detail"] == "200 from /models"
     assert opus["routes"] == ["direct_api"]
-    assert by_name["or-x"]["key_present"] is False
-    assert by_name["or-x"]["key_health"] == "unknown"
+    assert by_name["claude-opus"]["key_present"] is False
+    assert by_name["claude-opus"]["key_health"] == "n/a (subscription)"
     assert payload["workloads"] == {
         "developer": {"profile": "claude-opus", "route": "direct_api"},
         "noroute": {"profile": "or-x", "route": "direct_api"},
     }
     ids = [p["id"] for p in payload["providers"]]
-    assert "anthropic" in ids and "voice" in ids and "codex-subscription" in ids
+    assert "claude-subscription" in ids and "openrouter" in ids and "codex-subscription" in ids
+    assert "voice" not in ids
     assert payload["coverage_gaps"] == []
     json.dumps(payload)  # serializable
 

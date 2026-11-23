@@ -37,14 +37,9 @@ aliases:
   Fable 5: claude-fable-5
   Sonnet: claude-sonnet-5
 
-  # Moonshot — the bare name means the flagship, not the coding-tuned K2.
-  Kimi: kimi-k3
-
-  # OpenRouter — each bare name means the newer/higher-tier member, which
-  # preserves what the old prose mapping already intended.
+  # OpenRouter — each bare name means the newer/higher-tier member.
+  # Larry 2026-11-23: Kimi, DeepSeek and OpenAI-API (GPT) aliases removed with
+  # their retired API profiles; Codex runs on the ChatGPT subscription.
   Grok: or-grok-4.6
-  DeepSeek: or-deepseek-v4-pro
-  GPT: or-gpt-5.1
   Codex: codex-subscription
-  Codex via OpenRouter: or-codex-max
   Gemini: or-gemini-flash

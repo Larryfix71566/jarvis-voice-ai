@@ -7,7 +7,7 @@ import pytest
 
 from jarvis.config import expand_env_vars, load_settings
 
-REQUIRED = ("OPENAI_API_KEY", "DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY")
+REQUIRED = ("DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY")
 
 
 @pytest.fixture
@@ -32,12 +32,22 @@ def _set_required(monkeypatch):
 
 
 def test_missing_required_key_raises_and_lists_it(clean_env):
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+    clean_env.setenv("ELEVENLABS_API_KEY", "x")
+    with pytest.raises(RuntimeError, match="DEEPGRAM_API_KEY"):
         load_settings(env_file=None)
 
 
+def test_openai_api_key_is_not_required(clean_env):
+    """Larry 2026-11-23: the paid OpenAI/Anthropic APIs are retired, so no
+    model API key is needed to start."""
+    _set_required(clean_env)
+    clean_env.setenv("TAVILY_API_KEY", "tvly-test")
+    settings = load_settings(env_file=None)
+    assert not hasattr(settings, "openai_api_key")
+    assert not hasattr(settings, "openai_base_url")
+
+
 def test_missing_multiple_required_keys_all_listed(clean_env):
-    clean_env.setenv("OPENAI_API_KEY", "x")
     with pytest.raises(RuntimeError) as excinfo:
         load_settings(env_file=None)
     assert "DEEPGRAM_API_KEY" in str(excinfo.value)
@@ -55,8 +65,7 @@ def test_valid_settings_load_with_defaults(clean_env):
     _set_required(clean_env)
     with pytest.warns(UserWarning, match="TAVILY_API_KEY"):
         settings = load_settings(env_file=None)
-    assert settings.openai_base_url == "https://api.openai.com/v1"
-    assert settings.openai_model == "gpt-4.1-mini"
+    assert settings.openai_model == "claude-sonnet-5"
     assert settings.jarvis_memory_profile == "claude-sonnet-5"
     assert settings.jarvis_background_profile == "claude-sonnet-5"
     assert settings.jarvis_bot_port == 7860

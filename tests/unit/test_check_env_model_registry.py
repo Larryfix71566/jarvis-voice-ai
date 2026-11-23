@@ -44,24 +44,27 @@ def _write_agents(tmp_path, text):
 
 
 REGISTRY_YAML = """
-default: kimi-k3
+default: or-grok
 profiles:
-  - name: kimi-k3
-    provider: moonshot
-    model: kimi-k3
-    api_key_env: MOONSHOT_API_KEY
+  - name: or-grok
+    provider: openrouter
+    model: x-ai/grok-4.3
+    api_key_env: OPENROUTER_API_KEY
+  - name: or-gemini
+    provider: openrouter
+    model: google/gemini-3.7-flash
+    api_key_env: GEMINI_TEST_KEY
   - name: claude-opus
     provider: anthropic
     model: claude-opus-5
-    api_key_env: ANTHROPIC_API_KEY
 """
 
 
 class TestProfileReporting:
     def test_present_key_reports_pass(self, check_env, monkeypatch, tmp_path, capsys):
         _write_registry(tmp_path, REGISTRY_YAML)
-        monkeypatch.setenv("MOONSHOT_API_KEY", "x")
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "y")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "x")
+        monkeypatch.setenv("GEMINI_TEST_KEY", "y")
         check_env.check_model_registry()
         out = capsys.readouterr().out
         assert "[PASS]" in out
@@ -70,8 +73,8 @@ class TestProfileReporting:
 
     def test_missing_key_reports_warn_not_fail(self, check_env, monkeypatch, tmp_path, capsys):
         _write_registry(tmp_path, REGISTRY_YAML)
-        monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_TEST_KEY", raising=False)
         check_env.check_model_registry()
         out = capsys.readouterr().out
         assert "[WARN]" in out
@@ -80,10 +83,10 @@ class TestProfileReporting:
 
     def test_default_profile_labeled_as_registry_default(self, check_env, monkeypatch, tmp_path, capsys):
         _write_registry(tmp_path, REGISTRY_YAML)
-        monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         check_env.check_model_registry()
         out = capsys.readouterr().out
-        assert "kimi-k3 (registry default)" in out
+        assert "or-grok (registry default)" in out
         assert "claude-opus (registry default)" not in out
 
     def test_missing_registry_file_warns_and_returns(self, check_env, capsys):
@@ -108,25 +111,25 @@ class TestAgentCrossReference:
         _write_agents(tmp_path, """
 sub_agents:
   - name: developer
-    model_profile: kimi-k3
+    model_profile: or-grok
     on_profile_fallback: refuse
 """)
-        monkeypatch.setenv("MOONSHOT_API_KEY", "x")
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "y")
+        monkeypatch.setenv("OPENROUTER_API_KEY", "x")
+        monkeypatch.setenv("GEMINI_TEST_KEY", "y")
         check_env.check_model_registry()
         out = capsys.readouterr().out
-        assert "developer's model_profile (kimi-k3, on_profile_fallback=refuse)" in out
-        assert "MOONSHOT_API_KEY present" in out
+        assert "developer's model_profile (or-grok, on_profile_fallback=refuse)" in out
+        assert "OPENROUTER_API_KEY present" in out
 
     def test_refuse_mode_missing_key_gets_refuse_wording(self, check_env, monkeypatch, tmp_path, capsys):
         _write_registry(tmp_path, REGISTRY_YAML)
         _write_agents(tmp_path, """
 sub_agents:
   - name: developer
-    model_profile: kimi-k3
+    model_profile: or-grok
     on_profile_fallback: refuse
 """)
-        monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         check_env.check_model_registry()
         out = capsys.readouterr().out
         assert "developer will REFUSE every delegation until this is fixed" in out
@@ -137,9 +140,9 @@ sub_agents:
         _write_agents(tmp_path, """
 sub_agents:
   - name: scheduler
-    model_profile: claude-opus
+    model_profile: or-gemini
 """)
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_TEST_KEY", raising=False)
         check_env.check_model_registry()
         out = capsys.readouterr().out
         assert "scheduler will silently fall back to the voice model" in out
@@ -162,15 +165,61 @@ sub_agents:
         out = capsys.readouterr().out
         assert "[WARN]" in out or "[PASS]" in out
 
-    def test_unknown_profile_falls_back_to_openai_api_key_env(self, check_env, monkeypatch, tmp_path, capsys):
+    def test_subscription_profile_needs_no_key(self, check_env, monkeypatch, tmp_path, capsys):
+        _write_registry(tmp_path, REGISTRY_YAML)
+        _write_agents(tmp_path, """
+sub_agents:
+  - name: analyst
+    model_profile: claude-opus
+""")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        check_env.check_model_registry()
+        out = capsys.readouterr().out
+        assert "analyst's model_profile (claude-opus" in out
+        assert "subscription route (no API key)" in out
+        assert "ANTHROPIC_API_KEY" not in out
+
+    def test_unknown_profile_warns_not_in_registry(self, check_env, monkeypatch, tmp_path, capsys):
         _write_registry(tmp_path, REGISTRY_YAML)
         _write_agents(tmp_path, """
 sub_agents:
   - name: analyst
     model_profile: nonexistent-profile
 """)
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         check_env.check_model_registry()
         out = capsys.readouterr().out
         assert "analyst's model_profile (nonexistent-profile" in out
-        assert "OPENAI_API_KEY missing" in out
+        assert "not in the model registry" in out
+        assert "OPENAI_API_KEY" not in out
+
+
+class TestSubscriptionRuntimeAndRetiredKeys:
+    def test_missing_flags_fail(self, check_env, capsys):
+        check_env.check_subscription_runtime({})
+        out = capsys.readouterr().out
+        assert "[FAIL] Subscription runtime" in out
+        assert "JARVIS_MODEL_ROUTING_ENABLED=1" in out
+        assert "JARVIS_SUBSCRIPTION_TEXT_ENABLED=1" in out
+        assert check_env.failures == ["Subscription runtime"]
+
+    def test_flags_set_pass(self, check_env, capsys):
+        check_env.check_subscription_runtime({"JARVIS_MODEL_ROUTING_ENABLED": "1",
+                                              "JARVIS_SUBSCRIPTION_TEXT_ENABLED": "1"})
+        assert "[PASS] Subscription runtime" in capsys.readouterr().out
+        assert check_env.failures == []
+
+    def test_retired_keys_warn_loudly(self, check_env, capsys):
+        check_env.check_retired_keys({"ANTHROPIC_API_KEY": "x", "OPENAI_API_KEY": "y",
+                                      "MOONSHOT_API_KEY": "z"})
+        out = capsys.readouterr().out
+        for name in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "MOONSHOT_API_KEY"):
+            assert f"[WARN] RETIRED API key {name} is still set" in out
+        assert "revoke it in the provider console" in out
+        assert check_env.failures == []
+
+    def test_no_retired_keys_is_silent(self, check_env, capsys):
+        check_env.check_retired_keys({})
+        assert capsys.readouterr().out == ""
+
+    def test_openai_key_no_longer_required(self, check_env):
+        assert "OPENAI_API_KEY" not in check_env.REQUIRED_VARS

@@ -281,25 +281,23 @@ class TestLoadSettingsCallSite:
         """S4 call site 1: a required key present ONLY in the vault
         satisfies Settings — proof the injection happens before pydantic
         looks at the environment."""
-        vault.set_secret("OPENAI_API_KEY", "sk-from-vault")
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.setenv("DEEPGRAM_API_KEY", "dg-x")
+        vault.set_secret("DEEPGRAM_API_KEY", "dg-from-vault")
+        monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)
         monkeypatch.setenv("ELEVENLABS_API_KEY", "el-x")
         monkeypatch.setenv("TAVILY_API_KEY", "tv-x")
 
         from jarvis.config import load_settings
 
         settings = load_settings(env_file=None)
-        assert settings.openai_api_key == "sk-from-vault"
+        assert settings.deepgram_api_key == "dg-from-vault"
 
     def test_load_settings_env_still_wins_over_vault(self, monkeypatch):
-        vault.set_secret("OPENAI_API_KEY", "sk-from-vault")
-        monkeypatch.setenv("OPENAI_API_KEY", "sk-from-env")
-        monkeypatch.setenv("DEEPGRAM_API_KEY", "dg-x")
+        vault.set_secret("DEEPGRAM_API_KEY", "dg-from-vault")
+        monkeypatch.setenv("DEEPGRAM_API_KEY", "dg-from-env")
         monkeypatch.setenv("ELEVENLABS_API_KEY", "el-x")
         monkeypatch.setenv("TAVILY_API_KEY", "tv-x")
 
         from jarvis.config import load_settings
 
         settings = load_settings(env_file=None)
-        assert settings.openai_api_key == "sk-from-env"
+        assert settings.deepgram_api_key == "dg-from-env"

@@ -15,7 +15,7 @@ final class AppMessageTests: XCTestCase {
         let message = try XCTUnwrap(try AppMessage.decode(frame: data))
         guard case .agentWorking(let w) = message else { return XCTFail("expected .agentWorking") }
         XCTAssertEqual(w.runId, "r-1")
-        XCTAssertEqual(w.model, "moonshotai/kimi-k2.5-instruct")
+        XCTAssertEqual(w.model, "claude-sonnet-5")
         XCTAssertEqual(w.modelFallback, false)
         XCTAssertEqual(w.task, "compare hosts")
     }

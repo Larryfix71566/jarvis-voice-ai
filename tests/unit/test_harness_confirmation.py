@@ -11,7 +11,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_LLM_ACCESS_MODE", "legacy")
 
 def draft():
-    return P.stage_preference("developer", "claude-opus", "direct_api")
+    return P.stage_preference("developer", "or-grok-4.6", "direct_api")
 
 def test_exact_preview_saved_readback_not_runtime_adoption():
     d=draft()
@@ -89,14 +89,14 @@ async def test_voice_confirmation_never_reaches_persistence(monkeypatch):
     from jarvis.bot.model_route_tool import handle_model_route
     d=draft()
     monkeypatch.setattr(P,"confirm_preference",lambda *a,**kw:pytest.fail("voice confirmation sink"))
-    result=await handle_model_route(dict(workload="developer",profile="claude-opus",route="direct_api",confirm=True,draft_id=d["draft_id"]))
+    result=await handle_model_route(dict(workload="developer",profile="or-grok-4.6",route="direct_api",confirm=True,draft_id=d["draft_id"]))
     assert "Voice confirmation is unavailable" in result
     assert not P.list_preferences()
 
 @pytest.mark.asyncio
 async def test_voice_preview_has_exact_identity_but_no_approval_token():
     from jarvis.bot.model_route_tool import handle_model_route
-    result=await handle_model_route(dict(workload="developer",profile="claude-opus",route="direct_api",confirm=False))
+    result=await handle_model_route(dict(workload="developer",profile="or-grok-4.6",route="direct_api",confirm=False))
     assert "Configured selection:" in result and "Proposed selection:" in result
     assert "Eligibility and active runtime are unverified" in result
     assert "v1:" not in result
@@ -112,7 +112,7 @@ def test_removed_saved_profile_can_be_repaired_without_inventing_current_model()
     assert current["profile"] == "removed-profile" and current["model"] is None
     assert current["resolution_state"] == "unresolved"
     assert P.confirm_preference(repair["draft_id"])["state"] == "saved"
-    assert P.list_preferences()[0]["profile"] == "claude-opus"
+    assert P.list_preferences()[0]["profile"] == "or-grok-4.6"
 
 
 def test_unresolved_override_is_bound_and_changed_override_refuses(monkeypatch):
@@ -186,6 +186,6 @@ def test_catalog_wait_releases_writer_and_rechecks_afterward(monkeypatch,during_
 async def test_voice_preview_describes_unresolved_current_selection(monkeypatch):
     from jarvis.bot.model_route_tool import handle_model_route
     monkeypatch.setenv("JARVIS_MODEL_PROFILE_DEVELOPER","removed-profile")
-    result=await handle_model_route(dict(workload="developer",profile="claude-opus",route="direct_api",confirm=False))
+    result=await handle_model_route(dict(workload="developer",profile="or-grok-4.6",route="direct_api",confirm=False))
     assert "Configured selection: unresolved" in result and "Proposed selection:" in result
     assert "v1:" not in result

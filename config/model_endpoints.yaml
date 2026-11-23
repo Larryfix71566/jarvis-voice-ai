@@ -30,15 +30,17 @@
 # MODEL on an existing endpoint is a routine change in
 # config/model_profiles.yaml.
 
+# Larry 2026-11-23: Claude, ChatGPT (Codex) and Kimi are paid for by
+# subscription, so their pay-per-token API endpoints (api.anthropic.com,
+# api.openai.com, api.moonshot.ai) are gone, and jarvis.provider_access
+# refuses them (and DeepSeek) in every mode even if one is re-added here.
+# Claude and Codex models run only through their subscription CLIs.
+
 endpoints:
-  moonshot:
-    provider: moonshot
-    base_url: https://api.moonshot.ai/v1
-    api_key_env: MOONSHOT_API_KEY
-  anthropic:
+  claude-subscription:
     provider: anthropic
-    base_url: https://api.anthropic.com/v1/
-    api_key_env: ANTHROPIC_API_KEY
+    kind: subscription
+    route: subscription
   codex-subscription:
     provider: openai
     kind: subscription
@@ -50,4 +52,4 @@ endpoints:
 
 supervisor:
   identity: anthropic/claude-fable-5
-  endpoint: anthropic
+  endpoint: claude-subscription

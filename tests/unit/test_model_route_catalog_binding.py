@@ -204,17 +204,21 @@ def test_choice_metadata_is_workload_specific_and_has_no_provider_or_db_calls(mo
 
     monkeypatch.setattr("jarvis.saygm.fetch_catalog", forbidden)
     monkeypatch.setattr("jarvis.model_preferences.list_preferences", forbidden)
-    descriptor = describe_route_choice("vision", "claude-opus", "direct_api",
-                                       environ={"ANTHROPIC_API_KEY": "private-fixture"})
+    descriptor = describe_route_choice("developer", "or-grok-4.6", "direct_api",
+                                       environ={"OPENROUTER_API_KEY": "private-fixture"})
     assert descriptor["compatible"] is True
     assert descriptor["key_present"] is True
-    assert descriptor["credential_env"] == "ANTHROPIC_API_KEY"
-    assert set(descriptor["capabilities"]) == {"text", "tools", "images", "streaming"}
+    assert descriptor["credential_env"] == "OPENROUTER_API_KEY"
+    assert set(descriptor["capabilities"]) == {"text", "tools"}
     assert descriptor["billing"] == "provider_api"
     assert "private-fixture" not in str(descriptor)
-    voice = describe_route_choice("voice_supervisor", "claude-haiku-4-5", "direct_api", environ={})
-    assert voice["compatible"] is True and voice["model"] == "claude-haiku-4-5"
-    assert describe_route_choice("developer", "claude-haiku-4-5", "direct_api")["compatible"] is False
+    # No paid gateway profile is image-verified, so vision stays incompatible.
+    vision = describe_route_choice("vision", "or-grok-4.6", "direct_api",
+                                   environ={"OPENROUTER_API_KEY": "private-fixture"})
+    assert vision["compatible"] is False and "images" in vision["reason"]
+    voice = describe_route_choice("voice_supervisor", "or-gemini-flash", "direct_api", environ={})
+    assert voice["compatible"] is True and voice["model"] == "google/gemini-3.7-flash"
+    assert describe_route_choice("developer", "or-gemini-flash", "direct_api")["compatible"] is False
     private = describe_route_choice("memory", "claude-sonnet-5", "saygm", environ={})
     assert private["compatible"] is False
     assert private["status"] == "catalog_verification_required"
@@ -240,6 +244,8 @@ def test_loaded_choice_catalog_avoids_reloads_and_filters_subscription_provider(
     assert "subscription" not in model_routing.available_routes(codex, access["routes"])
     descriptor = describe_route_choice("planning", "claude-opus", "subscription",
                                        access_config=access, registry=registry, environ={})
+    # A text workload on the subscription route uses the text adapter, so it
+    # needs no tool acceptance; tool workloads are checked below.
     assert descriptor["applicable"] is True and descriptor["compatible"] is True
     unsupported = describe_route_choice("developer", "claude-opus", "subscription",
                                         access_config=access, registry=registry, environ={})

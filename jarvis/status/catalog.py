@@ -34,7 +34,6 @@ from urllib.parse import urljoin, urlparse
 from jarvis.status.logs import redact
 from jarvis.status.providers import ProviderRef, discover_providers
 
-ANTHROPIC_VERSION = "2023-06-01"
 MAX_PAGES = 10
 CACHE_TTL_S = 3600.0
 MAX_ERROR_CHARS = 200
@@ -47,7 +46,7 @@ class CatalogResult:
     provider: str
     ok: bool
     fetched_at: str
-    source: str                 # e.g. "anthropic:/v1/models"
+    source: str                 # e.g. "openrouter:/api/v1/models"
     models: tuple[dict, ...]    # each {"id": str, "display_name": str|None, "created": str|None}
     error_category: str | None  # rejected|unfunded|unreachable|unsupported|not_configured|no_credential
     error: str | None           # sanitized, <= 200 chars, never contains a key or header
@@ -131,23 +130,6 @@ def _items(payload: dict) -> list[dict]:
     return [item for item in data if isinstance(item, dict) and item.get("id")]
 
 
-def _anthropic(base: str, key: str, http, timeout: float) -> list[dict]:
-    headers = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION,
-               "User-Agent": USER_AGENT}
-    url = f"{base.rstrip('/')}/models?limit=1000"
-    models: list[dict] = []
-    for _ in range(MAX_PAGES):
-        payload = _get_json(http, url, headers, timeout)
-        for item in _items(payload):
-            models.append({"id": str(item["id"]),
-                           "display_name": item.get("display_name"),
-                           "created": item.get("created_at")})
-        if not payload.get("has_more") or not payload.get("last_id"):
-            break
-        url = f"{base.rstrip('/')}/models?limit=1000&after_id={payload['last_id']}"
-    return models
-
-
 _PRICE_KEYS = ("prompt", "completion")
 
 
@@ -222,7 +204,7 @@ def _fetch_uncached(ref: ProviderRef, *, timeout: float, http, env: Mapping[str,
     if adapter == "service_health":
         return _result(ref, ok=False, source=_source(ref, adapter), category="unsupported",
                        error="not an LLM catalog; reachability only (services topic)")
-    if adapter not in ("anthropic_models", "openai_models", "saygm_catalog"):
+    if adapter not in ("openai_models", "saygm_catalog"):
         return _result(ref, ok=False, source=_source(ref, adapter), category="unsupported",
                        error="no catalog adapter for this provider (coverage gap)")
 
@@ -235,9 +217,7 @@ def _fetch_uncached(ref: ProviderRef, *, timeout: float, http, env: Mapping[str,
                        error=f"{ref.credential_env or 'no credential'} is not set")
     facts: dict[str, dict] = {}
     try:
-        if adapter == "anthropic_models":
-            models = _anthropic(base, key, http, timeout)
-        elif adapter == "openai_models":
+        if adapter == "openai_models":
             models = _openai(base, key, http, timeout, facts)
         else:
             models = _saygm(ref, key, timeout)
@@ -372,13 +352,9 @@ def compare_to_registry(results: Iterable[CatalogResult], registry: dict, *,
     for res in results:
         if not res.ok:
             continue
-        if res.provider == "voice":
-            model = str(env.get("OPENAI_MODEL") or "").strip()
-            configured = [(f"voice:{model}", model)] if model else []
-        else:
-            ref = refs.get(res.provider)
-            names = ref.profiles if ref is not None else ()
-            configured = [(n, str(profiles.get(n, {}).get("model") or "")) for n in names]
+        ref = refs.get(res.provider)
+        names = ref.profiles if ref is not None else ()
+        configured = [(n, str(profiles.get(n, {}).get("model") or "")) for n in names]
         offered = {str(m["id"]) for m in res.models}
         configured_ids = {mid for _, mid in configured}
         extra = [m for m in res.models if str(m["id"]) not in configured_ids]

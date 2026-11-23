@@ -306,7 +306,7 @@ def test_unreadable_upgrade_models_omits_path_and_parser_source(
         names = registry._resolve_dynamic_env(
             "mcp-private", [{"source": "upgrade_models_api_keys"}])
 
-    assert names == ["OPENAI_API_KEY"]
+    assert names == []
     assert "upgrade_models_unreadable server=mcp-private" in caplog.text
     assert "error_type=ParserError" in caplog.text
     assert str(tmp_path) not in caplog.text

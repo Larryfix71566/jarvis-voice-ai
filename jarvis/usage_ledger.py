@@ -424,38 +424,23 @@ def record_call(rung: str,
 
 # ---------------------------------------------------------------- adapter
 #
-# jarvis-voice-ai-clean confirmed (2026-09-01): every profile — direct
-# Anthropic, direct Moonshot, and OpenRouter — is reached through the SAME
-# AsyncOpenAI client class, just pointed at a different base_url. There is
-# no native Anthropic Messages API client anywhere in this repo. That means
-# every response has the same OpenAI-wire `usage` shape regardless of which
-# vendor actually answered — one adapter, not three.
+# Larry 2026-11-23: the pay-per-token Anthropic/OpenAI/Moonshot APIs are
+# retired. Claude and Codex usage arrives through the subscription adapters;
+# the remaining API path is the OpenAI-wire `usage` shape from OpenRouter and
+# SAYGM, so one adapter covers it.
 #
-# PROVIDER LABEL comes from what construction already resolved (an
-# api_key_env / model_profile match), never guessed from the SDK class,
-# since there's only one class. Pass it in explicitly from the call site —
-# see PROVIDER_BY_KEY_ENV below for the mapping used at base.py's call site.
+# PROVIDER LABEL comes from what construction already resolved (a profile or
+# route match), never guessed from the SDK class.
 #
-# CACHE FIELDS ARE UNVERIFIED THROUGH THIS PATH. OpenAI's own API reports
-# prompt_tokens_details.cached_tokens; whether Anthropic's and Moonshot's
-# OpenAI-compatible endpoints populate that same field (or any cache field
-# at all) when hit via chat.completions.create is not yet confirmed for
-# this deployment — same class of risk as the OpenRouter+Claude caching
-# passthrough gap, now potentially affecting the direct claude-opus
-# (developer) rung too. This adapter checks a short list of known aliases
-# and otherwise reports zero rather than guessing — a persistent zero on a
-# cached session is the signal to inspect the raw response, not proof
-# caching failed. Set JARVIS_DEBUG_USAGE_LEDGER=1 to print the raw usage
-# object once per call site so the actual shape can be eyeballed per
-# provider before trusting the cache columns.
+# CACHE FIELDS ARE UNVERIFIED THROUGH THIS PATH. This adapter checks a short
+# list of known aliases and otherwise reports zero rather than guessing — a
+# persistent zero on a cached session is the signal to inspect the raw
+# response, not proof caching failed. Set JARVIS_DEBUG_USAGE_LEDGER=1 to print
+# the raw usage object once per call site.
 
 def provider_from_base_url(base_url: str) -> str:
-    """Derive the real provider from the live client's base_url rather than
-    from an env var NAME — confirmed 2026-09-01 that OPENAI_API_KEY/
-    OPENAI_BASE_URL in this deployment actually point at Anthropic
-    (api.anthropic.com), so the key's name is not trustworthy as a label.
-    base_url is: self-updating if .env is ever repointed, and available at
-    every call site via the already-constructed client (client.base_url)."""
+    """Derive the provider from the live client's base_url rather than from an
+    env var NAME, which is not trustworthy as a label."""
     b = (base_url or "").lower()
     try:
         endpoint = urlsplit(b)
@@ -464,14 +449,8 @@ def provider_from_base_url(base_url: str) -> str:
             return "saygm"
     except ValueError:
         pass
-    if "anthropic.com" in b:
-        return "anthropic"
     if "openrouter.ai" in b:
         return "openrouter"
-    if "moonshot" in b:
-        return "moonshot"
-    if "openai.com" in b:
-        return "openai"
     if b.startswith("subscription://"):
         return "subscription"
     return "unknown"
@@ -483,11 +462,7 @@ _CACHED_TOKEN_ALIASES = (
 )
 _CACHE_WRITE_ALIASES = (
     (None, "cache_creation_input_tokens"),
-    ("prompt_tokens_details", "cache_write_tokens"),  # OpenRouter shape, and
-    # what jarvis/anthropic_shim.py's _convert_response() produces directly
-    # (Phase 1, Rev 3.2, landing step (i)) — openai's own
-    # PromptTokensDetails already has this field natively at the pinned
-    # openai==2.53.0, verified 2026-09-01.
+    ("prompt_tokens_details", "cache_write_tokens"),  # OpenRouter shape
 )
 
 

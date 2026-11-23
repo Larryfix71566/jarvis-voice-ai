@@ -1786,18 +1786,18 @@ class TestModelProfile:
         import yaml
         p = tmp_path / "upgrade_models.yaml"
         p.write_text(yaml.safe_dump({
-            "default": "kimi-k2",
+            "default": "or-test",
             "profiles": [
-                {"name": "kimi-k2", "label": "Kimi K2", "provider": "moonshot",
-                 "model": "kimi-k2.7-code", "base_url": "https://api.moonshot.ai/v1",
-                 "api_key_env": "MOONSHOT_API_KEY"},
+                {"name": "or-test", "label": "OpenRouter test", "provider": "openrouter",
+                 "model": "x-ai/grok-4.3", "base_url": "https://openrouter.ai/api/v1",
+                 "api_key_env": "OPENROUTER_API_KEY"},
             ],
         }))
         monkeypatch.setenv("JARVIS_UPGRADE_MODELS", str(p))
         if key_present:
-            monkeypatch.setenv("MOONSHOT_API_KEY", "test-key")
+            monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
         else:
-            monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
+            monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         return p
 
     def test_resolved_profile_used_as_model(self, tmp_path, monkeypatch):
@@ -1805,13 +1805,13 @@ class TestModelProfile:
         agent = SubAgent(
             name="developer", display_name="Developer", description="d",
             mcp_servers=["mcp-repo"], settings=make_settings(),
-            registry=FakeRegistry(), model_profile="kimi-k2",
+            registry=FakeRegistry(), model_profile="or-test",
         )
-        assert agent._model == "kimi-k2.7-code"
+        assert agent._model == "x-ai/grok-4.3"
         assert agent._client.api_key == "test-key"
-        assert str(agent._client.base_url) == "https://api.moonshot.ai/v1/"
+        assert str(agent._client.base_url) == "https://openrouter.ai/api/v1/"
         # Larry 2026-08-19 — the public pair the Agents tab card reads.
-        assert agent.model == "kimi-k2.7-code"
+        assert agent.model == "x-ai/grok-4.3"
         assert agent.model_is_fallback is False
 
     def test_unknown_profile_falls_back_with_warning(self, tmp_path, monkeypatch, caplog):
@@ -1836,7 +1836,7 @@ class TestModelProfile:
         agent = SubAgent(
             name="developer", display_name="Developer", description="d",
             mcp_servers=["mcp-repo"], settings=settings,
-            registry=FakeRegistry(), model_profile="kimi-k2",
+            registry=FakeRegistry(), model_profile="or-test",
         )
         assert agent._model == settings.openai_model
         assert "subagent_model_profile_fallback" in caplog.text
@@ -1902,19 +1902,19 @@ class TestRuntimeModelOverride:
         import yaml
         p = tmp_path / "upgrade_models.yaml"
         p.write_text(yaml.safe_dump({
-            "default": "kimi-k2",
+            "default": "grok",
             "profiles": [
-                {"name": "fable", "label": "Fable", "provider": "anthropic",
-                 "model": "claude-fable-5",
-                 "base_url": "https://api.anthropic.com/v1/",
-                 "api_key_env": "ANTHROPIC_API_KEY"},
+                {"name": "grok", "label": "Grok", "provider": "openrouter",
+                 "model": "x-ai/grok-4.3",
+                 "base_url": "https://openrouter.ai/api/v1/",
+                 "api_key_env": "OPENROUTER_API_KEY"},
             ],
         }))
         monkeypatch.setenv("JARVIS_UPGRADE_MODELS", str(p))
         if key_present:
-            monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+            monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
         else:
-            monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+            monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         return p
 
     def _agent_with_fake_override_client(self, tmp_path, monkeypatch, script):
@@ -1923,24 +1923,11 @@ class TestRuntimeModelOverride:
         override path builds is faked out so an override run never
         touches the real network.
 
-        Phase 1 (MORTIMER_OPTIMIZATION_PLAN.md, Rev 3.2, landing step
-        (ii), 2026-09-02): the override path now goes through
-        jarvis.llm_client.make_async_client, which — for this fixture's
-        "fable" profile (provider: anthropic) — builds a real
-        AsyncAnthropicChatShim when native routing is on. That's exactly
-        right in production (it's the whole point of this landing step),
-        but it means this fixture's FakeAsyncOpenAI is reached only with
-        native routing forced OFF; see
-        test_override_builds_native_shim_when_anthropic_native_enabled
-        below for the native-on case, which asserts the shim type
-        directly instead of faking the transport. `openai.AsyncOpenAI` is
-        patched (module attribute, looked up at call time inside
-        llm_client.py) rather than `base_module.AsyncOpenAI`, which no
-        longer exists — base.py imports llm_client now, not AsyncOpenAI
-        directly.
+        2026-11-23: the native Anthropic shim is gone (the Anthropic API is
+        retired); the override path builds a plain openai.AsyncOpenAI for a
+        non-retired endpoint (OpenRouter), which this fixture fakes.
         """
         self._registry_file(tmp_path, monkeypatch)
-        monkeypatch.setenv("JARVIS_ANTHROPIC_NATIVE", "0")
         import openai
 
         default_fake = FakeLLM([("text", "default reply")])
@@ -1965,41 +1952,17 @@ class TestRuntimeModelOverride:
         agent, _default, constructed = self._agent_with_fake_override_client(
             tmp_path, monkeypatch, [("text", "override reply")],
         )
-        reply = await agent.run("research radar", model_profile_override="fable")
+        reply = await agent.run("research radar", model_profile_override="grok")
         assert reply == "override reply"
         assert constructed["api_key"] == "test-key"
-        assert constructed["base_url"] == "https://api.anthropic.com/v1/"
-
-    async def test_override_builds_native_shim_when_anthropic_native_enabled(
-        self, tmp_path, monkeypatch
-    ) -> None:
-        """Phase 1 (Rev 3.2, landing step (ii)) mirror of the test above:
-        with JARVIS_ANTHROPIC_NATIVE left at its default (unset — on), the
-        SAME "fable" (provider: anthropic) override profile must resolve
-        to the real prompt-caching shim, not the OpenAI-compat client.
-        No network call is made — constructing AsyncAnthropicChatShim
-        never touches the network, only .create() would."""
-        self._registry_file(tmp_path, monkeypatch)
-        monkeypatch.delenv("JARVIS_ANTHROPIC_NATIVE", raising=False)
-        from jarvis.anthropic_shim import AsyncAnthropicChatShim
-
-        default_fake = FakeLLM([("text", "default reply")])
-        agent = SubAgent(
-            name="developer", display_name="Developer", description="d",
-            mcp_servers=["mcp-repo"], settings=make_settings(),
-            registry=FakeRegistry(), client_factory=lambda s: default_fake,
-        )
-        client, model, refused_reason = agent.resolve_model_profile("fable")
-        assert refused_reason == ""
-        assert model == "claude-fable-5"
-        assert isinstance(client, AsyncAnthropicChatShim)
+        assert constructed["base_url"] == "https://openrouter.ai/api/v1/"
 
     async def test_override_failure_refuses_never_falls_back(self, tmp_path, monkeypatch):
         self._registry_file(tmp_path, monkeypatch, key_present=False)
         agent, completions = make_agent([("text", "should never run")], name="developer")
-        reply = await agent.run("research radar", model_profile_override="fable")
+        reply = await agent.run("research radar", model_profile_override="grok")
         assert reply.startswith("REFUSED:")
-        assert "fable" in reply
+        assert "grok" in reply
         # Named the agent's own (unaffected) default too — F7's rationale.
         assert make_settings().openai_model in reply
         assert completions.requests == []  # no model call attempted
@@ -2025,7 +1988,7 @@ class TestRuntimeModelOverride:
             [("text", "should never run")], name="scheduler",
             on_profile_fallback="warn",
         )
-        reply = await agent.run("research radar", model_profile_override="fable")
+        reply = await agent.run("research radar", model_profile_override="grok")
         assert reply.startswith("REFUSED:")
         assert completions.requests == []
 
@@ -2036,7 +1999,7 @@ class TestRuntimeModelOverride:
         before_client = agent._client
         before_model = agent._model
 
-        await agent.run("research radar", model_profile_override="fable")
+        await agent.run("research radar", model_profile_override="grok")
 
         assert agent._client is before_client
         assert agent._model == before_model
@@ -2065,8 +2028,8 @@ class TestRuntimeModelOverride:
 
         monkeypatch.setattr(base_module, "RunLogger", CapturingRunLogger)
 
-        await agent.run("research radar", model_profile_override="fable")
-        assert captured_models == ["claude-fable-5"]
+        await agent.run("research radar", model_profile_override="grok")
+        assert captured_models == ["x-ai/grok-4.3"]
 
     async def test_enabled_confidential_workload_redacts_run_log(self, monkeypatch):
         """MAR-D: route privacy applies even when the turn is unlabeled."""
@@ -2210,7 +2173,7 @@ class TestRefuseMode:
         assert agent.model_is_fallback is True
 
     async def test_a_resolved_profile_never_refuses(self, tmp_path, monkeypatch):
-        agent, _ = self._agent(tmp_path, monkeypatch, "refuse", profile="kimi-k2")
+        agent, _ = self._agent(tmp_path, monkeypatch, "refuse", profile="or-test")
         assert agent.refuses == ""
         assert agent.model_is_fallback is False
 
