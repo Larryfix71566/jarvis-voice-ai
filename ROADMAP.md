@@ -180,7 +180,7 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 - **Owner:** `claude`
 - **Status:** claimed 2026-11-23: one PR into `next`.
 - **Implemented by:** Claude
-- **Remaining work / acceptance:** Larry: merge, set `JARVIS_ORCHESTRATOR_ENABLED=1` on the Mac, confirm the installed `claude` CLI runs `claude-fable-5-2`, and time one hand-off on a real voice turn. Fable 5.2 routing latency, the routing eval through the orchestrator and the streaming/acknowledgement fix the design depends on are untested.
+- **Remaining work / acceptance:** Larry: merge; check in `/model` that Fable 5.2 does not draw usage credits on his plan; confirm the installed `claude` CLI 2.1.291 runs `claude-fable-5-2`; set `JARVIS_ORCHESTRATOR_ENABLED=1` on the Mac and produce a voice tool receipt for the new hand_off menu (WS-40 receipt folder); time one hand-off on a real voice turn. Follow-up: `HANDOFF_ADDENDUM` still tells the voice model to delegate with `continuation`, which with the flag on is the orchestrator's call. Fable 5.2 routing latency, the routing eval through the orchestrator and the streaming/acknowledgement fix the design depends on are untested.
 - **Model version:** Claude Fable 5.2 (plan), Claude Sonnet 5.5 (implementation)
 - **Where:** `claude/orchestrator-handoff-20261123` into `next`
 - **Plan:** `docs/plans/MORTIMER_ORCHESTRATION_SPLIT_DESIGN_2026-11-23.md`
