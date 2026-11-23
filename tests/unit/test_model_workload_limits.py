@@ -162,8 +162,8 @@ def test_native_route_selection_preserves_limits_for_execution_to_enforce(tmp_pa
 
 def test_descriptor_publishes_limits_without_account_or_billing_evidence():
     choice = describe_route_choice(
-        "analyst", "claude-sonnet-5", "direct_api", access_config=_access_config(),
-        environ={"ANTHROPIC_API_KEY": "secret-must-not-be-displayed"},
+        "analyst", "or-grok-4.3", "direct_api", access_config=_access_config(),
+        environ={"OPENROUTER_API_KEY": "secret-must-not-be-displayed"},
     )
     assert choice["compatible"] is True
     assert choice["limits"] == LIMIT_VALUES

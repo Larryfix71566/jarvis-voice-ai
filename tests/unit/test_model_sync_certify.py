@@ -102,7 +102,7 @@ def test_certify_voice_step(tmp_path):
     r = C.certify(cand(roles=["voice"], voice=True), status_dir=tmp_path, probe=ok_probe,
                   voice_runner=lambda m, msgs, t: "ok")
     assert r["passed"] and r["steps"][-1]["name"] == "voice_bench"
-    assert r["manual"] == ["python scripts/latency_probe.py  # after switching OPENAI_MODEL, on live logs"]
+    assert r["manual"] == ["python scripts/latency_probe.py  # after switching the voice_supervisor profile, on live logs"]
     r = C.certify(cand(roles=["voice"], voice=True), status_dir=tmp_path, probe=ok_probe,
                   voice_runner=lambda m, msgs, t: "")
     assert not r["passed"]

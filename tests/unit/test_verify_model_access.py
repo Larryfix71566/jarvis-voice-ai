@@ -10,7 +10,7 @@ def test_access_report_is_secret_free_and_lists_workloads(monkeypatch):
     assert "must-not-appear" not in rendered
     assert "developer" in report["workloads"]
     assert report["routes"]["subscription"]["billing"] == "subscription"
-    assert report["routes"]["subscription"]["capabilities"] == ["text"]
+    assert report["routes"]["subscription"]["capabilities"] == ["text", "tools"]
     assert report["routes"]["subscription"]["api_credentials_stripped_before_launch"] is True
 
 

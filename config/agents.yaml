@@ -157,21 +157,9 @@ sub_agents:
     # (config/model_profiles.yaml). Change the profile name here to
     # reassign; resolution failures fall back to the voice model with a
     # logged warning.
-    # Larry 2026-08-19 — moved from kimi-k3 (direct Moonshot) to a
-    # coding-tuned frontier model reached through OpenRouter (or-codex-max),
-    # for the reason he gave: one key buys access to genuinely frontier
-    # build models instead of the one mid-tier model a single vendor
-    # offered.
-    #
-    # Larry 2026-08-22 — moved again, or-codex-max -> claude-opus ("I would
-    # rather the default developer model be opus 5 not gpt-5.1"), after a
-    # live session where the model chip reading "gpt-5.1-codex-max" was
-    # itself a source of confusion. claude-opus is a DIRECT Anthropic
-    # profile (no proxy hop), which the registry's own guidance prefers for
-    # this agent — the developer lives on tool calls, and a known-good
-    # direct route beats a proxy that may route the same slug to upstreams
-    # of differing tool fidelity. It also rides ANTHROPIC_API_KEY, the same
-    # key the voice loop already proves alive at every boot.
+    # Larry 2026-08-22: developer runs on claude-opus (build-grade, tool-call
+    # fidelity). Larry 2026-11-23: it runs on the Claude subscription route;
+    # the pay-per-token APIs are retired.
     #
     # A dead/missing key would make SubAgent fall back to the VOICE model,
     # which would put a dispatcher on build work; on_profile_fallback:

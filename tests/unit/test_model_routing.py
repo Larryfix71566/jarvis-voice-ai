@@ -17,14 +17,28 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _skill_eval_policy(tmp_path, *, enabled=True, spend_ceiling=1.0,
-                       priority="background", fallbacks=None):
+                       priority="background", fallbacks=None,
+                       route="subscription"):
     path = tmp_path / "model-access.yaml"
     path.write_text(yaml.safe_dump({
-        "defaults": {"route": "direct_api", "fallback_routes": []},
-        "routes": {},
+        "defaults": {"route": route, "fallback_routes": []},
+        "routes": {
+            "subscription": {
+                "adapter": "subscription_runtime", "billing": "subscription",
+                "provider": "claude", "privacy": "approved_external",
+                "capabilities": ["text", "tools"],
+            },
+            "saygm": {
+                "adapter": "saygm_gateway", "billing": "saygm_credit",
+                "credential_env": "SAYGM_API_KEY",
+                "base_url": "https://api.saygm.com/v1",
+                "privacy": "approved_external",
+                "capabilities": ["text", "tools"],
+            },
+        },
         "workloads": {
             "skill_eval": {
-                "profile": "claude-opus", "route": "direct_api",
+                "profile": "claude-opus", "route": route,
                 "privacy": "approved_external", "priority": priority,
                 "fallback_routes": fallbacks or [], "capabilities": ["text"],
             },
@@ -42,21 +56,22 @@ def _skill_eval_policy(tmp_path, *, enabled=True, spend_ceiling=1.0,
 
 
 def test_policy_selection_is_deterministic_and_explicit_override_wins(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    policy = resolve_policy("developer", explicit_route="direct_api")
-    route = resolve_model_route("developer", explicit_route="direct_api")
-    assert policy.route == "direct_api"
+    # direct_api is gone for the Claude profiles (no API key); the explicit
+    # route override is exercised on the subscription route instead.
+    policy = resolve_policy("developer", explicit_route="subscription")
+    route = resolve_model_route("developer", explicit_route="subscription")
+    assert policy.route == "subscription"
     assert route.profile_name == "claude-opus"
-    assert route.route.name == "direct_api"
+    assert route.route.name == "subscription"
     assert route.identity == "anthropic/claude-opus-5"
     assert route.priority == "interactive"
 
 
 def test_streaming_capability_is_explicit_to_verified_direct_profiles(monkeypatch):
-    route = resolve_model_route(
-        "developer", environ={"ANTHROPIC_API_KEY": "synthetic-key"}
-    )
-    assert "streaming" in route.route.capabilities
+    # The subscription routes do not carry streaming (2026-11-23: no direct
+    # Claude API); only a verified direct_api profile could advertise it.
+    route = resolve_model_route("developer")
+    assert "streaming" not in route.route.capabilities
     saygm_route = resolve_model_route(
         "memory", explicit_route="saygm",
         environ={"SAYGM_API_KEY": "synthetic-key"},
@@ -68,18 +83,24 @@ def test_streaming_capability_is_explicit_to_verified_direct_profiles(monkeypatc
     assert "streaming" not in saygm_route.route.capabilities
 
 
-def test_voice_haiku_is_resolved_as_voice_only_builtin(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    profile = model_profile_for_workload("voice_supervisor")
-    assert profile["model"] == "claude-haiku-4-5"
-    assert profile["identity"] == "anthropic/claude-haiku-4-5"
+def test_voice_uses_newest_sonnet_and_old_haiku_builtin_is_gone(monkeypatch):
+    # Larry 2026-11-23: voice runs on the newest Sonnet on the subscription.
+    assert model_profile_for_workload("voice_supervisor")["model"] == "claude-sonnet-5-5"
+    route = resolve_model_route("voice_supervisor")
+    assert route.model == "claude-sonnet-5-5"
+    assert route.route.name == "subscription"
+    assert route.api_key_env is None
+    # An old saved or env selection of the Haiku 4.5 builtin now fails loudly.
+    for workload in ("voice_supervisor", "developer"):
+        with pytest.raises(ModelRouteError, match="unknown model profile"):
+            resolve_model_route(workload, explicit_profile="claude-haiku")
 
 
 def test_vision_workload_requires_image_capability(monkeypatch):
-    route = resolve_model_route(
-        "vision", environ={"ANTHROPIC_API_KEY": "synthetic-key"}
-    )
-    assert "images" in route.route.capabilities
+    # The subscription route carries no images, so vision fails closed rather
+    # than silently dropping the image requirement.
+    with pytest.raises(ModelRouteError, match="lacks required capabilities"):
+        resolve_model_route("vision")
 
 
 def test_unknown_workload_fails_closed():
@@ -88,15 +109,18 @@ def test_unknown_workload_fails_closed():
 
 
 def test_confidential_workload_cannot_use_external_default(monkeypatch):
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     with pytest.raises(ModelRouteError, match="requires confidential"):
+        resolve_model_route("memory", explicit_route="subscription")
+    # direct_api is not even offered for a keyless Claude profile.
+    with pytest.raises(ModelRouteError, match="does not offer route 'direct_api'"):
         resolve_model_route("memory", explicit_route="direct_api")
 
 
 def test_missing_route_credential_fails_closed(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    with pytest.raises(ModelRouteError, match="requires ANTHROPIC_API_KEY"):
-        resolve_model_route("developer")
+    monkeypatch.delenv("SAYGM_API_KEY", raising=False)
+    from jarvis.model_routing import resolve_model_route_checked
+    with pytest.raises(ModelRouteError, match="requires SAYGM_API_KEY"):
+        resolve_model_route_checked("developer", explicit_route="saygm", environ={})
 
 
 def test_profile_routes_are_reported_without_credentials():
@@ -195,11 +219,13 @@ def test_skill_evaluation_route_requires_budget_and_background_no_fallback(
     monkeypatch.setenv("JARVIS_MODEL_PREFERENCES_ENABLED", "0")
     monkeypatch.delenv("JARVIS_MODEL_PROFILE_SKILL_EVAL", raising=False)
     monkeypatch.delenv("JARVIS_MODEL_ROUTE_SKILL_EVAL", raising=False)
-    missing_spend = _skill_eval_policy(tmp_path, spend_ceiling=None)
+    # A paid route (saygm credit) still needs a spend ceiling; the
+    # subscription route is exempt.
+    missing_spend = _skill_eval_policy(tmp_path, spend_ceiling=None, route="saygm")
     with pytest.raises(ModelRouteError, match="requires an explicit spend ceiling"):
         resolve_model_route(
             "skill_eval", policy_path=missing_spend,
-            environ={"ANTHROPIC_API_KEY": "synthetic-key"},
+            environ={"SAYGM_API_KEY": "synthetic-key"},
         )
 
     interactive = _skill_eval_policy(tmp_path, priority="interactive")
@@ -225,10 +251,10 @@ def test_skill_evaluation_uses_only_its_reviewed_background_route(
     path = _skill_eval_policy(tmp_path)
     route = resolve_model_route(
         "skill_eval", policy_path=path,
-        environ={"ANTHROPIC_API_KEY": "synthetic-key"},
+        environ={},
     )
     assert route.profile_name == "claude-opus"
-    assert route.route.billing == "provider_api"
+    assert route.route.billing == "subscription"
     assert route.priority == "background"
     assert route.workload == "skill_eval"
 

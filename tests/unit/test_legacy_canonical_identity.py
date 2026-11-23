@@ -40,8 +40,8 @@ def routing_off(monkeypatch):
     (_profile("direct", "gpt-5.1", identity="openai/gpt-5.1"),
      _profile("proxy", "openai/gpt-5.1", provider="openrouter", identity="openai/gpt-5.1")),
     (_profile("first", "same-model"), _profile("alias", "same-model")),
-    (_profile("direct", "kimi-k3", provider="moonshot"),
-     _profile("proxy", "moonshotai/kimi-k3", provider="openrouter")),
+    (_profile("direct", "synthetic", provider="x-ai"),
+     _profile("proxy", "x-ai/synthetic", provider="openrouter")),
     (_profile("first", "same-model", identity="openai/first-label"),
      _profile("alias", "same-model", identity="openai/second-label")),
     (_profile("first", "opaque", provider="openrouter", identity="openai/first-label"),
@@ -93,13 +93,13 @@ def test_explicit_malformed_identity_never_falls_back_to_a_guessed_identity(tmp_
 
 def test_legacy_identity_derivation_preserves_original_return_shape(tmp_path):
     registry = _registry(
-        _profile("direct", "kimi-k3", provider="moonshot"),
-        _profile("proxy", "openai/gpt-5.1", provider="openrouter", tier="mid"),
+        _profile("direct", "synthetic", provider="x-ai"),
+        _profile("proxy", "google/synthetic", provider="openrouter", tier="mid"),
     )
     loaded = ua.load_model_registry(_write_legacy(tmp_path, registry))
     assert loaded == registry
     assert ua.validate_model_registry_identities(loaded) == {
-        "direct": "moonshotai/kimi-k3", "proxy": "openai/gpt-5.1",
+        "direct": "x-ai/synthetic", "proxy": "google/synthetic",
     }
     assert all("identity" not in p for p in loaded["profiles"].values())
 

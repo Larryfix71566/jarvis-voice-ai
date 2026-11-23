@@ -85,7 +85,7 @@ def launch(model):
 
 def one_candidate(**kw):
     return Harness(pins=[pin("claude-fable-5", "config/a.yaml"),
-                         pin("claude-fable-5", ".env:OPENAI_MODEL", "voice")],
+                         pin("claude-fable-5", ".env:JARVIS_VOICE_MODEL", "voice")],
                    launches=[launch("claude-fable-5-1")], **kw)
 
 
@@ -201,7 +201,7 @@ def test_passed_cert_with_failed_proposal_retries_propose_only(tmp_path):
 
 # -------------------------------------------------------------- manual proposals
 def test_env_only_candidate_is_manual_without_propose(tmp_path):
-    h = Harness(pins=[pin("claude-fable-5", ".env:OPENAI_MODEL", "voice")],
+    h = Harness(pins=[pin("claude-fable-5", ".env:JARVIS_VOICE_MODEL", "voice")],
                 launches=[launch("claude-fable-5-1")])
     n = Notices()
     rep = go(h, tmp_path, n)

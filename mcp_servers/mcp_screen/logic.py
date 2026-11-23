@@ -283,7 +283,16 @@ def _capture_screenshot(display: int) -> Path:
 
 
 class NoVisionProfileError(RuntimeError):
-    """No usable (vision-capable, key-present) model profile was found."""
+    """No usable (vision-capable, key-present) model profile was found.
+
+    Larry 2026-11-23: only profiles with their own api_key_env and base_url
+    (OpenRouter / SAYGM) count; subscription profiles have no such path here."""
+
+
+_NO_VISION_MESSAGE = (
+    "Screen vision is unavailable: it has no subscription path yet, and no "
+    "vision-capable profile has its own API key and endpoint."
+)
 
 
 def _resolve_vision_profile(registry: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -303,7 +312,9 @@ def _resolve_vision_profile(registry: dict[str, Any] | None = None) -> dict[str,
                 f"{VISION_PROFILE_ENV}={requested!r} is not a known "
                 "vision-capable profile in config/model_profiles.yaml."
             )
-        key_env = prof.get("api_key_env", "OPENAI_API_KEY")
+        key_env = prof.get("api_key_env") or ""
+        if not key_env or not prof.get("base_url"):
+            raise NoVisionProfileError(_NO_VISION_MESSAGE)
         if not os.environ.get(key_env):
             raise NoVisionProfileError(
                 f"Vision profile {requested!r} is missing its API key "
@@ -314,15 +325,11 @@ def _resolve_vision_profile(registry: dict[str, Any] | None = None) -> dict[str,
     for prof in profiles.values():
         if not prof.get("vision"):
             continue
-        key_env = prof.get("api_key_env", "OPENAI_API_KEY")
-        if os.environ.get(key_env):
+        key_env = prof.get("api_key_env") or ""
+        if key_env and prof.get("base_url") and os.environ.get(key_env):
             return prof
 
-    raise NoVisionProfileError(
-        "No vision-capable model profile has its API key set. Add "
-        "`vision: true` to a profile in config/model_profiles.yaml whose "
-        "endpoint's key is set, or set JARVIS_VISION_PROFILE."
-    )
+    raise NoVisionProfileError(_NO_VISION_MESSAGE)
 
 
 def _default_vision_client(profile: dict[str, Any]) -> tuple[Any, str]:
@@ -331,11 +338,15 @@ def _default_vision_client(profile: dict[str, Any]) -> tuple[Any, str]:
     profiles (jarvis/agents/base.py) — one client-construction pattern,
     not a second one. Sync client (screen_view is a sync MCP tool,
     matching mcp_web's convention)."""
-    from jarvis.provider_access import require_api_access
+    from jarvis.provider_access import require_api_access, require_not_retired
+    key_env = profile.get("api_key_env") or ""
+    if not key_env or not profile.get("base_url"):
+        raise NoVisionProfileError(_NO_VISION_MESSAGE)
+    require_not_retired(provider=profile.get("provider"),
+                        base_url=profile.get("base_url"), model=profile.get("model"))
     require_api_access()
     from openai import OpenAI
 
-    key_env = profile.get("api_key_env", "OPENAI_API_KEY")
     return (
         OpenAI(api_key=os.environ[key_env], base_url=profile["base_url"]),
         profile["model"],
@@ -455,7 +466,7 @@ def screen_view(
             # MIN_SCREENSHOT_BYTES above exists because macOS Screen
             # Recording denial fails SILENTLY into a wallpaper-only image.
             # There was no equivalent for a dead credential, and since every
-            # `vision: true` profile is Anthropic, one bad ANTHROPIC_API_KEY
+            # `vision: true` profile shares one key, one bad key
             # kills screen vision entirely while _resolve_vision_profile
             # reports success — because the key is PRESENT. The user then
             # sees a capture-shaped error for a credential-shaped problem,

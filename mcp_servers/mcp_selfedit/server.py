@@ -89,7 +89,7 @@ def selfedit_start(
     agrees, call again with confirm=true AND that same staging_id (goal/
     profile don't need to be restated; the sidecar replays exactly what
     was previewed). PROFILE optionally names a planner from the registry
-    (e.g. 'kimi-k2', 'kimi-k3', 'claude-opus'); empty uses the default.
+    (e.g. 'claude-sonnet-5', 'claude-opus'); empty uses the default.
     PLAN_PATH, when set, names an existing repo plan/spec document (e.g.
     docs/plans/GEOLOCATION_DEVELOPMENT_PLAN.md) that seeds the run — use it
     whenever the user asks to implement a plan, spec, or phase document.
@@ -225,7 +225,7 @@ def plan_start(
     in this conversation.
 
     MODE is 'single' (one named model authors the whole plan; PROFILE
-    optionally names it, e.g. 'kimi-k2', 'claude-opus'; empty uses the
+    optionally names it, e.g. 'claude-sonnet-5', 'claude-opus'; empty uses the
     default) or 'council' (every usable model drafts a COMPLETE plan in
     parallel, judges score them advisorily, and the user picks between
     them with plan_choose). Two-phase: call with confirm=false to preview,

@@ -19,7 +19,11 @@ from zoneinfo import ZoneInfo
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TIMEOUT = 10
 
-REQUIRED_VARS = ["OPENAI_API_KEY", "DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY"]
+REQUIRED_VARS = ["DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY"]
+
+# Larry 2026-11-23: these pay-per-token API keys are retired. Claude and
+# ChatGPT/Codex models run only on the subscriptions.
+RETIRED_KEY_VARS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "MOONSHOT_API_KEY"]
 
 failures: list[str] = []
 
@@ -138,15 +142,9 @@ def model_key_probe(base_url: str, api_key: str, model: str) -> tuple[str, str]:
     check_env said PASS for two days against a dead GITHUB_TOKEN; nothing
     carried that lesson to a single model key until this function.
 
-    WHY chat/completions AND NOT GET /models. The first cut of
-    scripts/check_keys.py probed `/models` because it is free and
-    read-only. Measured on Larry's machine 2026-08-19, it reported
-    ANTHROPIC_API_KEY and OPENAI_API_KEY as REJECTED (401) while Mortimer
-    was answering questions by voice on that exact key: Anthropic's
-    OpenAI-compatibility layer authenticates /chat/completions with a
-    Bearer token but does not serve /models the same way. A probe must
-    exercise the SAME call the consumers make, or its verdict answers a
-    different question than the one asked.
+    WHY chat/completions AND NOT GET /models: a probe must exercise the
+    SAME call the consumers make, or its verdict answers a different
+    question than the one asked.
 
     Auth is evaluated before request validity on every provider here, so a
     status that is NOT 401/403 means the key was accepted — even a 400 for
@@ -158,6 +156,8 @@ def model_key_probe(base_url: str, api_key: str, model: str) -> tuple[str, str]:
     """
     try:
         require_model_api_access()
+        from jarvis.provider_access import require_not_retired
+        require_not_retired(base_url=base_url, model=model)
     except ValueError as exc:
         return "blocked", str(exc)
     body = json.dumps({
@@ -237,14 +237,8 @@ def _load_model_registry() -> dict:
 def check_model_keys(env: dict[str, str], pre_vault_env: set[str],
                      vault_names: set[str]) -> None:
     """One live probe per distinct (api_key_env, base_url) — per KEY and
-    ENDPOINT, not per profile, so one dead Moonshot key reads as one
-    problem rather than two.
-
-    The endpoint is part of the question, not a detail: OPENAI_API_KEY may
-    hold an Anthropic credential when OPENAI_BASE_URL points at Anthropic
-    (which .env.example documents), and probing it against api.openai.com
-    returns 401 meaning only "not an OpenAI key." Grouping by key alone
-    made exactly that mistake and produced a false "renew this key."
+    ENDPOINT, not per profile. Subscription profiles carry no api_key_env
+    and are skipped: they are not reachable by API.
     """
     try:
         require_model_api_access(env)
@@ -263,27 +257,15 @@ def check_model_keys(env: dict[str, str], pre_vault_env: set[str],
     for prof in registry["profiles"].values():
         if not isinstance(prof, dict):
             continue
-        key_env = str(prof.get("api_key_env", "OPENAI_API_KEY"))
-        base = str(prof.get("base_url", ""))
+        key_env = str(prof.get("api_key_env") or "")
+        base = str(prof.get("base_url") or "")
+        if not key_env or not base:
+            continue  # subscription profile: no API key to probe
+        if key_env in RETIRED_KEY_VARS:
+            continue  # retired; reported by check_retired_keys
         g = groups.setdefault((key_env, base),
                               {"model": str(prof.get("model", "")), "names": []})
         g["names"].append(str(prof.get("name", "?")))
-
-    # The voice model is not in the registry but is the single most
-    # important credential in the system — omitting it would leave the one
-    # key whose failure silences Mortimer entirely unchecked.
-    # `env` (load_env()), NOT os.environ. OPENAI_BASE_URL lives in .env as
-    # plain configuration, and .env is NOT exported into os.environ by this
-    # script — only the vault's secrets are. Reading os.environ here fell
-    # back to the api.openai.com default and probed Larry's ANTHROPIC key
-    # against OpenAI's server, producing a required-check FAIL on a system
-    # whose voice loop was working perfectly. Third time this exact mistake
-    # has been made today: the endpoint a key is used against is part of the
-    # question, and it has to come from the same place production reads it.
-    voice_base = env.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-    voice_model = env.get("OPENAI_MODEL", "gpt-4.1-mini")
-    groups.setdefault(("OPENAI_API_KEY", voice_base),
-                      {"model": voice_model, "names": []})["names"].append("voice model")
 
     for (key_env, base), g in sorted(groups.items()):
         used_by = ", ".join(g["names"])
@@ -311,6 +293,29 @@ def check_model_keys(env: dict[str, str], pre_vault_env: set[str],
             # Never "renew this key": a blocked network and a dead
             # credential call for opposite responses.
             report(None, label, f"{detail} — NOT proven bad [source: {source}]")
+
+
+def check_subscription_runtime(env: dict[str, str]) -> None:
+    """FAIL unless the subscription routing flags are on."""
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from jarvis.provider_access import missing_subscription_runtime_flags
+    missing = missing_subscription_runtime_flags(env)
+    if missing:
+        report(False, "Subscription runtime",
+               "set " + " and ".join(f"{n}=1" for n in missing) + " in .env — "
+               "Mortimer's models run only on the Claude/ChatGPT subscriptions")
+    else:
+        report(True, "Subscription runtime", "model routing and subscription text enabled")
+
+
+def check_retired_keys(env: dict[str, str]) -> None:
+    """WARN loudly for any retired pay-per-token API key still configured."""
+    for name in RETIRED_KEY_VARS:
+        if (env.get(name) or "").strip():
+            report(None, f"RETIRED API key {name} is still set",
+                   "retired; remove it from .env / the vault and revoke it in "
+                   "the provider console")
 
 
 def check_github(env: dict[str, str], env_file_values: dict[str, str]) -> None:
@@ -393,8 +398,11 @@ def check_model_registry() -> None:
         if not name:
             continue
         by_name[name] = profile
-        key_env = str(profile.get("api_key_env", "OPENAI_API_KEY"))
+        key_env = str(profile.get("api_key_env") or "")
         label = f"{name} (registry default)" if name == default_name else name
+        if not key_env:
+            report(True, f"Model profile {label}", "subscription route (no API key)")
+            continue
         present = bool(os.environ.get(key_env, "").strip())
         report(
             True if present else None,
@@ -422,10 +430,14 @@ def check_model_registry() -> None:
             continue
         mode = str(agent.get("on_profile_fallback", "warn")).strip().lower()
         profile = by_name.get(str(profile_name)) or {}
-        key_env = str(profile.get("api_key_env", "OPENAI_API_KEY"))
-        present = bool(os.environ.get(key_env, "").strip())
+        key_env = str(profile.get("api_key_env") or "")
+        present = bool(os.environ.get(key_env, "").strip()) if key_env else True
         label = f"{name}'s model_profile ({profile_name}, on_profile_fallback={mode})"
-        if present:
+        if not profile:
+            report(None, label, f"profile {profile_name!r} is not in the model registry")
+        elif not key_env:
+            report(True, label, "subscription route (no API key)")
+        elif present:
             report(True, label, f"{key_env} present")
         elif mode == "refuse":
             report(None, label,
@@ -521,6 +533,12 @@ def check_model_catalog() -> None:
                    "on the same endpoint in config/model_profiles.yaml")
 
 
+def _profile_usable(profile: dict) -> bool:
+    """A subscription profile has no api_key_env and needs no key."""
+    key_env = str(profile.get("api_key_env") or "")
+    return not key_env or bool(os.environ.get(key_env, "").strip())
+
+
 def check_screen_vision() -> None:
     """V5 (MORTIMER_SHELL_FIX_AND_SCREEN_VISION_PLAN.md): report whether
     screen vision is on and which vision profile would answer a
@@ -560,13 +578,12 @@ def check_screen_vision() -> None:
         if match is None:
             report(None, "Screen vision",
                    f"JARVIS_VISION_PROFILE={named} is not a vision:true profile")
-        elif not os.environ.get(str(match.get("api_key_env", "")), "").strip():
+        elif not _profile_usable(match):
             report(None, "Screen vision", f"{named}'s {match.get('api_key_env')} is missing")
         else:
             chosen = match
     else:
-        chosen = next((p for p in vision
-                       if os.environ.get(str(p.get("api_key_env", "")), "").strip()), None)
+        chosen = next((p for p in vision if _profile_usable(p)), None)
         if chosen is None:
             report(None, "Screen vision", "no vision:true profile has its API key set")
     if chosen is not None:
@@ -616,33 +633,14 @@ def main() -> int:
     report(v >= (3, 11), "Python >= 3.11", f"found {v.major}.{v.minor}.{v.micro}")
 
     # 2. Required env vars present
-    api_blocked = False
-    try:
-        require_model_api_access(env)
-    except ValueError:
-        api_blocked = True
-    missing = [name for name in REQUIRED_VARS if not env.get(name)
-               and not (api_blocked and name == "OPENAI_API_KEY")]
+    missing = [name for name in REQUIRED_VARS if not env.get(name)]
     report(not missing, "Required env vars present",
            f"missing: {', '.join(missing)}" if missing else "all set")
 
-    # 3. LLM reachable
-    if api_blocked:
-        report(False, "LLM readiness", "API probes disabled; subscription readiness is not verified here")
-    elif env.get("OPENAI_API_KEY"):
-        base = env.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-        headers = {"Authorization": f"Bearer {env['OPENAI_API_KEY']}"}
-        if "anthropic" in base:
-            # Anthropic's /v1/models expects native auth; Bearer only works
-            # on /chat/completions (the path the bot actually calls).
-            headers = {"x-api-key": env["OPENAI_API_KEY"],
-                       "anthropic-version": "2023-06-01"}
-        code, _ = http_status(f"{base}/models", headers)
-        report(code is not None and 200 <= code < 300,
-               "LLM reachable (GET {}/models)".format(base),
-               f"HTTP {code}" if code else "connection error")
-    else:
-        report(False, "LLM reachable", "skipped (no OPENAI_API_KEY)")
+    # 3. Subscription runtime (Larry 2026-11-23: models run only on the
+    # Claude/ChatGPT subscriptions) and retired API keys.
+    check_subscription_runtime(env)
+    check_retired_keys(env)
 
     # 4. Deepgram reachable
     if env.get("DEEPGRAM_API_KEY"):

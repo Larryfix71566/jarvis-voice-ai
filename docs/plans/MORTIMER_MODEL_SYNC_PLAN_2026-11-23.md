@@ -20,7 +20,7 @@ Every morning at 06:30, inside the existing `com.mortimer.status-daily` launchd 
      - `claude --version`.
      - `codex app-server` `model/list` (no inference).
      - Kimi: no non-interactive list exists; reported as unsupported.
-   - Pins: every model ID in tracked `config/*.yaml` (not `config/generated/`), the voice model (`OPENAI_MODEL`), and the verified CLI version sets.
+   - Pins: every model ID in tracked `config/*.yaml` (not `config/generated/`), the voice model (`workloads.voice_supervisor.profile` in `config/model_access.yaml`, through the registry loader), and the verified CLI version sets.
 2. **Decide** (pure): a finding per
    - `new_model`: a newer release in the same lineage (vendor + family, `jarvis/model_sync/ids.py`) as a pinned model;
    - `deprecation`: a pinned model on the deprecations table, with days left and a level (`notice` when first seen or more than 30 days out, `task` at 30 days or less, `urgent` at 7 days or less, `retired` after the date);

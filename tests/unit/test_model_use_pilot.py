@@ -9,6 +9,10 @@ import pytest
 
 from scripts import run_model_use_pilot as pilot
 
+# Claude is subscription-only; the paid direct_api route is a non-retired
+# OpenRouter profile (mid tier meets the research/memory workload floor).
+PAID_PROFILE = "or-grok-4.3"
+
 
 def fake_client(text, *, error=None, usage=None):
     async def create(**kwargs):
@@ -55,7 +59,7 @@ async def test_default_dry_uses_real_policy_guards_without_clients(monkeypatch):
     import jarvis.model_routing as routing
     monkeypatch.setattr(routing, "make_route_client", lambda *a, **k: pytest.fail("provider client created"))
     monkeypatch.setattr(routing, "resolve_model_route_checked", lambda *a, **k: pytest.fail("live/catalog resolver called"))
-    report = await pilot.run_pilot()
+    report = await pilot.run_pilot(profile=PAID_PROFILE)
     assert all(row["status"] == "dry_ready_unverified" for row in report["trials"])
     assert report["provider_requests_attempted"] == 0
     assert report["summary"]["completed"] == 0
@@ -63,7 +67,7 @@ async def test_default_dry_uses_real_policy_guards_without_clients(monkeypatch):
 
 
 async def test_offline_research_crosses_actual_execution_boundary_with_unknown_usage():
-    report = await pilot.run_pilot(mode="offline", group="research")
+    report = await pilot.run_pilot(mode="offline", group="research", profile=PAID_PROFILE)
     assert report["summary"]["completed"] == report["summary"]["passed"] == 3
     for row in report["trials"]:
         assert row["execution_route"] == "direct_api"
@@ -99,10 +103,10 @@ async def test_offline_subscription_still_enforces_required_tool_capability():
 
 async def test_provider_output_and_error_text_never_enter_receipt():
     marker = "secret-provider-output-sentinel"
-    result = await pilot.run_pilot(mode="offline", client_factory=lambda *a: fake_client(marker))
+    result = await pilot.run_pilot(mode="offline", profile=PAID_PROFILE, client_factory=lambda *a: fake_client(marker))
     assert marker not in json.dumps(result)
     assert result["summary"]["passed"] == 0
-    result = await pilot.run_pilot(mode="offline", client_factory=lambda *a: fake_client("", error=RuntimeError(marker)))
+    result = await pilot.run_pilot(mode="offline", profile=PAID_PROFILE, client_factory=lambda *a: fake_client("", error=RuntimeError(marker)))
     assert marker not in json.dumps(result)
     assert all(row["error_category"] == "RuntimeError" for row in result["trials"])
 
@@ -142,9 +146,9 @@ async def test_invalid_or_insufficient_budget_rejected_before_execution(kwargs, 
 
 async def test_live_paid_route_without_budget_never_calls_provider(monkeypatch):
     import jarvis.model_routing as routing
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "credential-sentinel")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "credential-sentinel")
     monkeypatch.setattr(routing, "make_route_client", lambda *a, **k: pytest.fail("unbudgeted paid request"))
-    report = await pilot.run_pilot(mode="live", profile="claude-sonnet-5")
+    report = await pilot.run_pilot(mode="live", profile=PAID_PROFILE)
     assert all(row["status"] == "unavailable" for row in report["trials"])
     assert report["provider_requests_attempted"] == 0
     assert "credential-sentinel" not in json.dumps(report)
@@ -152,11 +156,11 @@ async def test_live_paid_route_without_budget_never_calls_provider(monkeypatch):
 
 async def test_live_spend_reservation_stops_before_over_budget_request(monkeypatch):
     import jarvis.model_routing as routing
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "credential-sentinel")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "credential-sentinel")
     monkeypatch.setattr(pilot, "_reserve_cost", lambda *a: 0.1)
     monkeypatch.setattr(routing, "make_route_client", lambda *a, **k: fake_client(
         '{"year":2026,"margin_percent":40,"source_id":"B","unknown_customer_count":null}'))
-    report = await pilot.run_pilot(mode="live", profile="claude-sonnet-5", max_spend_usd=0.15)
+    report = await pilot.run_pilot(mode="live", profile=PAID_PROFILE, max_spend_usd=0.15)
     assert report["provider_requests_attempted"] == 1
     assert report["trials"][1]["reason"] == "configured_price_reservation_exceeds_budget"
     assert report["budget"]["configured_price_reserved_usd"] == 0.1
@@ -175,7 +179,7 @@ async def test_timeout_discards_late_response_and_records_no_response_text():
         await asyncio.sleep(0.1)
         return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="late private sentinel", tool_calls=[]))])
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=slow)))
-    report = await pilot.run_pilot(mode="offline", timeout_s=0.01, deadline_s=1,
+    report = await pilot.run_pilot(mode="offline", profile=PAID_PROFILE, timeout_s=0.01, deadline_s=1,
                                    client_factory=lambda *a: client)
     assert report["summary"]["completed"] == 0
     assert all(row["error_category"] == "TimeoutError" for row in report["trials"])
@@ -190,7 +194,7 @@ async def test_failed_confidential_catalog_preflight_is_cached_once(monkeypatch)
         raise routing.ModelRouteError("provider catalog secret sentinel")
     monkeypatch.setattr(routing, "resolve_model_route_checked", unavailable)
     monkeypatch.setattr(routing, "make_route_client", lambda *a, **k: pytest.fail("unqualified confidential inference"))
-    report = await pilot.run_pilot(mode="live", group="memory", profile="claude-sonnet-5", route="saygm")
+    report = await pilot.run_pilot(mode="live", group="memory", profile=PAID_PROFILE, route="saygm")
     assert calls == [1]
     assert report["catalog_preflight_attempts"] == 1
     assert report["provider_requests_attempted"] == 0
@@ -236,7 +240,7 @@ async def test_actual_unverified_storage_cleanup_is_reported_and_comparison_refu
             yield scope
     monkeypatch.setattr(pilot, 'isolated_state', isolation)
     try:
-        report = await pilot.run_pilot()
+        report = await pilot.run_pilot(profile=PAID_PROFILE)
         assert report['storage_cleanup']['verified'] is False
         assert report['storage_cleanup']['duration_ms'] >= 10
         assert report['error'] == 'storage_cleanup_unverified'
@@ -299,7 +303,7 @@ def test_unavailable_baseline_does_not_discard_completed_candidate_receipt(tmp_p
         return comparison_receipt()
     monkeypatch.setattr(pilot, "run_pilot", measured)
     destination = tmp_path / "candidate.json"
-    assert pilot.main(["--mode", "live", "--profile", "claude-sonnet-5",
+    assert pilot.main(["--mode", "live", "--profile", PAID_PROFILE,
                        "--baseline-receipt", str(tmp_path / "missing-private-sentinel.json"),
                        "--output", str(destination)]) == 0
     result = json.loads(destination.read_bytes())

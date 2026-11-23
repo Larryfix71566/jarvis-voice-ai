@@ -5,7 +5,7 @@ final class SharedContentTransferTests: XCTestCase {
     func testRoundTripPreservesApprovalAndEphemeralFlags() throws {
         let item = SharedContentTransfer(kind: .text, mimeType: "text/plain",
                                           digest: "abc", payload: Data("hello".utf8),
-                                          provider: "openai", approved: true)
+                                          provider: "codex_subscription", approved: true)
         let decoded = try JSONDecoder().decode(SharedContentTransfer.self,
             from: JSONEncoder().encode(item))
         XCTAssertEqual(decoded, item)

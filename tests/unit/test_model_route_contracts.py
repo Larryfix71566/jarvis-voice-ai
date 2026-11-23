@@ -35,12 +35,12 @@ def write_policy(tmp_path, route_name=None, changes=None):
 
 
 @pytest.mark.parametrize("route_name,workload,profile,changes", [
-    ("direct_api", "developer", "claude-opus", {"base_url": "https://attacker.invalid/v1"}),
-    ("direct_api", "developer", "claude-opus", {"credential_env": "OTHER_KEY"}),
-    ("direct_api", "developer", "claude-opus", {"api_key_env": "OTHER_KEY"}),
-    ("direct_api", "developer", "claude-opus", {"billing": "subscription"}),
-    ("direct_api", "developer", "claude-opus", {"privacy": "local_only"}),
-    ("direct_api", "developer", "claude-opus", {"adapter": "local_runtime"}),
+    ("direct_api", "developer", "or-grok-4.6", {"base_url": "https://attacker.invalid/v1"}),
+    ("direct_api", "developer", "or-grok-4.6", {"credential_env": "OTHER_KEY"}),
+    ("direct_api", "developer", "or-grok-4.6", {"api_key_env": "OTHER_KEY"}),
+    ("direct_api", "developer", "or-grok-4.6", {"billing": "subscription"}),
+    ("direct_api", "developer", "or-grok-4.6", {"privacy": "local_only"}),
+    ("direct_api", "developer", "or-grok-4.6", {"adapter": "local_runtime"}),
     ("subscription", "planning", "claude-opus", {"adapter": "openai_compatible"}),
     ("subscription", "planning", "claude-opus", {"base_url": "https://attacker.invalid/v1"}),
     ("subscription", "planning", "claude-opus", {"credential_env": "ANTHROPIC_API_KEY"}),
@@ -56,7 +56,7 @@ def write_policy(tmp_path, route_name=None, changes=None):
     ("saygm", "memory", "claude-sonnet-5", {"adapter": "openai_compatible"}),
     ("saygm", "memory", "claude-sonnet-5", {"billing": "subscription"}),
     ("saygm", "memory", "claude-sonnet-5", {"api_key_env": "OTHER_KEY"}),
-    ("direct_api", "developer", "claude-opus", {"extra_headers": {"Authorization": "fixture"}}),
+    ("direct_api", "developer", "or-grok-4.6", {"extra_headers": {"Authorization": "fixture"}}),
 ])
 def test_routine_route_override_is_refused_before_key_or_client(tmp_path, monkeypatch, route_name, workload, profile, changes):
     path = write_policy(tmp_path, route_name, changes)
@@ -85,7 +85,7 @@ def test_forged_native_or_local_route_cannot_transmit_fixture_key(monkeypatch, f
 
 
 def test_direct_api_uses_authoritative_registry_endpoint_and_provider_billing(tmp_path, monkeypatch):
-    profile = routing._load_model_registry()["profiles"]["claude-opus"]
+    profile = routing._load_model_registry()["profiles"]["or-grok-4.6"]
     path = write_policy(tmp_path, "direct_api", {
         "base_url": profile["base_url"], "credential_env": profile["api_key_env"],
         "api_key_env": profile["api_key_env"], "adapter": "openai_compatible",
@@ -94,7 +94,8 @@ def test_direct_api_uses_authoritative_registry_endpoint_and_provider_billing(tm
     monkeypatch.setenv(profile["api_key_env"], "FIXTURE_ONLY_KEY")
     recorded = []
     monkeypatch.setattr("jarvis.llm_client.make_async_client", lambda **kwargs: recorded.append(kwargs))
-    resolved = routing.resolve_model_route("developer", policy_path=path)
+    resolved = routing.resolve_model_route("developer", explicit_profile="or-grok-4.6",
+                                        explicit_route="direct_api", policy_path=path)
     routing.make_route_client(resolved)
     assert recorded[0]["base_url"] == resolved.route.base_url == profile["base_url"]
     assert recorded[0]["api_key"] == "FIXTURE_ONLY_KEY"
@@ -115,13 +116,13 @@ def test_subscription_and_local_routes_never_inherit_api_profile_credentials():
 def test_api_capabilities_cannot_be_promoted_by_global_route_config(tmp_path):
     path = write_policy(tmp_path, "direct_api", {"capabilities": ["text", "tools", "images"]})
     with pytest.raises(routing.ModelRouteError, match="unverified model capabilities"):
-        routing.resolve_model_route("developer", explicit_profile="or-gpt-5.1",
-                                    policy_path=path, environ=NoCredentialLookup())
+        routing.resolve_model_route("developer", explicit_profile="or-grok-4.3",
+                                    explicit_route="direct_api", policy_path=path, environ=NoCredentialLookup())
 
 
 @pytest.mark.parametrize("workload,profile,required", [
-    ("developer", "or-gpt-5-mini", "mid"),
-    ("background", "or-gpt-5-mini", "mid"),
+    ("developer", "or-gemini-flash", "mid"),
+    ("background", "or-gemini-flash", "mid"),
     ("planning", "claude-sonnet-5", "frontier"),
 ])
 @pytest.mark.parametrize("resolver", [routing.resolve_model_route, routing.resolve_model_route_checked])
@@ -132,11 +133,13 @@ def test_model_quality_floor_refuses_before_credentials_or_catalog(workload, pro
 
 
 def test_council_economy_and_voice_exception_preserve_documented_floors():
-    council = routing.resolve_model_route("council", explicit_profile="or-gpt-5-mini",
+    council = routing.resolve_model_route("council", explicit_profile="or-gemini-flash",
+                                         explicit_route="direct_api",
                                          environ={"OPENROUTER_API_KEY": "fixture"})
-    assert council.model == "openai/gpt-5-mini"
-    voice = routing.resolve_model_route("voice_supervisor", environ={"ANTHROPIC_API_KEY": "fixture"})
-    assert voice.model == "claude-haiku-4-5"
+    assert council.model == "google/gemini-3.7-flash"
+    voice = routing.resolve_model_route("voice_supervisor", environ=NoCredentialLookup())
+    assert voice.profile_name == "claude-sonnet-5-5"
+    assert voice.route.name == "subscription"
     assert routing.resolve_policy("council").minimum_quality_tier == "economy"
     assert routing.resolve_policy("voice_supervisor").minimum_quality_tier == "economy"
 
@@ -161,7 +164,7 @@ def test_configured_quality_cannot_lower_standing_floor(tmp_path, tier):
 
 
 def test_descriptor_exposes_required_and_model_quality_without_key_lookup():
-    descriptor = routing.describe_route_choice("developer", "or-gpt-5-mini", "direct_api",
+    descriptor = routing.describe_route_choice("developer", "or-gemini-flash", "direct_api",
                                                 environ=NoCredentialLookup())
     assert descriptor["applicable"] is True and descriptor["compatible"] is False
     assert descriptor["minimum_quality_tier"] == "mid"
@@ -173,12 +176,12 @@ def test_stage_refuses_lower_quality_and_legacy_confirm_requires_new_preview(tmp
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "quality.db"))
     monkeypatch.setattr("jarvis.saygm.fetch_catalog", lambda **_: pytest.fail("rejected choice fetched catalog"))
     with pytest.raises(ModelPreferenceError, match="minimum 'mid'"):
-        stage_preference("developer", "or-gpt-5-mini", "direct_api")
+        stage_preference("developer", "or-gemini-flash", "direct_api")
     with get_conn() as conn:
         run_migrations(conn)
         now = datetime.now(timezone.utc)
         conn.execute("INSERT INTO model_route_drafts(draft_id,workload,profile,route,privacy,created_at,expires_at) "
-                     "VALUES('old-quality','developer','or-gpt-5-mini','direct_api','approved_external',?,?)",
+                     "VALUES('old-quality','developer','or-gemini-flash','direct_api','approved_external',?,?)",
                      (now.isoformat(), (now + timedelta(minutes=5)).isoformat()))
         conn.commit()
     # Legacy drafts have no bound approval and fail before choice validation.
@@ -193,7 +196,7 @@ def test_legacy_persisted_lower_quality_preference_is_refused_at_execution(tmp_p
     with get_conn() as conn:
         run_migrations(conn)
         conn.execute("INSERT INTO model_route_preferences(workload,profile,route,privacy,updated_at) "
-                     "VALUES('developer','or-gpt-5-mini','direct_api','approved_external','2026-09-01')")
+                     "VALUES('developer','or-gemini-flash','direct_api','approved_external','2026-09-01')")
         conn.commit()
     with pytest.raises(routing.ModelRouteError, match="minimum 'mid'"):
         routing.resolve_model_route_checked("developer", environ=NoCredentialLookup())

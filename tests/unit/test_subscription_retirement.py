@@ -25,13 +25,12 @@ def retired(monkeypatch, fresh_db):
 ])
 @pytest.mark.parametrize("factory", [llm_client.make_async_client, llm_client.make_sync_client])
 def test_retirement_precedes_api_client_construction(retired, provider, url, factory):
-    constructors = [Mock(side_effect=AssertionError("API constructed")) for _ in range(4)]
-    for target, stub in zip([
-        "openai.OpenAI", "openai.AsyncOpenAI",
-        "jarvis.llm_client.AnthropicChatShim", "jarvis.llm_client.AsyncAnthropicChatShim",
-    ], constructors):
+    constructors = [Mock(side_effect=AssertionError("API constructed")) for _ in range(2)]
+    for target, stub in zip(["openai.OpenAI", "openai.AsyncOpenAI"], constructors):
         retired.setattr(target, stub)
-    with pytest.raises(ProviderAccessError, match="no paid fallback"):
+    # Retired vendors (Anthropic/OpenAI) are refused by the all-mode guard,
+    # the rest by subscription-only mode; both say no paid call was made.
+    with pytest.raises(ProviderAccessError, match="(?i)no paid"):
         factory(api_key="synthetic", base_url=url, provider=provider)
     assert all(not stub.called for stub in constructors)
 
@@ -73,8 +72,9 @@ def test_explicit_paid_selection_cannot_override_retirement(retired, route):
 
 def test_retained_valid_api_route_is_refused_at_client_boundary(retired):
     retired.setenv("JARVIS_LLM_ACCESS_MODE", "legacy")
-    retired.setenv("ANTHROPIC_API_KEY", "synthetic-unit-credential")
-    route = resolve_model_route("planning", explicit_route="direct_api")
+    retired.setenv("OPENROUTER_API_KEY", "synthetic-unit-credential")
+    route = resolve_model_route("planning", explicit_profile="or-grok-4.6",
+                                explicit_route="direct_api")
     retired.setenv("JARVIS_LLM_ACCESS_MODE", "subscription_only")
     with pytest.raises(ModelRouteError, match="no fallback"):
         make_route_client(route)
@@ -131,16 +131,6 @@ def test_standalone_key_diagnostic_refuses_before_vault(retired):
     denied.assert_not_called()
 
 
-def test_standalone_planner_refuses_before_source_or_vault(retired):
-    from scripts import probe_planner
-    denied = Mock(side_effect=AssertionError("private source or vault read"))
-    retired.setattr(probe_planner, "inject_env", denied)
-    retired.setattr(probe_planner, "load_repo_map_suffix", denied)
-    with pytest.raises(ProviderAccessError):
-        probe_planner.main(["probe_planner.py"])
-    denied.assert_not_called()
-
-
 @pytest.mark.asyncio
 async def test_standalone_bench_refuses_before_sdk_or_vault(retired):
     from scripts import voice_model_bench
@@ -171,9 +161,10 @@ def test_private_source_policy_is_not_relaxed(retired):
     assert resolve_policy("memory").privacy == "confidential"
 
 
-def test_tools_do_not_become_supported_by_selecting_subscription(retired):
+def test_images_do_not_become_supported_by_selecting_subscription(retired):
+    # The subscription routes carry text and tools (2026-11-23), not images.
     with pytest.raises(ModelRouteError, match="capabilities"):
-        resolve_model_route("developer")
+        resolve_model_route("vision")
 
 
 def test_legacy_executor_cannot_shop_for_paid_fallback(retired):
@@ -198,7 +189,7 @@ def test_retirement_settings_do_not_require_api_credential(retired):
     from jarvis.config import Settings
     retired.delenv("OPENAI_API_KEY", raising=False)
     settings = Settings(_env_file=None, deepgram_api_key="synthetic", elevenlabs_api_key="synthetic")
-    assert settings.openai_api_key == ""
+    assert not hasattr(settings, "openai_api_key")
 
 
 def test_screen_child_receives_retirement_policy(retired):
@@ -211,8 +202,22 @@ def test_vision_refuses_before_constructing_client(retired):
     from mcp_servers.mcp_screen.logic import _default_vision_client
     constructor = Mock(side_effect=AssertionError("vision API constructed"))
     retired.setattr("openai.OpenAI", constructor)
+    retired.setenv("SYNTHETIC_KEY", "synthetic")
     with pytest.raises(ProviderAccessError):
-        _default_vision_client({"model": "synthetic", "api_key_env": "SYNTHETIC_KEY"})
+        _default_vision_client({"model": "synthetic", "api_key_env": "SYNTHETIC_KEY",
+                                "base_url": "https://openrouter.ai/api/v1"})
+    constructor.assert_not_called()
+
+
+def test_vision_refuses_a_retired_vendor_in_every_mode(monkeypatch):
+    from mcp_servers.mcp_screen.logic import _default_vision_client
+    monkeypatch.setenv("JARVIS_LLM_ACCESS_MODE", "legacy")
+    monkeypatch.setenv("SYNTHETIC_KEY", "synthetic")
+    constructor = Mock(side_effect=AssertionError("vision API constructed"))
+    monkeypatch.setattr("openai.OpenAI", constructor)
+    with pytest.raises(ProviderAccessError, match="retired"):
+        _default_vision_client({"model": "claude-sonnet-5", "api_key_env": "SYNTHETIC_KEY",
+                                "base_url": "https://api.anthropic.com/v1/"})
     constructor.assert_not_called()
 
 

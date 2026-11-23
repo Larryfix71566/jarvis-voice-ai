@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from jarvis import llm_client, usage_ledger
+from jarvis.provider_access import ProviderAccessError
 
 
 def completion():
@@ -22,7 +23,7 @@ async def test_actual_async_factory_keeps_identity_and_forwards_arguments_withou
     ticks = iter([10.0, 10.025])
     monkeypatch.setattr(llm_client, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
     monkeypatch.setattr(usage_ledger, "record_call", lambda **_: pytest.fail("factory must not record/double-count"))
-    client = llm_client.make_async_client(api_key="synthetic-key", base_url="https://api.openai.com/v1", provider="openai")
+    client = llm_client.make_async_client(api_key="synthetic-key", base_url="https://openrouter.ai/api/v1", provider="openrouter")
     assert client is sdk
     kwargs = {"model": "synthetic-model", "messages": [{"role": "user", "content": "public fixture"}],
               "tools": [{"type": "function", "function": {"name": "fixture", "parameters": {}}}], "max_tokens": 32}
@@ -33,19 +34,27 @@ async def test_actual_async_factory_keeps_identity_and_forwards_arguments_withou
     assert result._mortimer_api_call.duration_ms == pytest.approx(25)
 
 
-def test_sync_factory_keeps_native_provider_class_and_measurement(monkeypatch):
+def test_sync_factory_keeps_plain_openai_client_and_measurement(monkeypatch):
     response = completion()
-    class NativeShim:
+    class PlainClient:
         def __init__(self, **_):
             self.chat = SimpleNamespace(completions=SimpleNamespace(create=lambda **_: response))
-    monkeypatch.setattr(llm_client, "AnthropicChatShim", NativeShim)
-    client = llm_client.make_sync_client(api_key="synthetic-key", base_url="https://api.anthropic.com/v1", provider="anthropic")
-    assert isinstance(client, NativeShim)
-    assert client.chat.completions.create(model="synthetic", messages=[]) is response
+    monkeypatch.setattr(llm_client.openai, "OpenAI", PlainClient)
+    client = llm_client.make_sync_client(api_key="synthetic-key", base_url="https://openrouter.ai/api/v1", provider="openrouter")
+    assert isinstance(client, PlainClient)
+    assert client.chat.completions.create(model="x-ai/fixture", messages=[]) is response
     assert response._mortimer_api_call.duration_ms >= 0
 
 
-async def test_openrouter_cache_control_is_preserved_under_measurement(monkeypatch):
+def test_sync_factory_refuses_retired_endpoint_and_missing_base_url(monkeypatch):
+    monkeypatch.setattr(llm_client.openai, "OpenAI", lambda **_: pytest.fail("no client may be built"))
+    for base_url, provider in (("https://api.anthropic.com/v1", "anthropic"),
+                               ("https://api.openai.com/v1", "openai"), (None, "openrouter")):
+        with pytest.raises(ProviderAccessError):
+            llm_client.make_sync_client(api_key="synthetic-key", base_url=base_url, provider=provider)
+
+
+async def test_openrouter_extra_body_is_untouched_and_retired_slug_is_refused(monkeypatch):
     response, observed = completion(), []
     async def create(**kwargs):
         observed.append(kwargs)
@@ -53,9 +62,13 @@ async def test_openrouter_cache_control_is_preserved_under_measurement(monkeypat
     sdk = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     monkeypatch.setattr(llm_client.openai, "AsyncOpenAI", lambda **_: sdk)
     client = llm_client.make_async_client(api_key="synthetic-key", base_url="https://openrouter.ai/api/v1", provider="openrouter")
-    assert await client.chat.completions.create(model="anthropic/fixture", messages=[], extra_body={"other": "kept"}) is response
-    assert observed[0]["extra_body"] == {"other": "kept", "cache_control": {"type": "ephemeral"}}
+    assert await client.chat.completions.create(model="x-ai/fixture", messages=[], extra_body={"other": "kept"}) is response
+    # The Anthropic-only cache_control injection left with the retired slugs.
+    assert observed[0]["extra_body"] == {"other": "kept"}
     assert response._mortimer_api_call.route_name == "direct_api"
+    with pytest.raises(ProviderAccessError):
+        await client.chat.completions.create(model="anthropic/fixture", messages=[])
+    assert len(observed) == 1
 
 
 async def test_saygm_transport_is_not_relabelled_as_direct_api(monkeypatch):
@@ -90,7 +103,7 @@ async def test_streaming_initial_return_is_not_fabricated_as_full_duration(monke
         return stream
     sdk = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     monkeypatch.setattr(llm_client.openai, "AsyncOpenAI", lambda **_: sdk)
-    client = llm_client.make_async_client(api_key="synthetic-key", base_url="https://api.openai.com/v1", provider="openai")
+    client = llm_client.make_async_client(api_key="synthetic-key", base_url="https://openrouter.ai/api/v1", provider="openrouter")
     await client.chat.completions.create(model="fixture", messages=[])
     assert isinstance(stream._mortimer_api_call, usage_ledger.ApiCompletionMetadata)
     assert await client.chat.completions.create(model="fixture", messages=[], stream=True) is stream
@@ -105,7 +118,7 @@ async def test_failed_call_keeps_original_exception(monkeypatch):
         raise error
     sdk = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     monkeypatch.setattr(llm_client.openai, "AsyncOpenAI", lambda **_: sdk)
-    client = llm_client.make_async_client(api_key="synthetic-key", base_url=None, provider="openai")
+    client = llm_client.make_async_client(api_key="synthetic-key", base_url="https://openrouter.ai/api/v1", provider="openrouter")
     with pytest.raises(ProviderError) as raised:
         await client.chat.completions.create(model="fixture", messages=[])
     assert raised.value is error
@@ -123,7 +136,7 @@ async def test_async_cancellation_reaches_original_provider_and_records_nothing(
     sdk = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     monkeypatch.setattr(llm_client.openai, "AsyncOpenAI", lambda **_: sdk)
     monkeypatch.setattr(usage_ledger, "record_call", lambda **_: pytest.fail("cancelled attempt invented accounting"))
-    client = llm_client.make_async_client(api_key="synthetic-key", base_url=None, provider="openai")
+    client = llm_client.make_async_client(api_key="synthetic-key", base_url="https://openrouter.ai/api/v1", provider="openrouter")
     task = asyncio.create_task(client.chat.completions.create(model="fixture", messages=[]))
     await asyncio.wait_for(entered.wait(), timeout=1)
     task.cancel()
@@ -139,9 +152,9 @@ def test_prospective_attribution_is_saved_once_in_real_ledger(tmp_path, monkeypa
     response = completion()
     sdk = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_: response)))
     monkeypatch.setattr(llm_client.openai, "OpenAI", lambda **_: sdk)
-    client = llm_client.make_sync_client(api_key="synthetic-key", base_url=None, provider="openai")
+    client = llm_client.make_sync_client(api_key="synthetic-key", base_url="https://openrouter.ai/api/v1", provider="openrouter")
     result = client.chat.completions.create(model="synthetic-model", messages=[])
-    usage_ledger.record_completion("analyst", "openai", "synthetic-model", result)
+    usage_ledger.record_completion("analyst", "openrouter", "synthetic-model", result)
     with sqlite3.connect(tmp_path / "costs.db") as conn:
         rows = conn.execute("SELECT route_name,billing_source,duration_ms,usage_known,input_tokens,output_tokens FROM llm_calls").fetchall()
     assert len(rows) == 1

@@ -5,10 +5,9 @@ the voice model pin and the verified CLI version sets. Never raises.
 """
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from jarvis.model_sync import ids
 
@@ -102,11 +101,12 @@ def _load_yaml(path: Path) -> Any:
         return None
 
 
-def voice_pin(config_dir: Path = CONFIG_DIR, env: Mapping[str, str] | None = None) -> dict[str, str] | None:
+def voice_pin(config_dir: Path = CONFIG_DIR) -> dict[str, str] | None:
     """The voice model: workloads.voice_supervisor.profile of
     model_access.yaml, resolved through the model registry loader (profile
-    name -> its ``model``) or used directly when it already is a model ID. Only when
-    that yields nothing, OPENAI_MODEL from ``env`` (no settings default)."""
+    name -> its ``model``) or used directly when it already is a model ID.
+    The voice Supervisor runs only on the Claude subscription (WS-40), so
+    there is no OPENAI_MODEL fallback."""
     config_dir = Path(config_dir)
     access = _load_yaml(config_dir / "model_access.yaml")
     try:
@@ -126,10 +126,7 @@ def voice_pin(config_dir: Path = CONFIG_DIR, env: Mapping[str, str] | None = Non
         parsed = ids.parse(model or profile)
         if parsed:
             return {"model": parsed.raw, "source": VOICE_SOURCE}
-    source_env = os.environ if env is None else env
-    value = (source_env.get("OPENAI_MODEL") or "").strip()
-    parsed = ids.parse(value) if value else None
-    return {"model": parsed.raw, "source": "env:OPENAI_MODEL"} if parsed else None
+    return None
 
 
 def cli_pins() -> dict[str, list[str]]:
@@ -147,5 +144,5 @@ def cli_pins() -> dict[str, list[str]]:
     return out
 
 
-def collect_pins(config_dir: Path = CONFIG_DIR, env: Mapping[str, str] | None = None) -> dict[str, Any]:
-    return {"models": scan_config(config_dir), "voice": voice_pin(config_dir, env), "cli": cli_pins()}
+def collect_pins(config_dir: Path = CONFIG_DIR) -> dict[str, Any]:
+    return {"models": scan_config(config_dir), "voice": voice_pin(config_dir), "cli": cli_pins()}

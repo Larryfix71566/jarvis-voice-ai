@@ -1,10 +1,6 @@
-pipecat-ai[deepgram,elevenlabs,openai,google,silero,mcp,runner,webrtc,anthropic]==1.4.0
-# anthropic extra (MORTIMER_OPTIMIZATION_PLAN.md Phase 1, Rev 3.2, landing step
-# (i), 2026-09-01): pulls in the `anthropic` package, which both
-# pipecat.services.anthropic.llm.AnthropicLLMService (Path A, the Supervisor)
-# and jarvis/anthropic_shim.py (Path B, sub-agents/executor/council) import.
-# Neither is wired into a live call site yet at this commit — see the plan's
-# landing order.
+pipecat-ai[deepgram,elevenlabs,openai,google,silero,mcp,runner,webrtc]==1.4.0
+# 2026-11-23: the `anthropic` extra is gone with the paid Anthropic API
+# (Larry); Claude runs only through the Claude subscription CLI.
 mcp[cli]
 fastmcp>=3.4.5
 openai

@@ -190,6 +190,24 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 
 </details>
 
+<details id="ws-40">
+<summary>WS-40 — No pay-per-token Anthropic, OpenAI, Kimi or DeepSeek API calls · Claude</summary>
+
+**Workstream:** Larry asked in his Claude Duet channel on 2026-11-23 at 17:38:55 UTC, after an Anthropic API bill: "Please remove all code related to api for each of these. I don’t want to get another bill for api usage where I have a subscription". At 17:40:50 UTC he named Kimi as the third subscription ("we have a Kimi subscription"), and at 17:46:19 UTC: "No voice should definitely use the subscription ... ensure we are using the most capable model to deliver voice with the least acceptable latency". No existing row covered provider billing, so this block is added with the PR that implements it; merging the PR approves the row (§0 rule 2). Under §0 rule 14 this block keeps systems from overlapping; it is not exclusive.
+
+- **Owner:** `claude`
+- **Status:** claimed 2026-11-23: one PR into `next`.
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** No code path can reach the Anthropic, OpenAI, Moonshot/Kimi or DeepSeek pay-per-token APIs in any access mode (provider, host or gateway model slug); Claude and Codex work runs only on the subscription routes; startup refuses unless `JARVIS_MODEL_ROUTING_ENABLED=1` and `JARVIS_SUBSCRIPTION_TEXT_ENABLED=1`; voice runs on the Claude subscription (`claude-sonnet-5-5`). Larry: remove the retired keys from `.env` and the vault, set the flags, redeploy, revoke the keys in each console, then measure voice with `scripts/latency_probe.py --budget`. Follow-ups: a voice capability receipt (voice and tool-using agents need `JARVIS_SUBSCRIPTION_TOOLS_ENABLED=1` and a receipt), a Kimi Code CLI subscription route, and a subscription path for screen vision and the text CLI.
+- **Model version:** Claude Opus 5.5
+- **Where:** `claude/remove-paid-api-20261123` into `next`
+- **Plan:** none (one PR); status in the PR
+- **Scope:** `jarvis/provider_access.py`, `jarvis/llm_client.py` (and the deleted `jarvis/anthropic_shim.py`), `jarvis/model_routing.py`, `jarvis/model_execution.py`, the voice LLM block in `jarvis/bot/pipeline.py`, `jarvis/config.py`, the client fallbacks in `jarvis/agents/base.py`, `jarvis/agents/supervisor.py` and `jarvis/agents/upgrade_agent.py`, `jarvis/council/`, `jarvis/status/`, `jarvis/usage_ledger.py`, `jarvis/vault.py`, `jarvis/keyhealth.py`, `mcp_servers/mcp_screen/logic.py`; `config/model_endpoints.yaml`, `model_profiles.yaml`, `model_access.yaml`, `model_aliases.yaml`, `model_prices.yaml`, `generated/model_catalog.*.json`; `scripts/check_env.py`, `check_keys.py`, `voice_model_bench.py` (and the deleted `probe_planner.py`, `test_prompt_caching.py`); `.env.example`; `requirements*.txt` (the `anthropic` SDK); Swift test fixtures naming retired models; directly related tests.
+- **Next step:** larry: merge, then the Mac steps above.
+- **Updated:** 11-23 (claim and PR)
+
+</details>
+
 <details id="ws-39">
 <summary>WS-39 — Mortimer's tone: dry humor and sarcasm with Larry · Claude</summary>
 

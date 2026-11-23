@@ -29,7 +29,6 @@ from jarvis.model_sync import ids
 # identity prefixes (model_endpoints.yaml supervisor identity) and count.
 _ROUTER_PREFIXES = ("openai/", "x-ai/", "google/", "deepseek/", "meta-llama/",
                     "mistralai/", "qwen/")
-VOICE_FILE = ".env:OPENAI_MODEL"
 # Contexts (pins.scan_config's nearest key) that mean "the voice model":
 # config/model_access.yaml workloads.voice_supervisor.profile.
 VOICE_CONTEXTS = frozenset({"voice", "voice_supervisor"})

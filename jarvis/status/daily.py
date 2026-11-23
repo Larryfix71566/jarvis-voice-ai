@@ -54,8 +54,8 @@ GENERATED_DIRNAME = "generated"  # data/status/generated/model_catalog.<endpoint
 SUBSCRIPTIONS = ("claude", "codex")
 
 # Spoken names only; which providers exist always comes from configuration.
-_DISPLAY = {"openrouter": "OpenRouter", "anthropic": "Anthropic", "moonshot": "Moonshot",
-            "saygm": "SAYGM", "openai": "OpenAI", "voice": "The voice endpoint"}
+_DISPLAY = {"openrouter": "OpenRouter", "anthropic": "Anthropic",
+            "saygm": "SAYGM", "openai": "OpenAI"}
 
 
 def _name(pid: str) -> str:
@@ -122,8 +122,6 @@ def collect(deps: dict[str, Callable[..., Any]] | None = None, *,
     refs: list = []
     try:
         refs = d["discover"](registry)
-        # Review finding 7: lets diff() tell when the voice endpoint is
-        # another provider's API under a second name.
         snap["base_urls"] = {str(r.id): str(r.base_url) for r in refs
                              if getattr(r, "base_url", None)}
     except Exception as exc:  # noqa: BLE001
@@ -261,7 +259,7 @@ def _per_mtok(value: Any) -> float | None:
 
 def _vendor(identities: Iterable[str], fallback: str) -> str:
     """The identity vendor prefix this endpoint's profiles already use
-    (e.g. `moonshotai` on the moonshot endpoint), else the provider."""
+    (e.g. `x-ai` on the openrouter endpoint), else the provider."""
     counts: dict[str, int] = {}
     for ident in identities:
         if "/" in ident:
@@ -374,23 +372,6 @@ def _catalog_ids(snap: dict[str, Any]) -> dict[str, list[str]]:
     return out
 
 
-def _voice_is_a_duplicate(snap: dict[str, Any]) -> bool:
-    """Review finding 7: True when the voice endpoint's list came from the
-    same API as another successful result (same base URL; for snapshots
-    without base URLs, the identical model list), so it is not reported
-    a second time."""
-    ids = _catalog_ids(snap)
-    if "voice" not in ids:
-        return False
-    others = [pid for pid in ids if pid != "voice"]
-    urls = {pid: str(u).strip().rstrip("/").lower()
-            for pid, u in (snap.get("base_urls") or {}).items() if u}
-    if urls.get("voice"):
-        return any(urls.get(pid) == urls["voice"] for pid in others)
-    return bool(ids["voice"]) and any(sorted(ids[pid]) == sorted(ids["voice"])
-                                      for pid in others)
-
-
 def diff(prev: dict[str, Any] | None, cur: dict[str, Any]) -> dict[str, Any]:
     """What changed since `prev` (None on the first run: only gaps count)."""
     out: dict[str, Any] = {"new_offered": {}, "newly_missing": {}, "probe_changes": [],
@@ -400,10 +381,7 @@ def diff(prev: dict[str, Any] | None, cur: dict[str, Any]) -> dict[str, Any]:
     cur_cmp = cur.get("comparison") or {}
     prev_cmp = prev.get("comparison") or {}
     cur_ids, prev_ids = _catalog_ids(cur), _catalog_ids(prev)
-    skip = {"voice"} if _voice_is_a_duplicate(cur) else set()
     for pid, ids in sorted(cur_ids.items()):
-        if pid in skip:
-            continue
         c = cur_cmp.get(pid) or {}
         configured = (c.get("configured_available") or []) + (c.get("configured_missing") or [])
         if not configured or pid not in prev_ids:
@@ -413,7 +391,7 @@ def diff(prev: dict[str, Any] | None, cur: dict[str, Any]) -> dict[str, Any]:
         if added:
             out["new_offered"][pid] = added
     for pid, c in sorted(cur_cmp.items()):
-        if pid not in prev_cmp or pid in skip:
+        if pid not in prev_cmp:
             continue
         was = set(prev_cmp[pid].get("configured_missing") or [])
         now = [n for n in c.get("configured_missing") or [] if n not in was]

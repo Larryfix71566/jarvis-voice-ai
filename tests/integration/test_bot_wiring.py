@@ -60,28 +60,13 @@ class FakeSTT(FrameProcessor):
 
 
 class FakeLLM:
-    def __init__(self, api_key, base_url, model):
-        self.kwargs = {"api_key": api_key, "base_url": base_url, "model": model}
-        self.functions = {}
+    """Stands in for SubscriptionVoiceLLMService (same keyword constructor)."""
 
-    def register_function(self, name, handler):
-        self.functions[name] = handler
-
-
-class FakeAnthropicLLM:
-    """Mirrors AnthropicLLMService's constructor shape for the Path A
-    wiring tests below -- api_key is accepted but unused when a client is
-    given (matches the real service, which does `client or
-    AsyncAnthropic(api_key=api_key)`)."""
-
-    class Settings:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-    def __init__(self, api_key, client, settings):
-        self.api_key = api_key
-        self.client = client
-        self.settings = settings
+    def __init__(self, *args, resolved=None, sources=None, session_id=None, **kwargs):
+        self.resolved = resolved
+        self.sources = sources
+        self.session_id = session_id
+        self.kwargs = kwargs
         self.functions = {}
 
     def register_function(self, name, handler):
@@ -276,7 +261,10 @@ def runtime(monkeypatch, tmp_path):
 @pytest.fixture
 def fakes(monkeypatch):
     monkeypatch.setattr(bp, "DeepgramFluxSTTService", FakeSTT)
-    monkeypatch.setattr(bp, "OpenAILLMService", FakeLLM)
+    monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "1")
+    monkeypatch.setenv("JARVIS_SUBSCRIPTION_TEXT_ENABLED", "1")
+    monkeypatch.setattr(
+        "jarvis.bot.subscription_llm.SubscriptionVoiceLLMService", FakeLLM)
     monkeypatch.setattr(bp, "ElevenLabsTTSService", FakeTTS)
     monkeypatch.setattr(bp, "ElevenLabsTTSSettings", FakeTTS.Settings)
     monkeypatch.setattr(bp, "Pipeline", FakePipeline)
@@ -346,34 +334,12 @@ def test_websocket_case_puts_the_client_message_processor_right_after_input(runt
     assert len(pipeline.processors) == 14   # the order above plus this processor
 
 
-def test_anthropic_base_url_builds_native_service_with_caching(runtime, fakes, monkeypatch):
-    """Phase 1 (Rev 3.2) landing step (iii), task 6: an Anthropic-direct
-    base_url with native routing on (the default) builds pipecat's own
-    AnthropicLLMService with prompt caching enabled -- not OpenAILLMService.
-    AnthropicLLMService is imported lazily inside its branch (same reason
-    the Google branch above it is), so it's patched at its real module
-    path rather than as a `bp` attribute -- `from pipecat.services.
-    anthropic.llm import X` re-reads that module's attribute fresh every
-    call to build_pipeline() (verified directly against pytest-monkeypatch
-    before relying on it here)."""
-    monkeypatch.setattr("pipecat.services.anthropic.llm.AnthropicLLMService", FakeAnthropicLLM)
-    runtime.settings.openai_base_url = "https://api.anthropic.com/v1/"
-    pipeline, llm, aggregators, pusher = build_pipeline(FakeTransport(), runtime)
-    assert isinstance(llm, FakeAnthropicLLM)
-    assert llm.settings.kwargs["enable_prompt_caching"] is True
-    assert llm.settings.kwargs["model"] == runtime.settings.openai_model
-    # The real anthropic.AsyncAnthropic client, built explicitly with the
-    # OpenAI-compat "/v1" suffix stripped -- the same bug step (ii) found
-    # and fixed in jarvis/anthropic_shim.py, reused here rather than
-    # trusting the service's own base_url-less default.
-    assert str(llm.client.base_url) == "https://api.anthropic.com"
-
-
-def test_anthropic_base_url_with_native_off_stays_on_openai_service(runtime, fakes, monkeypatch):
-    monkeypatch.setenv("JARVIS_ANTHROPIC_NATIVE", "0")
-    runtime.settings.openai_base_url = "https://api.anthropic.com/v1/"
-    pipeline, llm, aggregators, pusher = build_pipeline(FakeTransport(), runtime)
-    assert isinstance(llm, FakeLLM)
+def test_pipeline_refuses_to_build_without_subscription_text_flag(
+        runtime, fakes, monkeypatch):
+    from jarvis.provider_access import ProviderAccessError
+    monkeypatch.delenv("JARVIS_SUBSCRIPTION_TEXT_ENABLED", raising=False)
+    with pytest.raises(ProviderAccessError):
+        build_pipeline(FakeTransport(), runtime)
 
 
 def test_flux_never_interrupts_on_its_own(runtime, fakes, monkeypatch):
@@ -431,11 +397,13 @@ def test_six_functions_registered(runtime, fakes):
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
         "clear_clipboard", "console_action", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
-        "local_weather",
+        "local_weather", "model_route",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "system_status", "ui_control", "view_screen",
     ]
-    assert llm.kwargs == {"api_key": "sk", "base_url": "http://llm", "model": "m"}
+    assert llm.resolved.workload == "voice_supervisor"
+    assert llm.resolved.route.name == "subscription"
+    assert llm.session_id == "test-session"
 
 
 def test_brief_kill_switch_unregisters_tool_and_swaps_the_addendum(runtime, fakes, monkeypatch):
@@ -464,7 +432,7 @@ def test_ui_control_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
         "clear_clipboard", "console_action", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
-        "local_weather",
+        "local_weather", "model_route",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "system_status", "view_screen",
     ]
@@ -480,7 +448,7 @@ def test_status_kill_switch_unregisters_tool(runtime, fakes, monkeypatch):
     _, llm, aggregators, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
         "clear_clipboard", "console_action", "cost_summary", "daily_brief", "delegate_task", "follow_up", "list_screens",
-        "local_weather",
+        "local_weather", "model_route",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "ui_control", "view_screen",
     ]
@@ -502,7 +470,7 @@ def test_screen_vision_kill_switch_unregisters_tools(runtime, fakes, monkeypatch
     monkeypatch.setenv("JARVIS_SCREEN_ENABLED", "false")
     _, llm, _, _ = build_pipeline(FakeTransport(), runtime)
     assert sorted(llm.functions) == [
-        "clear_clipboard", "console_action", "cost_summary", "daily_brief", "delegate_task", "follow_up", "local_weather",
+        "clear_clipboard", "console_action", "cost_summary", "daily_brief", "delegate_task", "follow_up", "local_weather", "model_route",
         "progress_updates", "read_clipboard", "remember", "set_voice", "show_commands",
         "system_status", "ui_control",
     ]

@@ -35,7 +35,7 @@ def test_overview_shape():
     assert dev["max_iterations"] == 25
     assert agents["scheduler"]["max_iterations"] == 5      # the default when absent
     assert "mcp-time" in out["mcp_servers"]
-    assert out["workloads"]["developer"] == {"profile": "claude-opus", "route": "direct_api"}
+    assert out["workloads"]["developer"] == {"profile": "claude-opus", "route": "subscription"}
     assert list(out["flags"]) == FLAG_NAMES
     assert out["knowledge"] == {"ok": True, "stub": 1}
 

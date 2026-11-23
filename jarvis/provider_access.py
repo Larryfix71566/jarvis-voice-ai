@@ -21,9 +21,50 @@ ACCESS_MODE_ENV = "JARVIS_LLM_ACCESS_MODE"
 SUBSCRIPTION_ROUTES = frozenset({"subscription", "codex_subscription", "local"})
 _api_request = ContextVar("authorized_api_request", default=None)
 
+# Larry 2026-11-23: Claude, ChatGPT (Codex) and Kimi are paid for by
+# subscription, so Mortimer never buys their inference per token, and
+# DeepSeek is retired with them. This holds in EVERY access mode, including
+# legacy: no key, base_url, profile or OpenRouter slug can reach these
+# vendors' pay-per-token APIs. Their models run only through the
+# subscription routes (claude CLI, codex CLI).
+RETIRED_API_PROVIDERS = frozenset({"anthropic", "openai", "moonshot", "deepseek"})
+RETIRED_API_DOMAINS = ("anthropic.com", "openai.com", "moonshot.ai", "moonshot.cn",
+                       "kimi.com", "kimi.ai", "deepseek.com")
+# OpenRouter (and any gateway) slugs are vendor/model. A retired vendor's
+# model is refused even through a gateway that is otherwise allowed.
+RETIRED_MODEL_VENDORS = frozenset({"anthropic", "openai", "moonshotai", "deepseek"})
+
 
 class ProviderAccessError(ValueError):
     """A payload-free refusal before inference client construction."""
+
+
+def _retired_host(base_url) -> bool:
+    if not isinstance(base_url, str) or not base_url:
+        return False
+    try:
+        host = (urlsplit(base_url.strip()).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return True  # An unparseable destination is never proven safe.
+    return any(host == domain or host.endswith("." + domain) for domain in RETIRED_API_DOMAINS)
+
+
+def retired_model(model) -> bool:
+    """True for a gateway slug naming a retired vendor (anthropic/..., openai/...)."""
+    if not isinstance(model, str) or "/" not in model:
+        return False
+    vendor = model.strip().split("/", 1)[0].lower().lstrip("~")
+    return vendor in RETIRED_MODEL_VENDORS
+
+
+def require_not_retired(*, provider=None, base_url=None, model=None) -> None:
+    """Refuse a pay-per-token call to a subscription vendor, in every mode."""
+    if (isinstance(provider, str) and provider.lower() in RETIRED_API_PROVIDERS) \
+            or _retired_host(base_url) or retired_model(model):
+        raise ProviderAccessError(
+            "Anthropic, OpenAI, Kimi and DeepSeek APIs are retired; use the subscription "
+            "routes. No paid API call was made."
+        )
 
 
 def access_mode(environ: Mapping[str, str] | None = None) -> str:
@@ -61,7 +102,7 @@ def _endpoint_identity(base_url):
 def _eligible_api_endpoint(provider, base_url) -> bool:
     # This fixed, human-owned file is identity authority. Model profiles,
     # caller registry overrides and an OpenAI-compatible SDK are not.
-    if provider in {"openai", "anthropic"}:
+    if provider in RETIRED_API_PROVIDERS:
         return False
     if provider in {None, "saygm"}:
         from jarvis.saygm import validate_endpoint, SayGMError
@@ -74,8 +115,7 @@ def _eligible_api_endpoint(provider, base_url) -> bool:
     if identity is None:
         return False
     host, _ = identity
-    if any(host == domain or host.endswith("." + domain)
-           for domain in ("openai.com", "anthropic.com")):
+    if _retired_host(base_url):
         return False
     try:
         from jarvis.agents.upgrade_agent import DEFAULT_PROFILES_PATH, load_registry_layers
@@ -89,7 +129,7 @@ def _eligible_api_endpoint(provider, base_url) -> bool:
                    and _endpoint_identity(entry.get("base_url")) == identity
                    and isinstance(entry.get("provider"), str)}
         # Ambiguous identity fails closed, even if one label appears eligible.
-        return (len(matches) == 1 and not matches & {"openai", "anthropic"}
+        return (len(matches) == 1 and not matches & RETIRED_API_PROVIDERS
                 and (provider is None or provider in matches))
     except (OSError, ValueError, TypeError, KeyError, yaml.YAMLError):
         return False
@@ -97,6 +137,7 @@ def _eligible_api_endpoint(provider, base_url) -> bool:
 
 def require_api_access(mode: str | None = None, *, provider=None, base_url=None) -> None:
     """Guard API destinations; protocol compatibility grants no billing permission."""
+    require_not_retired(provider=provider, base_url=base_url)
     if subscription_only() or (mode is not None and subscription_only({ACCESS_MODE_ENV: mode})):
         raise ProviderAccessError(
             "subscription-only mode prohibits LLM API inference; no paid fallback was used"
@@ -146,6 +187,7 @@ def validated_api_request(resolved, policy, arguments):
 
 def require_api_request(arguments, *, provider=None, base_url=None):
     require_api_access(provider=provider, base_url=base_url)
+    require_not_retired(model=arguments.get("model") if isinstance(arguments, dict) else None)
     if selective_api_policy():
         admission = _api_request.get()
         if (admission is None or not admission["active"] or admission["used"]
@@ -180,4 +222,24 @@ def require_voice_readiness(mode: str | None = None) -> None:
     if selective_api_policy(mode):
         raise ProviderAccessError(
             "voice requires an eligible full-context route; direct OpenAI/Anthropic APIs are disabled and no fallback was used"
+        )
+
+
+SUBSCRIPTION_RUNTIME_FLAGS = ("JARVIS_MODEL_ROUTING_ENABLED", "JARVIS_SUBSCRIPTION_TEXT_ENABLED")
+
+
+def missing_subscription_runtime_flags(environ: Mapping[str, str] | None = None) -> list[str]:
+    env = os.environ if environ is None else environ
+    return [name for name in SUBSCRIPTION_RUNTIME_FLAGS if env.get(name) != "1"]
+
+
+def require_subscription_runtime(environ: Mapping[str, str] | None = None) -> None:
+    """Larry 2026-11-23: models run only on subscription routes. Refuse to start
+    loudly, naming the settings, rather than run without a usable model path."""
+    missing = missing_subscription_runtime_flags(environ)
+    if missing:
+        raise ProviderAccessError(
+            "Mortimer runs its models only on the Claude/Codex subscriptions; set "
+            + " and ".join(f"{name}=1" for name in missing)
+            + " in .env. The paid Anthropic, OpenAI, Kimi and DeepSeek APIs are retired."
         )

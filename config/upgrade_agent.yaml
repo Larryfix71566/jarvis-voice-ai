@@ -1,16 +1,17 @@
 # Upgrade Agent configuration (plan section 3.5).
-# Swapping the model is config-only: change model/base_url here or set
-# JARVIS_UPGRADE_MODEL / JARVIS_UPGRADE_BASE_URL in the environment.
+# Legacy single-slot fallback, used only when the model registry has no
+# profiles. Larry 2026-11-23: the OpenAI/Anthropic/Moonshot APIs are retired,
+# so this slot names no model or endpoint and fails closed; planner models
+# come from config/model_profiles.yaml on the subscription routes.
 # This file is NOT on the self-edit allowlist — the agent cannot change its
 # own model, temperature, or loop bounds.
-provider: openai
-model: gpt-4.1-mini
-base_url: https://api.openai.com/v1
+provider: ""
+model: ""
+base_url: ""
 temperature: 0.2
 # Larry 2026-08-22: raised 10 -> 50 after two live self-edit runs (the
-# independent-display-windows build and the model-card fix, both
-# kimi-k3) died at the 10-iteration cap having produced ZERO edit
-# proposals — the cap was exhausted entirely by read/orient calls before
+# independent-display-windows build and the model-card fix) died at the
+# 10-iteration cap having produced ZERO edit proposals — the cap was exhausted entirely by read/orient calls before
 # planning could converge. 50 puts self-edits above app_build's 40,
 # which is defensible: a self-edit's validation gates are stricter, so a
 # run that survives to an edit proposal is worth more iterations, and

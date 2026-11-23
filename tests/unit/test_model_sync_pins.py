@@ -47,22 +47,23 @@ def test_voice_pin(tmp_path):
         "profiles:\n  - name: fast-voice\n    endpoint: claude-subscription\n"
         "    model: claude-haiku-4-5\n    identity: anthropic/claude-haiku-4-5\n")
     src = "config/model_access.yaml:workloads.voice_supervisor"
-    assert pins.voice_pin(tmp_path, {}) == {"model": "claude-haiku-4-5", "source": src}
+    assert pins.voice_pin(tmp_path) == {"model": "claude-haiku-4-5", "source": src}
     (tmp_path / "model_profiles.yaml").write_text("profiles: []\n")
     (tmp_path / "model_access.yaml").write_text(
         "workloads:\n  voice_supervisor:\n    profile: claude-sonnet-5-5\n")
-    assert pins.voice_pin(tmp_path, {})["model"] == "claude-sonnet-5-5"
+    assert pins.voice_pin(tmp_path)["model"] == "claude-sonnet-5-5"
 
 
-def test_voice_pin_env_fallback(tmp_path):
-    assert pins.voice_pin(tmp_path, {}) is None
-    assert pins.voice_pin(tmp_path, {"OPENAI_MODEL": "gpt-4.1-mini"}) == {
-        "model": "gpt-4.1-mini", "source": "env:OPENAI_MODEL"}
-    assert pins.voice_pin(tmp_path, {"OPENAI_MODEL": "whatever"}) is None
+def test_voice_pin_has_no_env_fallback(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4.1-mini")
+    assert pins.voice_pin(tmp_path) is None
 
 
 def test_cli_and_collect(tmp_path):
     cli = pins.cli_pins()
     assert cli["claude"] and cli["codex"]
-    got = pins.collect_pins(_write(tmp_path), {"OPENAI_MODEL": "gpt-6-astra"})
-    assert set(got) == {"models", "voice", "cli"} and got["voice"]["model"] == "gpt-6-astra"
+    root = _write(tmp_path)
+    (root / "model_access.yaml").write_text(
+        "workloads:\n  voice_supervisor:\n    profile: claude-sonnet-5-5\n")
+    got = pins.collect_pins(root)
+    assert set(got) == {"models", "voice", "cli"} and got["voice"]["model"] == "claude-sonnet-5-5"

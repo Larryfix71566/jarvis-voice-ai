@@ -86,6 +86,14 @@ VISION_REGISTRY = {
 
 
 class TestResolveVisionProfile:
+    def test_subscription_profiles_are_skipped_not_given_a_default_key(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "x")
+        monkeypatch.delenv("JARVIS_VISION_PROFILE", raising=False)
+        reg = {"profiles": {"claude-opus": {"name": "claude-opus", "vision": True,
+                                             "model": "claude-opus-5"}}}
+        with pytest.raises(logic.NoVisionProfileError, match="no subscription path"):
+            logic._resolve_vision_profile(reg)
+
     def test_env_selects_named_vision_profile_when_key_present(self, monkeypatch):
         monkeypatch.setenv("JARVIS_VISION_PROFILE", "claude-sonnet")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "x")

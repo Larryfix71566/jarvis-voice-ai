@@ -21,10 +21,10 @@ from jarvis.privacy_policy import DataPolicy
 
 def route():
     return ResolvedModelRoute(
-        "voice_supervisor", "claude-haiku-4-5", "claude-haiku-4-5", "anthropic",
+        "voice_supervisor", "claude-sonnet-5-5", "claude-sonnet-5-5", "anthropic",
         "subscription://claude", AccessRoute("subscription", "subscription_runtime",
         "subscription", None, "approved_external", capabilities=("text", "tools")),
-        None, "anthropic/claude-haiku-4-5",
+        None, "anthropic/claude-sonnet-5-5",
     )
 
 
@@ -74,7 +74,6 @@ def setup(monkeypatch, fresh_db):
     monkeypatch.setenv("JARVIS_MODEL_ROUTING_ENABLED", "0")
     no_api = Mock(side_effect=AssertionError("API client created"))
     monkeypatch.setattr("openai.AsyncOpenAI", no_api)
-    monkeypatch.setattr("anthropic.AsyncAnthropic", no_api)
 
     def build(native, *, classified=True):
         monkeypatch.setattr(voice, "make_route_client", lambda _: native)

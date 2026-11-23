@@ -112,18 +112,6 @@ def test_joined_registry_equals_the_pre_split_registry(snapshot_env, as_migrated
     assert joined == expected
 
 
-def test_approved_streaming_restoration_preserves_every_other_profile_field(snapshot_env):
-    """CX-12 preserves Codex's three flags on the new live profile layout.
-
-    Main's historical migration fixtures remain immutable; this deliberate
-    post-split change is compared explicitly instead of rewriting the snapshot.
-    """
-    expected = _pre_split_registry()
-    for name in ("claude-opus", "claude-fable-5", "claude-sonnet-5"):
-        expected["profiles"][name]["streaming"] = True
-    assert ua.load_model_registry() == expected
-
-
 def test_the_frozen_pre_split_file_still_loads_to_the_snapshot(snapshot_env):
     """Legacy single-file acceptance (§3 item 2, §9 rollback): the last
     single-file registry, loaded through the same loader, is still exactly
@@ -519,7 +507,7 @@ def test_mcp_child_key_names_come_from_the_joined_registry(split_config):
     from jarvis.skills.registry import _resolve_dynamic_env
 
     names = _resolve_dynamic_env("mcp-screen", [{"source": "upgrade_models_api_keys"}])
-    assert names == ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+    assert names == ["ANTHROPIC_API_KEY"]
 
 
 def test_real_mcp_child_key_names_are_unchanged(monkeypatch):
@@ -527,8 +515,7 @@ def test_real_mcp_child_key_names_are_unchanged(monkeypatch):
     from jarvis.skills.registry import _resolve_dynamic_env
 
     names = _resolve_dynamic_env("mcp-screen", [{"source": "upgrade_models_api_keys"}])
-    assert names == ["ANTHROPIC_API_KEY", "MOONSHOT_API_KEY",
-                     "OPENAI_API_KEY", "OPENROUTER_API_KEY"]
+    assert names == ["OPENROUTER_API_KEY"]
 
 
 def test_vault_verify_groups_by_joined_key_and_endpoint(monkeypatch, capsys):
@@ -545,12 +532,8 @@ def test_vault_verify_groups_by_joined_key_and_endpoint(monkeypatch, capsys):
     lines = sorted(" ".join(line.split()) for line in capsys.readouterr().out.splitlines()
                    if "not in the vault" in line)
     assert lines == [
-        "-- ANTHROPIC_API_KEY not in the vault (claude-opus, claude-fable-5, claude-sonnet-5)",
-        "-- MOONSHOT_API_KEY not in the vault (kimi-k3, kimi-k2)",
-        "-- OPENAI_API_KEY not in the vault (codex-subscription)",
-        "-- OPENROUTER_API_KEY not in the vault (or-gpt-5-mini, or-gemini-flash, "
-        "or-deepseek, or-gpt-5.1, or-grok-4.3, or-codex-max, or-grok-4.6, "
-        "or-deepseek-v4-pro)",
+        "-- OPENROUTER_API_KEY not in the vault "
+        "(or-gemini-flash, or-grok-4.3, or-grok-4.6)",
     ]
 
 
@@ -577,7 +560,7 @@ def test_check_env_reads_the_split_pair(tmp_path, monkeypatch, capsys):
     check_env.check_screen_vision()
     out = capsys.readouterr().out
     assert "Model profile claude-opus (registry default) — ANTHROPIC_API_KEY present" in out
-    assert "Model profile codex-subscription — OPENAI_API_KEY missing" in out
+    assert "Model profile codex-subscription — subscription route (no API key)" in out
     assert "Screen vision — will use profile claude-opus" in out
 
 
@@ -691,8 +674,9 @@ class TestSupervisorPin:
         planner = ua.resolve_profile(ua.load_model_registry())
         endpoint = layers["endpoints"][pin["endpoint"]]
         assert planner["identity"] == pin["identity"]
-        assert planner["base_url"] == endpoint["base_url"]
-        assert planner["api_key_env"] == endpoint["api_key_env"]
+        # A subscription endpoint carries no base_url or api_key_env.
+        assert planner.get("base_url") == endpoint.get("base_url")
+        assert planner.get("api_key_env") == endpoint.get("api_key_env")
         assert planner["provider"] == endpoint["provider"]
 
 
@@ -717,21 +701,6 @@ class TestGeneratedCatalogue:
                 assert "/" in entry["identity"]
                 if entry["source"] == "seeded":
                     assert entry["fetched_at"] is None
-
-    def test_seeded_baseline_is_what_the_split_script_renders(self):
-        """Step 8: seeded from the split script, all 14 pre-split models,
-        fetched_at null and source "seeded". Skips once a sync has written
-        real entries (the baseline is then a diff, as intended)."""
-        catalogs = ua.load_upstream_catalogs()
-        if any(e["source"] != "seeded" for c in catalogs.values() for e in c["models"]):
-            pytest.skip("a sync has replaced the seeded baseline")
-        rendered = _split_script().render_catalogs(PRE_SPLIT_YAML)
-        assert set(rendered) == set(catalogs)
-        for endpoint, text in rendered.items():
-            assert ua.catalog_path(endpoint).read_text(encoding="utf-8") == text
-        identities = sorted(e["identity"] for c in catalogs.values() for e in c["models"])
-        expected = sorted(p["identity"] for p in _pre_split_registry()["profiles"].values())
-        assert identities == expected and len(identities) == 14
 
     def test_the_pinned_planner_model_string_matches_the_catalogue(self, monkeypatch):
         """D4, the half the load-time pin cannot see: rewriting the pinned

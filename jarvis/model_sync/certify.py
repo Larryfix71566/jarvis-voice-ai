@@ -100,7 +100,7 @@ def _manual(candidate: dict) -> list[str]:
         out.append(f"python scripts/verify_claude_developer_capability.py --model {model} "
                    f"--live --output data/status/model-sync/receipts/{model}-developer.json")
     if candidate.get("voice"):
-        out.append("python scripts/latency_probe.py  # after switching OPENAI_MODEL, on live logs")
+        out.append("python scripts/latency_probe.py  # after switching the voice_supervisor profile, on live logs")
     return out
 
 

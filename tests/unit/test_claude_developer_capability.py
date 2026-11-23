@@ -131,12 +131,23 @@ def test_actual_owned_capability_cli_remains_dry(owned_pilot_source, tmp_path_fa
     assert list(tmp_path.iterdir()) == []
 
 
-def test_static_selection_retains_ordinary_missing_tools_refusal():
+def test_static_selection_gates_tools_at_the_native_client(monkeypatch):
+    # Larry 2026-11-23: the subscription route now advertises tools (the paid
+    # API it replaced is gone), so the developer route resolves. The native
+    # tool client still refuses without the explicit flag and an acceptance
+    # receipt, so no tool call runs on an unverified route.
     result = probe.selection('claude-opus', 'subscription')
-    assert result['ordinary_route_refusal'] == 'route lacks required capabilities: tools'
+    assert result['ordinary_route_refusal'] is None
     assert result['tools_under_test'] and result['production_route_ready'] is False
-    with pytest.raises(routing.ModelRouteError, match='lacks required capabilities'):
-        routing.resolve_model_route_checked('developer', explicit_profile='claude-opus', explicit_route='subscription')
+    resolved = routing.resolve_model_route_checked(
+        'developer', explicit_profile='claude-opus', explicit_route='subscription')
+    monkeypatch.delenv('JARVIS_SUBSCRIPTION_TOOLS_ENABLED', raising=False)
+    with pytest.raises(routing.ModelRouteError, match='native tool adapter is disabled'):
+        routing.make_route_client(resolved)
+    monkeypatch.setenv('JARVIS_SUBSCRIPTION_TOOLS_ENABLED', '1')
+    monkeypatch.delenv('JARVIS_SUBSCRIPTION_TOOL_CAPABILITY_RECEIPT', raising=False)
+    with pytest.raises(routing.ModelRouteError, match='acceptance receipt is required'):
+        routing.make_route_client(resolved)
 
 
 def test_production_capture_parent_remains_fixed_mac_authority():

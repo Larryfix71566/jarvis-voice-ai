@@ -228,11 +228,10 @@ def _resolve_dynamic_env(server_name: str, dynamic: list[dict]) -> list[str]:
         # ONE loader so the key names come from the JOINED view — after the
         # registry split they live in config/model_endpoints.yaml, not in the
         # profile file (docs/plans/MORTIMER_MODEL_REGISTRY_SPLIT_PLAN.md D2).
-        names.add("OPENAI_API_KEY")  # mcp_screen/logic.py:282 default
         try:
             from jarvis.agents.upgrade_agent import load_model_registry
             registry = load_model_registry()
-        except Exception as exc:  # noqa: BLE001 — degrade to the default only
+        except Exception as exc:  # noqa: BLE001 — degrade to no names
             logger.warning(
                 "upgrade_models_unreadable server=%s error_type=%s",
                 server_name, type(exc).__name__[:64])

@@ -164,8 +164,8 @@ def _needs_certify(entry: dict[str, Any], cli_versions: dict[str, Any], now: dat
 
 def _manual_instruction(candidate: dict[str, Any]) -> str:
     return (f"{candidate['replaces']} is set outside the repository; change it to "
-            f"{candidate['model']} by hand (for voice: the voice_supervisor profile or "
-            f"OPENAI_MODEL in .env), then redeploy.")
+            f"{candidate['model']} by hand (for voice: the voice_supervisor profile in "
+            f"config/model_access.yaml), then redeploy.")
 
 
 def _handle_candidates(cands: list[dict[str, Any]], state: dict[str, Any],

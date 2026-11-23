@@ -106,7 +106,7 @@ class TestEveryAgentIsPinnedAboveTheFloor:
 
 
 class TestTheFloorProfileItself:
-    def test_the_floor_profile_is_direct_anthropic_sonnet(self, profiles_by_name):
+    def test_the_floor_profile_is_subscription_anthropic_sonnet(self, profiles_by_name):
         """`claude-sonnet-5` is the floor profile AND the Phase 3 executor
         tier. It replaced the OpenRouter route (same identity, same tier)
         because the registry rule is: never keep a proxy route for a model
@@ -114,7 +114,10 @@ class TestTheFloorProfileItself:
         prof = profiles_by_name.get("claude-sonnet-5")
         assert prof is not None, "claude-sonnet-5 profile missing from the registry"
         assert prof.get("identity") == "anthropic/claude-sonnet-5"
-        assert "anthropic.com" in str(prof.get("base_url", ""))
+        # Pay-per-token Anthropic is retired: the floor profile has no API
+        # endpoint, only the Claude subscription.
+        assert not prof.get("base_url")
+        assert not prof.get("api_key_env")
         assert prof.get("tier") == "mid"
         assert "or-sonnet-5" not in profiles_by_name, (
             "or-sonnet-5 must not coexist with claude-sonnet-5 (shared identity)"

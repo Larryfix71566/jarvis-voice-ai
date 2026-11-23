@@ -533,10 +533,19 @@ async def _call_profile(
     def _sync_call() -> tuple[str, dict[str, int] | None]:
         resolved_route = None
         api_key_env = (resolved_route.api_key_env if resolved_route is not None
-                       else profile.get("api_key_env", "OPENAI_API_KEY"))
+                       else profile.get("api_key_env", ""))
         api_key = os.environ.get(api_key_env) if api_key_env else None
+        if resolved_route is None and not api_key_env:
+            raise RuntimeError(
+                "profile has no API credential (subscription profile); "
+                "set JARVIS_MODEL_ROUTING_ENABLED=1 to use the subscription route")
         if resolved_route is None and not api_key:
             raise RuntimeError(f"{api_key_env} is not set")
+        if resolved_route is None:
+            from jarvis.provider_access import require_not_retired
+            require_not_retired(provider=profile.get("provider"),
+                                base_url=profile.get("base_url"),
+                                model=profile.get("model"))
         if data_policy is not None:
             route_for_policy = (
                 resolved_route.route if resolved_route is not None else
@@ -547,13 +556,6 @@ async def _call_profile(
                 )
             )
             assert_route_allowed(route_for_policy, data_policy)
-        # Phase 1 (MORTIMER_OPTIMIZATION_PLAN.md, Rev 3.2, landing step
-        # (ii), 2026-09-02): llm_client.make_sync_client routes an
-        # Anthropic-direct profile through jarvis/anthropic_shim.py
-        # (prompt caching) instead of the plain OpenAI-compat client,
-        # unless JARVIS_ANTHROPIC_NATIVE=0. Every other provider (incl.
-        # OpenRouter, which gets task 4's cache_control passthrough for
-        # anthropic/* models) is unaffected.
         client = (make_sync_route_client(resolved_route,
                                          timeout=COUNCIL_MEMBER_TIMEOUT_S,
                                          max_retries=0)
@@ -847,8 +849,7 @@ async def _gather_scores(
                 Score(judge_profile=name, proposal_label=lbl, value=None,
                      # GC6(a) (gap-closure plan, 2026-09-04): str(exc) is
                      # empty for asyncio.TimeoutError(), which hid a dead
-                     # judge for two weeks (kimi-k3, three rounds,
-                     # abstain_reason == "judge call failed: "). The
+                     # judge for two weeks. The
                      # exception TYPE can no longer disappear.
                      abstain_reason=f"judge call failed: {type(exc).__name__}: {exc}")
                 for lbl in labels

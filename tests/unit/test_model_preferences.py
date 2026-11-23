@@ -14,14 +14,14 @@ from jarvis.model_preferences import (
 def test_preference_requires_known_workload_and_profile(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "prefs.db"))
     with pytest.raises(ModelPreferenceError, match="unknown workload"):
-        stage_preference("missing", "claude-opus", "direct_api")
+        stage_preference("missing", "or-grok-4.6", "direct_api")
     with pytest.raises(ModelPreferenceError, match="unknown model profile"):
         stage_preference("developer", "missing", "direct_api")
 
 
 def test_preference_is_draft_then_confirmed(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "prefs.db"))
-    draft = stage_preference("developer", "claude-opus", "direct_api")
+    draft = stage_preference("developer", "or-grok-4.6", "direct_api")
     assert draft["draft_id"]
     assert list_preferences() == []
     result = confirm_preference(draft["draft_id"])
@@ -35,7 +35,7 @@ def test_preference_is_draft_then_confirmed(tmp_path, monkeypatch):
 def test_preference_migrations_apply_to_supplied_connection(tmp_path):
     conn = get_conn(tmp_path / "manual.db")
     run_migrations(conn)
-    draft = stage_preference("scheduler", "claude-sonnet-5", "direct_api", conn=conn)
+    draft = stage_preference("scheduler", "or-grok-4.3", "direct_api", conn=conn)
     assert confirm_preference(draft["draft_id"], conn=conn)["confirmed"]
     conn.close()
 
@@ -51,7 +51,7 @@ def test_voice_supervisor_requires_runtime_approval_contract(tmp_path, monkeypat
 def test_tool_workload_cannot_select_text_only_subscription(tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "capability-prefs.db"))
     with pytest.raises(ModelPreferenceError, match="lacks required capabilities"):
-        stage_preference("developer", "claude-opus", "subscription")
+        stage_preference("developer", "codex-subscription", "codex_subscription")
 
 
 @pytest.mark.parametrize("workload, configured", [("librarian", "confidential"),
@@ -65,8 +65,9 @@ def test_a_preference_can_never_lower_a_workloads_privacy(tmp_path, monkeypatch,
     monkeypatch.setenv("JARVIS_DB_PATH", str(tmp_path / "privacy-prefs.db"))
     assert resolve_policy(workload, include_preferences=False).privacy == configured
     for route in ("direct_api", "saygm", "local"):
+        profile = "or-grok-4.3" if route == "direct_api" else "claude-sonnet-5"
         with pytest.raises(ModelPreferenceError, match="never lower it"):
-            stage_preference(workload, "claude-sonnet-5", route, "approved_external")
+            stage_preference(workload, profile, route, "approved_external")
     assert list_preferences() == []
     assert resolve_policy(workload).privacy == configured
 

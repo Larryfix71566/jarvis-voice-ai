@@ -5,8 +5,8 @@ variable from §6.1, plus the `${VAR}` expansion helper used by
 `SkillRegistry` when loading config/mcp_servers.yaml (§6.3).
 
 Validation rules (locked by the plan):
-- Missing OPENAI_API_KEY, DEEPGRAM_API_KEY or ELEVENLABS_API_KEY -> startup
-  error listing exactly which are missing.
+- Missing DEEPGRAM_API_KEY or ELEVENLABS_API_KEY -> startup error listing
+  exactly which are missing. (OPENAI_API_KEY is retired, 2026-11-23.)
 - Missing TAVILY_API_KEY -> warning only (mcp-web degraded mode).
 - JARVIS_TIMEZONE must be a valid IANA name.
 """
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-REQUIRED_ENV_VARS = ("OPENAI_API_KEY", "DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY")
+REQUIRED_ENV_VARS = ("DEEPGRAM_API_KEY", "ELEVENLABS_API_KEY")
 
 _ENV_VAR_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
 
@@ -50,18 +50,17 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    # LLM (OpenAI-compatible)
-    openai_api_key: str = ""
-    openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = "gpt-4.1-mini"
+    # LLM. Larry 2026-11-23: models run only on the Claude/ChatGPT
+    # subscriptions (config/model_access.yaml); OPENAI_API_KEY and
+    # OPENAI_BASE_URL are retired and no longer read. `openai_model` is only
+    # the label recorded for an injected test client.
+    openai_model: str = "claude-sonnet-5"
     jarvis_llm_access_mode: str = "legacy"
 
     @model_validator(mode="after")
     def validate_llm_access(self):
         from jarvis.provider_access import access_mode
-        mode = access_mode({"JARVIS_LLM_ACCESS_MODE": self.jarvis_llm_access_mode})
-        if mode == "legacy" and not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY is required in legacy LLM access mode")
+        access_mode({"JARVIS_LLM_ACCESS_MODE": self.jarvis_llm_access_mode})
         return self
 
     # Speech
@@ -409,6 +408,11 @@ def bridge_settings_to_env(settings=None) -> None:
             "JARVIS_MEMORY_AUTOMATION_STAGE",
             "JARVIS_COMMAND_CONSOLE_ENABLED", "JARVIS_SHARED_CONTENT_ENABLED",
             "JARVIS_LLM_ACCESS_MODE",
+            # 2026-11-23: the subscription runtime switches, so a .env-only
+            # setting reaches the routing code that reads os.environ.
+            "JARVIS_MODEL_ROUTING_ENABLED", "JARVIS_SUBSCRIPTION_TEXT_ENABLED",
+            "JARVIS_SUBSCRIPTION_TOOLS_ENABLED",
+            "JARVIS_SUBSCRIPTION_TOOL_CAPABILITY_RECEIPT",
         ):
             if value:
                 os.environ.setdefault(name, value)

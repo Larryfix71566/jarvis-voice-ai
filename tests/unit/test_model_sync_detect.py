@@ -116,7 +116,7 @@ def test_voice_via_context():
 
 
 def test_voice_via_pins_voice_key():
-    pins = {"models": [], "voice": {"model": "gpt-4.1-mini", "source": "env:OPENAI_MODEL"}}
+    pins = {"models": [], "voice": {"model": "gpt-4.1-mini", "source": "config/model_access.yaml:workloads.voice_supervisor"}}
     public = {"launches": [launch("gpt-4.2-mini")]}
     f = kinds(run(public, {}, pins), "new_model")[0]
     assert f["replaces"] == "gpt-4.1-mini"
