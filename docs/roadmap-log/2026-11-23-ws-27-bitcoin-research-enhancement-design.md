@@ -2,7 +2,7 @@
 date: 2026-11-23
 system: codex
 rows: [WS-27]
-prs: []
+prs: [408]
 ---
 
 # WS-27 Bitcoin research enhancement design
