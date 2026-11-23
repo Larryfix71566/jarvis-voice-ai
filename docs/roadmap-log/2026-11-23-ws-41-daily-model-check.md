@@ -2,7 +2,7 @@
 date: 2026-11-23
 system: claude
 rows: [WS-41]
-prs: []
+prs: [409]
 ---
 
 # 2026-11-23: Daily new-model check (WS-41)
