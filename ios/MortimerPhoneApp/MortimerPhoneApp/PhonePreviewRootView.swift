@@ -1,3 +1,4 @@
+import MortimerOrbRendering
 import MortimerPhoneCore
 import SwiftUI
 
@@ -9,10 +10,12 @@ private enum PreviewSection: String, CaseIterable, Identifiable {
 
 struct PhonePreviewRootView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var model: PhoneAppPreviewModel
     @State private var displayedState: PhoneAppPreviewState = .disconnected
     @State private var selection: PreviewSection? = .preview
     @State private var demoTask: Task<Void, Never>?
+    @State private var orbDemo: PhoneSyntheticOrbDemo?
 
     init(model: PhoneAppPreviewModel) {
         _model = State(initialValue: model)
@@ -47,12 +50,14 @@ struct PhonePreviewRootView: View {
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase != .active else { return }
+            orbDemo = nil
             demoTask?.cancel()
             demoTask = nil
             model.applicationDidLoseForeground()
             displayedState = .disconnected
         }
         .onDisappear {
+            orbDemo = nil
             demoTask?.cancel()
             model.cancelDemo()
         }
@@ -77,6 +82,14 @@ struct PhonePreviewRootView: View {
             .buttonStyle(.bordered)
             .accessibilityIdentifier("preview.results")
             .disabled(demoTask != nil)
+
+            if let orbDemo, scenePhase == .active {
+                orbPreview(orbDemo)
+            }
+            Button(orbDemo == nil ? "Start synthetic orb" : "Stop synthetic orb") {
+                orbDemo = orbDemo == nil ? PhoneSyntheticOrbDemo() : nil
+            }
+            .accessibilityIdentifier("preview.orb.toggle")
 
             if case .syntheticResults(let items, _, _) = displayedState {
                 if items.isEmpty {
@@ -118,6 +131,34 @@ struct PhonePreviewRootView: View {
         .padding(24)
         .frame(maxWidth: 720, alignment: .leading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onDisappear { orbDemo = nil }
+    }
+
+    private func orbPreview(_ demo: PhoneSyntheticOrbDemo) -> some View {
+        HStack(spacing: 12) {
+            Group {
+                if reduceMotion {
+                    orbCanvas(demo: demo, date: nil)
+                } else {
+                    TimelineView(.animation(minimumInterval: 1.0 / 15)) { timeline in
+                        orbCanvas(demo: demo, date: timeline.date)
+                    }
+                }
+            }
+            .frame(width: 100, height: 92)
+            .accessibilityHidden(true)
+            Text(reduceMotion ? "Synthetic orb preview, motion reduced" : "Synthetic orb preview")
+                .font(.callout)
+                .accessibilityIdentifier("preview.orb.status")
+        }
+    }
+
+    private func orbCanvas(demo: PhoneSyntheticOrbDemo, date: Date?) -> some View {
+        Canvas(rendersAsynchronously: false) { context, size in
+            var context = context
+            demo.draw(into: &context, size: size, date: date)
+        }
+        .allowsHitTesting(false)
     }
 
     private var disconnectedBanner: some View {
@@ -225,5 +266,31 @@ struct PhonePreviewRootView: View {
             await model.resumeSyntheticResults()
             demoTask = nil
         }
+    }
+}
+
+
+/// One local preview run. Created by the preview button and discarded when
+/// the preview is stopped, leaves the screen, or loses the foreground.
+private final class PhoneSyntheticOrbDemo {
+    private let start = Date()
+    private var last = Date.distantPast
+    private let energy = OrbEnergyState(initialColor: CometOrbRenderer.stateColor(.assistant))
+
+    func draw(into context: inout GraphicsContext, size: CGSize, date: Date?) {
+        let reduced = date == nil
+        let now = max(start, date ?? start)
+        let elapsed = now.timeIntervalSince(start)
+        let frame = SyntheticOrbFrame(elapsed: elapsed, reduceMotion: reduced)
+        if !reduced, now > last {
+            let dt = last < start ? 1.0 / 15 : now.timeIntervalSince(last)
+            last = now
+            energy.advance(activity: .assistant, measuredLevel: frame.level,
+                           phase: frame.phase, now: elapsed, dt: dt)
+        }
+        CometOrbRenderer.draw(context: &context, size: size, stageCenterX: nil,
+                              phase: frame.phase, userEnergy: 0, outputEnergy: frame.level,
+                              activity: .assistant, reduceMotion: reduced,
+                              energyState: reduced ? nil : energy)
     }
 }

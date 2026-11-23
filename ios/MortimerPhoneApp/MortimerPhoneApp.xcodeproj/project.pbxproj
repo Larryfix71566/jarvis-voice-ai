@@ -6,6 +6,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A10000000000000000000011 /* MortimerOrbRendering in Frameworks */ = {isa = PBXBuildFile; productRef = A70000000000000000000003 /* MortimerOrbRendering */; };
 		A10000000000000000000001 /* MortimerPhoneCore in Frameworks */ = {isa = PBXBuildFile; productRef = A70000000000000000000001 /* MortimerPhoneCore */; };
 		A10000000000000000000002 /* MortimerPhoneApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* MortimerPhoneApp.swift */; };
 		A10000000000000000000003 /* PhonePreviewRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* PhonePreviewRootView.swift */; };
@@ -34,7 +35,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A60000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* MortimerPhoneCore in Frameworks */, ); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001 /* MortimerPhoneCore in Frameworks */, A10000000000000000000011 /* MortimerOrbRendering in Frameworks */, ); runOnlyForDeploymentPostprocessing = 0; };
 		A60000000000000000000002 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
@@ -57,7 +58,7 @@
 			buildRules = ();
 			dependencies = ();
 			name = MortimerPhoneApp;
-			packageProductDependencies = (A70000000000000000000001 /* MortimerPhoneCore */, );
+			packageProductDependencies = (A70000000000000000000001 /* MortimerPhoneCore */, A70000000000000000000003 /* MortimerOrbRendering */, );
 			productName = MortimerPhoneApp;
 			productReference = A20000000000000000000006 /* MortimerPhoneApp.app */;
 			productType = "com.apple.product-type.application";
@@ -83,7 +84,7 @@
 			buildConfigurationList = AB0000000000000000000007 /* Project Config List */;
 			compatibilityVersion = "Xcode 14.0";
 			mainGroup = A80000000000000000000001;
-			packageReferences = (A70000000000000000000002 /* XCLocalSwiftPackageReference "../MortimerPhoneCore" */, );
+			packageReferences = (A70000000000000000000002 /* XCLocalSwiftPackageReference "../MortimerPhoneCore" */, A70000000000000000000004 /* XCLocalSwiftPackageReference "../../shared/MortimerOrbRendering" */, );
 			productRefGroup = A80000000000000000000002 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -122,10 +123,12 @@
 
 /* Begin XCLocalSwiftPackageReference section */
 		A70000000000000000000002 /* XCLocalSwiftPackageReference "../MortimerPhoneCore" */ = {isa = XCLocalSwiftPackageReference; relativePath = ../MortimerPhoneCore; };
+		A70000000000000000000004 /* XCLocalSwiftPackageReference "../../shared/MortimerOrbRendering" */ = {isa = XCLocalSwiftPackageReference; relativePath = "../../shared/MortimerOrbRendering"; };
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		A70000000000000000000001 /* MortimerPhoneCore */ = {isa = XCSwiftPackageProductDependency; package = A70000000000000000000002 /* XCLocalSwiftPackageReference "../MortimerPhoneCore" */; productName = MortimerPhoneCore; };
+		A70000000000000000000003 /* MortimerOrbRendering */ = {isa = XCSwiftPackageProductDependency; package = A70000000000000000000004 /* XCLocalSwiftPackageReference "../../shared/MortimerOrbRendering" */; productName = MortimerOrbRendering; };
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A40000000000000000000001 /* Project object */;
