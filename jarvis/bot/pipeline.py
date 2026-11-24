@@ -579,7 +579,7 @@ async def start_typed_turn(runtime: Runtime, pusher: FramePusher, aggregators: A
     if not runtime.alive:
         return False
     runtime.sensitive_turn.clear()
-    arm_from_text(text)  # before anything is logged or stored
+    arm_from_text(text, credentials=True)  # before anything is logged or stored
     _log_transcript("USER:", text)
     if not _voice_is_sensitive():
         _persist(runtime.session_id, "user", text)

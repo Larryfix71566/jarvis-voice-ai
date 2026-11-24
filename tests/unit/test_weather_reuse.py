@@ -173,7 +173,8 @@ async def test_cached_radar_echoes_request_only_when_the_original_field_exists(e
 
 
 @pytest.mark.parametrize("privacy", ["confidential", "local_only"])
-async def test_private_classified_path_performs_neither_native_query_nor_fetch(privacy):
+async def test_private_label_alone_still_reuses_the_local_cache(privacy):
+    # Larry, 2026-11-24: a confidential label alone no longer refuses weather.
     registry, session = registry_for()
     calls = []
 
@@ -182,7 +183,23 @@ async def test_private_classified_path_performs_neither_native_query_nor_fetch(p
         return hit()
 
     with weather_reuse_scope(WeatherReuseBridge(query)):
-        _, result = await classified(registry, privacy=privacy)
+        policy, result = await classified(registry, privacy=privacy)
+    assert len(calls) == 1 and session.calls == []
+    assert result["city"] == "Atlanta"
+    assert policy.level == privacy
+
+
+async def test_account_turn_performs_neither_native_query_nor_fetch():
+    registry, session = registry_for()
+    calls = []
+
+    async def query(**request):
+        calls.append(request)
+        return hit()
+
+    current_sensitive_turn.get().arm("account", "weather-run")
+    with weather_reuse_scope(WeatherReuseBridge(query)):
+        _, result = await classified(registry)
     assert calls == [] and session.calls == []
     assert result == {"ok": False, "error": "tool_protected"}
 
@@ -352,7 +369,7 @@ async def test_privacy_and_source_authority_are_rechecked_after_the_native_await
     registry, session = registry_for()
 
     async def query(**_):
-        current_sensitive_turn.get().arm("test", "weather-run")
+        current_sensitive_turn.get().arm("account", "weather-run")
         return hit()
 
     with weather_reuse_scope(WeatherReuseBridge(query)):

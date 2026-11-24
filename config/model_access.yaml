@@ -13,7 +13,9 @@ defaults:
   capabilities: [text, tools]
 
 # Staged retirement selections. Only used with JARVIS_LLM_ACCESS_MODE set
-# to subscription_only; capability/privacy gates are deliberately unchanged.
+# to subscription_only; capability gates are unchanged. Since 2026-11-24 (Larry)
+# the Claude subscription route carries every privacy level; only account and
+# password details stay on the Mac (jarvis/model_routing.py).
 # Existing explicit/saved paid selections are refused, never rewritten.
 subscription_defaults:
   voice_supervisor: {route: subscription}

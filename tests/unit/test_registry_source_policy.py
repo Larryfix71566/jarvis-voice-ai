@@ -199,7 +199,10 @@ async def test_restarted_session_without_new_verified_contract_loses_source_auth
 
 
 @pytest.mark.parametrize("privacy", ["confidential", "local_only"])
-async def test_local_generated_results_keep_input_floor_and_external_calls_are_blocked(privacy):
+async def test_local_generated_results_keep_input_floor_and_external_calls_carry_the_label(privacy):
+    # Larry, 2026-11-24: only account or password details stay on the Mac.
+    # A confidential/local_only label alone no longer refuses an external
+    # tool; the result keeps the input floor so local sinks still redact it.
     local = registry_for("date_diff", "mcp-time", Session(response({"days": 1})), pinned=True)
     scope = execution("date_diff", {}, privacy)
     policy, _ = validate_tool_result(scope, await local.call_classified("date_diff", {}, execution_scope=scope))
@@ -211,6 +214,19 @@ async def test_local_generated_results_keep_input_floor_and_external_calls_are_b
         "web_search", {"query": CANARY}, execution_scope=web_scope,
     ))
     assert policy.level == privacy
+    assert json.loads(content) == {"results": []}
+    assert external_session.calls == [("web_search", {"query": CANARY})]
+
+
+@pytest.mark.parametrize("kind", ["account", "card", "routing", "iban", "credential"])
+async def test_account_or_credential_turn_never_reaches_an_external_tool(kind):
+    external_session = Session(response({"results": []}))
+    external = registry_for("web_search", "mcp-web", external_session, pinned=True)
+    current_sensitive_turn.get().arm(kind, "source-parent")
+    web_scope = execution("web_search", {"query": CANARY})
+    _, content = validate_tool_result(web_scope, await external.call_classified(
+        "web_search", {"query": CANARY}, execution_scope=web_scope,
+    ))
     assert json.loads(content)["error"] == "tool_protected"
     assert CANARY not in content
     assert external_session.calls == []

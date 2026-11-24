@@ -108,6 +108,7 @@ def test_unknown_workload_fails_closed():
         resolve_policy("not-a-workload")
 
 
+@pytest.mark.usefixtures("subscription_without_carry")
 def test_confidential_workload_cannot_use_external_default(monkeypatch):
     with pytest.raises(ModelRouteError, match="requires confidential"):
         resolve_model_route("memory", explicit_route="subscription")

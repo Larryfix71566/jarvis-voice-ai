@@ -199,6 +199,7 @@ def test_unknown_model_route_or_model_mismatch_cannot_substitute(kwargs):
         probe.selection(**kwargs)
 
 
+@pytest.mark.usefixtures("subscription_without_carry")
 @pytest.mark.parametrize('floor', ['confidential', 'local_only'])
 def test_actual_effective_policy_override_refuses_before_cli(tmp_path, monkeypatch, floor):
     access = yaml.safe_load((probe.ROOT / 'config/model_access.yaml').read_text())
@@ -237,6 +238,7 @@ def test_native_unsupported_effective_caps_are_not_cleared(monkeypatch, limits):
         probe.selection('claude-opus', 'subscription')
 
 
+@pytest.mark.usefixtures("subscription_without_carry")
 def test_inherited_sensitive_turn_or_typed_private_floor_refuses():
     with pytest.raises(routing.ModelRouteError):
         probe.selection('claude-opus', 'subscription', input_policy=DataPolicy('local_only', 'private-source'))

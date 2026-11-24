@@ -30,7 +30,7 @@ from typing import Any, Callable, Literal, Sequence
 from jarvis.agents.base import SubAgent, load_sub_agents
 from jarvis.agents.base import _assistant_message as _base_assistant_message
 from jarvis.agents.delegate import build_delegate_tool
-from jarvis.bot.sensitive_turn import arm_from_text, is_sensitive
+from jarvis.bot.sensitive_turn import arm_from_text, holds_account_info, is_sensitive
 from jarvis.db import get_conn, now_iso
 from jarvis.memory import render_memory_context
 from jarvis.model_catalog import render_model_catalog
@@ -207,7 +207,7 @@ class Orchestrator:
         tool_calls_total = 0
         seen_tool_call_ids: set[str] = set()
         self._history.append({"role": "user", "content": user_text})
-        arm_from_text(user_text)               # T4a K3 (P4)
+        arm_from_text(user_text, credentials=True)  # T4a K3 (P4)
         if not is_sensitive():
             self._persist("user", user_text)
 
@@ -353,15 +353,15 @@ class Orchestrator:
                     tool_call.function.name, arguments
                 )
                 arm_from_text(result)
-                if is_sensitive():
-                    # The live Supervisor is the documented voice-provider
-                    # exception, so never send a sensitive tool result back
-                    # on the next provider round. Remove this round's raw
+                if holds_account_info():
+                    # Larry, 2026-11-24: only account or password details
+                    # stay on the Mac. Never send such a tool result back on
+                    # the next provider round, and remove this round's raw
                     # tool arguments/results from retained history as well.
                     del self._history[tool_history_start:]
                     reply = (
-                        "Protected details were detected during this task. I stopped "
-                        "before sending them to the voice model."
+                        "Account or password details were detected during this task. "
+                        "I stopped before sending them to the voice model."
                     )
                     protected_result_detected = True
                     break

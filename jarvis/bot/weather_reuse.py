@@ -16,7 +16,7 @@ import math
 import time
 from typing import Any, Callable, Iterator
 
-from jarvis.bot.sensitive_turn import is_sensitive
+from jarvis.bot.sensitive_turn import holds_account_info
 from jarvis.bot.weather_intent import canonical_place, current_weather_intent
 from jarvis.runlog.context import get_run_id
 
@@ -131,7 +131,8 @@ HARD_REFUSAL_CODES = frozenset({"protected_turn", "not_requested"})
 class WeatherReuseBridge:
     def __init__(self, query: Callable[..., Any], *, is_protected: Callable[[], bool] | None = None) -> None:
         self._query = query
-        self._protected = is_protected or is_sensitive
+        # Only account or password details stay on the Mac (Larry, 2026-11-24).
+        self._protected = is_protected or holds_account_info
         # Only timing/key provenance, consumed once. Never weather bodies/TTL
         # candidates; run cancellation cannot leave an unbounded result cache.
         self._dispatch: OrderedDict[tuple[str, str, str], dict] = OrderedDict()

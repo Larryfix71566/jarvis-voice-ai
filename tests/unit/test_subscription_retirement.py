@@ -155,6 +155,7 @@ async def test_retained_api_route_cannot_use_injected_execution_client(retired):
     factory.assert_not_called()
 
 
+@pytest.mark.usefixtures("subscription_without_carry")
 def test_private_source_policy_is_not_relaxed(retired):
     with pytest.raises(ModelRouteError):
         resolve_model_route("memory")
@@ -246,3 +247,33 @@ def test_readiness_does_not_claim_account_or_activation(monkeypatch):
     assert report["inference_attempts"] == 0
     assert report["activation_ready"] is False
     assert report["runtimes"]["codex"]["authentication"] == "not_checked"
+
+
+# Larry, 2026-11-24: "the only text that should be banned from outside the
+# machine would include account or password info". The Claude subscription
+# carries every privacy level; account and password details are held back
+# separately (sensitive_turn.holds_account_info).
+@pytest.mark.parametrize("workload", ["memory", "librarian", "background", "systems"])
+def test_private_workloads_resolve_on_the_claude_subscription(retired, workload):
+    resolved = resolve_model_route(workload)
+    assert resolved.route.name == "subscription"
+    assert resolved.route.privacy == "approved_external"
+
+
+@pytest.mark.parametrize("level", ["approved_external", "confidential", "local_only"])
+def test_subscription_carries_every_policy_level(retired, level):
+    from jarvis.model_routing import route_carries
+    from jarvis.privacy_policy import DataPolicy, assert_route_allowed
+    route = resolve_model_route("memory").route
+    assert route_carries(route, level)
+    assert_route_allowed(route, DataPolicy(level, "synthetic"))
+
+
+def test_a_forged_subscription_route_does_not_inherit_the_carry():
+    from jarvis.model_routing import AccessRoute, route_carries
+    forged = AccessRoute("subscription", "openai", "metered", None, "approved_external")
+    assert not route_carries(forged, "confidential")
+    other = AccessRoute("codex_subscription", "codex_subscription_runtime", "subscription", None,
+                        "approved_external")
+    assert not route_carries(other, "confidential")
+    assert not route_carries(None, "approved_external")

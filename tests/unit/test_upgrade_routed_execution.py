@@ -276,6 +276,7 @@ def test_enabled_timeout_refuses_without_implicit_failover(monkeypatch, fixture_
     assert CANARY not in json.dumps(refusal)
 
 
+@pytest.mark.usefixtures("subscription_without_carry")
 def test_unlabeled_plan_is_confidential_before_session_or_model(monkeypatch):
     workspace = WorkspaceFixture()
     agent = ua.UpgradeAgent(workspace)
@@ -292,6 +293,7 @@ def test_unlabeled_plan_is_confidential_before_session_or_model(monkeypatch):
     ("session_submit", {"ok": True, "pr_url": CANARY}),
     ("session_decline", {"ok": False, "declined": True, "reason": CANARY}),
 ])
+@pytest.mark.usefixtures("subscription_without_carry")
 def test_private_tool_result_never_reaches_branch_council_history_or_sink(
     name, payload, monkeypatch, fixture_issuer, caplog,
 ):
