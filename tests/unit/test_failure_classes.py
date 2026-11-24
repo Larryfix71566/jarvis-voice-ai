@@ -51,6 +51,8 @@ from tests.unit.test_subagent import FakeRegistry, make_agent
      ("policy", "protected_turn")),
     ("local_weather", "local_weather failed: named or unclear weather target; device location "
      "is not the requested place.", None, ("policy", "weather_place_not_requested")),
+    ("local_weather", "local_weather failed: the request did not clearly name a place or ask for "
+     "weather here. Ask the user which place.", None, ("policy", "weather_place_not_requested")),
     # The registry's own category wins over whatever the text says.
     ("x", '{"ok":false,"error":"tool_reported_failure"}', "tool_timeout", ("transient", "tool_timeout")),
 ])

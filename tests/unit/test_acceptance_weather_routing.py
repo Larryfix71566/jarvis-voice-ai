@@ -141,7 +141,7 @@ async def test_named_intent_refuses_wrong_subject_before_native_cache_or_fetch(s
             subject_key=subject, tool=tool, days=7, units="imperial")
     finally:
         current_weather_intent.reset(token)
-    assert reply.status == "refused" and reply.code == "invalid_request"
+    assert reply.status == "refused" and reply.code == ("invalid_request" if subject is None else "not_requested")
     assert calls == []
 
 

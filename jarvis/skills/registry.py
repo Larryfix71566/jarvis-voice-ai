@@ -1194,7 +1194,9 @@ class SkillRegistry:
             contract = self._source_contract_for(tool_name, server, session)
             if (contract is not None and server == "mcp-web"
                     and tool_name in {"get_weather", "get_weather_radar"}):
-                from jarvis.bot.weather_reuse import current_weather_reuse, named_weather_subject_key
+                from jarvis.bot.weather_reuse import (
+                    HARD_REFUSAL_CODES, current_weather_reuse, named_weather_subject_key,
+                )
 
                 weather_bridge = current_weather_reuse.get()
                 weather_subject_key = named_weather_subject_key(source_arguments.get("city"))
@@ -1216,7 +1218,10 @@ class SkillRegistry:
                     # fetch can be released against that changed authority.
                     refusal = "protected_turn" if is_sensitive() or private_input else (
                         "stale_selection" if self._source_contract_for(tool_name, server, session) is None
-                        else reuse.code if reuse.status == "refused" else None)
+                        else reuse.code if reuse.status == "refused" and reuse.code in HARD_REFUSAL_CODES
+                        else None)
+                    if refusal is None and reuse.status == "refused":
+                        logger.info("weather_reuse_fallback tool=%s code=%s", tool_name, reuse.code)
                     if refusal is not None:
                         category = "weather_reuse_" + refusal
                         return self._finish_invocation(tool_name, server, session, source_arguments,
