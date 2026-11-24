@@ -438,3 +438,5 @@ must document reversible migration or compatible forward recovery before claim.
 Current main/PRs, prior bench, routing/local-runtime refusal and mail/finance
 constraints inspected; official source checks are linked. No runtime changes,
 models installed, private records read, paid benchmarks, merge or deployment.
+
+2026-11-24 (daily batch): #408 merged into `main` on 11-23 (`6ff8702`) added §3.4, the Bitcoin research track (read-only skill and chart-first card, a separately gated Daily Brief recommendation, later a native Mac workspace). Documentation only; implementation needs fresh scoped dispatches ([log](../roadmap-log/2026-11-23-ws-27-bitcoin-research-enhancement-design.md)).
