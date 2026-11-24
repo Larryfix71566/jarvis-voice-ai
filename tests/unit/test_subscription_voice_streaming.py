@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
-from pipecat.frames.frames import InterruptionFrame, LLMTextFrame
+from pipecat.frames.frames import EndFrame, InterruptionFrame, LLMTextFrame, StartFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection
 
@@ -18,6 +18,7 @@ from jarvis.model_routing import (
     resolve_model_route,
 )
 from jarvis.privacy_policy import DataPolicy
+from jarvis.voice_sources import VoiceSources, bound_context_type
 
 STREAM_ENV = "JARVIS_VOICE_STREAMING_ENABLED"
 
@@ -217,6 +218,101 @@ def test_record_tool_menu_carries_stream_and_effort(monkeypatch, setup):
     buffered = setup(StreamNative(), streaming=False)
     buffered.record_tool_menu(ctx)
     assert calls[-1][1] == {"stream": False, "effort": "medium"}
+
+
+# Startup must warm the first turn, not just the next one.
+def startup_context(sources, level="approved_external"):
+    system = {"role": "system", "content": "Synthetic startup system prompt."}
+    sources.bind(system, DataPolicy(level, "synthetic-fixture"))
+    return bound_context_type()(
+        sources=sources, messages=[system], tools=context().tools)
+
+
+async def test_start_frame_prestarts_before_any_prompt_and_first_turn_reuses_ids(
+        setup, monkeypatch):
+    native, sources = StreamNative(), VoiceSources()
+    service = setup(native, prestart=True, sources=sources)
+    ctx = startup_context(sources)
+    menu_record = Mock()
+    monkeypatch.setattr("jarvis.subscription_tools.record_tool_menu", menu_record)
+    service.record_tool_menu(ctx)
+    assert native.prestarts == []
+    await service.process_frame(StartFrame(), FrameDirection.DOWNSTREAM)
+    assert native.requests == []
+    assert len(native.prestarts) == 1
+    spare, _, args = native.prestarts[0]
+    assert spare.context == ()
+    assert args["messages"] == ctx.get_messages()
+    assert spare.data_policy.level == "approved_external"
+    assert menu_record.call_count == 1  # service keeps the normal menu-record call
+    user = {"role": "user", "content": "Synthetic first prompt."}
+    sources.bind(user, DataPolicy("approved_external", "synthetic-fixture"))
+    ctx.add_message(user)
+    await service._process_context(ctx)
+    assert native.requests[0][0].parent_request_id == spare.parent_request_id
+    assert native.requests[0][0].task_id == spare.task_id
+    assert len(native.prestarts) == 2  # ordinary post-turn rearming remains
+    await service.cleanup()
+    assert service._next_parent_id is None
+    assert native.discarded == 1
+
+
+@pytest.mark.parametrize("case", ["streaming-off", "prestart-off", "no-context",
+                                 "confidential", "mixed", "mutated", "unregistered"])
+async def test_start_frame_never_preloads_unapproved_context(setup, monkeypatch, case):
+    native, sources = StreamNative(), VoiceSources()
+    if case == "prestart-off":
+        monkeypatch.setenv("JARVIS_VOICE_PRESTART_ENABLED", "0")
+    service = setup(native, streaming=case != "streaming-off",
+                    prestart=True, sources=sources)
+    ctx = startup_context(sources, "confidential" if case == "confidential" else
+                          "approved_external")
+    if case == "mixed":
+        msg = {"role": "assistant", "content": "Synthetic history, never preload."}
+        sources.bind(msg, DataPolicy("approved_external", "synthetic-fixture"))
+        ctx.add_message(msg)
+    if case == "mutated":
+        ctx.get_messages()[0]["content"] = "Synthetic tamper after binding."
+    if case == "unregistered":
+        service.unregister_function("fixture_clock")
+    menu_record = Mock()
+    monkeypatch.setattr("jarvis.subscription_tools.record_tool_menu", menu_record)
+    if case != "no-context":
+        service.record_tool_menu(ctx)
+    await service.process_frame(StartFrame(), FrameDirection.DOWNSTREAM)
+    assert service._native_client is None
+    assert native.prestarts == native.requests == []
+    assert service._next_parent_id is None
+
+
+async def test_stop_before_first_prompt_discards_startup_spare(setup, monkeypatch):
+    native, sources = StreamNative(), VoiceSources()
+    service = setup(native, prestart=True, sources=sources)
+    monkeypatch.setattr("jarvis.subscription_tools.record_tool_menu", Mock())
+    service.record_tool_menu(startup_context(sources))
+    await service.process_frame(StartFrame(), FrameDirection.DOWNSTREAM)
+    assert len(native.prestarts) == 1
+    await service.process_frame(EndFrame(), FrameDirection.DOWNSTREAM)
+    assert not native.requests
+    assert native.discarded == 1
+    assert service._next_parent_id is None
+    assert service._next_task_id is None
+
+
+async def test_start_frame_spare_failure_leaves_cold_first_turn_available(setup, monkeypatch):
+    native, sources = StreamNative(prestart_error=RuntimeError("synthetic miss")), VoiceSources()
+    service = setup(native, prestart=True, sources=sources)
+    ctx = startup_context(sources)
+    monkeypatch.setattr("jarvis.subscription_tools.record_tool_menu", Mock())
+    service.record_tool_menu(ctx)
+    await service.process_frame(StartFrame(), FrameDirection.DOWNSTREAM)
+    assert service._next_parent_id is None
+    service.push_error.assert_not_called()
+    user = {"role": "user", "content": "Synthetic first prompt."}
+    sources.bind(user, DataPolicy("approved_external", "synthetic-fixture"))
+    ctx.add_message(user)
+    await service._process_context(ctx)
+    assert len(native.requests) == 1
 
 
 # 3. streamed turn -----------------------------------------------------------
