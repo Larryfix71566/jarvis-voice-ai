@@ -88,6 +88,16 @@ final class OrbGlassCardTests: XCTestCase {
         XCTAssertEqual(RimGlow.rimStops.map(\.opacity), [1, 0.34, 0.12])
     }
 
+    func testRimFloorPlusSpotReproducesTheMockupStops() {
+        let f = RimGlow.rimFloor
+        XCTAssertEqual(f, 0.12)
+        for (spot, stop) in zip(RimGlow.rimSpotStops, RimGlow.rimStops) {
+            XCTAssertEqual(spot.location, stop.location)
+            XCTAssertEqual(f + spot.opacity * (1 - f), stop.opacity, accuracy: 1e-12)
+        }
+        XCTAssertEqual(RimGlow.rimSpotStops.last?.opacity ?? 1, 0, accuracy: 1e-12)
+    }
+
     func testFollowGlowIsOffUnlessTurnedOn() throws {
         let key = OrbGlassCardSettings.followGlowKey
         guard ProcessInfo.processInfo.environment[key] == nil else {

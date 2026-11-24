@@ -78,6 +78,14 @@ struct OrbGlassCardPolicy {
 enum RimGlow {
     /// Rim peak at the focus, mid at 55% of the radius, floor beyond it.
     static let rimStops: [(opacity: Double, location: Double)] = [(1, 0), (0.34, 0.55), (0.12, 1)]
+    /// The rim is drawn as an even floor (the last stop) plus a peak seen
+    /// through a moving spot. Painting the peak at alpha a over the floor f
+    /// gives f + a(1 - f), so a = (o - f) / (1 - f) reproduces each stop's o.
+    static var rimFloor: Double { rimStops.last?.opacity ?? 0 }
+    static var rimSpotStops: [(opacity: Double, location: Double)] {
+        rimStops.map { (opacity: ($0.opacity - rimFloor) / (1 - rimFloor), location: $0.location) }
+    }
+    static let bandSpotStops: [(opacity: Double, location: Double)] = [(1, 0), (0, 1)]
     static let rimRadius: CGFloat = 210
     static let rimWidth: CGFloat = 1.6
     static let bandOpacity = 0.36
@@ -319,17 +327,23 @@ private struct RimGlowOverlay: View {
                     ?? RimGlow.focus(pointer: CGPoint(x: min(max(pointer.location.x, 0), proxy.size.width),
                                                       y: min(max(pointer.location.y, 0), proxy.size.height)),
                                      in: proxy.size) ?? .top
+                let point = CGPoint(x: focus.x * proxy.size.width, y: focus.y * proxy.size.height)
+                // The rings and the band's blur never depend on the pointer, so
+                // they can render once per size or colour; a pointer move only
+                // moves the two spots inside the masks. The first version put
+                // the focus in each stroke's gradient, which changed the blurred
+                // layer's content on every move (3.92/12.90 ms p50/p95 on the
+                // Mac, 2026-11-24). That this layout is cheaper is a hypothesis
+                // that CarouselGlassFrameTimeTests' follow probe measures.
                 ZStack {
-                    shape.strokeBorder(
-                        RadialGradient(colors: [color.opacity(RimGlow.bandOpacity), .clear],
-                                       center: focus, startRadius: 0, endRadius: RimGlow.bandRadius),
-                        lineWidth: RimGlow.bandWidth)
+                    shape.strokeBorder(color.opacity(RimGlow.bandOpacity), lineWidth: RimGlow.bandWidth)
                         .blur(radius: RimGlow.bandBlur).clipShape(shape)
-                    shape.strokeBorder(
-                        RadialGradient(gradient: Gradient(stops: RimGlow.rimStops.map {
-                            Gradient.Stop(color: color.opacity($0.opacity), location: $0.location)
-                        }), center: focus, startRadius: 0, endRadius: RimGlow.rimRadius),
-                        lineWidth: RimGlow.rimWidth)
+                        .mask { RimGlowSpot(radius: RimGlow.bandRadius, stops: RimGlow.bandSpotStops)
+                            .position(point) }
+                    shape.strokeBorder(color.opacity(RimGlow.rimFloor), lineWidth: RimGlow.rimWidth)
+                    shape.strokeBorder(color, lineWidth: RimGlow.rimWidth)
+                        .mask { RimGlowSpot(radius: RimGlow.rimRadius, stops: RimGlow.rimSpotStops)
+                            .position(point) }
                 }
             case .staticEven:
                 ZStack {
@@ -344,5 +358,20 @@ private struct RimGlowOverlay: View {
         }
         .opacity(on ? 1 : 0)
         .animation(mode == .tracking ? .easeInOut(duration: RimGlow.fade) : nil, value: on)
+    }
+}
+
+/// A radial alpha spot for the follow glow's masks. Fixed content; only its
+/// position changes as the pointer moves.
+private struct RimGlowSpot: View {
+    let radius: CGFloat
+    let stops: [(opacity: Double, location: Double)]
+
+    var body: some View {
+        Circle()
+            .fill(RadialGradient(gradient: Gradient(stops: stops.map {
+                Gradient.Stop(color: Color.white.opacity($0.opacity), location: $0.location)
+            }), center: .center, startRadius: 0, endRadius: radius))
+            .frame(width: radius * 2, height: radius * 2)
     }
 }
