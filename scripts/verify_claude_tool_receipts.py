@@ -67,6 +67,20 @@ class Menu:
     model: str
     refs: tuple
     probe: str
+    # 2026-11-23 (WS-43): a streamed and/or effort-tagged voice menu is a
+    # different CLI invocation, so its receipt must be proven with the same one.
+    stream: bool = False
+    effort: str | None = None
+
+
+def menu_options(menu):
+    """Keyword options for the session, argv and validator; empty at the defaults."""
+    options = {}
+    if menu.stream:
+        options['stream'] = True
+    if menu.effort:
+        options['effort'] = menu.effort
+    return options
 
 
 def probe_tool(refs):
@@ -89,7 +103,7 @@ def probe_tool(refs):
 def load_menu(path):
     """A recorded menu, as the ModelToolReference tuple its requests send."""
     from jarvis.model_execution import ModelToolReference
-    from jarvis.subscription_tools import TOOL_MENU_KIND
+    from jarvis.subscription_tools import TOOL_MENU_KIND, VOICE_EFFORTS
     source = Path(path)
     try:
         if not source.is_file() or source.stat().st_size > MENU_BYTES:
@@ -103,6 +117,10 @@ def load_menu(path):
             or type(record.get('model')) is not str or not record['model'].startswith('claude-')
             or type(tools) is not list or not tools):
         raise CapabilityUnavailable('tool_menu_invalid')
+    if ('stream_text' in record and record['stream_text'] is not True) or (
+            'effort' in record and (type(record['effort']) is not str
+                                    or record['effort'] not in VOICE_EFFORTS)):
+        raise CapabilityUnavailable('tool_menu_invalid')
     refs = []
     for tool in tools:
         if (type(tool) is not dict or set(tool) != {'name', 'description', 'parameters'}
@@ -113,7 +131,8 @@ def load_menu(path):
     names = [ref.name for ref in refs]
     if len(set(names)) != len(names):
         raise CapabilityUnavailable('tool_menu_invalid')
-    return Menu(source, record['workload'], record['model'], tuple(refs), probe_tool(refs))
+    return Menu(source, record['workload'], record['model'], tuple(refs), probe_tool(refs),
+                record.get('stream_text') is True, record.get('effort'))
 
 
 def menu_files(path):
@@ -170,7 +189,8 @@ async def protocol_round(identity, menu, timeout, *, environment=None, expect_ba
     first = _request(menu, parent, 0, timeout)
     Session = observed_session_type()
     session = Session(first, SimpleNamespace(model=model), {'messages': messages}, identity['path'],
-                      max_tool_calls=2, environment=environment)
+                      max_tool_calls=2, environment=environment,
+                      **menu_options(menu))
     host_calls = 0
     result = {'native_tool_call_observed': False, 'unknown_tool_rejected': False,
               'system_constraints_observed': False, 'terminal_success_without_error_items': False,
@@ -390,14 +410,15 @@ def build_receipt(identity, menu, live, isolation, negative, isolated, refused):
         'tool_schema_sha256': _json_digest([{'name': ref.name, 'description': ref.description,
             'parameters': dict(ref.parameters)} for ref in refs]),
         'invocation_sha256': _json_digest(_claude_tool_argv(identity['path'], model,
-            '<mcp-config>', '<system-prompt>', names)),
+            '<mcp-config>', '<system-prompt>', names, **menu_options(menu))),
         'control_protocol_sha256': _json_digest(NATIVE_CONTROL_CONTRACT),
         'isolation_env_sha256': _json_digest(NATIVE_ISOLATION_ENV),
         'protocol_source': NATIVE_PROTOCOL_SOURCE,
         'api_credentials_absent': not any('API_KEY' in key or 'BASE_URL' in key
                                           for key in _subscription_env()),
         **proof, 'native_cleanup_verified': cleanup, 'workload': menu.workload,
-        'probe_tool': menu.probe, 'menu_file': menu.path.name, 'runner_sha256': digest(Path(__file__).read_bytes()),
+        'probe_tool': menu.probe, 'menu_file': menu.path.name,
+        **({'stream_text': True} if menu.stream else {}), **({'effort': menu.effort} if menu.effort else {}), 'runner_sha256': digest(Path(__file__).read_bytes()),
         'observations': {'live': live, 'isolation': isolation, 'negative': negative,
             'isolation_http': isolated['observations'], 'negative_http': refused['observations'],
             'isolation_failures': loopback_failures(isolated, model),
@@ -459,7 +480,8 @@ def accepted(store, menu):
     os.environ[TOOLS_ENABLED_ENV] = '1'
     os.environ[TOOL_CAPABILITY_RECEIPT_ENV] = str(store)
     try:
-        _validate_native_receipt(menu.model, [ref.name for ref in menu.refs], menu.refs)
+        _validate_native_receipt(menu.model, [ref.name for ref in menu.refs], menu.refs,
+                                 **menu_options(menu))
         return True
     except SubscriptionCapabilityError:
         return False

@@ -67,6 +67,35 @@ NATIVE_PROTOCOL_SOURCE = {"package": "claude-agent-sdk", "version": "0.2.163",
                           "file": "claude_agent_sdk/_internal/query.py",
                           "sha256": "0562517de949f4431177f204fe84cda3265f495d0eb0a949b9ced96cc5bd8276"}
 
+# 2026-11-23 (WS-43): voice-only opt-ins, all OFF by default. Streaming turns on
+# --include-partial-messages text deltas AND the pre-started spare session;
+# the pre-start alone can be turned off; the effort level is independent.
+VOICE_STREAMING_ENV = "JARVIS_VOICE_STREAMING_ENABLED"
+VOICE_PRESTART_ENV = "JARVIS_VOICE_PRESTART_ENABLED"
+VOICE_EFFORT_ENV = "JARVIS_VOICE_EFFORT"
+VOICE_EFFORTS = ("low", "medium", "high")
+
+
+def voice_streaming_enabled(environ: Any = None) -> bool:
+    env = os.environ if environ is None else environ
+    return env.get(VOICE_STREAMING_ENV) == "1"
+
+
+def voice_prestart_enabled(environ: Any = None) -> bool:
+    env = os.environ if environ is None else environ
+    return voice_streaming_enabled(env) and env.get(VOICE_PRESTART_ENV) != "0"
+
+
+def voice_effort(environ: Any = None) -> str | None:
+    """None when unset or empty; any value outside VOICE_EFFORTS is refused."""
+    env = os.environ if environ is None else environ
+    value = env.get(VOICE_EFFORT_ENV)
+    if not value:
+        return None
+    if value not in VOICE_EFFORTS:
+        raise ValueError("voice effort must be low, medium or high")
+    return value
+
 
 def _encode_frame(packet: dict[str, Any], limit: int) -> bytes:
     try:
@@ -103,14 +132,22 @@ async def _close_writer(writer: asyncio.StreamWriter) -> None:
 
 
 def _claude_tool_argv(command: str, model: str, mcp_path: str,
-                      system_path: str, names: list[str]) -> list[str]:
-    return [command, "--print", "--input-format", "stream-json", "--output-format",
+                      system_path: str, names: list[str], *, stream: bool = False,
+                      effort: str | None = None) -> list[str]:
+    argv = [command, "--print", "--input-format", "stream-json", "--output-format",
             "stream-json", "--verbose", "--no-session-persistence", "--restricted",
             "--setting-sources", "", "--disable-slash-commands", "--no-chrome",
             "--strict-mcp-config", "--mcp-config", mcp_path, "--tools", "",
             "--allowed-tools", ",".join(f"mcp__{_GATEWAY_NAME}__{name}" for name in names),
             "--permission-mode", "dontAsk", "--permission-prompts", "none",
             "--system-prompt-file", system_path, "--model", model]
+    # 2026-11-23 (WS-43): appended only when requested, so the default argv (and
+    # its receipt digest) is unchanged.
+    if stream:
+        argv.append("--include-partial-messages")
+    if effort:
+        argv += ["--effort", effort]
+    return argv
 
 
 def claude_tool_runtime_identity() -> dict[str, str]:
@@ -142,15 +179,27 @@ DEFAULT_TOOL_MENU_DIR = "logs/tool-menus"
 TOOL_MENU_KIND = "mortimer_tool_menu"
 
 
-def tool_menu_record(workload: str, model: str, tools: Any) -> dict[str, Any]:
-    return {"record_kind": TOOL_MENU_KIND, "schema_version": 1, "workload": workload,
-            "model": model, "tools": [{"name": tool.name, "description": tool.description,
-                                       "parameters": dict(tool.parameters)} for tool in tools]}
+def tool_menu_record(workload: str, model: str, tools: Any, *, stream: bool = False,
+                     effort: str | None = None) -> dict[str, Any]:
+    record = {"record_kind": TOOL_MENU_KIND, "schema_version": 1, "workload": workload,
+              "model": model, "tools": [{"name": tool.name, "description": tool.description,
+                                         "parameters": dict(tool.parameters)} for tool in tools]}
+    if stream:
+        record["stream_text"] = True
+    if effort:
+        record["effort"] = effort
+    return record
 
 
 def tool_menu_path(directory: str | Path, record: dict[str, Any]) -> Path:
     """One file per workload, model and exact menu."""
-    key = _json_digest([record["model"], record["tools"]])[:12]
+    if "stream_text" in record or "effort" in record:
+        # 2026-11-23 (WS-43): a streamed or effort-tagged menu is a different
+        # argv, so it gets its own file and coexists with the buffered menu.
+        key = _json_digest([record["model"], record["tools"], {
+            "stream_text": bool(record.get("stream_text")), "effort": record.get("effort")}])[:12]
+    else:
+        key = _json_digest([record["model"], record["tools"]])[:12]
     workload = "".join(ch for ch in str(record["workload"]) if ch.isalnum() or ch in "_-") or "workload"
     return Path(directory) / f"{workload}-{key}.json"
 
@@ -180,10 +229,11 @@ def write_tool_menu(path: str | Path, record: dict[str, Any]) -> bool:
     return True
 
 
-def record_tool_menu(workload: str, model: str, tools: Any) -> Path | None:
+def record_tool_menu(workload: str, model: str, tools: Any, *, stream: bool = False,
+                     effort: str | None = None) -> Path | None:
     """Best effort: a failure is logged and never blocks a request."""
     try:
-        record = tool_menu_record(workload, model, tools)
+        record = tool_menu_record(workload, model, tools, stream=stream, effort=effort)
         path = tool_menu_path(os.environ.get(TOOL_MENU_DIR_ENV) or DEFAULT_TOOL_MENU_DIR, record)
         if write_tool_menu(path, record):
             _logger.info("tool_menu_recorded workload=%s tools=%d path=%s",
@@ -203,8 +253,10 @@ MAX_RECEIPTS_IN_STORE = 128
 
 
 def _receipt_matches(receipt: Any, identity: dict[str, str], model: str,
-                     names: list[str], tools: Any) -> bool:
-    invocation = _claude_tool_argv(identity["path"], model, "<mcp-config>", "<system-prompt>", names)
+                     names: list[str], tools: Any, *, stream: bool = False,
+                     effort: str | None = None) -> bool:
+    invocation = _claude_tool_argv(identity["path"], model, "<mcp-config>", "<system-prompt>", names,
+                                   stream=stream, effort=effort)
     return not (type(receipt) is not dict
             or type(receipt.get("schema_version")) is not int or receipt.get("schema_version") != 1
             or receipt.get("provider") != "claude"
@@ -242,7 +294,8 @@ def _receipt_candidates(source: Path) -> list[Path]:
     return files
 
 
-def _validate_native_receipt(model: str, names: list[str], tools: Any = ()) -> dict[str, str]:
+def _validate_native_receipt(model: str, names: list[str], tools: Any = (), *,
+                             stream: bool = False, effort: str | None = None) -> dict[str, str]:
     if os.environ.get(TOOLS_ENABLED_ENV) != "1":
         raise SubscriptionCapabilityError("subscription native tools are disabled")
     path = os.environ.get(TOOL_CAPABILITY_RECEIPT_ENV)
@@ -258,7 +311,7 @@ def _validate_native_receipt(model: str, names: list[str], tools: Any = ()) -> d
                 receipt = json.loads(candidate.read_text(encoding="utf-8"))
             except (OSError, ValueError, UnicodeError):
                 continue
-            if _receipt_matches(receipt, identity, model, names, tools):
+            if _receipt_matches(receipt, identity, model, names, tools, stream=stream, effort=effort):
                 return identity
         raise ValueError("receipt mismatch")
     except SubscriptionCapabilityError:
@@ -281,11 +334,18 @@ class _Pending:
     delivery: asyncio.Future[bool] | None = None
 
 
+@dataclass(frozen=True)
+class _TextDelta:
+    """A streamed fragment of the current round's spoken text (WS-43)."""
+    text: str
+
+
 class _ClaudeNativeSession:
     """One ephemeral provider process and private IPC channel per parent run."""
 
     def __init__(self, request: Any, resolved: Any, completion_args: dict[str, Any],
-                 command: str, *, max_tool_calls: int = MAX_TOOL_CALLS):
+                 command: str, *, max_tool_calls: int = MAX_TOOL_CALLS,
+                 stream: bool = False, effort: str | None = None):
         self.parent_id = request.parent_request_id
         self.workload = request.workload
         self.model = resolved.model
@@ -324,10 +384,30 @@ class _ClaudeNativeSession:
         self.gateway_tasks: set[asyncio.Task[Any]] = set()
         self.start_time = time.monotonic()
         self.deadline = self.start_time + request.timeout_s
+        # 2026-11-23 (WS-43): streamed text deltas, and the launch/bind split
+        # that lets voice start the provider process before the user speaks.
+        self.stream = stream
+        self.effort = effort
+        self.round_text: list[str] = []
+        self.streaming_round = False
+        self.bound = False
+        self.launched_at: float | None = None
+        self.system_written: str | None = None
 
-    async def start(self) -> None:
-        if any(message.get("role") == "tool" or message.get("tool_calls") for message in self.messages):
+    @staticmethod
+    def system_text(messages: list[dict[str, Any]]) -> str:
+        """Exactly what launch writes to system.txt, so a spare can be compared."""
+        return "\n\n".join(message["content"] for message in messages
+                            if message.get("role") == "system")
+
+    @staticmethod
+    def _refuse_tool_history(messages: list[dict[str, Any]]) -> None:
+        if any(message.get("role") == "tool" or message.get("tool_calls") for message in messages):
             raise SubscriptionCapabilityError("a native session cannot start with unrelated tool history")
+
+    async def launch(self) -> None:
+        """Start the provider and finish initialization; the prompt is sent later."""
+        self._refuse_tool_history(self.messages)
         self.server = await asyncio.start_unix_server(self._gateway, path=str(self.socket_path),
                                                      limit=_request_frame_limit(self.names))
         self.socket_path.chmod(0o600)
@@ -344,10 +424,11 @@ class _ClaudeNativeSession:
         }}}), encoding="utf-8")
         mcp_path.chmod(0o600)
         system_path = self.directory / "system.txt"
-        system_path.write_text("\n\n".join(message["content"] for message in self.messages
-                                          if message.get("role") == "system"), encoding="utf-8")
+        self.system_written = self.system_text(self.messages)
+        system_path.write_text(self.system_written, encoding="utf-8")
         system_path.chmod(0o600)
-        argv = _claude_tool_argv(self.command, self.model, str(mcp_path), str(system_path), self.names)
+        argv = _claude_tool_argv(self.command, self.model, str(mcp_path), str(system_path), self.names,
+                                 **self._argv_options())
         self.process = await asyncio.create_subprocess_exec(
             *argv, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE, cwd=self.temp.name,
@@ -355,14 +436,78 @@ class _ClaudeNativeSession:
             limit=_native_frame_limit(self.names),
         )
         self.readers = [asyncio.create_task(self._stdout()), asyncio.create_task(self._stderr())]
-        ordinary = [message for message in self.messages if message.get("role") != "system"]
-        prompt = _prompt(ordinary) if ordinary else "Follow the supplied instructions."
         await self._write_native({"type": "control_request", "request_id": self.initialize_id,
                                   "request": NATIVE_CONTROL_CONTRACT})
         async with asyncio.timeout(max(0.001, self.deadline - time.monotonic())):
             await self.initialized
+        self.launched_at = time.monotonic()
+
+    def _argv_options(self) -> dict[str, Any]:
+        options: dict[str, Any] = {}
+        if self.stream:
+            options["stream"] = True
+        if self.effort:
+            options["effort"] = self.effort
+        return options
+
+    async def send_prompt(self) -> None:
+        ordinary = [message for message in self.messages if message.get("role") != "system"]
+        prompt = _prompt(ordinary) if ordinary else "Follow the supplied instructions."
+        self.bound = True
         await self._write_native({"type": "user", "client_composed": True,
                                   "message": {"role": "user", "content": prompt}})
+
+    async def start(self) -> None:
+        await self.launch()
+        await self.send_prompt()
+
+    def matches(self, request: Any, resolved: Any, completion_args: dict[str, Any],
+                effort: str | None) -> str | None:
+        """None when this pre-started session may serve ``request``, else a fixed reason."""
+        if self.bound:
+            return "bound"
+        if self.closed:
+            return "closed"
+        if self.failure is not None:
+            return "failed"
+        if self.process is None or self.process.returncode is not None:
+            return "process_exited"
+        if (not self.initialized.done() or self.initialized.cancelled()
+                or self.initialized.exception() is not None):
+            return "not_initialized"
+        if request.parent_request_id != self.parent_id:
+            return "parent"
+        if request.workload != self.workload:
+            return "workload"
+        if request.task_id != self.origin_task_id:
+            return "task"
+        if resolved.model != self.model:
+            return "model"
+        if bool(completion_args.get("stream")) != self.stream:
+            return "stream"
+        if effort != self.effort:
+            return "effort"
+        if (self.names != [tool.name for tool in request.tools]
+                or self.schemas != {tool.name: dict(tool.parameters) for tool in request.tools}
+                or self.descriptions != {tool.name: tool.description for tool in request.tools}):
+            return "tools"
+        try:
+            if self.system_text(completion_args["messages"]) != self.system_written:
+                return "system"
+        except (KeyError, TypeError):
+            return "system"
+        return None
+
+    async def bind(self, request: Any, completion_args: dict[str, Any]) -> None:
+        """Hand a launched spare its real turn; the deadline starts at this write."""
+        if self.bound or self.closed or self.launched_at is None:
+            raise SubscriptionRuntimeError("native spare cannot be bound")
+        self._refuse_tool_history(completion_args["messages"])
+        self.messages = copy.deepcopy(completion_args["messages"])
+        self.task_id = request.task_id
+        self.start_time = time.monotonic()
+        self.deadline = self.start_time + request.timeout_s
+        await self.send_prompt()
 
     def _environment(self) -> dict[str, str]:
         env = _subscription_env(self.temp.name)
@@ -471,6 +616,17 @@ class _ClaudeNativeSession:
                     if calls:
                         self.text_message_id = None
                         self.message_text = []
+                        blocks = "\n".join(text)
+                        content = blocks
+                        if self.stream:
+                            # 2026-11-23 (WS-43): spoken text is what was
+                            # streamed; the block text is only the fallback
+                            # when no delta arrived for this round.
+                            content = "".join(self.round_text)
+                            if not content and blocks:
+                                await self.queue.put(_TextDelta(blocks))
+                                content = blocks
+                            self.round_text = []
                         # Stdio MCP lacks the originating tool_use_id. Refuse
                         # identical calls before publication, so Mortimer's
                         # executor never acts on an ambiguous native batch.
@@ -479,7 +635,7 @@ class _ClaudeNativeSession:
                             self.pending[pending.call_id] = pending
                         self.call_count += len(staged)
                         self.published_assistant = {
-                            "role": "assistant", "content": "\n".join(text) or None,
+                            "role": "assistant", "content": content or None,
                             "tool_calls": [{"id": call.id, "type": "function", "function": {
                                 "name": call.function.name, "arguments": call.function.arguments},
                                 **call.model_extra} for call in calls],
@@ -487,7 +643,7 @@ class _ClaudeNativeSession:
                         async with self.pending_ready:
                             self.pending_ready.notify_all()
                         await self.queue.put(SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-                            content="\n".join(text), tool_calls=calls, model_extra={}))], usage=None))
+                            content=content, tool_calls=calls, model_extra={}))], usage=None))
                 elif event.get("type") == "result":
                     if (event.get("is_error") is not False or event.get("subtype") != "success"
                             or self.pending or any(not item.hook_done for item in self.completed.values())):
@@ -495,9 +651,29 @@ class _ClaudeNativeSession:
                     result = event.get("result")
                     if not isinstance(result, str) or not result.strip():
                         raise SubscriptionRuntimeError("native completion contains no assistant text")
+                    content = result
+                    if self.stream:
+                        content = "".join(self.round_text)
+                        if not content:
+                            await self.queue.put(_TextDelta(result))
+                            content = result
+                        elif content != result:
+                            _logger.info("native_stream_result_differs streamed_chars=%d result_chars=%d",
+                                         len(content), len(result))
+                        self.round_text = []
                     await self.queue.put(SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-                        content=result, tool_calls=[], model_extra={}))], usage=normalize_claude_usage(event.get("usage"))))
+                        content=content, tool_calls=[], model_extra={}))], usage=normalize_claude_usage(event.get("usage"))))
                     return
+                elif event.get("type") == "stream_event" and self.stream:
+                    # Only top-level (not sub-agent) text deltas are spoken.
+                    inner = event.get("event")
+                    delta = inner.get("delta") if isinstance(inner, dict) else None
+                    if (isinstance(inner, dict) and inner.get("type") == "content_block_delta"
+                            and event.get("parent_tool_use_id") is None
+                            and isinstance(delta, dict) and delta.get("type") == "text_delta"
+                            and isinstance(delta.get("text"), str) and delta["text"]):
+                        self.round_text.append(delta["text"])
+                        await self.queue.put(_TextDelta(delta["text"]))
                 elif event.get("type") not in {"system", "user", "stream_event", "rate_limit_event"}:
                     raise SubscriptionRuntimeError("native runtime returned an unsupported event")
             raise SubscriptionRuntimeError("native stream ended without a terminal result")
@@ -567,7 +743,7 @@ class _ClaudeNativeSession:
             if task:
                 self.gateway_tasks.discard(task)
 
-    async def next_completion(self, request: Any, completion_args: dict[str, Any]) -> Any:
+    def _accept_continuation(self, request: Any, completion_args: dict[str, Any]) -> None:
         if request.parent_request_id != self.parent_id or request.workload != self.workload:
             raise SubscriptionCapabilityError("native continuation belongs to a different parent or workload")
         if self.suspended:
@@ -630,11 +806,39 @@ class _ClaudeNativeSession:
             self.messages = copy.deepcopy(messages)
             self.published_assistant = None
         self.task_id = request.task_id
+
+    async def next_completion(self, request: Any, completion_args: dict[str, Any]) -> Any:
+        self._accept_continuation(request, completion_args)
         response = await self.queue.get()
+        while isinstance(response, _TextDelta):
+            response = await self.queue.get()
         if isinstance(response, BaseException):
             raise response
         self.suspended = bool(response.choices[0].message.tool_calls)
         return response
+
+    async def stream_round(self) -> Any:
+        """One round as OpenAI-shaped chunks for ``_collect_chat_stream``."""
+        while True:
+            item = await self.queue.get()
+            if isinstance(item, BaseException):
+                raise item
+            if not isinstance(item, _TextDelta):
+                break
+            yield SimpleNamespace(id=None, usage=None, choices=[SimpleNamespace(
+                delta=SimpleNamespace(content=item.text, tool_calls=None), finish_reason=None)])
+        calls = list(item.choices[0].message.tool_calls or [])
+        self.suspended = bool(calls)
+        if calls:
+            delta = SimpleNamespace(content=None, tool_calls=[SimpleNamespace(
+                index=index, id=call.id, type="function",
+                function=SimpleNamespace(name=call.function.name, arguments=call.function.arguments),
+                model_extra=dict(call.model_extra)) for index, call in enumerate(calls)])
+            finish = "tool_calls"
+        else:
+            delta, finish = SimpleNamespace(content=None, tool_calls=None), "stop"
+        yield SimpleNamespace(id=None, usage=item.usage,
+                              choices=[SimpleNamespace(delta=delta, finish_reason=finish)])
 
     async def close(self) -> None:
         if self.closed:
@@ -664,8 +868,11 @@ class _ClaudeNativeSession:
 
 
 class ClaudeSubscriptionToolClient:
-    def __init__(self, model: str):
+    def __init__(self, model: str, *, effort: str | None = None):
+        if effort is not None and effort not in VOICE_EFFORTS:
+            raise SubscriptionCapabilityError("native effort must be low, medium or high")
         self.model = model
+        self.effort = effort
         self.base_url = "subscription://claude"
         self.sessions: dict[str, _ClaudeNativeSession] = {}
         self.locks: dict[str, asyncio.Lock] = {}
@@ -675,17 +882,148 @@ class ClaudeSubscriptionToolClient:
         # provider process tree has been terminated.
         self.failed_cleanup_sessions: dict[str, _ClaudeNativeSession] = {}
         self.cleanup_unverified = False
+        # 2026-11-23 (WS-43): at most one launched-but-unbound spare, and the
+        # parents whose streamed round has not finished yet.
+        self.spares: dict[str, asyncio.Task[Any]] = {}
+        self.streaming: set[str] = set()
+
+    def _options(self, stream: bool) -> dict[str, Any]:
+        """Keyword options for menus, receipts and sessions; empty at the defaults."""
+        options: dict[str, Any] = {}
+        if stream:
+            options["stream"] = True
+        if self.effort:
+            options["effort"] = self.effort
+        return options
+
+    async def _close_session(self, session: _ClaudeNativeSession) -> None:
+        """close_request's cleanup semantics for a session that is not in ``sessions``."""
+        try:
+            await session.close()
+        except BaseException as failure:
+            self.failed_cleanup_sessions[session.parent_id] = session
+            self.cleanup_unverified = True
+            if isinstance(failure, asyncio.CancelledError):
+                raise
+            raise SubscriptionRuntimeError("native provider cleanup is unverified",
+                                           category="cleanup") from None
+
+    def has_spare(self) -> bool:
+        return bool(self.spares)
+
+    def prestart(self, request: Any, resolved: Any, completion_args: dict[str, Any]) -> None:
+        """Launch a spare provider process for ``request`` before its prompt exists."""
+        if self.cleanup_unverified:
+            raise SubscriptionRuntimeError("native provider cleanup is unverified; launch refused",
+                                           category="cleanup")
+        parent = request.parent_request_id
+        for key, task in list(self.spares.items()):
+            if task.done() and (task.cancelled() or task.exception() is not None):
+                del self.spares[key]  # A dead spare cleaned up after itself; it must not block the next.
+        if parent in self.sessions or parent in self.spares:
+            raise SubscriptionCapabilityError("native spare parent is already in use")
+        if self.spares:
+            raise SubscriptionCapabilityError("a native spare is already pending")
+        if any(message.get("role") != "system" for message in completion_args.get("messages", ())):
+            raise SubscriptionCapabilityError("a native spare may carry system context only")
+        task = asyncio.create_task(self._prestart(request, resolved, completion_args))
+        task.add_done_callback(lambda done: done.cancelled() or done.exception())
+        self.spares[parent] = task
+
+    async def _prestart(self, request: Any, resolved: Any,
+                        completion_args: dict[str, Any]) -> _ClaudeNativeSession:
+        session = None
+        try:
+            options = self._options(completion_args.get("stream") is True)
+            names = [tool.name for tool in request.tools]
+            await asyncio.to_thread(record_tool_menu, request.workload, self.model, request.tools, **options)
+            identity = await asyncio.to_thread(_validate_native_receipt, self.model, names,
+                                               request.tools, **options)
+            if self.cleanup_unverified:
+                raise SubscriptionRuntimeError("native provider cleanup is unverified; launch refused",
+                                               category="cleanup")
+            session = _ClaudeNativeSession(request, resolved, completion_args, identity["path"], **options)
+            started = time.monotonic()
+            await session.launch()
+            _logger.info("native_prestart_ready launch_ms=%d", (time.monotonic() - started) * 1000)
+            return session
+        except BaseException:
+            if session is not None:
+                try:
+                    await session.close()
+                except BaseException:
+                    self.failed_cleanup_sessions[session.parent_id] = session
+                    self.cleanup_unverified = True
+            raise
+
+    async def discard_spares(self) -> None:
+        tasks = list(self.spares.values())
+        self.spares.clear()
+        flagged = self.cleanup_unverified
+        for task in tasks:
+            task.cancel()
+        failed = False
+        for outcome in await asyncio.gather(*tasks, return_exceptions=True):
+            if isinstance(outcome, _ClaudeNativeSession):  # Finished before the cancel landed.
+                try:
+                    await self._close_session(outcome)
+                except SubscriptionRuntimeError:
+                    failed = True
+        if failed or (self.cleanup_unverified and not flagged):
+            raise SubscriptionRuntimeError("native provider cleanup is unverified", category="cleanup")
+
+    async def _claim_spare(self, request: Any, resolved: Any,
+                           completion_args: dict[str, Any]) -> _ClaudeNativeSession | None:
+        """The bound pre-started session for this request, or None to launch cold."""
+        parent = request.parent_request_id
+        spare = self.spares.pop(parent, None)
+        if spare is None:
+            return None
+        waited = time.monotonic()
+        try:
+            session = await spare
+        except asyncio.CancelledError:
+            task = asyncio.current_task()
+            if task is not None and task.cancelling():
+                raise
+            _logger.info("native_prestart_miss reason=cancelled")
+            return None
+        except Exception:  # noqa: BLE001 - the spare cleaned up after itself; run cold
+            _logger.info("native_prestart_miss reason=failed")
+            return None
+        wait_ms = (time.monotonic() - waited) * 1000
+        reason = session.matches(request, resolved, completion_args, self.effort)
+        if reason is not None:
+            _logger.info("native_prestart_miss reason=%s", reason)
+            await self._close_session(session)
+            return None
+        self.sessions[parent] = session
+        try:
+            await session.bind(request, completion_args)
+        except Exception:  # noqa: BLE001 - fall back to a cold launch after verified cleanup
+            _logger.info("native_prestart_miss reason=bind_failed")
+            await self.close_request(parent)
+            return None
+        _logger.info("native_prestart_used wait_ms=%d idle_ms=%d", wait_ms,
+                     (time.monotonic() - (session.launched_at or waited)) * 1000)
+        return session
 
     async def execute_request(self, request: Any, resolved: Any, completion_args: dict[str, Any]) -> Any:
         if self.cleanup_unverified:
             raise SubscriptionRuntimeError("native provider cleanup is unverified; client cannot be reused",
                                            category="cleanup")
+        requested_stream = completion_args.get("stream")
         if (resolved.model != self.model or resolved.route.adapter != "subscription_runtime"
-                or completion_args.get("max_tokens") is not None or completion_args.get("stream")
+                or completion_args.get("max_tokens") is not None
+                or (requested_stream and requested_stream is not True)
                 or completion_args.get("response_format") is not None
                 or request.attachments or request.extra_body or request.temperature is not None):
             raise SubscriptionCapabilityError("native subscription request has an unsupported capability")
+        streaming = requested_stream is True
+        options = self._options(streaming)
         parent = request.parent_request_id
+        if parent in self.streaming:
+            raise SubscriptionCapabilityError("a native stream is still active for this request")
         lock = self.locks.setdefault(parent, asyncio.Lock())
         self.active_requests[parent] = self.active_requests.get(parent, 0) + 1
         try:
@@ -693,21 +1031,33 @@ class ClaudeSubscriptionToolClient:
                 if self.cleanup_unverified:
                     raise SubscriptionRuntimeError("native provider cleanup is unverified; client cannot be reused",
                                                    category="cleanup")
+                if parent in self.streaming:
+                    raise SubscriptionCapabilityError("a native stream is still active for this request")
                 session = self.sessions.get(parent)
                 if session is None:
+                    session = await self._claim_spare(request, resolved, completion_args)
+                if session is None:
                     names = [tool.name for tool in request.tools]
-                    await asyncio.to_thread(record_tool_menu, request.workload, self.model, request.tools)
-                    identity = await asyncio.to_thread(_validate_native_receipt, self.model, names, request.tools)
+                    await asyncio.to_thread(record_tool_menu, request.workload, self.model, request.tools, **options)
+                    identity = await asyncio.to_thread(_validate_native_receipt, self.model, names,
+                                                       request.tools, **options)
                     if self.cleanup_unverified:
                         raise SubscriptionRuntimeError("native provider cleanup is unverified; launch refused",
                                                        category="cleanup")
-                    session = _ClaudeNativeSession(request, resolved, completion_args, identity["path"])
+                    session = _ClaudeNativeSession(request, resolved, completion_args, identity["path"], **options)
                     self.sessions[parent] = session
                     await session.start()
                 elif (session.model != resolved.model
+                      or getattr(session, "stream", False) != streaming
                       or session.schemas != {tool.name: dict(tool.parameters) for tool in request.tools}
                       or session.descriptions != {tool.name: tool.description for tool in request.tools}):
                     raise SubscriptionCapabilityError("native continuation changed the model or tool registry")
+                if streaming:
+                    # The lock is released on return; self.streaming refuses a
+                    # second request for this parent until the stream ends.
+                    session._accept_continuation(request, completion_args)
+                    self.streaming.add(parent)
+                    return self._stream(parent, session)
                 response = await session.next_completion(request, completion_args)
                 if self.cleanup_unverified:
                     raise SubscriptionRuntimeError("native provider cleanup is unverified; completion refused",
@@ -729,14 +1079,34 @@ class ClaudeSubscriptionToolClient:
                 self.active_requests[parent] = remaining
             else:
                 self.active_requests.pop(parent)
-                if parent not in self.sessions:
+                if parent not in self.sessions and parent not in self.streaming:
                     self.locks.pop(parent, None)
+
+    async def _stream(self, parent: str, session: _ClaudeNativeSession) -> Any:
+        try:
+            if self.cleanup_unverified:
+                raise SubscriptionRuntimeError("native provider cleanup is unverified; completion refused",
+                                               category="cleanup")
+            async for chunk in session.stream_round():
+                yield chunk
+            if self.cleanup_unverified:
+                raise SubscriptionRuntimeError("native provider cleanup is unverified; completion refused",
+                                               category="cleanup")
+            if not session.suspended:
+                await self.close_request(parent)
+        finally:
+            # An early stop or failure is closed by the caller's own failure
+            # path (close_model_request), never here.
+            self.streaming.discard(parent)
+            if parent not in self.sessions and parent not in self.active_requests:
+                self.locks.pop(parent, None)
 
     async def close_request(self, parent_request_id: str) -> None:
         if parent_request_id in self.failed_cleanup_sessions:
             raise SubscriptionRuntimeError("native provider cleanup remains unverified",
                                            category="cleanup")
         session = self.sessions.pop(parent_request_id, None)
+        self.streaming.discard(parent_request_id)
         try:
             if session is not None:
                 try:
@@ -749,7 +1119,7 @@ class ClaudeSubscriptionToolClient:
                     raise SubscriptionRuntimeError("native provider cleanup is unverified",
                                                    category="cleanup") from None
         finally:
-            if parent_request_id not in self.active_requests:
+            if parent_request_id not in self.active_requests and parent_request_id not in self.streaming:
                 self.locks.pop(parent_request_id, None)
 
 

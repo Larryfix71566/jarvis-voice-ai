@@ -172,6 +172,24 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 
 </details>
 
+<details id="ws-43">
+<summary>WS-43 — Voice streaming and a pre-started Claude CLI · Claude</summary>
+
+**Workstream:** Larry said "Build streaming" in his Claude Duet channel on 2026-11-23 at 21:10 UTC, answering whether to build the voice streaming change behind a flag after the investigation in `/mnt/project-files/mortimer/voice-streaming-investigation-2026-11-23.md` (Claude Duet project files). No existing row covered speaking the voice model's reply while it is still being written, so this block is added with the PR that implements it; merging the PR approves the row (§0 rule 2). Under §0 rule 14 this block keeps systems from overlapping; it is not exclusive. With `JARVIS_VOICE_STREAMING_ENABLED=1`, the voice model's text reaches TTS as the CLI writes it (`--include-partial-messages`), and a Claude CLI process for the next turn is started and initialized while the user is still listening, so the next turn skips the CLI start-up. `JARVIS_VOICE_EFFORT` adds `--effort` to the voice CLI. Off by default; with every flag unset the CLI arguments, tool-menu files and receipts are unchanged.
+
+- **Owner:** `claude`
+- **Status:** claimed 2026-11-23: one PR into `next`.
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** Larry: merge; deploy; produce voice tool receipts for the streamed menus (new CLI arguments mean new receipts); run `scripts/latency_probe.py --budget` on real turns with Opus 5.5 and Sonnet 5.5 at low effort; check the idle cost of a waiting CLI process on his plan. Haiku 5.5 is not selectable: a registry profile for it would break the 2026-09-01 model floor (`tests/unit/test_model_floor.py`), so a voice-only way to pick it is a separate decision. Untested: real CLI streaming through Pipecat and ElevenLabs, and what is said when a turn fails after its first sentence was spoken.
+- **Model version:** Claude Opus 5.5 (plan, review), Claude Sonnet 5.5 (implementation)
+- **Where:** `claude/voice-streaming-prestart-20261123` into `next`
+- **Plan:** `docs/roadmap-log/2026-11-23-ws-43-voice-streaming.md`
+- **Scope:** the flag helpers, argument options, streamed session rounds and pre-started sessions in `jarvis/subscription_tools.py`; streamed text and pre-start scheduling in `jarvis/bot/subscription_llm.py`; the flag-gated `streaming` capability and voice effort in `jarvis/model_routing.py`; menu options in `scripts/verify_claude_tool_receipts.py`; the `claude-opus-5-5` profile in `config/model_profiles.yaml` and its seeded entry in `config/generated/model_catalog.claude-subscription.json`; `tests/unit/test_subscription_streaming.py` and `tests/unit/test_subscription_voice_streaming.py` (new). Not in scope: `jarvis/bot/pipeline.py`, `config/model_access.yaml`, `jarvis/agents/orchestration.py`.
+- **Next step:** larry: merge, deploy, receipts, latency run.
+- **Updated:** 11-23 (claim and PR)
+
+</details>
+
 <details id="ws-42">
 <summary>WS-42 — Orchestration split: hand_off tool and text orchestrator · Claude</summary>
 
@@ -1508,6 +1526,8 @@ projection, never hidden cards; protected results retain their existing limits.
 
 
 **Adopted typed phone-card wire reservation (2026-10-31, WS-04/17/30):** reserve closed operations `results.view`, `results.select`, `results.pin`, `results.unpin`, `results.close`, `results.reopen` in the existing `mortimer.phone-remote.v1` envelope, exactly as the independently accepted typed-card design specifies. Reuse `read`/`action` scopes and existing status/reason enums; add no port, launchd label, config key, migration, credential or general console-action permission. These identifiers serve only the injected synthetic offline slice until separate production claims.
+
+**Config keys reserved for WS-43, 2026-11-23 (before implementation):** `JARVIS_VOICE_STREAMING_ENABLED`, `1` turns on streamed voice replies and the pre-started voice CLI; anything else is off (default). `JARVIS_VOICE_PRESTART_ENABLED`, `0` keeps streaming but turns the pre-start off (for measurement); default on, read only while streaming is on. `JARVIS_VOICE_EFFORT`, `low`, `medium` or `high` adds `--effort` to the voice CLI; unset or empty adds nothing (default); any other value refuses the voice route. New profile `claude-opus-5-5`. No migration, port, launchd label, allow-list row, runtime file or wire field.
 
 **Config key reserved for WS-42, 2026-11-23 (before implementation):** `JARVIS_ORCHESTRATOR_ENABLED`, `1`, `true` or `yes` (surrounding spaces and case ignored) turns the hand_off orchestrator on; unset, empty or any other value is off (default). New workload `orchestration` in `config/model_access.yaml`, new profile `claude-fable-5-2`. No migration, port, launchd label, allow-list row, runtime file or wire field.
 

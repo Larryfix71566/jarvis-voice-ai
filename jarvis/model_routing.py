@@ -735,6 +735,19 @@ def _resolved_route(policy: WorkloadPolicy, profile: dict[str, Any], route: Acce
         route = replace(route, capabilities=tuple(
             capability for capability in route.capabilities
             if capability in policy.required_capabilities))
+        # 2026-11-23 (WS-43): the subscription routes carry no "streaming"
+        # capability on their own (the profile comment says so); this flag is
+        # the explicit opt-in, for the native voice tool route only.
+        if (route.adapter == "subscription_runtime"
+                and policy.workload == "voice_supervisor"
+                and "tools" in route.capabilities
+                and "streaming" not in route.capabilities):
+            # Read the process environment, not ``env``: route resolution must
+            # never look up unexpected keys in the caller's mapping (the
+            # no-credential-lookup contract in test_model_route_contracts).
+            from jarvis.subscription_tools import voice_streaming_enabled
+            if voice_streaming_enabled():
+                route = replace(route, capabilities=route.capabilities + ("streaming",))
     _assert_policy_route(policy, route)
     if route.credential_env and not env.get(route.credential_env):
         raise ModelRouteError(
@@ -850,6 +863,7 @@ def make_route_client(resolved: ResolvedModelRoute, *, timeout: float | None = 6
                 TOOL_CAPABILITY_RECEIPT_ENV,
                 TOOLS_ENABLED_ENV,
                 ClaudeSubscriptionToolClient,
+                voice_effort,
             )
             if os.environ.get(TOOLS_ENABLED_ENV) != "1":
                 raise ModelRouteError("subscription native tool adapter is disabled")
@@ -860,7 +874,15 @@ def make_route_client(resolved: ResolvedModelRoute, *, timeout: float | None = 6
             # The request's exact tool set is available only at execute_chat.
             # execute_request validates that receipt against model, executable,
             # version, argv and tool names before starting a provider process.
-            return ClaudeSubscriptionToolClient(resolved.model)
+            effort = None
+            if resolved.workload == "voice_supervisor":
+                # 2026-11-23 (WS-43): optional --effort for the voice CLI only.
+                try:
+                    effort = voice_effort()
+                except ValueError:
+                    raise ModelRouteError(
+                        "JARVIS_VOICE_EFFORT must be low, medium or high") from None
+            return ClaudeSubscriptionToolClient(resolved.model, effort=effort)
         if os.environ.get("JARVIS_SUBSCRIPTION_TEXT_ENABLED") != "1":
             raise ModelRouteError("subscription text adapter is disabled")
         from jarvis.subscription import SubscriptionTextClient
