@@ -2,7 +2,7 @@
 date: 2026-11-24
 system: codex
 rows: [WS-43]
-prs: []
+prs: [419]
 ---
 
 ## First-turn Claude CLI warm-up and useful-speech timing
