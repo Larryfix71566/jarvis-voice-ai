@@ -254,13 +254,50 @@ async def test_interruption_drains_inference_and_emits_no_late_speech(setup):
 
 
 @pytest.mark.asyncio
-async def test_error_is_payload_free_and_never_falls_back(setup):
+async def test_error_is_payload_free_and_never_falls_back(setup, caplog):
     native = Native(fail=True)
     service = setup(native)
-    await service.process_frame(LLMContextFrame(context()), FrameDirection.DOWNSTREAM)
+    with caplog.at_level("WARNING", logger=voice.__name__):
+        await service.process_frame(LLMContextFrame(context()), FrameDirection.DOWNSTREAM)
     assert service.push_error.await_args.kwargs == {
         "error_msg": "Subscription voice request unavailable"}
     assert native.closed
+    assert "voice_request_failed error=RuntimeError" in caplog.text
+    assert "detail=(withheld)" in caplog.text
+    assert "PRIVATE_PROVIDER_ERROR_CANARY" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_refusal_before_transmission_is_logged_with_its_reason(setup, caplog):
+    native = Native()
+    service = setup(native, classified=False)
+    with caplog.at_level("WARNING", logger=voice.__name__):
+        await service.process_frame(LLMContextFrame(context()), FrameDirection.DOWNSTREAM)
+    assert not native.requests
+    assert "voice_request_failed error=ModelRouteError" in caplog.text
+    assert "requires 'confidential'" in caplog.text
+    assert "Read the synthetic clock" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_runtime_failure_logs_category_message_and_cause_types(setup, caplog):
+    native = Native()
+
+    async def refuse(request, resolved, args):
+        try:
+            raise OSError("PRIVATE_PATH_CANARY")
+        except OSError as exc:
+            raise voice.SubscriptionCapabilityError(
+                "Claude native tool capability receipt does not match") from exc
+    native.execute_request = refuse
+    service = setup(native)
+    with caplog.at_level("WARNING", logger=voice.__name__):
+        await service.process_frame(LLMContextFrame(context()), FrameDirection.DOWNSTREAM)
+    line = next(r.getMessage() for r in caplog.records
+                if r.getMessage().startswith("voice_request_failed"))
+    assert line == ("voice_request_failed error=SubscriptionCapabilityError category=capability "
+                    "detail=Claude native tool capability receipt does not match causes=OSError")
+    assert "PRIVATE_PATH_CANARY" not in caplog.text
 
 
 @pytest.mark.asyncio

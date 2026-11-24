@@ -33,11 +33,38 @@ from jarvis.model_execution import (
 )
 from jarvis.model_routing import ModelRouteError, ResolvedModelRoute, make_route_client
 from jarvis.privacy_policy import DataPolicy, assert_route_allowed, strictest
-from jarvis.subscription import SubscriptionCapabilityError
+from jarvis.subscription import SubscriptionCapabilityError, SubscriptionRuntimeError
 from jarvis.subscription_tools import voice_effort, voice_prestart_enabled
 from jarvis.usage_ledger import record_execution_result
 
 _logger = logging.getLogger(__name__)
+
+# These errors carry fixed, host-written messages (route, policy and runtime
+# contract names), never model input or provider output, so their text is safe
+# to log. Every other exception is logged by class name only.
+_SAFE_MESSAGE_ERRORS = (SubscriptionRuntimeError, ModelRouteError)
+_MAX_LOGGED_DETAIL = 300
+_MAX_CAUSE_DEPTH = 5
+
+
+def _failure_causes(exc: BaseException) -> list[str]:
+    names, seen, current = [], {id(exc)}, exc
+    while len(names) < _MAX_CAUSE_DEPTH:
+        current = current.__cause__ or current.__context__
+        if current is None or id(current) in seen:
+            break
+        seen.add(id(current))
+        names.append(type(current).__name__)
+    return names
+
+
+def _log_voice_failure(exc: BaseException) -> None:
+    detail = (str(exc)[:_MAX_LOGGED_DETAIL]
+              if isinstance(exc, _SAFE_MESSAGE_ERRORS) else "(withheld)")
+    _logger.warning(
+        "voice_request_failed error=%s category=%s detail=%s causes=%s",
+        type(exc).__name__, getattr(exc, "category", "-"), detail,
+        ",".join(_failure_causes(exc)) or "-")
 
 
 # Larry 2026-11-23 (WS-40): voice runs on the Claude subscription, and the
@@ -411,8 +438,9 @@ class SubscriptionVoiceLLMService(LLMService):
             except asyncio.CancelledError:
                 await self._close_turn()
                 raise
-            except Exception:
+            except Exception as exc:
                 await self._close_turn()
+                _log_voice_failure(exc)
                 # Provider exception strings can contain private input.
                 await self.push_error(error_msg="Subscription voice request unavailable")
             finally:
