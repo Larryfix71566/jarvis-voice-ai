@@ -30,13 +30,16 @@ final class OrbGlassCardTests: XCTestCase {
                     for hc in [true, false] {
                         for rm in [true, false] {
                             for suppressed in [true, false] {
-                                let got = Policy.glow(lit: lit, glassEnabled: glass, reduceTransparency: rt,
-                                                      increasedContrast: hc, reduceMotion: rm, suppressed: suppressed)
-                                let crystal = glass && !rt && !hc
-                                let want: Policy.GlowMode = (!lit || !crystal || suppressed) ? .off
-                                    : (rm ? .staticEven : .tracking)
-                                XCTAssertEqual(got, want,
-                                    "lit \(lit) glass \(glass) rt \(rt) hc \(hc) rm \(rm) suppressed \(suppressed)")
+                                for follow in [true, false] {
+                                    let got = Policy.glow(lit: lit, glassEnabled: glass, reduceTransparency: rt,
+                                                          increasedContrast: hc, reduceMotion: rm, suppressed: suppressed,
+                                                          followGlow: follow)
+                                    let crystal = glass && !rt && !hc
+                                    let want: Policy.GlowMode = (!lit || !crystal || suppressed) ? .off
+                                        : (rm ? .staticEven : (follow ? .tracking : .off))
+                                    XCTAssertEqual(got, want,
+                                        "lit \(lit) glass \(glass) rt \(rt) hc \(hc) rm \(rm) suppressed \(suppressed) follow \(follow)")
+                                }
                             }
                         }
                     }
@@ -83,6 +86,19 @@ final class OrbGlassCardTests: XCTestCase {
         XCTAssertEqual(RimGlow.rimRadius, 210)
         XCTAssertEqual(RimGlow.fade, 0.18)
         XCTAssertEqual(RimGlow.rimStops.map(\.opacity), [1, 0.34, 0.12])
+    }
+
+    func testFollowGlowIsOffUnlessTurnedOn() throws {
+        let key = OrbGlassCardSettings.followGlowKey
+        guard ProcessInfo.processInfo.environment[key] == nil else {
+            throw XCTSkip("\(key) is set in this test environment")
+        }
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(saved, forKey: key) }
+        UserDefaults.standard.removeObject(forKey: key)
+        XCTAssertFalse(OrbGlassCardSettings.followGlowEnabled)
+        UserDefaults.standard.set(true, forKey: key)
+        XCTAssertTrue(OrbGlassCardSettings.followGlowEnabled)
     }
 
     func testPointerModelKeepsLastLocationOnExit() {
