@@ -117,6 +117,24 @@ Historical snapshot of who was working on what (2026-10-28 handoffs): moved to t
 
 ### Needs work: not yet built (proposed, claimed, in progress, in review, blocked)
 
+<details id="ws-43">
+<summary>WS-43 — Voice streaming and a pre-started Claude CLI · Claude</summary>
+
+**Workstream:** Larry said "Build streaming" in his Claude Duet channel on 2026-11-23 at 21:10 UTC, answering whether to build the voice streaming change behind a flag after the investigation in `/mnt/project-files/mortimer/voice-streaming-investigation-2026-11-23.md` (Claude Duet project files). No existing row covered speaking the voice model's reply while it is still being written, so this block is added with the PR that implements it; merging the PR approves the row (§0 rule 2). Under §0 rule 14 this block keeps systems from overlapping; it is not exclusive. With `JARVIS_VOICE_STREAMING_ENABLED=1`, the voice model's text reaches TTS as the CLI writes it (`--include-partial-messages`), and a Claude CLI process for the next turn is started and initialized while the user is still listening, so the next turn skips the CLI start-up. `JARVIS_VOICE_EFFORT` adds `--effort` to the voice CLI. Off by default; with every flag unset the CLI arguments, tool-menu files and receipts are unchanged.
+
+- **Owner:** `claude` (original WS-43 implementation); `codex` (only the first-turn warm-up and latency measurement follow-up below).
+- **Status:** claimed 2026-11-23: one PR into `next`.
+- **Implemented by:** Claude
+- **Remaining work / acceptance:** Larry: merge; deploy; produce voice tool receipts for the streamed menus (new CLI arguments mean new receipts); run `scripts/latency_probe.py --budget` on real turns with Opus 5.5 and Sonnet 5.5 at low effort; check the idle cost of a waiting CLI process on his plan. Haiku 5.5 is not selectable: a registry profile for it would break the 2026-09-01 model floor (`tests/unit/test_model_floor.py`), so a voice-only way to pick it is a separate decision. Untested: real CLI streaming through Pipecat and ElevenLabs, and what is said when a turn fails after its first sentence was spoken.
+- **Model version:** Claude Opus 5.5 (plan, review), Claude Sonnet 5.5 (implementation)
+- **Where:** `claude/voice-streaming-prestart-20261123` into `next` (original implementation, [#414](https://github.com/Larryfix71566/jarvis-voice-ai/pull/414)); `codex/ws43-voice-warmup-latency-20261124` into `next` (bounded follow-up after this claim merges).
+- **Plan:** [Original WS-43 implementation log on `next`](https://github.com/Larryfix71566/jarvis-voice-ai/blob/next/docs/roadmap-log/2026-11-23-ws-43-voice-streaming.md).
+- **Scope:** the flag helpers, argument options, streamed session rounds and pre-started sessions in `jarvis/subscription_tools.py`; streamed text and pre-start scheduling in `jarvis/bot/subscription_llm.py`; the flag-gated `streaming` capability and voice effort in `jarvis/model_routing.py`; menu options in `scripts/verify_claude_tool_receipts.py`; the `claude-opus-5-5` profile in `config/model_profiles.yaml` and its seeded entry in `config/generated/model_catalog.claude-subscription.json`; `tests/unit/test_subscription_streaming.py` and `tests/unit/test_subscription_voice_streaming.py` (new). Not in scope: `jarvis/bot/pipeline.py`, `config/model_access.yaml`, `jarvis/agents/orchestration.py`. **Codex follow-up only:** (1) schedule first-turn Claude CLI warm-up with the existing opt-in, reuse and cleanup guards, without changing receipt handling, verified CLI versions or policy, in `jarvis/bot/subscription_llm.py` and `jarvis/subscription_tools.py`; (2) separate acknowledgement audio from first useful reply audio, classify completed turns by identity rather than adjacent log lines, and fail acceptance on an empty measurement window in the latency-only portions of `jarvis/bot/transcript_log.py` and `scripts/latency_probe.py`. Add focused offline tests for those changes. No transcript export, new flag, route/model selection, controller/settings changes, live calls, app/window tests, activation, installation or deployment. If another owned path is needed, stop for a separate handoff.
+- **Next step:** larry: merge, deploy, receipts, latency run.
+- **Updated:** 11-23 (claim and PR)
+
+</details>
+
 <details id="ws-34">
 <summary>WS-34 — Release closure lane: Python, contracts, CI triggers, removals · Claude</summary>
 
