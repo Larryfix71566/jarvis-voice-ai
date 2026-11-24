@@ -196,30 +196,51 @@ class SubscriptionVoiceLLMService(LLMService):
         return copy.deepcopy(self._native_history + [expected]
                              + [replies[call["id"]] for call in wanted])
 
-    async def _schedule_prestart(self):
+    async def start(self, frame):
+        await super().start(frame)
+        await self._schedule_prestart(startup=True)
+
+    async def _schedule_prestart(self, *, startup=False):
         """Pre-start the next turn's CLI (WS-43). Never raises; a miss runs cold."""
         context = self._prestart_context
         if (not self._prestart or self._cleanup_failed or context is None
-                or self._next_parent_id is not None):
+                or self._next_parent_id is not None
+                or (startup and (self._parent_id is not None or self._turn_generation))):
             return
         try:
+            params = self.get_llm_adapter().get_llm_invocation_params(
+                context, convert_developer_to_user=False)
+            tools = voice_tool_references(params["tools"])
+            system_messages = [copy.deepcopy(message) for message in params["messages"]
+                               if message.get("role") == "system"]
+            policy = self._last_policy
+            if startup:
+                # Before any real turn, do not manufacture an approved policy
+                # or preload conversation history. The stored startup context
+                # contains the host-bound system prompt and registered menu.
+                if (not system_messages or len(system_messages) != len(params["messages"])
+                        or self.policy_for_context is None
+                        or any(tool.name not in self._functions for tool in tools)):
+                    return
+                policy = self.policy_for_context(context)
+                if type(policy) is not DataPolicy:
+                    return
+                if self.sources is not None:
+                    policy = strictest(policy, self.sources.policy_for_projection(
+                        context, system_messages))
+                assert_route_allowed(self.resolved.route, policy)
+
             client = self._client(self.resolved)
             if getattr(client, "has_spare", lambda: False)():
                 # No ids are pending here, so any spare the client still holds
                 # belongs to a turn that failed before reaching it; close it so
                 # it cannot block every later pre-start.
                 await self._discard_spare()
-            tools = self.tool_menu_references(context)
-            params = self.get_llm_adapter().get_llm_invocation_params(
-                context, convert_developer_to_user=False)
-            system_messages = [copy.deepcopy(message) for message in params["messages"]
-                               if message.get("role") == "system"]
             parent, task = str(uuid.uuid4()), str(uuid.uuid4())
             request = ModelExecutionRequest(
                 workload="voice_supervisor", task_id=task, parent_request_id=parent,
                 instructions="", context=(), tools=tools,
-                data_policy=self._last_policy or DataPolicy(
-                    "approved_external", "voice-prestart"),
+                data_policy=policy or DataPolicy("approved_external", "voice-prestart"),
                 timeout_s=120.0,
             )
             client.prestart(request, self.resolved, {
