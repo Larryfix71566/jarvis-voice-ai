@@ -31,6 +31,24 @@ enum OrbGlassCardStyle {
     static var tint: Color { ink.opacity(tintOpacity) }
 }
 
+/// The follow glow's on/off setting. Off unless turned on: on Larry's Mac
+/// (2026-11-24, next `e655fbe`) the tracking glow measured p50/p95 3.92/12.90 ms
+/// against today's card at 0.90/0.99 ms, failing the 10% frame-time gate in
+/// `CarouselGlassFrameTimeTests`. Turn it on with the environment variable
+/// `JARVIS_CAROUSEL_FOLLOW_GLOW=1`, or `defaults write com.mortimer.host
+/// JARVIS_CAROUSEL_FOLLOW_GLOW -bool true`. The static crystal glass is
+/// unaffected either way, and so is the Reduce Motion even rim.
+enum OrbGlassCardSettings {
+    static let followGlowKey = "JARVIS_CAROUSEL_FOLLOW_GLOW"
+
+    static var followGlowEnabled: Bool {
+        if let raw = ProcessInfo.processInfo.environment[followGlowKey]?.lowercased() {
+            return ["1", "true", "on", "yes"].contains(raw)
+        }
+        return UserDefaults.standard.bool(forKey: followGlowKey)
+    }
+}
+
 /// Which surface a card gets, and whether its rim glow tracks the pointer.
 struct OrbGlassCardPolicy {
     enum Treatment: Equatable { case litCrystal, unlitCrystal, opaque }
@@ -44,11 +62,15 @@ struct OrbGlassCardPolicy {
         return lit ? .litCrystal : .unlitCrystal
     }
 
+    /// `followGlow` false turns tracking off; the Reduce Motion even rim
+    /// (static, no per-frame work) is kept.
     static func glow(lit: Bool, glassEnabled: Bool, reduceTransparency: Bool,
-                     increasedContrast: Bool, reduceMotion: Bool, suppressed: Bool) -> GlowMode {
+                     increasedContrast: Bool, reduceMotion: Bool, suppressed: Bool,
+                     followGlow: Bool) -> GlowMode {
         guard treatment(lit: lit, glassEnabled: glassEnabled, reduceTransparency: reduceTransparency,
                         increasedContrast: increasedContrast) == .litCrystal, !suppressed else { return .off }
-        return reduceMotion ? .staticEven : .tracking
+        if reduceMotion { return .staticEven }
+        return followGlow ? .tracking : .off
     }
 }
 
@@ -106,10 +128,12 @@ final class RimGlowPointer {
 extension View {
     /// The orb's glass on a result card. `lit` is the live front card.
     /// `glowDriver` lets tests move the simulated pointer without events.
+    /// `followGlow` nil reads `OrbGlassCardSettings.followGlowEnabled`.
     func orbGlassCard(lit: Bool, glowColor: Color, glowSuppressed: Bool = false,
-                      glowDriver: RimGlowPointer? = nil) -> some View {
+                      glowDriver: RimGlowPointer? = nil, followGlow: Bool? = nil) -> some View {
         modifier(OrbGlassCardModifier(lit: lit, glowColor: glowColor,
-                                      glowSuppressed: glowSuppressed, glowDriver: glowDriver))
+                                      glowSuppressed: glowSuppressed, glowDriver: glowDriver,
+                                      followGlow: followGlow ?? OrbGlassCardSettings.followGlowEnabled))
     }
 }
 
@@ -118,6 +142,7 @@ private struct OrbGlassCardModifier: ViewModifier {
     let glowColor: Color
     let glowSuppressed: Bool
     let glowDriver: RimGlowPointer?
+    let followGlow: Bool
     @State private var ownPointer = RimGlowPointer()
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
@@ -131,7 +156,8 @@ private struct OrbGlassCardModifier: ViewModifier {
             reduceTransparency: reduceTransparency, increasedContrast: increased)
         let mode = OrbGlassCardPolicy.glow(
             lit: lit, glassEnabled: JarvisFlags.glassEnabled, reduceTransparency: reduceTransparency,
-            increasedContrast: increased, reduceMotion: reduceMotion, suppressed: glowSuppressed)
+            increasedContrast: increased, reduceMotion: reduceMotion, suppressed: glowSuppressed,
+            followGlow: followGlow)
         let pointer = glowDriver ?? ownPointer
         switch treatment {
         case .opaque:
@@ -154,6 +180,8 @@ private struct OrbGlassCardModifier: ViewModifier {
                 .overlay(RimGlowOverlay(pointer: pointer, color: glowColor, mode: mode)
                     .allowsHitTesting(false))
                 .onContinuousHover(coordinateSpace: .local) { phase in
+                    // With the glow off nothing reads the pointer; skip the writes.
+                    guard mode != .off else { return }
                     switch phase {
                     case .active(let point): pointer.update(point)
                     case .ended: pointer.update(nil)

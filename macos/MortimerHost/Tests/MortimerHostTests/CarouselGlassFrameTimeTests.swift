@@ -10,12 +10,16 @@ import Observation
 /// render server runs the completion block of the transaction that carried it.
 /// Card 620 x 400 pt. Every frame changes the card's text, so all three
 /// probes redraw the card; the pointer also moves through `RimGlowPointer`,
-/// the glow's test hook, so the follow probe redraws its glow too. Gate:
-/// probe 3 (lit + follow glow) p50 and p95 each <= probe 1 x 1.10, the same
-/// margin as the orb's C6 test. Needs a logged-in graphical session.
+/// the glow's test hook, so the follow probe redraws its glow too.
+/// Gate: the shipped card (the lit card exactly as `ResultCarouselView`
+/// builds it, follow glow per `OrbGlassCardSettings`) p50 and p95 each <=
+/// today x 1.10, the same margin as the orb's C6 test. The follow probe
+/// (follow glow forced on) is always measured and recorded, and is gated
+/// only when the follow glow is turned on (`JARVIS_CAROUSEL_FOLLOW_GLOW=1`).
+/// Needs a logged-in graphical session.
 @MainActor
 final class CarouselGlassFrameTimeTests: XCTestCase {
-    enum Probe { case today, crystal, crystalFollow }
+    enum Probe { case today, crystal, crystalFollow, shipped }
 
     @MainActor @Observable
     final class Tick { var frame = 0 }
@@ -40,6 +44,9 @@ final class CarouselGlassFrameTimeTests: XCTestCase {
                     card.orbGlassCard(lit: true, glowColor: AppTheme.mortimer, glowSuppressed: true,
                                       glowDriver: pointer)
                 case .crystalFollow:
+                    card.orbGlassCard(lit: true, glowColor: AppTheme.mortimer, glowSuppressed: false,
+                                      glowDriver: pointer, followGlow: true)
+                case .shipped:
                     card.orbGlassCard(lit: true, glowColor: AppTheme.mortimer, glowSuppressed: false,
                                       glowDriver: pointer)
                 }
@@ -123,7 +130,9 @@ final class CarouselGlassFrameTimeTests: XCTestCase {
         let today = measure(.today)
         let crystal = measure(.crystal)
         let follow = measure(.crystalFollow)
-        for (name, result) in [("today", today), ("crystal", crystal), ("follow", follow)] {
+        let shipped = measure(.shipped)
+        let followGated = OrbGlassCardSettings.followGlowEnabled
+        for (name, result) in [("today", today), ("crystal", crystal), ("follow", follow), ("shipped", shipped)] {
             XCTAssertEqual(result.completions, 310, "\(name): every frame must reach the render server")
         }
         func summary(_ frames: [Double]) -> [String: Double] {
@@ -131,9 +140,11 @@ final class CarouselGlassFrameTimeTests: XCTestCase {
              "max_ms": ms(frames.max() ?? 0)]
         }
         let record: [String: Any] = [
-            "gate": "follow p50 and p95 <= today x 1.10",
+            "gate": followGated ? "shipped and follow p50 and p95 <= today x 1.10"
+                : "shipped p50 and p95 <= today x 1.10; follow recorded, not gated (follow glow off)",
+            "follow_glow_enabled": followGated,
             "today": summary(today.frames), "crystal": summary(crystal.frames),
-            "crystal_follow": summary(follow.frames),
+            "crystal_follow": summary(follow.frames), "shipped": summary(shipped.frames),
             "frames_per_probe": 300, "card_pt": ["width": 620, "height": 400],
             "os": ProcessInfo.processInfo.operatingSystemVersionString,
             "recorded_at": ISO8601DateFormatter().string(from: Date()),
@@ -146,10 +157,15 @@ final class CarouselGlassFrameTimeTests: XCTestCase {
             .write(to: directory.appendingPathComponent("carousel-glass-frame-time.json"))
         let t50 = percentile(today.frames, 0.5), t95 = percentile(today.frames, 0.95)
         let f50 = percentile(follow.frames, 0.5), f95 = percentile(follow.frames, 0.95)
-        print("Carousel glass p50/p95: today \(ms(t50))/\(ms(t95)), crystal \(ms(percentile(crystal.frames, 0.5)))/\(ms(percentile(crystal.frames, 0.95))), follow \(ms(f50))/\(ms(f95)) ms")
+        let s50 = percentile(shipped.frames, 0.5), s95 = percentile(shipped.frames, 0.95)
+        print("Carousel glass p50/p95: today \(ms(t50))/\(ms(t95)), crystal \(ms(percentile(crystal.frames, 0.5)))/\(ms(percentile(crystal.frames, 0.95))), follow \(ms(f50))/\(ms(f95)), shipped \(ms(s50))/\(ms(s95)) ms; follow glow \(followGated ? "on, gated" : "off, follow not gated")")
         if ProcessInfo.processInfo.environment["MORTIMER_SANDBOX_GUEST"] != "1" {
-            XCTAssertLessThanOrEqual(f50, t50 * 1.10, "follow p50 \(f50) vs today \(t50) ms")
-            XCTAssertLessThanOrEqual(f95, t95 * 1.10, "follow p95 \(f95) vs today \(t95) ms")
+            XCTAssertLessThanOrEqual(s50, t50 * 1.10, "shipped p50 \(s50) vs today \(t50) ms")
+            XCTAssertLessThanOrEqual(s95, t95 * 1.10, "shipped p95 \(s95) vs today \(t95) ms")
+            if followGated {
+                XCTAssertLessThanOrEqual(f50, t50 * 1.10, "follow p50 \(f50) vs today \(t50) ms")
+                XCTAssertLessThanOrEqual(f95, t95 * 1.10, "follow p95 \(f95) vs today \(t95) ms")
+            }
         }
     }
 }
