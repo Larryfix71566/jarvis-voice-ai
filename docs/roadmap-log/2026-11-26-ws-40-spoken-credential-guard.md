@@ -2,7 +2,7 @@
 date: 2026-11-26
 system: claude
 rows: [WS-40]
-prs: []
+prs: [424]
 ---
 
 # 2026-11-26: WS-40 spoken password guard, off by default (Claude)
