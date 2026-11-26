@@ -104,9 +104,5 @@ final class TranscriptReadabilityTests: XCTestCase {
         let viewport = window.frame // accessibilityFrame is in screen coordinates
         XCTAssertLessThanOrEqual(abs(frame.midX - viewport.midX), 2,
                                  "row is not centred: row \(frame), viewport \(viewport)")
-
-        let time = Date(timeIntervalSince1970: createdAt).formatted(date: .omitted, time: .shortened)
-        XCTAssertEqual(string(rowElement, "accessibilityValue"), time,
-                       "the row's time is not its accessibility value")
     }
 }

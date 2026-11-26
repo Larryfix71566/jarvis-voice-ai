@@ -175,7 +175,7 @@ final class InspectCurrentRunTests: XCTestCase {
         {"type":"agent","name":"developer","display_name":"Developer","state":"working","run_id":"d1","task":"fix"}
         """))
         store.apply(try message("""
-        {"type":"agent","state":"done","name":"developer","run_id":"d1","ok":true}
+        {"type":"agent","state":"done","name":"developer","display_name":"Developer","run_id":"d1","ok":true}
         """))
         store.apply(try message("""
         {"type":"agent","name":"analyst","display_name":"Analyst","state":"working","run_id":"a1","task":"compare"}
