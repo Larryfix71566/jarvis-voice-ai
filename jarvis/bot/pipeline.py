@@ -134,7 +134,7 @@ from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.research_watcher import ResearchWatcher
 from jarvis.bot.screen_tool import build_list_screens_tool, build_view_screen_tool
-from jarvis.bot.sensitive_turn import SensitiveTurn, arm_from_text, current_sensitive_turn
+from jarvis.bot.sensitive_turn import SensitiveTurn, arm_user_turn, current_sensitive_turn
 from jarvis.bot.shared_content import (
     SharedContentService,
     analyze_shared_content_via_boundary,
@@ -579,7 +579,7 @@ async def start_typed_turn(runtime: Runtime, pusher: FramePusher, aggregators: A
     if not runtime.alive:
         return False
     runtime.sensitive_turn.clear()
-    arm_from_text(text, credentials=True)  # before anything is logged or stored
+    arm_user_turn(text)  # before anything is logged or stored
     _log_transcript("USER:", text)
     if not _voice_is_sensitive():
         _persist(runtime.session_id, "user", text)

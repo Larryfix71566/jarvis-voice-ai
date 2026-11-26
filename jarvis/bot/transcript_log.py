@@ -42,8 +42,10 @@ from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from jarvis.bot.sensitive_turn import (
     arm_from_text,
+    arm_user_turn,
     current_sensitive_turn,
     is_sensitive,
+    note_assistant_reply,
 )
 from jarvis.db import get_conn, now_iso
 
@@ -84,6 +86,7 @@ class TranscriptLogger(FrameProcessor):
                 # only place the value appears ("what's my balance?" ->
                 # "$2,431.18"). Scan it before printing/persisting.
                 arm_from_text(text)
+                note_assistant_reply(text)
                 _log_transcript(ASSISTANT_LOG_PREFIX, text)
                 if not is_sensitive():
                     self._persist("assistant", text)
@@ -154,10 +157,13 @@ class TranscriptObserver(BaseObserver):
                         if hasattr(consumed, "__await__"):
                             consumed = await consumed
                         if bool(consumed):
+                            held = current_sensitive_turn.get()
+                            if held is not None:
+                                held.take_credential_prompt()
                             return
                     except Exception:  # noqa: BLE001 — consent must not break voice
                         pass
-                arm_from_text(text, credentials=True)  # arm on the FULL turn text
+                arm_user_turn(text)  # arm on the FULL turn text
                 _log_transcript("USER:", text)
                 if not is_sensitive():
                     _persist(self._session_id, "user", text)  # P1
@@ -189,7 +195,9 @@ class TranscriptObserver(BaseObserver):
         # (6c). Arm incrementally too, so a single-segment turn is armed as
         # early as possible; arm_from_text is idempotent and total.
         self._user_buffer.append(text)
-        arm_from_text(" ".join(self._user_buffer), credentials=True)
+        held = current_sensitive_turn.get()
+        arm_from_text(" ".join(self._user_buffer), credentials=True,
+                      credential_pending=bool(held is not None and held.credential_prompted))
 
 
 def _persist(session_id: str, role: str, content: str) -> None:

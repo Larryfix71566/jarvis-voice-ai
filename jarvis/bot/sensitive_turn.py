@@ -28,7 +28,10 @@ from __future__ import annotations
 import uuid
 from contextvars import ContextVar
 
-from jarvis.sensitive import detect_credential, detect_financial
+from jarvis.sensitive import (
+    asks_for_credential, detect_credential, detect_financial,
+    detect_spoken_credential, leaves_credential_pending,
+)
 
 # Larry, 2026-11-24: "the only text that should be banned from outside the
 # machine would include account or password info". These arm kinds hold
@@ -45,7 +48,8 @@ class SensitiveTurn:
     the SAME instance and must see mutations.
     """
 
-    __slots__ = ("armed", "turn_id", "kind", "temporary_content_mode", "account_info")
+    __slots__ = ("armed", "turn_id", "kind", "temporary_content_mode", "account_info",
+                 "credential_prompted")
 
     def __init__(self) -> None:
         self.armed: bool = False
@@ -58,6 +62,13 @@ class SensitiveTurn:
         self.temporary_content_mode: bool = False
         # Sticky for the turn: a later, milder arm() must not hide it.
         self.account_info: bool = False
+        # Set when a turn asks for (or leaves hanging) a credential, so the NEXT
+        # user turn is read as the value. Outlives clear() by one user turn.
+        self.credential_prompted: bool = False
+
+    def take_credential_prompt(self) -> bool:
+        value, self.credential_prompted = self.credential_prompted, False
+        return value
 
     def arm(self, kind: str, turn_id: str | None = None) -> None:
         """Mark the current turn sensitive. Idempotent within a turn."""
@@ -125,7 +136,8 @@ def current_turn_id() -> str:
     return holder.turn_id
 
 
-def arm_from_text(text: str, turn_id: str | None = None, *, credentials: bool = False) -> bool:
+def arm_from_text(text: str, turn_id: str | None = None, *, credentials: bool = False,
+                  credential_pending: bool = False) -> bool:
     """Run detection on `text` and arm the current turn if it matches.
 
     Called on BOTH the user text and the assistant reply (review F2). Returns
@@ -137,6 +149,9 @@ def arm_from_text(text: str, turn_id: str | None = None, *, credentials: bool = 
     # Credentials are checked on what the user says or types (credentials=
     # True), not on tool output, where source files carry fake keys.
     if kind is None and credentials and detect_credential(text):
+        kind = "credential"
+    if kind is None and credentials and detect_spoken_credential(
+            text, pending=credential_pending):
         kind = "credential"
     if kind is None:
         return False
@@ -166,3 +181,28 @@ def redacted(text: str) -> str:
     prefix itself.)
     """
     return f"<sensitive turn {current_turn_id()}: {len(text)} chars withheld>"
+
+
+def arm_user_turn(text: str, turn_id: str | None = None) -> bool:
+    """Arm for a CLOSED user turn (spoken or typed). Consumes a pending
+    credential prompt, and sets one when the turn leaves a value unsaid."""
+    try:
+        holder = current_sensitive_turn.get()
+        pending = holder.take_credential_prompt() if holder is not None else False
+        result = arm_from_text(text, turn_id, credentials=True, credential_pending=pending)
+        if holder is not None and leaves_credential_pending(text):
+            holder.credential_prompted = True
+        return result
+    except Exception:  # noqa: BLE001 — runs inside the voice loop
+        return False
+
+
+def note_assistant_reply(text: str) -> None:
+    """Remember that Mortimer asked for a credential, so the next user turn
+    is read as the value."""
+    try:
+        holder = current_sensitive_turn.get()
+        if holder is not None and asks_for_credential(text):
+            holder.credential_prompted = True
+    except Exception:  # noqa: BLE001
+        pass
