@@ -225,6 +225,49 @@ WS-37 interface and WS-38 request-resolution work.
   stale/missing data and intact approval and protected-content behavior. Larry
   records the gate before Option 3 starts.
 
+#### Backtest of the recovery rule (amended 2026-11-26)
+
+Larry asked for backtesting on 2026-11-26. TradingView has no data API, so it
+stays an optional manual check; the backtest is the Option 2 calculator run
+over full history, not a second implementation.
+
+- **Data:** Coin Metrics community `PriceUSD` daily (CC BY-NC 4.0, no key, no
+  cost). Its GitHub CSV archive covers 2010-07-18 to 2026-05-23 with no gaps
+  but stopped updating on 2026-05-24; the tail comes from the keyless
+  community API, unverified at writing. The first build step checks that
+  endpoint and records whether `PriceUSD` is still offered after Coin Metrics'
+  announced community-data retirements (Talos, 2025-10-27); if not, use the
+  free CM Reference Rate and record a method change. Pin the joined file as
+  the snapshot above. Run a one-time Bitstamp daily-close comparison as a join
+  check only; never mix series. Keep real data out of git; commit the
+  manifest, checksum and synthetic fixtures.
+- **Replay:** for every fix time after warm-up, call the same calculator with
+  only rows whose fix time is at or before it, and store each day's state.
+  Reports come only from that table. A faster incremental path must match the
+  truncated call on sampled dates. A future-perturbation test (change every
+  price after a date; the state at that date must not change) proves no
+  look-ahead. The replay uses the provisional low; the retrospective low is
+  report-only.
+- **Cycle definition:** a bear starts at the first close at least 50% below
+  the prior all-time closing high and ends at the next new high. Through
+  2026-05-23 that gives seven completed bears, three since 2014.
+- **Report:** one row per bear: start, low (marked retrospective), broken
+  provisional lows, first partial recovery, first qualifying signal, delay
+  and percentage above the low, reversals, the close 180 days after the signal
+  and the worst drawdown inside it (unfinished until 180 days pass). Totals
+  give cycles, signals, reversals, signals lower after 180 days, data range,
+  snapshot checksum and method version, plus every firing outside a bear.
+  Counts with sample size only; never an implied probability.
+- **Overfitting guard:** the 84-day, seven-close, 200-day and 180-day values
+  are fixed as written before the first run. The backtest has no tunable
+  parameters and the product has no parameter sweep. A later rule change is a
+  written plan change, decided on data through 2018 and reported separately
+  for 2019 onward.
+- **Exit:** the Option 2 exit above, plus synthetic series (flat, V-shaped,
+  slow grind, reversal), rule edges (equal is not above, six closes is not
+  seven, current close excluded), missing dates, checksum refusal and
+  card/brief/replay parity for the same fix.
+
 #### Daily Brief: One Bitcoin recommendation
 
 After the Option 2 card, add a separately gated section to the **existing**
@@ -255,6 +298,26 @@ above the 200-day average and a close above the prior 84-day high. Data:
 November 23, 2026, 00:00 UTC.” The frozen fix is $61,103.71; its 200-day
 average is $72,319.11 and prior 84-day closing high is $86,520.80.
 
+**Additions (amended 2026-11-26):** Larry asked that what the backtest and
+live price add reach the brief. The rules above still bind: one stance from
+the daily fix, no holdings, sizes, trade prices or orders, and a Bitcoin
+failure never holds up the brief. Defaults:
+
+- **Progress toward the rule (on):** closes above the 200-day average out of
+  seven and the prior 84-day closing high to beat, from the daily fix.
+- **History clause (on change days only):** when the stance changes, a
+  provisional low breaks, the rule fires or a signal reverses, one clause of
+  backtest counts with the sample size and data range (for example, fired
+  after N of M past bears; K were lower 180 days later). Never a percentage
+  chance.
+- **Last price (on):** one public fetch while the brief is built, with its
+  venue and time, labelled as not a close and never used for the stance. It is
+  omitted as "live price unavailable" after a 5-second timeout and never
+  delays the brief.
+- **Cycle age (off):** days since the last halving against past cycles at the
+  same age; context only.
+- **Spoken:** still the stance and one next check only.
+
 #### Option 3: Native Mac workspace
 
 Open from the Bitcoin result first; a command-palette entry can follow. Put
@@ -282,6 +345,31 @@ a validated local snapshot; on failure retain the last known good snapshot
 and show its age. Keep rollback independent of other routing and preserve the
 card fallback. No accounts, exchange credentials, orders, background
 monitoring, deployment or harness-controller changes are part of this design.
+The 2026-11-26 live price layer below changes the background-monitoring line
+only as far as polling while the workspace is on screen and single fetches
+for a card request or brief.
+
+**Live price layer (amended 2026-11-26):** Larry asked for current pricing
+shown as a graph next to the snapshot charts.
+
+- Draw a live point and a "today so far" candle at the right edge of the daily
+  chart and the halving-cycle graphs, styled apart from closed days, labelled
+  with venue and time, with a stale warning after 2 minutes without an update
+  and "No live price" when the feed fails. Snapshot series are unchanged.
+- The Option 2 card makes one fetch per request and shows a "last price" line;
+  it does not poll.
+- Default feed: Kraken public Ticker (`/0/public/Ticker`, no authentication
+  declared, today's open/high/low start at midnight UTC, matching the daily
+  fix day). Fallback: Coinbase Exchange public ticker (documented public limit
+  10 requests per second per IP). Poll every 30 seconds only while the
+  workspace is on screen; stop when hidden, minimised or closed. No background
+  task, schedule or notification. Check both venues' terms at claim time.
+- A live price is never a close: stance, rule, backtest and brief stance read
+  daily closes only. After the UTC day changes the candle reads "awaiting
+  official close" until the next validated daily fix.
+- **Exit:** feed down, stale and malformed replies; polling stops when hidden;
+  changing live values moves no computed state; every live value shows venue
+  and time.
 
 ## 4. Durable task, evidence and proactive follow-through contract
 
