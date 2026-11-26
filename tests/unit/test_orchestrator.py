@@ -111,13 +111,13 @@ def make_orchestrator(script, registry=None, mode="direct", **kwargs):
 
 
 class TestSimpleReply:
-    async def test_sensitive_tool_result_is_not_sent_in_a_followup_voice_round(self, fresh_db):
-        class SensitiveRegistry(FakeRegistry):
+    async def test_account_tool_result_is_not_sent_in_a_followup_voice_round(self, fresh_db):
+        class AccountRegistry(FakeRegistry):
             async def call(self, name, arguments, server_names=None):
                 self.calls.append((name, arguments))
-                return "Account balance is $1,234.56."
+                return "Checking account 000123456789 is open."
 
-        registry = SensitiveRegistry()
+        registry = AccountRegistry()
         orch, completions = make_orchestrator([
             ("tool", "fake_tool", {}), ("text", "provider must not see this"),
         ], registry=registry)
@@ -125,12 +125,30 @@ class TestSimpleReply:
         reply = await orch.chat("read the local account record")
 
         assert len(completions.requests) == 1
-        assert "Protected details were detected" in reply
-        assert "$1,234.56" not in reply
+        assert "Account or password details were detected" in reply
+        assert "000123456789" not in reply
         assert all(
-            "$1,234.56" not in str(message)
+            "000123456789" not in str(message)
             for message in orch.history
         )
+
+    async def test_balance_alone_reaches_the_followup_voice_round(self, fresh_db):
+        # Larry, 2026-11-24: only account or password details stay on the
+        # Mac, so a balance with no account number is no longer withheld.
+        class BalanceRegistry(FakeRegistry):
+            async def call(self, name, arguments, server_names=None):
+                self.calls.append((name, arguments))
+                return "Account balance is $1,234.56."
+
+        orch, completions = make_orchestrator([
+            ("tool", "fake_tool", {}), ("text", "Your balance is $1,234.56."),
+        ], registry=BalanceRegistry())
+
+        reply = await orch.chat("what is my balance")
+
+        assert len(completions.requests) == 2
+        assert reply == "Your balance is $1,234.56."
+
     async def test_text_reply_and_history(self, fresh_db):
         orch, completions = make_orchestrator([("text", "Good afternoon, Boss.")])
         reply = await orch.chat("hello")

@@ -40,7 +40,7 @@ from mcp.client.stdio import stdio_client
 from mcp.shared.exceptions import McpError
 from mcp.types import Tool
 
-from jarvis.bot.sensitive_turn import current_sensitive_turn, is_sensitive
+from jarvis.bot.sensitive_turn import current_sensitive_turn, holds_account_info
 from jarvis.config import bridge_settings_to_env, expand_env_vars
 from jarvis.runlog.context import get_run_id, get_run_logger
 from jarvis.privacy_policy import (
@@ -881,8 +881,9 @@ class SkillRegistry:
             return self._classified_result(tool_name, server, None, arguments,
                 f"Tool '{tool_name}' is not available in this context.", execution_scope, runlog,
                 host_failure="tool_not_available")
-        if server in EXTERNAL_TOOL_SERVERS and is_sensitive():
-            # The current turn may contain financial/private material. Do not
+        if server in EXTERNAL_TOOL_SERVERS and holds_account_info():
+            # The current turn holds account or credential details (Larry,
+            # 2026-11-24: only those stay on the Mac). Do not
             # let an external MCP child receive it; the model gets a truthful
             # tool failure and can choose a local-only alternative.
             content = (
@@ -1201,9 +1202,10 @@ class SkillRegistry:
                 weather_bridge = current_weather_reuse.get()
                 weather_subject_key = named_weather_subject_key(source_arguments.get("city"))
                 if weather_bridge is not None and weather_subject_key is not None:
-                    private_input = (execution_scope is not None
-                                     and execution_scope.input_policy.level in {"confidential", "local_only"})
-                    if is_sensitive() or private_input:
+                    # Only account or credential details stay on the Mac
+                    # (Larry, 2026-11-24); a confidential label alone no
+                    # longer refuses the local weather cache.
+                    if holds_account_info():
                         return self._finish_invocation(tool_name, server, session, source_arguments,
                             '{"ok":false,"error":"weather_reuse_protected_turn"}', runlog,
                             int((time.perf_counter() - call_start) * 1000), execution_scope,
@@ -1216,7 +1218,7 @@ class SkillRegistry:
                     # A native await may outlive this turn's privacy or the
                     # verified MCP session. Neither cached bytes nor a new
                     # fetch can be released against that changed authority.
-                    refusal = "protected_turn" if is_sensitive() or private_input else (
+                    refusal = "protected_turn" if holds_account_info() else (
                         "stale_selection" if self._source_contract_for(tool_name, server, session) is None
                         else reuse.code if reuse.status == "refused" and reuse.code in HARD_REFUSAL_CODES
                         else None)

@@ -230,3 +230,27 @@ def detect_financial(text: str) -> FinancialMatch | None:
         # raises inside the voice loop is worse than one that misses.
         return None
     return None
+
+
+# --------------------------------------------------------------------------
+# Credentials (Larry, 2026-11-24: account or password info must not leave the
+# Mac). Literal key/token shapes, and a typed password/secret assignment. A
+# password spoken in a sentence ("the password is wrong") is deliberately
+# not matched: it cannot be told apart from talk about passwords.
+# --------------------------------------------------------------------------
+
+_CREDENTIAL_RES = (
+    re.compile(r"\bsk-(?:ant-)?[A-Za-z0-9_-]{20,}"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}"),
+    re.compile(r"\bxox[abpr]-[A-Za-z0-9-]{10,}"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    re.compile(r"(?i)\b(?:password|passwd|passcode|api[_-]?key|secret|access[_-]?token)\s*[:=]\s*\S{4,}"),
+)
+
+
+def detect_credential(text: str) -> bool:
+    """True when `text` holds a credential literal. Never returns the match."""
+    if not guard_enabled() or not isinstance(text, str) or not text:
+        return False
+    return any(pattern.search(text) for pattern in _CREDENTIAL_RES)

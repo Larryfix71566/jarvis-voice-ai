@@ -234,6 +234,7 @@ async def test_cancelled_delegate_late_result_retains_policy_after_scope_restora
         current_sensitive_turn.reset(token)
 
 
+@pytest.mark.usefixtures("subscription_without_carry")
 async def test_native_adapter_checks_materialized_payload_after_classification(setup, monkeypatch):
     from jarvis.model_routing import ModelRouteError
     native = Native()

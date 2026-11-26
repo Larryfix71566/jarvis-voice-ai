@@ -28,7 +28,14 @@ from __future__ import annotations
 import uuid
 from contextvars import ContextVar
 
-from jarvis.sensitive import detect_financial
+from jarvis.sensitive import detect_credential, detect_financial
+
+# Larry, 2026-11-24: "the only text that should be banned from outside the
+# machine would include account or password info". These arm kinds hold
+# account or credential details; every other sensitive kind (a balance, a
+# confidential tool source, imported content) may go to the Claude
+# subscription, which carries every privacy level.
+ACCOUNT_INFO_KINDS = frozenset({"card", "account", "routing", "iban", "credential"})
 
 
 class SensitiveTurn:
@@ -38,7 +45,7 @@ class SensitiveTurn:
     the SAME instance and must see mutations.
     """
 
-    __slots__ = ("armed", "turn_id", "kind", "temporary_content_mode")
+    __slots__ = ("armed", "turn_id", "kind", "temporary_content_mode", "account_info")
 
     def __init__(self) -> None:
         self.armed: bool = False
@@ -49,11 +56,15 @@ class SensitiveTurn:
         # has already crossed the provider boundary; clearing it between
         # turns would allow the next memory sweep to persist the context.
         self.temporary_content_mode: bool = False
+        # Sticky for the turn: a later, milder arm() must not hide it.
+        self.account_info: bool = False
 
     def arm(self, kind: str, turn_id: str | None = None) -> None:
         """Mark the current turn sensitive. Idempotent within a turn."""
         self.armed = True
         self.kind = kind
+        if kind in ACCOUNT_INFO_KINDS:
+            self.account_info = True
         if self.turn_id is None:
             self.turn_id = turn_id or uuid.uuid4().hex[:8]
 
@@ -62,6 +73,7 @@ class SensitiveTurn:
         self.armed = False
         self.turn_id = None
         self.kind = None
+        self.account_info = False
 
     def arm_temporary_content(self) -> None:
         """Pause memory persistence for the rest of this bot session."""
@@ -93,6 +105,18 @@ def is_sensitive() -> bool:
     return holder.is_armed()
 
 
+def holds_account_info() -> bool:
+    """True when the current turn carries account or credential details.
+
+    Those never leave the Mac, on any external route. Fail-closed like
+    is_sensitive(): an unset ContextVar counts as holding them.
+    """
+    holder = current_sensitive_turn.get()
+    if holder is None:
+        return True
+    return bool(holder.account_info)
+
+
 def current_turn_id() -> str:
     """The armed turn's id, for redacted log lines. '-' when not armed/unset."""
     holder = current_sensitive_turn.get()
@@ -101,7 +125,7 @@ def current_turn_id() -> str:
     return holder.turn_id
 
 
-def arm_from_text(text: str, turn_id: str | None = None) -> bool:
+def arm_from_text(text: str, turn_id: str | None = None, *, credentials: bool = False) -> bool:
     """Run detection on `text` and arm the current turn if it matches.
 
     Called on BOTH the user text and the assistant reply (review F2). Returns
@@ -109,7 +133,12 @@ def arm_from_text(text: str, turn_id: str | None = None) -> bool:
     runs inside the voice loop.
     """
     match = detect_financial(text)
-    if match is None:
+    kind = match.kind if match is not None else None
+    # Credentials are checked on what the user says or types (credentials=
+    # True), not on tool output, where source files carry fake keys.
+    if kind is None and credentials and detect_credential(text):
+        kind = "credential"
+    if kind is None:
         return False
     holder = current_sensitive_turn.get()
     if holder is None:
@@ -124,7 +153,7 @@ def arm_from_text(text: str, turn_id: str | None = None) -> bool:
             turn_id = get_run_id() or None
         except Exception:  # noqa: BLE001
             turn_id = None
-    holder.arm(match.kind, turn_id)
+    holder.arm(kind, turn_id)
     return True
 
 

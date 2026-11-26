@@ -132,3 +132,15 @@ def _stub_notice_outbox(monkeypatch):
     from jarvis import notices
 
     notices._reset_live_session_for_tests()
+
+
+@pytest.fixture
+def subscription_without_carry(monkeypatch):
+    """Run a test as if the Claude subscription carried only its own
+    approved_external level, the rule before Larry's 2026-11-24 decision.
+
+    The privacy gates still guard routes that cannot carry a level (SAYGM,
+    a direct API); this keeps their refusal tests meaningful on the route
+    fixtures those tests already build.
+    """
+    monkeypatch.setattr("jarvis.model_routing._TRUSTED_EXTERNAL_CARRY", {})

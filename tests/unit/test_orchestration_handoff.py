@@ -255,6 +255,7 @@ async def test_decide_route_sends_a_text_only_request_with_the_voice_policy(monk
     assert "tools" not in sent and "max_tokens" not in sent and "temperature" not in sent
 
 
+@pytest.mark.usefixtures("subscription_without_carry")
 async def test_confidential_context_is_refused_before_any_client_call():
     client = StubClient(decision_json([one_step()]))
     with pytest.raises(O.DecisionError) as err:

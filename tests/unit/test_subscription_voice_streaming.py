@@ -259,6 +259,7 @@ async def test_start_frame_prestarts_before_any_prompt_and_first_turn_reuses_ids
 
 @pytest.mark.parametrize("case", ["streaming-off", "prestart-off", "no-context",
                                  "confidential", "mixed", "mutated", "unregistered"])
+@pytest.mark.usefixtures("subscription_without_carry")
 async def test_start_frame_never_preloads_unapproved_context(setup, monkeypatch, case):
     native, sources = StreamNative(), VoiceSources()
     if case == "prestart-off":

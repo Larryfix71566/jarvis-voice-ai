@@ -46,7 +46,9 @@ from jarvis.agents.upgrade_agent import (
     load_model_registry,
     resolve_profile,
 )
-from jarvis.bot.sensitive_turn import arm_from_text, is_sensitive, current_sensitive_turn
+from jarvis.bot.sensitive_turn import (
+    arm_from_text, current_sensitive_turn, holds_account_info, is_sensitive,
+)
 from jarvis.config import Settings
 from jarvis.model_execution import (
     ModelContextMessage,
@@ -63,6 +65,7 @@ from jarvis.model_routing import (
     make_route_client,
     resolve_model_route_checked,
     resolve_policy,
+    route_carries,
 )
 from jarvis.model_budget import TaskBudget, begin_model_task_budget, remaining_seconds, ModelBudgetUnavailable
 from jarvis.skills.registry import ADVISORY_SOURCE_TOOLS
@@ -107,6 +110,28 @@ def model_routing_env_enabled() -> bool:
     jarvis.status.overview read ONE rule (R8). The Settings field
     `jarvis_model_routing_enabled` is OR-ed in by the callers, unchanged."""
     return os.environ.get("JARVIS_MODEL_ROUTING_ENABLED") == "1"
+
+
+def _protected_turn_blocks(resolved: ResolvedModelRoute | None, private_route: bool,
+                           floor: DataPolicy | None = None) -> bool:
+    """True when this turn's protected material may not go to the route.
+
+    Larry, 2026-11-24: only account or password information is barred from
+    leaving the Mac. Account and credential details never go to an external
+    route; any other protected material (a confidential source, a balance,
+    a private workload floor) goes wherever the route may carry it.
+    """
+    if private_route:
+        return False
+    if holds_account_info():
+        return True
+    levels = [floor.level] if floor is not None and floor.level != "approved_external" else []
+    if is_sensitive():
+        levels.append("confidential")
+    if not levels:
+        return False
+    route = resolved.route if resolved is not None else None
+    return not all(route_carries(route, level) for level in levels)
 
 
 def _policy_requires_runlog_redaction(workload: str, *, enabled: bool) -> bool:
@@ -877,7 +902,8 @@ class SubAgent:
             workload_policy_floor is not None
             and workload_policy_floor.level in {"confidential", "local_only"}
         )
-        if (is_sensitive() or configured_private_policy) and not private_route:
+        if _protected_turn_blocks(run_resolved_route, private_route,
+                                  workload_policy_floor if configured_private_policy else None):
             logger.warning("subagent_refused_sensitive_route agent=%s", self.name)
             return "FAILED: no verified local route is available for this protected request."
         if private_route and private_result_sink is None:
@@ -1504,7 +1530,7 @@ class SubAgent:
             except (KeyError, TypeError) as exc:
                 raise ValueError("agent tool registry returned an invalid schema") from exc
         for iteration in range(self._max_iterations):
-            if is_sensitive() and not private_route:
+            if _protected_turn_blocks(resolved_route, private_route, policy_floor):
                 reply = (
                     "Protected details were detected during this task. I stopped "
                     "before sending them to a non-confidential model route."
@@ -1819,7 +1845,7 @@ class SubAgent:
                 arm_from_text(result)
                 if is_sensitive():
                     runlog.mark_sensitive()
-                if is_sensitive() and not private_route:
+                if _protected_turn_blocks(resolved_route, private_route, policy_floor):
                     # Do not put newly protected tool output into the next
                     # provider request. The run log and activity event are
                     # already switched to their protected forms above.

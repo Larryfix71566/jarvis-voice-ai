@@ -157,7 +157,7 @@ class TranscriptObserver(BaseObserver):
                             return
                     except Exception:  # noqa: BLE001 — consent must not break voice
                         pass
-                arm_from_text(text)          # arm on the FULL turn text
+                arm_from_text(text, credentials=True)  # arm on the FULL turn text
                 _log_transcript("USER:", text)
                 if not is_sensitive():
                     _persist(self._session_id, "user", text)  # P1
@@ -189,7 +189,7 @@ class TranscriptObserver(BaseObserver):
         # (6c). Arm incrementally too, so a single-segment turn is armed as
         # early as possible; arm_from_text is idempotent and total.
         self._user_buffer.append(text)
-        arm_from_text(" ".join(self._user_buffer))
+        arm_from_text(" ".join(self._user_buffer), credentials=True)
 
 
 def _persist(session_id: str, role: str, content: str) -> None:

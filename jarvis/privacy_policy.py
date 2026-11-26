@@ -11,7 +11,7 @@ import re
 import secrets
 from typing import Any
 
-from jarvis.model_routing import AccessRoute, ModelRouteError
+from jarvis.model_routing import AccessRoute, ModelRouteError, route_carries
 
 
 class PrivacyLevel(IntEnum):
@@ -45,10 +45,13 @@ def strictest(*policies: DataPolicy) -> DataPolicy:
 
 
 def assert_route_allowed(route: AccessRoute, policy: DataPolicy) -> None:
-    """Raise before transmission when a route is less private than required."""
-    required = _NAMES[policy.level]
-    offered = _NAMES.get(route.privacy)
-    if offered is None or offered < required:
+    """Raise before transmission when a route may not carry this policy.
+
+    route_privacy_ceiling: the Claude subscription carries every level
+    (Larry, 2026-11-24); account details are held back by the sensitive-turn
+    guard instead.
+    """
+    if not route_carries(route, policy.level):
         raise ModelRouteError(
             f"route {route.name!r} provides {route.privacy!r}, "
             f"but {policy.source} requires {policy.level!r}"

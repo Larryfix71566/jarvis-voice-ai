@@ -33,6 +33,8 @@ from jarvis.model_execution import (
 )
 from jarvis.model_routing import ModelRouteError, ResolvedModelRoute, make_route_client
 from jarvis.privacy_policy import DataPolicy, assert_route_allowed, strictest
+from jarvis.bot.sensitive_turn import ACCOUNT_INFO_KINDS
+from jarvis.sensitive import detect_credential, detect_financial
 from jarvis.subscription import SubscriptionCapabilityError, SubscriptionRuntimeError
 from jarvis.subscription_tools import voice_effort, voice_prestart_enabled
 from jarvis.usage_ledger import record_execution_result
@@ -45,6 +47,19 @@ _logger = logging.getLogger(__name__)
 _SAFE_MESSAGE_ERRORS = (SubscriptionRuntimeError, ModelRouteError)
 _MAX_LOGGED_DETAIL = 300
 _MAX_CAUSE_DEPTH = 5
+
+
+# Larry, 2026-11-24: account or password information never leaves the Mac.
+# What he said or typed that holds it is replaced before the turn is sent, so
+# the model can tell him it stayed local instead of the turn failing.
+ACCOUNT_DETAILS_WITHHELD = (
+    "[The user's message held account or password details. They stay on this "
+    "Mac and were not sent; ask for the rest without them.]")
+
+
+def _holds_account_details(text: str) -> bool:
+    match = detect_financial(text)
+    return (match is not None and match.kind in ACCOUNT_INFO_KINDS) or detect_credential(text)
 
 
 def _failure_causes(exc: BaseException) -> list[str]:
@@ -323,9 +338,26 @@ class SubscriptionVoiceLLMService(LLMService):
             self._native_history = None
             self._turn_policy = None
 
+    def _withhold_account_details(self, context):
+        """Replace user messages that hold account or credential details."""
+        def withhold(message):
+            message["content"] = ACCOUNT_DETAILS_WITHHELD
+
+        for message in context.get_messages():
+            if (type(message) is not dict or message.get("role") != "user"
+                    or type(message.get("content")) is not str
+                    or message["content"] == ACCOUNT_DETAILS_WITHHELD
+                    or not _holds_account_details(message["content"])):
+                continue
+            if self.sources is not None:
+                self.sources.rewrite(message, withhold)
+            else:
+                withhold(message)
+
     async def _process_context(self, context):
         if self._cleanup_failed:
             raise SubscriptionCapabilityError("subscription voice cleanup is unverified")
+        self._withhold_account_details(context)
         policy = (self.policy_for_context(context) if self.policy_for_context
                   else DataPolicy("confidential", "unclassified-voice-context"))
         if type(policy) is not DataPolicy:

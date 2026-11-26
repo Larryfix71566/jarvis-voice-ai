@@ -887,6 +887,20 @@ for appropriately classified workloads. Protected work must remain unavailable
 until an eligible private/local route exists or Larry explicitly approves a
 narrow source-policy change. Existing restrictions have not been relaxed.
 
+**2026-11-24 update (Larry's decision).** Larry, in his Claude Duet channel on
+2026-11-24 at 21:05:48 UTC: "the only text that should be banned from outside
+the machine would include account or password info. tell me why anything else
+should be limited". Every voice turn was failing because the retained memory
+snapshot is always `confidential`. The Claude subscription route (and only
+that protected contract) now carries every policy level, including
+`confidential` and `local_only`. Account and password details (card, account,
+routing and IBAN numbers, typed passwords and key or token literals) are held
+back from every external route and tool server: voice replaces the user
+message that holds them, agents stop before sending them, and external MCP
+tools refuse the turn. Data labels are unchanged, so local run logs,
+transcripts and durable sinks still redact as before. The Codex subscription,
+SAYGM and direct routes keep the old rule.
+
 
 ### 2026-10-21 — Offline runtime proof and voice provenance integration boundary
 

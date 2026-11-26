@@ -254,7 +254,7 @@ class TestCall:
         session = FakeSession(result=ok_result())
         registry._sessions = {"mcp-web": session}
         holder = SensitiveTurn()
-        holder.arm("financial", turn_id="canary")
+        holder.arm("account", turn_id="canary")
         token = current_sensitive_turn.set(holder)
         try:
             result = await registry.call("web_search", {"query": "PRIVATE_CANARY_92"})
@@ -386,7 +386,7 @@ class TestCall:
         session = FakeSession(result=ok_result(structured={"results": []}))
         registry._sessions = {"mcp-web": session}
         holder = SensitiveTurn()
-        holder.arm("financial")
+        holder.arm("account")
         token = current_sensitive_turn.set(holder)
         try:
             result = await registry.call("web_search", {"query": "private"})

@@ -37,6 +37,15 @@ _ROUTE_CONTRACTS = {
     "saygm": ("saygm_gateway", "saygm_credit", "approved_external"),
     "local": ("local_runtime", "local", "local_only"),
 }
+# Larry, 2026-11-24: "the only text that should be banned from outside the
+# machine would include account or password info". The Claude subscription
+# route therefore CARRIES every privacy level. Its own privacy stays
+# approved_external (the data does leave the Mac), so behaviour keyed to a
+# truly private route (local result sinks, protected events) is unchanged.
+# Account numbers and credentials are kept off it separately by the
+# sensitive-turn guard (jarvis.bot.sensitive_turn.holds_account_info).
+# Keyed on the protected contract, so route config cannot widen it.
+_TRUSTED_EXTERNAL_CARRY = {"subscription": "local_only"}
 _ROUTE_CONFIG_KEYS = frozenset({
     "adapter", "billing", "privacy", "provider", "base_url", "credential_env",
     "api_key_env", "capabilities",
@@ -48,6 +57,28 @@ _NATIVE_ROUTE_URLS = {
 
 class ModelRouteError(RuntimeError):
     """A requested route cannot safely execute the workload."""
+
+
+def route_privacy_ceiling(route: Any) -> str:
+    """The strictest data-policy level this route may carry.
+
+    Normally the route's own privacy. The Claude subscription, verified by
+    its protected adapter/billing/privacy contract, carries every level
+    (Larry's 2026-11-24 decision; see _TRUSTED_EXTERNAL_CARRY).
+    """
+    privacy = getattr(route, "privacy", None)
+    name = getattr(route, "name", None)
+    carry = _TRUSTED_EXTERNAL_CARRY.get(name) if type(name) is str else None
+    if carry is not None and (route.adapter, route.billing, privacy) == _ROUTE_CONTRACTS[name]:
+        return carry
+    return privacy
+
+
+def route_carries(route: Any, level: str) -> bool:
+    """True when `route` may carry data at policy `level` (fails closed)."""
+    ceiling = _PRIVACY_ORDER.get(route_privacy_ceiling(route)) if route is not None else None
+    required = _PRIVACY_ORDER.get(level)
+    return ceiling is not None and required is not None and ceiling >= required
 
 
 def _assert_unique_canonical_identities(registry: dict[str, Any]) -> None:
@@ -604,10 +635,10 @@ def verify_saygm_route_choice(profile: dict[str, Any], route: AccessRoute, *,
 
 
 def _assert_policy_route(policy: WorkloadPolicy, route: AccessRoute) -> None:
-    if policy.privacy == "local_only" and route.privacy != "local_only":
+    if policy.privacy == "local_only" and not route_carries(route, "local_only"):
         raise ModelRouteError(
             f"workload {policy.workload!r} requires local_only but route {route.name!r} is external")
-    if policy.privacy == "confidential" and route.privacy not in {"local_only", "confidential"}:
+    if policy.privacy == "confidential" and not route_carries(route, "confidential"):
         raise ModelRouteError(
             f"workload {policy.workload!r} requires confidential processing; "
             f"route {route.name!r} is {route.privacy}")

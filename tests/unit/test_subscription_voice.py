@@ -222,6 +222,7 @@ async def test_foreign_or_mutated_continuation_cannot_resume_native_session(setu
     await service._close_turn()
 
 
+@pytest.mark.usefixtures("subscription_without_carry")
 @pytest.mark.asyncio
 async def test_unclassified_context_and_private_tool_results_refuse_before_transmission(setup):
     native = Native(tool=True)
@@ -267,6 +268,7 @@ async def test_error_is_payload_free_and_never_falls_back(setup, caplog):
     assert "PRIVATE_PROVIDER_ERROR_CANARY" not in caplog.text
 
 
+@pytest.mark.usefixtures("subscription_without_carry")
 @pytest.mark.asyncio
 async def test_refusal_before_transmission_is_logged_with_its_reason(setup, caplog):
     native = Native()
@@ -320,3 +322,38 @@ def test_codex_or_paid_voice_route_is_not_accepted():
         with pytest.raises(ModelRouteError):
             voice.SubscriptionVoiceLLMService(resolved=replace(
                 candidate, route=replace(candidate.route, name=name)))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("said", [
+    "Pay it from checking account 000123456789 please.",
+    "My password: hunter2-synthetic, can you log in?",
+    "Use the key sk-ant-SYNTHETICSYNTHETICSYNTHETIC0000 for that.",
+])
+async def test_account_or_password_details_are_withheld_and_the_turn_still_runs(setup, said):
+    # Larry, 2026-11-24: account or password info never leaves the Mac, and a
+    # confidential label alone no longer refuses the subscription.
+    native = Native()
+    service = setup(native)
+    service.policy_for_context = lambda _: DataPolicy("confidential", "retained-memory-snapshot")
+    ctx = context()
+    ctx.get_messages()[-1]["content"] = said
+    await service._process_context(ctx)
+    assert len(native.requests) == 1
+    sent = repr(native.requests[0])
+    for secret in ("000123456789", "hunter2-synthetic", "sk-ant-SYNTHETIC"):
+        assert secret not in sent
+    assert voice.ACCOUNT_DETAILS_WITHHELD in sent
+    assert ctx.get_messages()[-1]["content"] == voice.ACCOUNT_DETAILS_WITHHELD
+    await service._close_turn()
+
+
+@pytest.mark.asyncio
+async def test_ordinary_confidential_turn_is_sent_unchanged(setup):
+    native = Native()
+    service = setup(native)
+    service.policy_for_context = lambda _: DataPolicy("local_only", "synthetic-private")
+    await service._process_context(context())
+    assert len(native.requests) == 1
+    assert "Read the synthetic clock." in repr(native.requests[0])
+    await service._close_turn()
