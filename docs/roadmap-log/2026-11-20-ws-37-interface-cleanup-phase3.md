@@ -2,13 +2,13 @@
 date: 2026-11-20
 system: claude
 rows: [WS-37]
-prs: []
+prs: [425]
 ---
 
 # 2026-11-20: WS-37 interface cleanup, Phase 3 (Claude)
 
 - **System:** Claude (Claude Code cloud session). Planned by a Fable 5.2 helper (worksheet from the plan's §6 and the code on `next` at `00af821c`), implemented by three Sonnet helpers in parallel, integrated and read line by line by the Opus 5.5 thread.
-- **Go-ahead:** Larry handed the "Claim Phase 3 of the interface cleanup?" task to Claude from his Claude Duet Tasks page on 2026-11-20 at 13:44 UTC. Claim: `docs/roadmap-log/2026-11-20-ws-37-claim-phase3.md` on `main`.
+- **Go-ahead:** Larry handed the "Claim Phase 3 of the interface cleanup?" task to Claude from his Claude Duet Tasks page on 2026-11-20 at 13:44 UTC. That session's push was refused, so its claim PR for `main` was never pushed. Landed via PR #425 into `next` (branch `claude/project-thread-b7mgnc`, 2026-11-26, applied to `next` at `50dd8ab` without conflicts, together with WS-38 1A). The daily batch records Owner `claude` (Phase 3) and Where.
 - **Plan:** `docs/plans/MORTIMER_INTERFACE_CLEANUP_PLAN_2026-11-18.md` §6. Visual tuning (§6.1 last bullet) is not in this PR.
 - **Change (paths under `macos/MortimerHost/Sources/MortimerHost/`):**
   - **The orb owns the empty stage.** `Console/AdaptiveStageView.swift`: a pure placement rule (`orbPlacement`, `layout`, `threadIsEmpty`). The orb is centred, in a square slot of up to 440 pt (about 224 pt of glass, twice the rail's 112), with its one status line and mute, when the thread has no rows, references or approvals, no results are in the carousel, no other surface (Skills, Memory graph, Atlas, Workflows, comparison) is showing and nothing is working. Otherwise the existing conversation, rail or bottom layout is used unchanged. Slot size: `AdaptiveLayoutMetrics.restOrbSlotSide` (fits narrow windows, 160 pt minimum).
