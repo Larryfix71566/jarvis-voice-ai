@@ -1,6 +1,35 @@
 import SwiftUI
 import JarvisKit
 
+enum AgentsTabSections {
+    struct Split: Equatable {
+        let current: [AgentRun]
+        let history: [AgentRun]
+    }
+    static let historyExpandedKey = "mortimer.drawer.agentsHistoryExpanded"
+    static let emptyCurrent = "No agent is working right now."
+
+    /// Current: unfinished runs newest first, plus the focused run even if it
+    /// has since finished, focused run first. History: every other run, newest first.
+    static func split(runs: [AgentRun], focusedRunID: Int?) -> Split {
+        let newestFirst = Array(runs.reversed())
+        var current = newestFirst.filter { $0.doneAt == nil || $0.id == focusedRunID }
+        if let focusedRunID, let index = current.firstIndex(where: { $0.id == focusedRunID }), index > 0 {
+            current.insert(current.remove(at: index), at: 0)
+        }
+        let shown = Set(current.map(\.id))
+        return Split(current: current, history: newestFirst.filter { !shown.contains($0.id) })
+    }
+
+    static func historyTitle(runCount: Int) -> String {
+        switch runCount {
+        case 0: return "HISTORY"
+        case 1: return "HISTORY · 1 RUN"
+        default: return "HISTORY · \(runCount) RUNS"
+        }
+    }
+}
+
 /// APP plan §3 P8, §5 step 10 — the Agents tab: LIVE sub-agent progress
 /// from AgentRunStore (the message stream), newest last per the store's
 /// oldest-first order, rendered newest-first here. Registers NO stream
@@ -18,26 +47,69 @@ struct AgentsTab: View {
     /// before DrawerView's buildModelsOnce has run.
     let council: CouncilViewModel?
 
+    @Environment(DrawerState.self) private var drawer: DrawerState?
+    @AppStorage(AgentsTabSections.historyExpandedKey) private var historyExpanded = false
+    private static let topID = "agents-current-top"
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                if agentRuns.runs.isEmpty {
-                    Text("No agent activity this session.")
-                        .foregroundStyle(AppTheme.textDim)
-                } else {
-                    ForEach(agentRuns.runs.reversed()) { run in
-                        card(run)
+        let split = AgentsTabSections.split(runs: agentRuns.runs, focusedRunID: drawer?.focusedRunID)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    sectionTitle("CURRENT RUN").id(Self.topID)
+                    if split.current.isEmpty {
+                        Text(AgentsTabSections.emptyCurrent).foregroundStyle(AppTheme.textDim)
+                    } else {
+                        ForEach(split.current) { run in card(run) }
+                    }
+                    Divider().overlay(AppTheme.hairline).padding(.vertical, 2)
+                    historyToggle(runCount: split.history.count)
+                    if historyExpanded {
+                        ForEach(split.history) { run in card(run) }
+                        if let drawer {
+                            Button("All runs") { drawer.setTab("runs") }
+                                .buttonStyle(.plain).font(.caption).foregroundStyle(AppTheme.textDim)
+                                .accessibilityHint("Opens the Runs tab")
+                        }
+                        if let council { CouncilRosterSection(model: council) }
                     }
                 }
-                if let council {
-                    Divider().overlay(AppTheme.hairline).padding(.vertical, 2)
-                    CouncilRosterSection(model: council)
-                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .preserveDrawerScroll("agents")
+            .onChange(of: drawer?.runFocusRequest) { _, _ in scrollToCurrent(proxy) }
+            .task { scrollToCurrent(proxy) }
         }
-        .preserveDrawerScroll("agents")
+    }
+
+    private func scrollToCurrent(_ proxy: ScrollViewProxy) {
+        guard drawer?.consumeRunFocusScroll() == true else { return }
+        proxy.scrollTo(Self.topID, anchor: .top)   // a cut, so Reduce Motion needs no branch
+    }
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text).font(.system(size: 10, design: .monospaced)).kerning(2.0)
+            .foregroundStyle(AppTheme.textDim)
+    }
+
+    private func historyToggle(runCount: Int) -> some View {
+        Button { historyExpanded.toggle() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: historyExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption2).accessibilityHidden(true)
+                Text(AgentsTabSections.historyTitle(runCount: runCount))
+                    .font(.system(size: 10, design: .monospaced)).kerning(2.0)
+                Spacer()
+            }
+            .foregroundStyle(AppTheme.textDim)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("History")
+        .accessibilityValue(historyExpanded ? "Expanded" : "Collapsed")
+        .accessibilityHint("Shows earlier runs and council rounds")
+        .accessibilityIdentifier("agents.history")
     }
 
     private func card(_ run: AgentRun) -> some View {

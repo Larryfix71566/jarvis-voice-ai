@@ -49,6 +49,7 @@ from jarvis.privacy_policy import (
     validate_tool_result,
 )
 from jarvis.model_budget import TaskBudget
+from jarvis.fallbacks import log_served, read_served
 from jarvis.toolresult import classify_tool_result
 from jarvis.yaml_utils import load_unique_yaml_file
 
@@ -767,7 +768,7 @@ class SkillRegistry:
                     # Explicit host reduction: remove every byte of raw MCP,
                     # HTTP and tool failure text. This fixed generated result
                     # preserves useful public failure/constraint continuation.
-                    content = json.dumps({"ok": False, "error": failure_category or "tool_reported_failure"},
+                    content = json.dumps({"ok": False, "error": failure_category or outcome.reason},
                                          separators=(",", ":"))
                 try:
                     envelope = issue_tool_result(
@@ -804,11 +805,17 @@ class SkillRegistry:
         )
         observed = value.content if isinstance(value, ToolResultEnvelope) else value
         outcome = classify_tool_result(tool_name, observed, failure_category=failure_category)
+        # WS-38 1A: which path served is a closed code, safe to log and store.
+        ps = read_served(tool_name, observed)
+        if ps is not None:
+            log_served(logger, ps)
         if runlog is not None:
             # No raw provider/MCP error is telemetry, even in legacy mode.
             # WS-38 2A: outcome.reason is always a closed REASON_CLASSES key.
+            extra = ({"served_by": ps.path, "fallback_after": ps.after}
+                     if ps is not None else {})
             runlog.mcp_call(tool_name, server, ok=outcome.ok, latency_ms=latency_ms,
-                            error=outcome.reason if not outcome.ok else None)
+                            error=outcome.reason if not outcome.ok else None, **extra)
         return value
 
     async def call(

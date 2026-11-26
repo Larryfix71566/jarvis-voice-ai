@@ -45,6 +45,19 @@ class TestBodyFailures:
         assert out.body_failure is True
         assert out.error == "tool reported ok: false"
 
+    def test_listed_body_reason_decides_the_reason(self):
+        body = json.dumps({"error": "Web search failed (HTTP 401).",
+                           "reason": "upstream_auth_rejected"})
+        out = classify_tool_result("web_search", body)
+        assert (out.reason, out.failure_class) == ("upstream_auth_rejected", "approach")
+        assert out.error == "Web search failed (HTTP 401)."
+
+    def test_unlisted_body_reason_is_ignored_and_category_wins(self):
+        body = json.dumps({"error": "x", "reason": "free text"})
+        assert classify_tool_result("t", body).reason == "tool_reported_failure"
+        body = json.dumps({"error": "x", "reason": "upstream_error"})
+        assert classify_tool_result("t", body, failure_category="mcp_tool_error").reason == "mcp_tool_error"
+
     def test_error_message_truncated_to_300(self):
         body = json.dumps({"ok": False, "error": "x" * 500})
         out = classify_tool_result("some_tool", body)

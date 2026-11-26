@@ -8,6 +8,25 @@ import JarvisKit
 /// under Reduce Motion, during a pointer drag, or while editing text.
 enum AdaptiveLayoutMode: Equatable { case conversation, rail, bottom }
 
+/// Interface cleanup Phase 3: where the orb sits. Centred only at rest (empty
+/// thread, nothing else showing, nothing working); otherwise in the margin
+/// slot of the existing `AdaptiveLayoutMode`.
+enum StageOrbPlacement: Equatable { case centred, margin }
+
+struct StageLayout: Equatable {
+    let placement: StageOrbPlacement
+    let mode: AdaptiveLayoutMode
+}
+
+@MainActor
+enum StageTransition {
+    /// While something needs the user, every stage layout change is a cut.
+    static func animation(reduceMotion: Bool, needsYou: Bool) -> Animation? {
+        if needsYou { return nil }
+        return AdaptiveTransition.animation(reduceMotion: reduceMotion)
+    }
+}
+
 struct AdaptiveStageView: View {
     let voiceState: VoiceState
     let wideWindow: Bool
@@ -27,6 +46,10 @@ struct AdaptiveStageView: View {
     /// (same pattern as ConversationThreadView's approvals and agentRuns).
     @Environment(DisplayResultStore.self) private var displayResults: DisplayResultStore?
     @Environment(ConsoleNoticeState.self) private var notices: ConsoleNoticeState?
+    @Environment(ApprovalStore.self) private var approvals: ApprovalStore?
+    @Environment(AgentRunStore.self) private var agentRuns: AgentRunStore?
+    @Namespace private var orbSpace
+    private static let orbGeometryID = "stage-orb"
 
     init(voiceState: VoiceState, wideWindow: Bool,
          coordinator: ConsoleActionCoordinator? = nil) {
@@ -95,54 +118,108 @@ struct AdaptiveStageView: View {
         return .bottom
     }
 
+    static func threadIsEmpty(entries: [ConversationEntry], references: [CachedResultReference],
+                              approvals: [ApprovalStore.Item], approvalNotes: [ApprovalStore.Note]) -> Bool {
+        ConversationThread.rows(entries).isEmpty && references.isEmpty
+            && approvals.isEmpty && approvalNotes.isEmpty
+    }
+
+    static func orbPlacement(threadIsEmpty: Bool, hasResults: Bool,
+                             showsOtherSurface: Bool, working: Bool) -> StageOrbPlacement {
+        (threadIsEmpty && !hasResults && !showsOtherSurface && !working) ? .centred : .margin
+    }
+
+    static func layout(threadIsEmpty: Bool, hasResults: Bool, showsOtherSurface: Bool, working: Bool,
+                       showsConversation: Bool, compactConversation: Bool,
+                       wideWindow: Bool, stageWidth: Double) -> StageLayout {
+        StageLayout(placement: orbPlacement(threadIsEmpty: threadIsEmpty, hasResults: hasResults,
+                                            showsOtherSurface: showsOtherSurface, working: working),
+                    mode: mode(showsConversation: showsConversation, compactConversation: compactConversation,
+                               wideWindow: wideWindow, stageWidth: stageWidth))
+    }
+
+    private func currentLayout(stageWidth: Double) -> StageLayout {
+        let empty = Self.threadIsEmpty(entries: conversation.entries,
+            references: conversation.cachedReferences,
+            approvals: approvals?.items ?? [], approvalNotes: approvals?.notes ?? [])
+        let other = workspace.showsSkills || workspace.showsMemoryGraph || workspace.showsAtlas
+            || workspace.showsWorkflows || workspace.comparisonResult != nil
+        let working = ConversationThread.activity(runs: agentRuns?.runs ?? [],
+                                                  thinking: client.botIsThinking) != nil
+        return Self.layout(threadIsEmpty: empty, hasResults: !workspace.carouselResults.isEmpty,
+            showsOtherSurface: other, working: working,
+            showsConversation: workspace.showsConversation, compactConversation: compactConversation,
+            wideWindow: wideWindow, stageWidth: stageWidth)
+    }
+
+    private func restStage(size: CGSize) -> some View {
+        let side = AdaptiveLayoutMetrics.restOrbSlotSide(stageWidth: Double(size.width),
+                                                         stageHeight: Double(size.height))
+        return VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
+                          needsYou: needsYou, interactive: true, presentation: voicePresentation)
+                .matchedGeometryEffect(id: Self.orbGeometryID, in: orbSpace)
+                .frame(width: side, height: side)
+            orbControls.frame(maxWidth: AdaptiveLayoutMetrics.voiceRailWidth)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     var body: some View {
         GeometryReader { geometry in
-            let mode = Self.mode(showsConversation: workspace.showsConversation,
-                                 compactConversation: compactConversation,
-                                 wideWindow: wideWindow, stageWidth: geometry.size.width)
+            let layout = currentLayout(stageWidth: geometry.size.width)
             Group {
-                switch mode {
-                case .conversation:
-                    VStack(spacing: 0) {
-                        conversationAndResults
-                        Divider()
-                        VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
-                                      needsYou: needsYou, interactive: true,
-                                      presentation: voicePresentation)
-                            .frame(minHeight: 150, maxHeight: 220)
-                        orbControls
-                    }
-                case .rail:
-                    HStack(spacing: 0) {
+                if layout.placement == .centred {
+                    restStage(size: geometry.size)
+                } else {
+                    switch layout.mode {
+                    case .conversation:
                         VStack(spacing: 0) {
+                            conversationAndResults
+                            Divider()
                             VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
                                           needsYou: needsYou, interactive: true,
-                                      presentation: voicePresentation)
-                                .frame(height: AdaptiveLayoutMetrics.railOrbSlotHeight)
+                                          presentation: voicePresentation)
+                                .matchedGeometryEffect(id: Self.orbGeometryID, in: orbSpace)
+                                .frame(minHeight: 150, maxHeight: 220)
                             orbControls
-                            Spacer(minLength: 0)
-                        }.frame(width: AdaptiveLayoutMetrics.voiceRailWidth)
-                        Divider()
-                        compactStageContent
-                    }
-                case .bottom:
-                    VStack(spacing: 0) {
-                        compactStageContent
-                        Divider()
+                        }
+                    case .rail:
                         HStack(spacing: 0) {
-                            VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
-                                          needsYou: needsYou, interactive: true,
-                                      presentation: voicePresentation)
-                                // Keep the compact rail shallow while giving
-                                // the measured lobe enough horizontal travel
-                                // to remain legible at the default width.
-                                .frame(minWidth: 220, idealWidth: 240, maxWidth: 280)
-                            orbControls
-                        }.frame(height: 180)
+                            VStack(spacing: 0) {
+                                VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
+                                              needsYou: needsYou, interactive: true,
+                                          presentation: voicePresentation)
+                                    .matchedGeometryEffect(id: Self.orbGeometryID, in: orbSpace)
+                                    .frame(height: AdaptiveLayoutMetrics.railOrbSlotHeight)
+                                orbControls
+                                Spacer(minLength: 0)
+                            }.frame(width: AdaptiveLayoutMetrics.voiceRailWidth)
+                            Divider()
+                            compactStageContent
+                        }
+                    case .bottom:
+                        VStack(spacing: 0) {
+                            compactStageContent
+                            Divider()
+                            HStack(spacing: 0) {
+                                VoiceWaveView(voiceState: voiceState, wakePulse: client.wakePulse,
+                                              needsYou: needsYou, interactive: true,
+                                          presentation: voicePresentation)
+                                    .matchedGeometryEffect(id: Self.orbGeometryID, in: orbSpace)
+                                    // Keep the compact rail shallow while giving
+                                    // the measured lobe enough horizontal travel
+                                    // to remain legible at the default width.
+                                    .frame(minWidth: 220, idealWidth: 240, maxWidth: 280)
+                                orbControls
+                            }.frame(height: 180)
+                        }
                     }
                 }
             }
-            .animation(AdaptiveTransition.animation(reduceMotion: reduceMotion), value: mode)
+            .animation(StageTransition.animation(reduceMotion: reduceMotion, needsYou: needsYou), value: layout)
         }
         // C5 always keeps transcript arrivals quiet unless the router has
         // attested the still-active request. Stage ownership remains paired.

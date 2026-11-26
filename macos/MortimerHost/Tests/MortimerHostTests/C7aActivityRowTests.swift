@@ -81,6 +81,7 @@ final class C7aActivityRowTests: XCTestCase {
                     run(3, display: "Scheduler", tools: ["calendar_list"], started: 300, done: 310)]
         let activity = try XCTUnwrap(ConversationThread.activity(runs: runs, thinking: true))
         XCTAssertEqual(activity.text, "Editing code")
+        XCTAssertEqual(activity.runID, 2)
         XCTAssertEqual(activity.accessibilityLabel, "Developer is working: Editing code")
         XCTAssertFalse(activity.text.contains("private task words"))
     }
@@ -89,6 +90,7 @@ final class C7aActivityRowTests: XCTestCase {
         XCTAssertEqual(ConversationThread.activity(runs: [run(1, started: 1)], thinking: false)?.text,
                        "Starting")
         XCTAssertEqual(ConversationThread.activity(runs: [], thinking: true)?.text, "Thinking")
+        XCTAssertNil(ConversationThread.activity(runs: [], thinking: true)?.runID)
         XCTAssertNil(ConversationThread.activity(runs: [run(1, started: 1, done: 2)], thinking: false))
         XCTAssertNil(ConversationThread.activity(runs: [], thinking: false))
     }

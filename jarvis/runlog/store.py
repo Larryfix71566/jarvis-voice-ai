@@ -623,17 +623,24 @@ class RunLogger:
 
     def mcp_call(
         self, tool: str, server: str, ok: bool, latency_ms: int,
-        error: str | None = None,
+        error: str | None = None, served_by: str | None = None,
+        fallback_after: str | None = None,
     ) -> None:
         def _do() -> None:
             seq = self._next_seq()
             err = (SENSITIVE_SENTINEL
                    if (error is not None and self._redact(error)) else error)
-            self._buffer.append({
+            record = {
                 "type": "mcp_call", "seq": seq, "tool": tool, "server": server,
                 "ok": bool(ok), "latency_ms": latency_ms, "error": err,
                 "at": now_iso(),
-            })
+            }
+            # WS-38 1A: closed path codes only; no DB column, payload only.
+            if served_by is not None:
+                record["served_by"] = served_by
+            if fallback_after is not None:
+                record["fallback_after"] = fallback_after
+            self._buffer.append(record)
             self._execute(
                 "INSERT INTO agent_events (run_id, seq, type, tool, server, "
                 "ok, latency_ms, created_at, user_id) "

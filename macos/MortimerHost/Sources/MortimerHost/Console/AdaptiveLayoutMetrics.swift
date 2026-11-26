@@ -11,6 +11,15 @@ enum AdaptiveLayoutMetrics {
     /// diameter is 0.51 of the smaller slot side (CometOrbRenderer), so
     /// 260 x 220 gives about 112 pt.
     static let railOrbSlotHeight = 220.0
+    /// Interface cleanup Phase 3: the centred at-rest orb slot (square).
+    static let restOrbSlotMax = 440.0
+    static let restOrbSlotMin = 160.0
+    /// Height kept for the status line (up to three lines), its button and mute.
+    static let restControlsReserve = 150.0
+    static func restOrbSlotSide(stageWidth: Double, stageHeight: Double) -> Double {
+        let fit = min(stageWidth - 2 * workspacePadding, stageHeight - restControlsReserve)
+        return min(restOrbSlotMax, max(restOrbSlotMin, fit))
+    }
     static let dividerWidth = 1.0
     static let comparisonSpacing = 16.0
     static var minimumComparisonWidth: Double { 2 * resultContentWidth + 2 * comparisonSpacing + dividerWidth }
