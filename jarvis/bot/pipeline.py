@@ -134,7 +134,7 @@ from jarvis.bot.remember_tool import build_remember_tool
 from jarvis.bot.reminders_watcher import RemindersWatcher
 from jarvis.bot.research_watcher import ResearchWatcher
 from jarvis.bot.screen_tool import build_list_screens_tool, build_view_screen_tool
-from jarvis.bot.sensitive_turn import SensitiveTurn, arm_from_text, arm_user_turn, current_sensitive_turn
+from jarvis.bot.sensitive_turn import SensitiveTurn, arm_user_turn, current_sensitive_turn
 from jarvis.bot.shared_content import (
     SharedContentService,
     analyze_shared_content_via_boundary,
