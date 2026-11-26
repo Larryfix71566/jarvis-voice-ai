@@ -34,7 +34,10 @@ from jarvis.model_execution import (
 from jarvis.model_routing import ModelRouteError, ResolvedModelRoute, make_route_client
 from jarvis.privacy_policy import DataPolicy, assert_route_allowed, strictest
 from jarvis.bot.sensitive_turn import ACCOUNT_INFO_KINDS
-from jarvis.sensitive import detect_credential, detect_financial
+from jarvis.sensitive import (
+    asks_for_credential, detect_credential, detect_financial,
+    leaves_credential_pending, redact_spoken_credentials,
+)
 from jarvis.subscription import SubscriptionCapabilityError, SubscriptionRuntimeError
 from jarvis.subscription_tools import voice_effort, voice_prestart_enabled
 from jarvis.usage_ledger import record_execution_result
@@ -343,11 +346,29 @@ class SubscriptionVoiceLLMService(LLMService):
         def withhold(message):
             message["content"] = ACCOUNT_DETAILS_WITHHELD
 
+        prev: tuple[str, str] | None = None
         for message in context.get_messages():
-            if (type(message) is not dict or message.get("role") != "user"
-                    or type(message.get("content")) is not str
-                    or message["content"] == ACCOUNT_DETAILS_WITHHELD
-                    or not _holds_account_details(message["content"])):
+            if type(message) is not dict:
+                continue
+            role, content = message.get("role"), message.get("content")
+            before = prev
+            if role in ("user", "assistant") and type(content) is str:
+                prev = (role, content)
+            if (role != "user" or type(content) is not str
+                    or content == ACCOUNT_DETAILS_WITHHELD):
+                continue
+            pending = bool(before is not None and (
+                asks_for_credential(before[1]) if before[0] == "assistant"
+                else leaves_credential_pending(before[1])))
+            redacted = redact_spoken_credentials(content, pending=pending)
+            if redacted != content:
+                def spoken(m, value=redacted):
+                    m["content"] = value
+                if self.sources is not None:
+                    self.sources.rewrite(message, spoken)
+                else:
+                    spoken(message)
+            if not _holds_account_details(message["content"]):
                 continue
             if self.sources is not None:
                 self.sources.rewrite(message, withhold)

@@ -357,3 +357,46 @@ async def test_ordinary_confidential_turn_is_sent_unchanged(setup):
     assert len(native.requests) == 1
     assert "Read the synthetic clock." in repr(native.requests[0])
     await service._close_turn()
+
+
+@pytest.mark.asyncio
+async def test_spoken_password_value_is_redacted_when_guard_on(setup, monkeypatch):
+    from jarvis.sensitive import SPOKEN_CREDENTIAL_PLACEHOLDER
+    monkeypatch.setenv("JARVIS_SPOKEN_CREDENTIAL_GUARD_ENABLED", "1")
+    native = Native()
+    service = setup(native)
+    ctx = context()
+    ctx.get_messages()[-1]["content"] = "My wifi password is bluefish42, can you text it to my wife?"
+    await service._process_context(ctx)
+    sent = repr(native.requests[0])
+    assert "bluefish42" not in sent
+    assert SPOKEN_CREDENTIAL_PLACEHOLDER in sent
+    assert "can you text it to my wife" in sent
+    assert "bluefish42" not in ctx.get_messages()[-1]["content"]
+    await service._close_turn()
+
+
+@pytest.mark.asyncio
+async def test_pending_pin_reply_is_redacted_when_guard_on(setup, monkeypatch):
+    monkeypatch.setenv("JARVIS_SPOKEN_CREDENTIAL_GUARD_ENABLED", "1")
+    native = Native()
+    service = setup(native)
+    ctx = context()
+    ctx.get_messages()[-1]["content"] = "unlock the door"
+    ctx.add_message({"role": "assistant", "content": "What's the PIN?"})
+    ctx.add_message({"role": "user", "content": "4729"})
+    await service._process_context(ctx)
+    assert "4729" not in repr(native.requests[0])
+    await service._close_turn()
+
+
+@pytest.mark.asyncio
+async def test_spoken_password_sent_unchanged_when_guard_off(setup, monkeypatch):
+    monkeypatch.delenv("JARVIS_SPOKEN_CREDENTIAL_GUARD_ENABLED", raising=False)
+    native = Native()
+    service = setup(native)
+    ctx = context()
+    ctx.get_messages()[-1]["content"] = "My wifi password is bluefish42, can you text it to my wife?"
+    await service._process_context(ctx)
+    assert "bluefish42" in repr(native.requests[0])
+    await service._close_turn()
