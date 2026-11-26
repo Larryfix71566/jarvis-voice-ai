@@ -33,9 +33,14 @@ final class TranscriptReadabilityTests: XCTestCase {
         let rows = [row("u1", user: true, at: 100), row("a1", user: false, at: 101),
                     row("a2", user: false, at: 103)]
         let note = ApprovalStore.Note(id: UUID(), time: Date(timeIntervalSince1970: 102), text: "Declined.")
-        let items = ConversationThread.items(rows: rows, cards: [], approvalNotes: [note])
-        XCTAssertEqual(items.map(\.id).count, 4)
+        // items() puts a note after the last row when no later question
+        // follows it, so the run rule is checked on the list a note between
+        // two replies would make.
+        let items: [ConversationThread.Item] = [.row(rows[0]), .row(rows[1]), .approvalNote(note), .row(rows[2])]
         XCTAssertEqual(ConversationThread.speakerRunStarts(items), ["u1", "a1", "a2"])
+        let placed = ConversationThread.items(rows: rows, cards: [], approvalNotes: [note])
+        XCTAssertEqual(placed.count, 4)
+        XCTAssertEqual(ConversationThread.speakerRunStarts(placed), ["u1", "a1"])
     }
 
     func testTimestampShowsOnlyOnHover() {
@@ -101,7 +106,7 @@ final class TranscriptReadabilityTests: XCTestCase {
                                  "row is not centred: row \(frame), viewport \(viewport)")
 
         let time = Date(timeIntervalSince1970: createdAt).formatted(date: .omitted, time: .shortened)
-        XCTAssertTrue(elements.contains { string($0, "accessibilityValue") == time },
-                      "the row's time is not its accessibility value")
+        XCTAssertEqual(string(rowElement, "accessibilityValue"), time,
+                       "the row's time is not its accessibility value")
     }
 }

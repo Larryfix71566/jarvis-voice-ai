@@ -207,7 +207,15 @@ final class InspectCurrentRunTests: XCTestCase {
 
         let toggle = try XCTUnwrap(collapsed.controls["History"])
         XCTAssertTrue(press(toggle))
-        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-        XCTAssertTrue(accessible(view).text.contains("Developer"))
+        // The press writes the AppStorage key; give SwiftUI time to re-render
+        // and re-read the tree, up to two seconds on a loaded runner.
+        var expanded = accessible(view)
+        for _ in 0..<20 where !expanded.text.contains("Developer") {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            window.layoutIfNeeded(); view.layoutSubtreeIfNeeded()
+            expanded = accessible(view)
+        }
+        XCTAssertTrue(defaults.bool(forKey: AgentsTabSections.historyExpandedKey), "the press did not expand History")
+        XCTAssertTrue(expanded.text.contains("Developer"), "History opened but its runs did not render: \(expanded.text)")
     }
 }

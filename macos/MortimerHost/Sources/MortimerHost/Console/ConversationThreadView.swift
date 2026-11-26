@@ -708,7 +708,9 @@ struct ConversationThreadRowView: View {
         .padding(.vertical, 9)
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .accessibilityElement(children: .combine)
+        // .ignore, not .combine: combining merged the selectable text's own
+        // value into the row's, so the time was no longer its value.
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(row.isUser ? "You" : "Mortimer"): \(row.text)")
         .accessibilityValue(timeText)
     }
