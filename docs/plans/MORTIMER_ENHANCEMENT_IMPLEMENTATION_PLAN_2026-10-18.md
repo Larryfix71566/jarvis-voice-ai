@@ -268,6 +268,40 @@ over full history, not a second implementation.
   seven, current close excluded), missing dates, checksum refusal and
   card/brief/replay parity for the same fix.
 
+#### Second indicator: price against the 4-year average (amended 2026-11-26)
+
+Larry asked on 2026-11-26 to test a claim from a paid trade-alert seller's
+video: dips below the 4-year moving average marked buying zones. It is a lead
+under test, not a trusted signal.
+
+- **Definition:** the mean of the previous 1,460 daily closes, current close
+  excluded; the indicator is the close's distance from it. Same calculator
+  module, replay and future-perturbation test as the recovery rule. Warm-up
+  means it starts on 2014-07-17 for Bitcoin and is unavailable before.
+- **Report:** one row per episode below the line (episodes split by a 90-day
+  gap): first and last close below, days below and longest run, further
+  drawdown before the turn, closes 180 and 365 days after the first close
+  below ("unfinished" until then), and every bear it missed, with totals,
+  data range and checksum. Counts with sample size only. The 365-day horizon
+  is fixed for this indicator only, before the real run.
+- **Orientation probe (unpinned CSV, not committed):** five episodes since
+  2014 (January and August 2015, March 2020, June 2022 to March 2023, June to
+  October 2023); all higher 365 days later, one lower at 180 days, a further
+  22% fall after the first 2022 close below; it missed the 2018 bear (4.5%
+  above the average at the low).
+- **200-week variant:** the previous 1,400 closes, reported beside it in the
+  backtest only; the product shows the 4-year average alone.
+- **Total crypto market cap:** optional and not built. No free, verified
+  daily history source was found; a claim must name its source and cost
+  first, and the series is never mixed with Bitcoin's.
+- **Where it shows:** a line on the workspace's long-range chart, a context
+  line on the card and in the Daily Brief ("Bitcoin is X% above/below its
+  4-year average") from the daily fix. Never a buy signal and never an input
+  to the stance.
+- **Exit:** window excludes the current close; fewer than 1,460 closes is
+  unavailable; equal is not below; no look-ahead; card, brief and replay
+  agree on one fix.
+
 #### Daily Brief: One Bitcoin recommendation
 
 After the Option 2 card, add a separately gated section to the **existing**
@@ -316,6 +350,8 @@ failure never holds up the brief. Defaults:
   delays the brief.
 - **Cycle age (off):** days since the last halving against past cycles at the
   same age; context only.
+- **4-year average (on):** one context line, distance from the 4-year
+  average at the daily fix; never a buy signal or a stance input.
 - **Spoken:** still the stance and one next check only.
 
 #### Option 3: Native Mac workspace
