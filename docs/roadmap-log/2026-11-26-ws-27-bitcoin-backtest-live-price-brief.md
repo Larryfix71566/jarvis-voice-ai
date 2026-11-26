@@ -2,7 +2,7 @@
 date: 2026-11-26
 system: claude
 rows: [WS-27]
-prs: []
+prs: [426]
 ---
 # WS-27 Bitcoin backtest, live price and Daily Brief additions
 
