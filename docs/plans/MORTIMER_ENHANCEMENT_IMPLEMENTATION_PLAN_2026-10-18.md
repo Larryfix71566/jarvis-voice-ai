@@ -578,6 +578,70 @@ recomputes them on the pinned snapshot and records any difference.
   change; the brief line never carries a percentage; card, brief, dashboard
   and replay agree on the same fix.
 
+#### Daily Brief: trend regime line (amended 2026-11-27)
+
+Larry asked on 2026-11-27 for a bear trigger to match the bull one. A
+symmetric regime rule was proposed, and he replied "Add it to the plan"
+(23:04:19 UTC, Claude Duet channel). It is one more daily brief line, under
+the same rules as the Additions above: daily fix only, never a live price, no
+buying or selling language, sizes or prices to trade at, a failure omits the
+line, and the spoken brief is unchanged.
+
+- **Rule.** The regime turns **Bull** after seven consecutive closes above
+  their respective 200-day averages (Option 2's average) and **Bear** after
+  seven consecutive closes below them. Otherwise it keeps its prior state.
+  Equal is neither above nor below and resets neither count. Before the
+  first flip after warm-up (200 closes for the average, then seven more) the
+  regime is unavailable, not assumed.
+- **Brief line.** The current regime, the date and close of the last flip,
+  the level that would flip it and progress toward it, for example: "Trend
+  regime: Bear since November 18, 2026 ($62,897). It turns Bull after 7
+  straight closes above the 200-day average ($71,912.30); 0 of 7 so far."
+  The dashboard's stance view shades Bull and Bear periods and marks each
+  flip.
+- **Relation to the stance.** The Bull flip is the first half of the
+  recovery rule, but the regime is a label shown beside the stance, not an
+  input to it: a Bull regime does not mean "Recovery rule met", and the
+  existing caution holds that a trigger is not proof of a bull market. The
+  stance rules, backtest of the recovery rule and history clause are
+  unchanged.
+- **Backtest.** Same calculator, replay table and future-perturbation test
+  as the recovery rule. The report lists every flip (date, close, direction),
+  how many flips moved in their own direction before the next flip, and the
+  compounded change while Bull and while Bear, with counts and the data
+  range, never as an implied probability.
+
+**Decisions for Larry** (proposed by Claude, not chosen by Larry):
+- the seven-close hold, fixed before the first real run and never tuned;
+- whether the regime stays a label beside the stance (the default above) or
+  becomes a stance input, which would change the stance rules and need its
+  own backtest under the overfitting guard;
+- the labels "Bull" and "Bear", or plainer "uptrend" and "downtrend", given
+  the plan's caution about calling a bull market.
+
+**Orientation figures (unpinned, not committed).** From the channel's test
+stand-in on 2026-11-27, over Coin Metrics daily closes 2012-01-01 to the
+2026-11-26 label: 32 flips, of which 12 of the 31 completed ones moved in
+their own direction before the next; compounded change about 12,000x while
+Bull and 0.95x while Bear. Alternatives tested the same way: a single close
+across the 200-day average gave 104 flips; a 50-day/200-day crossing gave 25
+flips but rose about 2x while Bear, so it turned later. Last flips: Bull at
+the 2026-08-25 close of $78,601 and Bear at the 2026-11-18 close of $62,897.
+This PR did not reproduce them; the first build step recomputes them on the
+pinned snapshot and records any difference.
+
+- **Self-check fixture.** Committed with expected values written before the
+  code: a synthetic series with a clean Bull flip on the seventh close, six
+  closes above followed by one below (no flip), a close exactly equal to the
+  average inside a run, a Bear flip, a whipsaw that flips twice inside 20
+  days, and a series too short for warm-up (unavailable). At the frozen
+  2026-11-23 fix, the regime, last flip date and close, and the count toward
+  the next flip are recorded with the snapshot checksum; the daily self-check
+  withholds the line, and says so, when a recomputation of that fix differs.
+- **Exit:** the fixture passes; no look-ahead; changing the hold length moves
+  no stance, rule state or other brief line; the line never carries buying
+  or selling language; card, brief, dashboard and replay agree on one fix.
+
 ## 4. Durable task, evidence and proactive follow-through contract
 
 The proposed WS-24 record is the overall-task authority; agent runs, attempts,

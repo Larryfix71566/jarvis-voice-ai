@@ -23,9 +23,14 @@ prs: [427]
   existing stance inputs). Band width, stretch gap, scoring day, horizons and
   the five-stretch floor are proposed defaults. A self-check fixture covers
   both lines (synthetic series plus the frozen 2026-11-23 fix).
+  A third subsection adds a trend regime line: Bull after seven consecutive
+  closes above the 200-day average, Bear after seven below, shown beside the
+  stance and not an input to it (a decision left to Larry), with its own
+  backtest report and self-check fixture. The seven-close hold and the labels
+  are proposed defaults.
 - **Evidence:** Larry's messages in his Claude Duet channel on 2026-11-27
-  (21:41:16, 21:43:05, 21:44:40, 21:46:03, 21:47:05 and 23:02:21 UTC), quoted in the
-  sections. The orientation figures in the new lines came from the channel's
+  (21:41:16, 21:43:05, 21:44:40, 21:46:03, 21:47:05, 23:02:21 and 23:04:19 UTC), quoted in the
+  sections. The orientation figures in the new lines and the regime came from the channel's
   test stand-in and were not reproduced in this PR. A test stand-in of the dashboard runs outside Mortimer as a
   prototype; it is not evidence that anything here works.
 - **Left / next actor:** larry: decide the proposed defaults, then merge #426
