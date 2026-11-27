@@ -2,7 +2,7 @@
 date: 2026-11-27
 system: claude
 rows: [WS-27, WS-13]
-prs: [this PR]
+prs: [427]
 ---
 # WS-27 and WS-13: Bitcoin dashboard with reference bands, and a sectioned brief
 
