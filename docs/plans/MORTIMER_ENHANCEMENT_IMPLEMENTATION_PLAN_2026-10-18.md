@@ -407,6 +407,100 @@ shown as a graph next to the snapshot charts.
   changing live values moves no computed state; every live value shows venue
   and time.
 
+#### Dashboard charts and reference bands (amended 2026-11-27)
+
+Larry asked on 2026-11-27, in his Claude Duet channel, for charts for the
+Bitcoin data (21:41:16 UTC, "I want some charts/dashboards for the bitcoin
+data as well"), for upper and lower bounds on the chart (21:43:05 UTC). Offered
+the power-law corridor, the rainbow chart, Mayer Multiple bands and Bollinger
+Bands, he answered "Add each of the are beneficial" (21:44:40 UTC). He agreed
+to a short brief with the charts on a dashboard (21:46:03 UTC, "Agreed. I like
+to see axis data for each for reference") and asked for these to be added to
+Mortimer (21:47:05 UTC). The brief layout itself is a WS-13 change, recorded
+in the mail, calendar and brief plan §R.0g. A test stand-in of the dashboard,
+built outside Mortimer from this section's rules, is the prototype; nothing
+here depends on it.
+
+**Rule that binds every band:** the four bands are reference lines drawn on
+charts. They are never inputs to the stance, the recovery rule, the 4-year
+average line, the backtest or the history clause, and the brief's stance text
+never names a band. A band is computed only from validated daily closes of the
+pinned snapshot above, never from a live price, and draws nothing where its
+window or warm-up is incomplete. No band label says buy, sell, cheap, expensive
+or any equivalent.
+
+**Three charts.** One plain line of text under each chart says where the
+latest close sits; that line is also the chart's accessible summary.
+
+1. **Cycle view (all history, log price).** Daily closes from the first
+   snapshot row, the power-law corridor's floor and ceiling, and the rainbow
+   zones between them. Plain line, for example: "The close is 1.9x the
+   power-law floor, in zone 3 of 9."
+2. **Stance view (last 365 days).** Daily closes, the 200-day average and the
+   prior 84-day closing high exactly as Option 2 defines them, and the Mayer
+   bands. Plain line, for example: "The close is 0.84x its 200-day average."
+3. **Short-term view (last 90 days).** Daily closes and the Bollinger Bands.
+   Plain line, for example: "The close is inside the bands, in the lower
+   third."
+
+**Axes on every chart.** Larry asked to see the axis data on each chart. Every
+chart has a title, a labelled date axis with tick values (years on the cycle
+view, months on the other two), a labelled USD price axis with tick values in
+dollars, a legend naming every line and band, and a footer with the source and
+the daily fix it was drawn from. The cycle view's price axis is logarithmic,
+says so in its label, and puts ticks at round values that stay readable at
+the narrowest supported window. Tick labels never overlap or truncate.
+
+**Proposed defaults, open for Larry's decision.** These were proposed by
+Claude, not chosen by Larry; each needs his yes, or another value, before a
+claim builds it. Each is a fixed, written parameter, never tuned against the
+backtest.
+
+- **Power-law corridor:** an ordinary least-squares fit of log10(close)
+  against log10(days since 2009-01-03), over every snapshot close through the
+  fix, refitted at each daily fix. The floor and ceiling run parallel to the
+  fit, offset by the smallest and largest residual through the fix, so by
+  construction they contain every past close; the chart says so, and the
+  corridor is described as a fit to the past, not a forecast. Coefficients,
+  fit window and offsets are recorded with the output. Alternative: published
+  fixed coefficients from a third-party model, which adds an outside
+  dependency.
+- **Rainbow zones:** nine zones of equal width in log price between that
+  floor and ceiling, numbered 1 (lowest) to 9 and coloured from cool to warm,
+  with no trading names (the popular chart's labels such as "fire sale" are
+  not used). Alternative: a separate log regression fit, as some published
+  rainbow charts use.
+- **Mayer bands:** 0.8x and 2.4x the 200-day average defined in Option 2
+  (no second average). The plain line gives the close's Mayer Multiple
+  (close divided by that average) to two decimals.
+- **Bollinger Bands:** a 20-close simple average through the fix, plus and
+  minus 2 population standard deviations of the same 20 closes.
+
+**Where it shows.** The three charts are a dashboard that opens to the latest
+validated daily fix every time, from the brief's Bitcoin section, the Option 2
+result and the command palette. Proposed default: the dashboard is the Option 3
+workspace's default view, ahead of its current-bear, past-recoveries and
+halving-cycle views, and it uses the same reviewed, versioned native series
+payload; the v1 bar-only chart contract does not change. Until Option 3 lands,
+the brief and the Option 2 card are unchanged and show no dashboard control.
+Alternative, also open: an earlier dashboard result in the carousel, rendered
+as chart images through the existing graph/media asset path. The dashboard
+holds public market data only: no mail, calendar or other brief content
+reaches it, and the market tool still receives no brief payload. The live
+price layer may draw its live point on the stance and short-term views; it
+moves no band, line or plain-line text.
+
+- **Exit:** frozen reference values for each band on synthetic series and on
+  the pinned snapshot's fix of 2026-11-23; every band unavailable, not zero,
+  before its warm-up (200 closes for Mayer, 20 for Bollinger); a parameter-perturbation test (change every band
+  parameter; stance, rule state, 4-year line, backtest output and brief stance
+  text are byte-identical); a live-price test (changing live values moves no
+  band); every chart shows labelled axes with tick values, a legend, the
+  source and the fix on the identified Mac build, including the narrowest
+  window, large text and VoiceOver reading the plain line; the plain line and
+  the chart agree for the same fix; no band label carries a trading word; and
+  card, brief and dashboard show the same fix.
+
 ## 4. Durable task, evidence and proactive follow-through contract
 
 The proposed WS-24 record is the overall-task authority; agent runs, attempts,

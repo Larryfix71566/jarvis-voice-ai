@@ -6,7 +6,8 @@ revision 3 its review of `5e37696` (R.0a), revision 4 its review of `b3d7c0f`
 (R.0b), and revision 5 its review of `4994861` (R.0c). Revision 6 records Larry's
 decisions D1–D9 (R.0d, R.5); revision 7 records Codex's P1 clearance and its last
 P3 correction (R.0e); revision 8 records Larry's 2026-11-03 choice to put mail
-headlines on request ahead of P2 (R.0f). §R is authoritative. The August text after §R is
+headlines on request ahead of P2 (R.0f); revision 9 records his 2026-11-27
+choice of a sectioned brief whose charts live on a dashboard (R.0g). §R is authoritative. The August text after §R is
 history: R.9 says which parts remain background, and R.10–R.12 govern wherever they
 differ. Implements
 roadmap track **T5** (`docs/plans/MORTIMER_PLATFORM_ROADMAP.md` §2.5), tracked as
@@ -28,6 +29,63 @@ Nothing here is implemented, tested or accepted. No mailbox, calendar, provider 
 credential was touched. Approval works in two steps: first Larry answers D1–D9
 (R.5); then each increment in R.6 is claimed, built, cross-reviewed and accepted on
 its own. This section does not authorize implementation.
+
+### R.0g Revision 9 (2026-11-27, Larry: a sectioned brief with a dashboard)
+
+**Why.** Larry is trying out the Daily Brief through a test stand-in in his
+Claude Duet channel before Mortimer builds it. On 2026-11-27 he asked:
+"Can we do some formatting for the daily brief organize in sections and make
+easily human readable. I want some charts/dashboards for the bitcoin data as
+well" (21:41:16 UTC). Offered two layouts, A (everything in the message with a
+chart) and B (a short summary, with the charts on a dashboard that opens at the
+same place every day), he agreed to B: "Agreed. I like to see axis data for
+each for reference" (21:46:03 UTC). He then asked for these enhancements to be
+added to Mortimer (21:47:05 UTC). The Bitcoin charts and their bands are WS-27,
+recorded in the [enhancement plan](MORTIMER_ENHANCEMENT_IMPLEMENTATION_PLAN_2026-10-18.md)
+§3.4, "Dashboard charts and reference bands"; this revision covers only the
+brief's own layout. D1–D9 and every R.10 contract are unchanged.
+
+**Layout.**
+- **Labelled sections.** The `brief` card shows one heading per section, in a
+  fixed order, and only the sections that are enabled; a section that is off
+  is absent, never an empty heading. Today that is Mail; WS-27's Bitcoin
+  section joins it when its own gate opens. Proposed default, open for
+  Larry's decision: Bitcoin goes after mail and before problems in R.10.16's
+  order (calendar, reminders, mail, Bitcoin, problems).
+- **Short and readable.** Each section is a few short lines. Mail keeps its
+  per-account status and count rows and its newest headlines (P3m). Bitcoin
+  keeps WS-27's stance, reason, next condition, progress, 4-year average line,
+  labelled last price and cutoff, and carries no chart. Lines never depend on
+  a wide window: the card is checked at the narrowest supported Mac window and
+  at large text, and on iPhone once its result transport is accepted.
+- **Dashboard, not a link.** The charts live on the WS-27 dashboard, which
+  always opens to the latest validated daily fix. The card reaches it through
+  a host-owned control on the Bitcoin section that names a fixed local
+  destination; it carries no URL and no source text, so R.10.16's "No links"
+  rule still holds. The control appears only once the dashboard exists.
+- **Isolation.** The dashboard holds public market data only. Mail, and any
+  later calendar or reminders section, never appear on it, and its being
+  available or not never changes what the card shows for mail. The whole card
+  stays `confidential` (D4 a); copy, share and export of the card stay blocked
+  (D8 a), Bitcoin section included. Spoken output is unchanged.
+
+**Not decided here.** The brief's schedule (`JARVIS_BRIEF_TIME` stays
+unreserved), any new section beyond Mail and Bitcoin, and Calendar's place
+before P2 lands. The section order above is a proposed default.
+
+**Files when claimed.** The section heading and order in `jarvis/brief.py`,
+the typed section kind in JarvisKit `DisplayPayload`, and
+`macos/MortimerHost/Sources/MortimerHost/Display/BriefCardView.swift`, which
+today hard-codes the "Mail" heading. The Bitcoin section's content and its
+dashboard control are WS-27's and need a joint claim with WS-13 for the
+shared payload (R.13).
+
+**Acceptance.** Offline: sections render in the fixed order; a disabled
+section is absent; the card's payload carries no URL; a Bitcoin failure leaves
+the Mail section and its timing unchanged; no mail text reaches the dashboard
+payload. Mac (Larry): the card shows labelled Mail and Bitcoin sections that
+read cleanly at the narrowest window and at large text, and the Bitcoin
+control opens the dashboard at the latest fix.
 
 ### R.0f Revision 8 (2026-11-03, Larry: mail headlines on request before P2)
 
