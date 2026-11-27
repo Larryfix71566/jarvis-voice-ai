@@ -416,8 +416,8 @@ the power-law corridor, the rainbow chart, Mayer Multiple bands and Bollinger
 Bands, he answered "Add each of the are beneficial" (21:44:40 UTC). He agreed
 to a short brief with the charts on a dashboard (21:46:03 UTC, "Agreed. I like
 to see axis data for each for reference") and asked for these to be added to
-Mortimer (21:47:05 UTC). The brief layout itself is a WS-13 change, recorded
-in the mail, calendar and brief plan §R.0g. A test stand-in of the dashboard,
+Mortimer (21:47:05 UTC). The brief layout itself is a WS-13 change, proposed
+for the mail, calendar and brief plan §R.0g in PR #428. A test stand-in of the dashboard,
 built outside Mortimer from this section's rules, is the prototype; nothing
 here depends on it.
 
