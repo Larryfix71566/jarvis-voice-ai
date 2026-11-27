@@ -501,6 +501,83 @@ moves no band, line or plain-line text.
   the chart agree for the same fix; no band label carries a trading word; and
   card, brief and dashboard show the same fix.
 
+#### Daily Brief: days like today and levels to watch (amended 2026-11-27)
+
+Larry asked on 2026-11-27 whether the data supports a forecast. The answer
+was that it does not, and two daily brief lines were offered instead; he
+replied "Add both to the plan" (23:02:21 UTC, Claude Duet channel).
+Both join the 2026-11-26 Additions above, under the same rules: they come from
+the daily fix, never from a live price; they are never stance inputs; they say
+nothing about buying or selling, sizes or prices to trade at; a failure omits
+the line and never holds up the brief; and the spoken brief is still the
+stance and one next check only.
+
+- **Days like today (on, daily).** The ratio is the close divided by the
+  200-day average defined in Option 2. A matching day is any past fix whose
+  ratio lies within a band around today's ratio. Consecutive matching days
+  form a stretch; a gap of more than 30 days without a matching day starts a
+  new stretch. Each stretch is scored once, from its first matching day: it
+  is higher at a horizon when the close that many days later is above that
+  first close (equal is not higher). A stretch counts at a horizon only when
+  that full horizon has passed by today's fix, so the counts can differ by
+  horizon. Brief line, counts and sample size only, never a percentage or a
+  chance: "Days like today (0.84x the 200-day average): since 2011, higher 30
+  days later in 8 of 21 past stretches, 90 days in 12 of 21, a year in 10 of
+  19. This describes the past; it is not a forecast." The dashboard's stance
+  view also shows each horizon's 10th-to-90th percentile range and median
+  change; the brief line does not. Same calculator, replay table and
+  future-perturbation test as the backtest.
+- **Levels to watch (on, daily).** Two prices, both existing stance inputs
+  recomputed at each fix: the 200-day average (a close above it meets the
+  first condition of the recovery rule) and the provisional low (a close
+  below it breaks that low, which the brief already leads with). Brief line:
+  "Levels to watch: a close above $71,912.30 (the 200-day average) or below
+  $58,525.08 (the provisional low)." When the close is already above the
+  200-day average, the upper level is the prior 84-day closing high instead;
+  when it is above both, the line gives the provisional low alone. The line
+  never offers a level already crossed, and no other level is added.
+
+**Proposed defaults, open for Larry's decision** (proposed by Claude, not
+chosen by Larry): a band of today's ratio plus or minus 0.04 (0.80x to 0.88x
+when today is 0.84x); the 30-day gap that splits stretches; scoring from each
+stretch's first day; horizons of 30, 90 and 365 days, fixed before the first
+real run and never tuned; and a floor of five scored stretches, below which
+the line reads "Days like today: too few past stretches to count".
+
+**Orientation figures (unpinned, not committed).** The figures in the
+examples above came from the channel's test stand-in on 2026-11-27, run over
+Coin Metrics daily closes through the 2026-11-26 label (ratio 0.84x, first
+matching day 2011-09-06): higher in 8 of 21 stretches at 30 days (10th to
+90th percentile -24% to +28%), 12 of 21 at 90 days (-42% to +60%) and 10 of
+19 at 365 days (-50% to +163%, median +51%). The levels were $71,912.30 and
+the provisional low of $58,525.08 (Coin Metrics label 2026-06-30, fixed at
+2026-07-01 00:00 UTC). This PR did not reproduce them; the first build step
+recomputes them on the pinned snapshot and records any difference.
+
+- **Self-check fixture.** Two parts, both committed with expected values
+  written before the code:
+  1. **Synthetic series:** built so that the expected answers are known by
+     construction: three stretches split by gaps longer than 30 days, two
+     runs of matching days split by a gap of exactly 30 days (one stretch),
+     a stretch whose 365-day horizon runs past the series end (counted at 30
+     and 90 days only), a close exactly equal 30 days later (not higher), a
+     ratio exactly on the band edge (inside), and fewer than five stretches
+     in a variant (the "too few" line). For levels: a series whose close sits
+     between the two levels, one above the 200-day average (the line names the
+     84-day high), one above both (the provisional low alone), and one where the provisional low has
+     just broken and a new one starts.
+  2. **Frozen fix:** at the 2026-11-23 fix already frozen above ($61,103.71
+     close, $72,319.11 200-day average), the confirm level equals that
+     average to the cent, the invalidate level equals the provisional low
+     recorded when the snapshot is pinned, and the ratio (0.845, to three
+     decimals) and stretch counts are recorded with the snapshot checksum.
+     The daily self-check refuses to publish either line when a recomputation
+     of this fix does not match, and says so in place of the line.
+- **Exit:** the fixture passes; no look-ahead (future-perturbation test);
+  neither line moves the stance or any other brief line when its parameters
+  change; the brief line never carries a percentage; card, brief, dashboard
+  and replay agree on the same fix.
+
 ## 4. Durable task, evidence and proactive follow-through contract
 
 The proposed WS-24 record is the overall-task authority; agent runs, attempts,

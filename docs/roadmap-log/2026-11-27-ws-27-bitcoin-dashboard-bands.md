@@ -16,10 +16,17 @@ prs: [427]
   The fit method, zone count, Mayer multiples (0.8x, 2.4x), Bollinger settings
   (20 closes, 2 standard deviations) and where the dashboard lives (default:
   the Option 3 workspace's first view) are proposed defaults open for Larry's
-  decision.
+  decision. A second subsection adds two daily brief lines: "days like
+  today" (past stretches at a similar close-to-200-day ratio, scored "higher
+  in N of M" at 30, 90 and 365 days, counts only, stated as not a forecast)
+  and "levels to watch" (the 200-day average and the provisional low, both
+  existing stance inputs). Band width, stretch gap, scoring day, horizons and
+  the five-stretch floor are proposed defaults. A self-check fixture covers
+  both lines (synthetic series plus the frozen 2026-11-23 fix).
 - **Evidence:** Larry's messages in his Claude Duet channel on 2026-11-27
-  (21:41:16, 21:43:05, 21:44:40, 21:46:03 and 21:47:05 UTC), quoted in the
-  section. A test stand-in of the dashboard runs outside Mortimer as a
+  (21:41:16, 21:43:05, 21:44:40, 21:46:03, 21:47:05 and 23:02:21 UTC), quoted in the
+  sections. The orientation figures in the new lines came from the channel's
+  test stand-in and were not reproduced in this PR. A test stand-in of the dashboard runs outside Mortimer as a
   prototype; it is not evidence that anything here works.
 - **Left / next actor:** larry: decide the proposed defaults, then merge #426
   before this PR, which is stacked on it. Implementation owners stay
