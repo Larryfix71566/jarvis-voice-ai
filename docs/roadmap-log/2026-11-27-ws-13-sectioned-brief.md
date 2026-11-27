@@ -2,7 +2,7 @@
 date: 2026-11-27
 system: claude
 rows: [WS-13]
-prs: [this PR]
+prs: [428]
 ---
 # WS-13: a sectioned brief whose charts live on a dashboard
 
