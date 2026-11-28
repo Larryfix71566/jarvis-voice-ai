@@ -419,7 +419,10 @@ to see axis data for each for reference") and asked for these to be added to
 Mortimer (21:47:05 UTC). The brief layout itself is a WS-13 change, proposed
 for the mail, calendar and brief plan §R.0g in PR #428. A test stand-in of the dashboard,
 built outside Mortimer from this section's rules, is the prototype; nothing
-here depends on it.
+here depends on it. He then asked for halving markers on the chart (22:06:49
+UTC, "On the bitcoin chart add indicators for each halving and the halfway
+point between halvings"), and on 2026-11-28 answered "All defaults" (15:31:27
+UTC) to the open choices in this section and the two below.
 
 **Rule that binds every band:** the four bands are reference lines drawn on
 charts. They are never inputs to the stance, the recovery rule, the 4-year
@@ -434,8 +437,10 @@ latest close sits; that line is also the chart's accessible summary.
 
 1. **Cycle view (all history, log price).** Daily closes from the first
    snapshot row, the power-law corridor's floor and ceiling, and the rainbow
-   zones between them. Plain line, for example: "The close is 1.9x the
-   power-law floor, in zone 3 of 9."
+   zones between them, and the halving markers below. Plain line, for
+   example: "Low (zone 2 of 7): the close sits 28% of the way from the
+   power-law floor ($29,505) to the ceiling ($372,161)." (Figures from the
+   test stand-in's 2026-11-27 fix, not reproduced here.)
 2. **Stance view (last 365 days).** Daily closes, the 200-day average and the
    prior 84-day closing high exactly as Option 2 defines them, and the Mayer
    bands. Plain line, for example: "The close is 0.84x its 200-day average."
@@ -451,25 +456,49 @@ the daily fix it was drawn from. The cycle view's price axis is logarithmic,
 says so in its label, and puts ticks at round values that stay readable at
 the narrowest supported window. Tick labels never overlap or truncate.
 
-**Proposed defaults, open for Larry's decision.** These were proposed by
-Claude, not chosen by Larry; each needs his yes, or another value, before a
-claim builds it. Each is a fixed, written parameter, never tuned against the
-backtest.
+**Halving markers (cycle view only).** A solid vertical line at each halving,
+dated by the UTC day its block was mined: block 210,000 on 2012-11-28,
+420,000 on 2016-07-09, 630,000 on 2020-05-11 and 840,000 on 2024-04-20. A
+dotted vertical line at the calendar midpoint between two consecutive
+halvings, rounded down to the day: 2014-09-18, 2018-06-10, 2022-05-01 and
+2026-04-16. The next halving (block 1,050,000) is drawn as a dashed line at
+its estimated date, about 2028-04-11, and labelled "est."; the latest
+midpoint depends on it, so it is labelled "est." too. The halving table and
+the estimate are fixed constants in the method version, each recorded with
+its source (the block's own timestamp; for the estimate, the tip height, the
+date it was read and the blocks left at the 10-minute target). They change
+only through a reviewed change, never at runtime, and Mortimer adds no
+blockchain data source for them. The chart note says the next halving and the
+latest midpoint are estimates. Markers are reference lines like the bands:
+never stance inputs, and absent from the stance and short-term views, where
+at most one would show. Tags shorten on narrow windows (halving year only on
+the narrowest) and never overlap.
 
-- **Power-law corridor:** an ordinary least-squares fit of log10(close)
-  against log10(days since 2009-01-03), over every snapshot close through the
-  fix, refitted at each daily fix. The floor and ceiling run parallel to the
-  fit, offset by the smallest and largest residual through the fix, so by
-  construction they contain every past close; the chart says so, and the
-  corridor is described as a fit to the past, not a forecast. Coefficients,
-  fit window and offsets are recorded with the output. Alternative: published
-  fixed coefficients from a third-party model, which adds an outside
-  dependency.
-- **Rainbow zones:** nine zones of equal width in log price between that
-  floor and ceiling, numbered 1 (lowest) to 9 and coloured from cool to warm,
-  with no trading names (the popular chart's labels such as "fire sale" are
-  not used). Alternative: a separate log regression fit, as some published
-  rainbow charts use.
+**Decided parameters.** Claude proposed these and Larry chose them on
+2026-11-28 (15:31:27 UTC, "All defaults", Claude Duet channel). Each is a
+fixed, written parameter, never tuned against the backtest.
+
+- **Power-law corridor:** both lines are refitted at each daily fix over
+  every snapshot close through the fix, with x = log10(days since 2009-01-03)
+  and y = log10(close). The floor is an ordinary least-squares fit of y on x
+  over every close, shifted down to touch the lowest close relative to that
+  fit. The ceiling is an ordinary least-squares fit through each halving
+  cycle's highest close (cycles split at the halving dates above), shifted up
+  to touch the highest of those relative to its own fit. By construction no
+  close sits below the floor or above the ceiling; the chart says so, says
+  the current cycle's high can still change, and describes the corridor as a
+  fit to the past, not a forecast. Coefficients, the closes that set each
+  shift and the cycle highs are recorded with the output. Why the ceiling has
+  its own fit: on the test stand-in, offsetting the floor's fit by its
+  largest residual let one June 2011 spike put the ceiling near $2.2 million
+  (orientation, not reproduced here). Not chosen: published fixed
+  coefficients from a third-party model.
+- **Rainbow zones:** seven zones of equal width in log price between that
+  floor and ceiling, numbered 1 (lowest) to 7 and named by position only:
+  Floor zone, Low, Lower middle, Middle, Upper middle, High, Ceiling zone.
+  No trading names (the popular chart's labels such as "fire sale" are not
+  used). Seven matches the test dashboard; the earlier draft of this
+  section said nine.
 - **Mayer bands:** 0.8x and 2.4x the 200-day average defined in Option 2
   (no second average). The plain line gives the close's Mayer Multiple
   (close divided by that average) to two decimals.
@@ -478,13 +507,13 @@ backtest.
 
 **Where it shows.** The three charts are a dashboard that opens to the latest
 validated daily fix every time, from the brief's Bitcoin section, the Option 2
-result and the command palette. Proposed default: the dashboard is the Option 3
-workspace's default view, ahead of its current-bear, past-recoveries and
-halving-cycle views, and it uses the same reviewed, versioned native series
+result and the command palette. Decided (Larry, 2026-11-28, "All
+defaults"): the dashboard is the Option 3 workspace's default view, ahead of
+its current-bear, past-recoveries and halving-cycle views, and it uses the same reviewed, versioned native series
 payload; the v1 bar-only chart contract does not change. Until Option 3 lands,
 the brief and the Option 2 card are unchanged and show no dashboard control.
-Alternative, also open: an earlier dashboard result in the carousel, rendered
-as chart images through the existing graph/media asset path. The dashboard
+Not chosen: an earlier dashboard result in the carousel, rendered as chart
+images through the existing graph/media asset path. The dashboard
 holds public market data only: no mail, calendar or other brief content
 reaches it, and the market tool still receives no brief payload. The live
 price layer may draw its live point on the stance and short-term views; it
@@ -498,8 +527,11 @@ moves no band, line or plain-line text.
   band); every chart shows labelled axes with tick values, a legend, the
   source and the fix on the identified Mac build, including the narrowest
   window, large text and VoiceOver reading the plain line; the plain line and
-  the chart agree for the same fix; no band label carries a trading word; and
-  card, brief and dashboard show the same fix.
+  the chart agree for the same fix; no band label carries a trading word;
+  halving markers sit on the four table dates and the midpoints computed from
+  them, the next halving and latest midpoint carry "est.", and no marker tag
+  overlaps another at the narrowest window; and card, brief and dashboard
+  show the same fix.
 
 #### Daily Brief: days like today and levels to watch (amended 2026-11-27)
 
@@ -537,9 +569,9 @@ stance and one next check only.
   when it is above both, the line gives the provisional low alone. The line
   never offers a level already crossed, and no other level is added.
 
-**Proposed defaults, open for Larry's decision** (proposed by Claude, not
-chosen by Larry): a band of today's ratio plus or minus 0.04 (0.80x to 0.88x
-when today is 0.84x); the 30-day gap that splits stretches; scoring from each
+**Decided parameters** (proposed by Claude, chosen by Larry on 2026-11-28,
+15:31:27 UTC, "All defaults"): a band of today's ratio plus or minus 0.04
+(0.80x to 0.88x when today is 0.84x); the 30-day gap that splits stretches; scoring from each
 stretch's first day; horizons of 30, 90 and 365 days, fixed before the first
 real run and never tuned; and a floor of five scored stretches, below which
 the line reads "Days like today: too few past stretches to count".
@@ -611,13 +643,15 @@ line, and the spoken brief is unchanged.
   compounded change while Bull and while Bear, with counts and the data
   range, never as an implied probability.
 
-**Decisions for Larry** (proposed by Claude, not chosen by Larry):
+**Decided** (proposed by Claude, chosen by Larry on 2026-11-28, 15:31:27
+UTC, "All defaults"):
 - the seven-close hold, fixed before the first real run and never tuned;
-- whether the regime stays a label beside the stance (the default above) or
-  becomes a stance input, which would change the stance rules and need its
-  own backtest under the overfitting guard;
-- the labels "Bull" and "Bear", or plainer "uptrend" and "downtrend", given
-  the plan's caution about calling a bull market.
+- the regime stays a label beside the stance, not a stance input; making it
+  an input would change the stance rules and needs its own plan change and
+  backtest under the overfitting guard;
+- the labels are "Bull" and "Bear". The plan's caution about calling a bull
+  market still holds: the line names the regime and never says "bull
+  market".
 
 **Orientation figures (unpinned, not committed).** From the channel's test
 stand-in on 2026-11-27, over Coin Metrics daily closes 2012-01-01 to the
