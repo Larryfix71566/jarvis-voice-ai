@@ -49,9 +49,10 @@ this revision covers only the brief's own layout and does not depend on them. D1
 - **Labelled sections.** The `brief` card shows one heading per section, in a
   fixed order, and only the sections that are enabled; a section that is off
   is absent, never an empty heading. Today that is Mail; WS-27's Bitcoin
-  section joins it when its own gate opens. Proposed default, open for
-  Larry's decision: Bitcoin goes after mail and before problems in R.10.16's
-  order (calendar, reminders, mail, Bitcoin, problems).
+  section joins it when its own gate opens. **Decided (2026-11-28):**
+  Bitcoin goes after mail and before problems in R.10.16's order (calendar,
+  reminders, mail, Bitcoin, problems). Claude proposed it and Larry chose it
+  ("All defaults", 15:31:27 UTC, Claude Duet channel).
 - **Short and readable.** Each section is a few short lines. Mail keeps its
   per-account status and count rows and its newest headlines (P3m). Bitcoin
   keeps WS-27's stance, reason, next condition, progress, 4-year average line,
@@ -71,7 +72,7 @@ this revision covers only the brief's own layout and does not depend on them. D1
 
 **Not decided here.** The brief's schedule (`JARVIS_BRIEF_TIME` stays
 unreserved), any new section beyond Mail and Bitcoin, and Calendar's place
-before P2 lands. The section order above is a proposed default.
+before P2 lands. The section order above is decided.
 
 **Files when claimed.** The section heading and order in `jarvis/brief.py`,
 the typed section kind in JarvisKit `DisplayPayload`, and
